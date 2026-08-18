@@ -17,7 +17,7 @@ This repository now includes a functional multi-tenant foundation plus operation
 
 1. **Frontend**
    - Landing page, login/register, OTP login, workspace chooser, profile, notifications.
-   - Filament Workspace panel (`/workspace`) and Platform panel (`/platform`).
+   - Blade MVC workspace dashboard (`/workspace`) and platform dashboard (`/platform`).
 2. **Authentication**
    - Email/password, OTP (phone), Google/Facebook OAuth redirects, email verification, password reset.
 3. **Workspace Isolation**

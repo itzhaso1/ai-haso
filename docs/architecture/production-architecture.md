@@ -8,7 +8,7 @@
 - **Strict workspace context propagation** across API, services, jobs, events, notifications, webhooks, caches, and storage paths.
 
 ### Core Layers
-- **Presentation Layer**: REST API + (later) Filament panels.
+- **Presentation Layer**: REST API + Blade MVC interfaces.
 - **Application Layer**: Controllers, Form Requests, Actions/Services.
 - **Domain Layer**: Business services (Workspace, Auth, Inventory, Orders, Payments, AI, WhatsApp, Subscription).
 - **Infrastructure Layer**: Eloquent, Queues, Cache/Redis, Storage, Webhook handlers, Gateway adapters.
