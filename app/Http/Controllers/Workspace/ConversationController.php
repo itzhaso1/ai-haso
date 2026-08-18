@@ -23,17 +23,48 @@ class ConversationController extends Controller
     {
         $this->authorize('viewAny', Conversation::class);
 
+        $search = $request->string('search')->toString();
+
         $conversations = Conversation::query()
-            ->with('customer')
+            ->with([
+                'customer',
+                'messages' => fn ($query) => $query->latest()->limit(1),
+            ])
             ->withCount('messages')
-            ->when($request->string('search')->toString(), function ($query, $search): void {
-                $query->where('external_id', 'like', '%'.$search.'%');
+            ->when($search, function ($query, $search): void {
+                $query->where(function ($innerQuery) use ($search): void {
+                    $innerQuery
+                        ->where('external_id', 'like', '%'.$search.'%')
+                        ->orWhereHas('customer', fn ($customerQuery) => $customerQuery->where('name', 'like', '%'.$search.'%'));
+                });
             })
             ->latest('last_message_at')
             ->paginate(12)
             ->withQueryString();
 
-        return view('workspace.conversations.index', compact('conversations'));
+        $activeConversationId = $request->integer('conversation');
+        if (! $activeConversationId && $conversations->count() > 0) {
+            $activeConversationId = (int) $conversations->first()->id;
+        }
+
+        $activeConversation = null;
+        if ($activeConversationId) {
+            $activeConversation = Conversation::query()
+                ->with([
+                    'customer',
+                    'messages' => fn ($query) => $query->with('user')->latest()->limit(80),
+                ])
+                ->find($activeConversationId);
+
+            if ($activeConversation) {
+                $activeConversation->setRelation(
+                    'messages',
+                    $activeConversation->messages->sortBy('created_at')->values()
+                );
+            }
+        }
+
+        return view('workspace.conversations.index', compact('conversations', 'activeConversation'));
     }
 
     public function create(): View
@@ -56,16 +87,17 @@ class ConversationController extends Controller
 
         $conversation = $this->conversationService->create($payload);
 
-        return redirect()->route('workspace.conversations.edit', $conversation)->with('success', 'تم إنشاء المحادثة.');
+        return redirect()->route('workspace.conversations.index', [
+            'conversation' => $conversation->id,
+        ])->with('success', 'تم إنشاء المحادثة.');
     }
 
-    public function edit(Conversation $conversation): View
+    public function edit(Conversation $conversation): RedirectResponse
     {
         $this->authorize('update', $conversation);
 
-        return view('workspace.conversations.edit', [
-            'conversation' => $conversation->load(['customer', 'messages.user']),
-            'metadataJson' => json_encode($conversation->metadata ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
+        return redirect()->route('workspace.conversations.index', [
+            'conversation' => $conversation->id,
         ]);
     }
 
@@ -85,7 +117,9 @@ class ConversationController extends Controller
             'metadata' => $this->parseJsonField($request, 'metadata_json', $conversation->metadata ?? []),
         ]);
 
-        return redirect()->route('workspace.conversations.edit', $conversation)->with('success', 'تم تحديث المحادثة.');
+        return redirect()->route('workspace.conversations.index', [
+            'conversation' => $conversation->id,
+        ])->with('success', 'تم تحديث المحادثة.');
     }
 
     public function destroy(Conversation $conversation): RedirectResponse
@@ -108,6 +142,8 @@ class ConversationController extends Controller
 
         $this->conversationService->addMessage($conversation, $payload, $request->user());
 
-        return redirect()->route('workspace.conversations.edit', $conversation)->with('success', 'تم إرسال الرسالة.');
+        return redirect()->route('workspace.conversations.index', [
+            'conversation' => $conversation->id,
+        ])->with('success', 'تم إرسال الرسالة.');
     }
 }
