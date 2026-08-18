@@ -3,8 +3,6 @@
 namespace App\Models;
 
 use Database\Factories\UserFactory;
-use Filament\Models\Contracts\FilamentUser;
-use Filament\Panel;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -28,7 +26,7 @@ use Spatie\Permission\Traits\HasRoles;
     'last_login_ip',
 ])]
 #[Hidden(['password', 'remember_token'])]
-class User extends Authenticatable implements FilamentUser, MustVerifyEmail
+class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, HasRoles, Notifiable;
@@ -67,11 +65,4 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
         return $this->hasMany(AuthIdentity::class);
     }
 
-    public function canAccessPanel(Panel $panel): bool
-    {
-        return match ($panel->getId()) {
-            'workspace' => $this->workspaces()->exists(),
-            default => false,
-        };
-    }
 }

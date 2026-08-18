@@ -5,6 +5,19 @@ use App\Http\Controllers\Auth\PhoneOtpController;
 use App\Http\Controllers\Auth\SocialLoginController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\WorkspaceSelectionController;
+use App\Http\Controllers\Workspace\AiSettingController;
+use App\Http\Controllers\Workspace\CategoryController;
+use App\Http\Controllers\Workspace\ConversationController;
+use App\Http\Controllers\Workspace\CustomerController;
+use App\Http\Controllers\Workspace\DashboardController as WorkspaceDashboardController;
+use App\Http\Controllers\Workspace\EmployeeInvitationController;
+use App\Http\Controllers\Workspace\InventoryController;
+use App\Http\Controllers\Workspace\OrderController;
+use App\Http\Controllers\Workspace\PaymentController;
+use App\Http\Controllers\Workspace\PaymentGatewayController;
+use App\Http\Controllers\Workspace\ProductController;
+use App\Http\Controllers\Workspace\SubscriptionController;
+use App\Http\Controllers\Workspace\WhatsAppAccountController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -26,14 +39,12 @@ Route::middleware(['guest'])->group(function (): void {
 });
 
 Route::middleware(['auth', 'verified'])->group(function (): void {
-    Route::get('/dashboard', function () {
-        return redirect()->route('workspace.choose');
-    })->name('dashboard');
+    Route::get('/dashboard', fn () => redirect()->route('workspace.dashboard'))->name('dashboard');
 
     Route::get('/workspaces/choose', [WorkspaceSelectionController::class, 'choose'])->name('workspace.choose');
     Route::post('/workspaces/{workspace}/switch', [WorkspaceSelectionController::class, 'switch'])->name('workspace.switch');
     Route::redirect('/subscription', '/workspace/subscriptions')->name('subscription.page');
-    Route::redirect('/billing', '/workspace/payments')->name('billing.page');
+    Route::redirect('/billing', '/workspace/payments/create')->name('billing.page');
     Route::redirect('/settings', '/profile')->name('settings.page');
     Route::redirect('/security', '/profile')->name('security.page');
 });
@@ -45,5 +56,43 @@ Route::middleware('auth')->group(function () {
     Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::post('/notifications/{id}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
 });
+
+Route::middleware(['auth', 'verified', 'workspace.selected', 'workspace.member'])
+    ->prefix('workspace')
+    ->as('workspace.')
+    ->group(function (): void {
+        Route::get('/', [WorkspaceDashboardController::class, 'index'])->name('dashboard');
+
+        Route::resource('categories', CategoryController::class)->except(['show']);
+        Route::resource('products', ProductController::class)->except(['show']);
+        Route::resource('customers', CustomerController::class)->except(['show']);
+        Route::resource('orders', OrderController::class)->except(['show']);
+        Route::resource('conversations', ConversationController::class)->except(['show']);
+        Route::post('conversations/{conversation}/messages', [ConversationController::class, 'storeMessage'])->name('conversations.messages.store');
+
+        Route::get('inventory', [InventoryController::class, 'index'])->name('inventory.index');
+        Route::get('inventory/create', [InventoryController::class, 'create'])->name('inventory.create');
+        Route::post('inventory', [InventoryController::class, 'store'])->name('inventory.store');
+
+        Route::get('payments', [PaymentController::class, 'index'])->name('payments.index');
+        Route::get('payments/create', [PaymentController::class, 'create'])->name('payments.create');
+        Route::post('payments', [PaymentController::class, 'store'])->name('payments.store');
+
+        Route::resource('payment-gateways', PaymentGatewayController::class)->except(['show']);
+
+        Route::get('subscriptions', [SubscriptionController::class, 'index'])->name('subscriptions.index');
+        Route::post('subscriptions', [SubscriptionController::class, 'store'])->name('subscriptions.store');
+        Route::delete('subscriptions/{subscription}', [SubscriptionController::class, 'destroy'])->name('subscriptions.destroy');
+
+        Route::get('ai-settings', [AiSettingController::class, 'edit'])->name('ai-settings.edit');
+        Route::put('ai-settings', [AiSettingController::class, 'update'])->name('ai-settings.update');
+
+        Route::resource('whatsapp-accounts', WhatsAppAccountController::class)->except(['show']);
+
+        Route::get('employees', [EmployeeInvitationController::class, 'index'])->name('employees.index');
+        Route::get('employees/invite', [EmployeeInvitationController::class, 'create'])->name('employees.create');
+        Route::post('employees/invite', [EmployeeInvitationController::class, 'store'])->name('employees.store');
+        Route::delete('employees/invitations/{employee}', [EmployeeInvitationController::class, 'destroy'])->name('employees.destroy');
+    });
 
 require __DIR__.'/auth.php';

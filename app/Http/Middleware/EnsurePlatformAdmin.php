@@ -16,7 +16,11 @@ class EnsurePlatformAdmin
     public function handle(Request $request, Closure $next): Response
     {
         if (! auth('platform_admin')->check()) {
-            abort(Response::HTTP_FORBIDDEN, 'Platform admin authentication required.');
+            if ($request->expectsJson()) {
+                abort(Response::HTTP_FORBIDDEN, 'Platform admin authentication required.');
+            }
+
+            return redirect()->route('platform.login');
         }
 
         return $next($request);
