@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Auth\LoginRequest;
-use App\Http\Requests\Auth\RegisterRequest;
-use App\Http\Requests\Auth\RequestOtpRequest;
-use App\Http\Requests\Auth\VerifyOtpRequest;
+use App\Http\Requests\ApiAuth\LoginRequest;
+use App\Http\Requests\ApiAuth\RegisterRequest;
+use App\Http\Requests\ApiAuth\RequestOtpRequest;
+use App\Http\Requests\ApiAuth\VerifyOtpRequest;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Auth\AuthenticationService;

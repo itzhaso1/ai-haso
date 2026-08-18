@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\EnsureFeatureAccess;
 use App\Http\Middleware\EnsurePlatformAdmin;
+use App\Http\Middleware\EnsureWorkspaceSelected;
 use App\Http\Middleware\EnsureWorkspaceMembership;
 use App\Http\Middleware\ResolveWorkspaceContext;
 use Illuminate\Foundation\Application;
@@ -26,6 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'workspace.resolve' => ResolveWorkspaceContext::class,
             'workspace.member' => EnsureWorkspaceMembership::class,
+            'workspace.selected' => EnsureWorkspaceSelected::class,
             'workspace.feature' => EnsureFeatureAccess::class,
             'platform.admin' => EnsurePlatformAdmin::class,
         ]);

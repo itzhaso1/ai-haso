@@ -20,14 +20,45 @@ abstract class WorkspaceScopedModel extends Model
         });
 
         static::creating(function (Model $model): void {
-            if (! $model->getAttribute('workspace_id')) {
-                $workspaceId = app(WorkspaceContext::class)->workspaceId();
+            $workspaceId = app(WorkspaceContext::class)->workspaceId();
+            $isPlatformAdmin = auth('platform_admin')->check();
+            $incomingWorkspaceId = $model->getAttribute('workspace_id');
 
-                if ($workspaceId === null) {
+            if ($isPlatformAdmin) {
+                if (! $incomingWorkspaceId) {
+                    throw new RuntimeException('workspace_id is required for platform admin writes.');
+                }
+
+                return;
+            }
+
+            if ($workspaceId === null) {
+                if (! $incomingWorkspaceId) {
                     throw new RuntimeException('Workspace context is required for creating workspace scoped records.');
                 }
 
-                $model->setAttribute('workspace_id', $workspaceId);
+                return;
+            }
+
+            if ($incomingWorkspaceId !== null && (int) $incomingWorkspaceId !== (int) $workspaceId) {
+                throw new RuntimeException('Cross-workspace write attempt detected.');
+            }
+
+            $model->setAttribute('workspace_id', $workspaceId);
+        });
+
+        static::updating(function (Model $model): void {
+            $workspaceId = app(WorkspaceContext::class)->workspaceId();
+            if (auth('platform_admin')->check()) {
+                return;
+            }
+            if ($workspaceId === null) {
+                return;
+            }
+
+            $incomingWorkspaceId = $model->getAttribute('workspace_id');
+            if ($incomingWorkspaceId !== null && (int) $incomingWorkspaceId !== (int) $workspaceId) {
+                throw new RuntimeException('Workspace_id cannot be changed outside current workspace context.');
             }
         });
     }

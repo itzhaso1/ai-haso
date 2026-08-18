@@ -2,8 +2,6 @@
 
 namespace App\Services\Auth;
 
-use App\Models\Plan;
-use App\Models\Subscription;
 use App\Models\User;
 use App\Services\Workspace\WorkspaceService;
 use Illuminate\Auth\AuthenticationException;
@@ -24,6 +22,29 @@ class AuthenticationService
      */
     public function register(array $payload): array
     {
+        [$user, $workspace] = $this->createUserAndWorkspace($payload);
+        $token = $this->issueToken($user, $workspace->id, ['*']);
+
+        return compact('user', 'workspace', 'token');
+    }
+
+    /**
+     * @param  array{name:string,email:string,password:string,phone?:string,workspace_type:string,workspace_name?:string}  $payload
+     * @return array{user:User,workspace:\App\Models\Workspace}
+     */
+    public function registerForSession(array $payload): array
+    {
+        [$user, $workspace] = $this->createUserAndWorkspace($payload);
+
+        return compact('user', 'workspace');
+    }
+
+    /**
+     * @param  array{name:string,email:string,password:string,phone?:string,workspace_type:string,workspace_name?:string}  $payload
+     * @return array{0:User,1:\App\Models\Workspace}
+     */
+    private function createUserAndWorkspace(array $payload): array
+    {
         return DB::transaction(function () use ($payload): array {
             $user = User::query()->create([
                 'name' => $payload['name'],
@@ -38,11 +59,9 @@ class AuthenticationService
                 $payload['workspace_name'] ?? null
             );
 
-            $this->attachDefaultPlan($workspace->id, $workspace->type);
+            $user->forceFill(['email_verified_at' => null])->save();
 
-            $token = $this->issueToken($user, $workspace->id, ['*']);
-
-            return compact('user', 'workspace', 'token');
+            return [$user, $workspace];
         });
     }
 
@@ -111,26 +130,4 @@ class AuthenticationService
         return $token;
     }
 
-    private function attachDefaultPlan(int $workspaceId, string $workspaceType): void
-    {
-        $plan = Plan::query()
-            ->where('workspace_type', $workspaceType)
-            ->where('is_active', true)
-            ->orderBy('price')
-            ->first();
-
-        if (! $plan) {
-            return;
-        }
-
-        Subscription::query()->create([
-            'workspace_id' => $workspaceId,
-            'plan_id' => $plan->id,
-            'status' => 'trialing',
-            'starts_at' => now(),
-            'trial_ends_at' => now()->addDays(14),
-            'current_period_start' => now(),
-            'current_period_end' => now()->addDays(14),
-        ]);
-    }
 }

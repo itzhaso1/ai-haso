@@ -1,8 +1,23 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AiController;
+use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\ConversationController;
+use App\Http\Controllers\Api\CustomerController;
+use App\Http\Controllers\Api\EmployeeController;
+use App\Http\Controllers\Api\InventoryController;
+use App\Http\Controllers\Api\MessageController;
+use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\Api\RolePermissionController;
 use App\Http\Controllers\Api\SocialAuthController;
+use App\Http\Controllers\Api\SubscriptionController;
+use App\Http\Controllers\Api\WhatsAppController;
 use App\Http\Controllers\Api\WorkspaceController;
+use App\Http\Controllers\Webhook\PaymentWebhookController;
+use App\Http\Controllers\Webhook\WhatsAppWebhookController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function (): void {
@@ -23,4 +38,37 @@ Route::middleware('auth:sanctum')->group(function (): void {
 Route::middleware(['auth:sanctum', 'workspace.resolve', 'workspace.member'])
     ->group(function (): void {
         Route::get('/workspace/{workspace}/current', [WorkspaceController::class, 'current']);
+
+        Route::apiResource('/categories', CategoryController::class);
+        Route::apiResource('/products', ProductController::class);
+        Route::apiResource('/customers', CustomerController::class);
+        Route::apiResource('/orders', OrderController::class);
+        Route::apiResource('/conversations', ConversationController::class);
+        Route::apiResource('/messages', MessageController::class)->only(['index', 'store', 'show']);
+        Route::apiResource('/payments', PaymentController::class)->only(['index', 'store', 'show']);
+        Route::apiResource('/subscriptions', SubscriptionController::class)->only(['index', 'store']);
+
+        Route::get('/inventory/movements', [InventoryController::class, 'index']);
+        Route::post('/inventory/adjust', [InventoryController::class, 'adjust']);
+
+        Route::get('/ai/settings', [AiController::class, 'settings']);
+        Route::put('/ai/settings', [AiController::class, 'updateSettings']);
+        Route::post('/ai/reply', [AiController::class, 'generateReply']);
+
+        Route::get('/whatsapp/accounts', [WhatsAppController::class, 'index']);
+        Route::post('/whatsapp/accounts', [WhatsAppController::class, 'storeAccount']);
+        Route::post('/whatsapp/phone-numbers', [WhatsAppController::class, 'storePhoneNumber']);
+
+        Route::get('/employees', [EmployeeController::class, 'index']);
+        Route::post('/employees/invite', [EmployeeController::class, 'invite']);
+        Route::patch('/employees/{membership}', [EmployeeController::class, 'update']);
+        Route::delete('/employees/{membership}', [EmployeeController::class, 'destroy']);
+
+        Route::get('/roles-permissions', [RolePermissionController::class, 'index']);
+        Route::post('/roles-permissions/assign-role', [RolePermissionController::class, 'assignRole']);
+        Route::post('/roles-permissions/sync-permissions', [RolePermissionController::class, 'syncPermissions']);
     });
+
+Route::get('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'verify']);
+Route::post('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'handle']);
+Route::post('/webhooks/payments/{provider}', [PaymentWebhookController::class, 'handle']);

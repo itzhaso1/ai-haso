@@ -20,9 +20,10 @@ class AuditLogService
         ?User $actor = null,
         ?Request $request = null,
         ?array $meta = null,
+        ?int $workspaceId = null,
     ): AuditLog {
         return AuditLog::withoutGlobalScopes()->create([
-            'workspace_id' => $this->workspaceContext->workspaceId(),
+            'workspace_id' => $workspaceId ?? $this->workspaceContext->workspaceId(),
             'user_id' => $actor?->id,
             'action' => $action,
             'entity_type' => $entityType,

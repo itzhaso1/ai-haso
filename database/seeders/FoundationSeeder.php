@@ -3,8 +3,11 @@
 namespace Database\Seeders;
 
 use App\Models\Plan;
+use App\Models\PlatformAdmin;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 
 class FoundationSeeder extends Seeder
 {
@@ -30,6 +33,10 @@ class FoundationSeeder extends Seeder
 
         foreach ($permissions as $permission) {
             Permission::findOrCreate($permission, 'web');
+        }
+
+        foreach (['owner', 'admin', 'manager', 'agent'] as $roleName) {
+            Role::findOrCreate($roleName, 'web');
         }
 
         $plans = [
@@ -77,10 +84,63 @@ class FoundationSeeder extends Seeder
                 'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp'],
                 'limits' => ['products' => 1000, 'users' => 10, 'orders' => 2000, 'ai_usage' => 20000],
             ],
+            [
+                'code' => 'company_pro',
+                'name' => 'Company Pro',
+                'workspace_type' => 'company',
+                'billing_period' => 'monthly',
+                'currency' => 'USD',
+                'price' => 199,
+                'is_active' => true,
+                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'payments', 'employees', 'analytics'],
+                'limits' => ['products' => 5000, 'users' => 30, 'orders' => 15000, 'ai_usage' => 120000],
+            ],
+            [
+                'code' => 'store_pro',
+                'name' => 'Store Pro',
+                'workspace_type' => 'store',
+                'billing_period' => 'monthly',
+                'currency' => 'USD',
+                'price' => 199,
+                'is_active' => true,
+                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'payments', 'employees', 'analytics'],
+                'limits' => ['products' => 5000, 'users' => 30, 'orders' => 15000, 'ai_usage' => 120000],
+            ],
+            [
+                'code' => 'company_enterprise',
+                'name' => 'Company Enterprise',
+                'workspace_type' => 'company',
+                'billing_period' => 'monthly',
+                'currency' => 'USD',
+                'price' => 499,
+                'is_active' => true,
+                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'payments', 'employees', 'analytics'],
+                'limits' => ['products' => 50000, 'users' => 200, 'orders' => 200000, 'ai_usage' => 1000000],
+            ],
+            [
+                'code' => 'store_enterprise',
+                'name' => 'Store Enterprise',
+                'workspace_type' => 'store',
+                'billing_period' => 'monthly',
+                'currency' => 'USD',
+                'price' => 499,
+                'is_active' => true,
+                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'payments', 'employees', 'analytics'],
+                'limits' => ['products' => 50000, 'users' => 200, 'orders' => 200000, 'ai_usage' => 1000000],
+            ],
         ];
 
         foreach ($plans as $plan) {
             Plan::query()->updateOrCreate(['code' => $plan['code']], $plan);
         }
+
+        PlatformAdmin::query()->updateOrCreate(
+            ['email' => env('PLATFORM_ADMIN_EMAIL', 'admin@ai-haso.local')],
+            [
+                'name' => env('PLATFORM_ADMIN_NAME', 'Platform Admin'),
+                'password' => Hash::make(env('PLATFORM_ADMIN_PASSWORD', 'password')),
+                'email_verified_at' => now(),
+            ]
+        );
     }
 }

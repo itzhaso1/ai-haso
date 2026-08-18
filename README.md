@@ -1,6 +1,6 @@
 # AI-HASO (Laravel SaaS Platform)
 
-Production-oriented Laravel backend for a multi-tenant platform supporting:
+Production-oriented Laravel SaaS platform (Backend + Frontend inside Laravel) supporting:
 
 - Individuals (personal AI + smart replies + conversations)
 - Companies/Stores (commerce workspace with products, inventory, orders, customers, payments, WhatsApp, AI, employees)
@@ -11,19 +11,28 @@ Full architecture, tenancy model, ERD, auth flows, security model, testing strat
 
 - `docs/architecture/production-architecture.md`
 
-## Current Foundation Scope
+## Implemented Modules (Current)
 
-This repository currently includes foundation modules:
+This repository now includes a functional multi-tenant foundation plus operational modules:
 
-1. Laravel project bootstrap
-2. Multi-tenancy core (`workspaces`, memberships, context middleware)
-3. Authentication foundations:
-   - Email/password
-   - Phone OTP flow
-   - Social identity model (Google/Facebook token exchange)
-4. Platform admin separation (`/platform/*`)
-5. Plan/subscription/feature-access foundations
-6. Audit and webhook-event base tables
+1. **Frontend**
+   - Landing page, login/register, OTP login, workspace chooser, profile, notifications.
+   - Filament Workspace panel (`/workspace`) and Platform panel (`/platform`).
+2. **Authentication**
+   - Email/password, OTP (phone), Google/Facebook OAuth redirects, email verification, password reset.
+3. **Workspace Isolation**
+   - Workspace context middleware + workspace-scoped models with write-protection.
+4. **Commerce & CRM**
+   - Categories, products (+variants), inventory movements, customers, orders, payments.
+5. **Conversations & AI**
+   - Conversations, messages, AI settings, AI response pipeline with provider abstraction.
+6. **Integrations**
+   - WhatsApp webhook architecture + processing jobs.
+   - Payment gateway abstraction + webhook processing + idempotency.
+7. **Subscriptions / Employees / Roles**
+   - Plans, subscriptions, employee invitations, role/permission APIs (team-scoped).
+8. **Ops**
+   - Notifications (database/mail), queue jobs, audit/webhook logging schema.
 
 ## Local Setup
 
@@ -31,7 +40,20 @@ This repository currently includes foundation modules:
 composer install
 cp .env.example .env
 php artisan key:generate
-php artisan migrate
-php artisan db:seed
-php artisan test
+npm install
+php artisan migrate --seed
+php artisan storage:link
+php artisan serve
+npm run dev
 ```
+
+## Default Platform Admin (local)
+
+- Email: `admin@ai-haso.local`
+- Password: `password`
+
+Override via `.env`:
+
+- `PLATFORM_ADMIN_EMAIL`
+- `PLATFORM_ADMIN_PASSWORD`
+- `PLATFORM_ADMIN_NAME`
