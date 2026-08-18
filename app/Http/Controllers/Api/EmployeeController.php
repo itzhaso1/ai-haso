@@ -8,10 +8,14 @@ use App\Models\User;
 use App\Models\WorkspaceUser;
 use App\Notifications\EmployeeInvitationNotification;
 use App\Support\Tenancy\WorkspaceContext;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 
 class EmployeeController extends Controller
 {
@@ -80,5 +84,68 @@ class EmployeeController extends Controller
         $membership->delete();
 
         return response()->json(status: 204);
+    }
+
+    public function acceptInvitation(Request $request, string $token): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($user, 401);
+
+        $invitation = EmployeeInvitation::withoutGlobalScopes()
+            ->where('token', $token)
+            ->where('email', $user->email)
+            ->where('status', 'pending')
+            ->first();
+
+        if (! $invitation) {
+            throw new ModelNotFoundException('Invitation not found.');
+        }
+
+        if ($invitation->expires_at->isPast()) {
+            $invitation->update(['status' => 'expired']);
+
+            return response()->json([
+                'message' => 'Invitation has expired.',
+            ], 422);
+        }
+
+        $membership = DB::transaction(function () use ($invitation, $user) {
+            $membership = WorkspaceUser::query()->updateOrCreate(
+                [
+                    'workspace_id' => $invitation->workspace_id,
+                    'user_id' => $user->id,
+                ],
+                [
+                    'membership_role' => $invitation->role,
+                    'status' => 'active',
+                    'is_primary' => false,
+                    'invited_by' => $invitation->invited_by,
+                    'joined_at' => now(),
+                ]
+            );
+
+            app(PermissionRegistrar::class)->setPermissionsTeamId($invitation->workspace_id);
+            try {
+                $role = Role::findOrCreate($invitation->role, 'web');
+                $user->assignRole($role);
+            } finally {
+                app(PermissionRegistrar::class)->setPermissionsTeamId(null);
+            }
+
+            $invitation->update([
+                'status' => 'accepted',
+                'accepted_at' => now(),
+            ]);
+
+            return $membership;
+        });
+
+        return response()->json([
+            'message' => 'Invitation accepted.',
+            'data' => [
+                'membership' => $membership->fresh(),
+                'workspace_id' => $invitation->workspace_id,
+            ],
+        ]);
     }
 }

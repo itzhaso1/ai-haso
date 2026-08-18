@@ -31,6 +31,7 @@ Route::prefix('auth')->group(function (): void {
 Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
+    Route::post('/employee-invitations/{token}/accept', [EmployeeController::class, 'acceptInvitation']);
 
     Route::get('/workspaces', [WorkspaceController::class, 'index']);
 });
