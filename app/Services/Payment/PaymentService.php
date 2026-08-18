@@ -73,6 +73,10 @@ class PaymentService
         $order = Order::withoutGlobalScopes()->where('order_number', $verification['reference'] ?? null)->first();
         $workspaceId = $gateway?->workspace_id ?? $order?->workspace_id;
 
+        if (! $workspaceId) {
+            return;
+        }
+
         $webhookEvent = WebhookEvent::withoutGlobalScopes()->firstOrCreate(
             [
                 'workspace_id' => $workspaceId,
@@ -80,7 +84,7 @@ class PaymentService
                 'external_event_id' => $eventId,
             ],
             [
-                'workspace_id' => $gateway?->workspace_id,
+                'workspace_id' => $workspaceId,
                 'event_type' => $verification['status'] ?? 'unknown',
                 'idempotency_key' => $eventId,
                 'headers' => $headers,
