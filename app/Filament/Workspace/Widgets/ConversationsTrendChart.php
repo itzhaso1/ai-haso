@@ -8,7 +8,7 @@ use Filament\Widgets\ChartWidget;
 
 class ConversationsTrendChart extends ChartWidget
 {
-    protected static ?string $heading = 'المحادثات (آخر 7 أيام)';
+    protected ?string $heading = 'المحادثات (آخر 7 أيام)';
 
     protected ?string $maxHeight = '280px';
 

@@ -8,7 +8,7 @@ use Filament\Widgets\ChartWidget;
 
 class CommercialSalesTrendChart extends ChartWidget
 {
-    protected static ?string $heading = 'اتجاه المبيعات (آخر 7 أيام)';
+    protected ?string $heading = 'اتجاه المبيعات (آخر 7 أيام)';
 
     protected ?string $maxHeight = '280px';
 
