@@ -7,6 +7,7 @@ use App\Http\Requests\Product\StoreProductRequest;
 use App\Http\Requests\Product\UpdateProductRequest;
 use App\Models\Product;
 use App\Services\Product\ProductService;
+use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -15,6 +16,7 @@ class ProductController extends Controller
 {
     public function __construct(
         private readonly ProductService $productService,
+        private readonly WorkspaceContext $workspaceContext,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -47,6 +49,7 @@ class ProductController extends Controller
 
     public function show(Product $product): JsonResponse
     {
+        $this->ensureInWorkspace($product);
         $this->authorize('view', $product);
 
         return response()->json(['data' => $product->load(['category', 'variants'])]);
@@ -54,6 +57,7 @@ class ProductController extends Controller
 
     public function update(UpdateProductRequest $request, Product $product): JsonResponse
     {
+        $this->ensureInWorkspace($product);
         $this->authorize('update', $product);
         $updated = $this->productService->update($product, $request->validated());
 
@@ -62,9 +66,19 @@ class ProductController extends Controller
 
     public function destroy(Product $product): JsonResponse
     {
+        $this->ensureInWorkspace($product);
         $this->authorize('delete', $product);
         $this->productService->delete($product);
 
         return response()->json(status: 204);
+    }
+
+    private function ensureInWorkspace(Product $product): void
+    {
+        $workspaceId = $this->workspaceContext->workspaceId();
+
+        if ($workspaceId !== null && (int) $product->workspace_id !== $workspaceId) {
+            abort(404);
+        }
     }
 }
