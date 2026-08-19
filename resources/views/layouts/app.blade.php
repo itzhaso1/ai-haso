@@ -97,10 +97,7 @@
                     </main>
 
                     <footer class="border-t border-gray-200 bg-white">
-                        <div class="flex flex-col gap-3 px-4 py-6 text-sm text-gray-600 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-                            <p>© {{ now()->year }} حاسم — منصة احترافية لإدارة الأعمال والمحادثات.</p>
-                            <p class="text-[#06C2A4]">تصميم نظيف · أداء سريع · جاهز للنمو</p>
-                        </div>
+                        @include('partials.company-footer-content')
                     </footer>
                 </div>
             </div>

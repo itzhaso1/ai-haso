@@ -25,5 +25,8 @@
     <main class="min-h-screen">
         @yield('content')
     </main>
+    <footer class="border-t border-gray-200 bg-white">
+        @include('partials.company-footer-content')
+    </footer>
 </body>
 </html>

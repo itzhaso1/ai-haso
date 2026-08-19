@@ -118,28 +118,7 @@
         </main>
 
         <footer id="support" class="border-t border-gray-200 bg-white">
-            <div class="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-3 lg:px-8">
-                <div>
-                    <h4 class="text-lg font-bold text-[#06C2A4]">حاسم</h4>
-                    <p class="mt-3 text-sm text-gray-600">منصة عربية لإدارة المحادثات والتجارة والذكاء الاصطناعي من مكان واحد.</p>
-                </div>
-                <div>
-                    <h5 class="text-sm font-semibold text-gray-900">روابط سريعة</h5>
-                    <ul class="mt-3 space-y-2 text-sm text-gray-600">
-                        <li><a href="#features" class="hover:text-[#06C2A4]">الميزات</a></li>
-                        <li><a href="#pricing" class="hover:text-[#06C2A4]">الاشتراكات</a></li>
-                        <li><a href="{{ route('workspace.choose') }}" class="hover:text-[#06C2A4]">مساحات العمل</a></li>
-                    </ul>
-                </div>
-                <div>
-                    <h5 class="text-sm font-semibold text-gray-900">الدخول</h5>
-                    <ul class="mt-3 space-y-2 text-sm text-gray-600">
-                        <li><a href="{{ route('login') }}" class="hover:text-[#06C2A4]">تسجيل الدخول</a></li>
-                        <li><a href="{{ route('register') }}" class="hover:text-[#06C2A4]">إنشاء حساب</a></li>
-                        <li><a href="{{ route('platform.login') }}" class="hover:text-[#06C2A4]">دخول منصة الإدارة</a></li>
-                    </ul>
-                </div>
-            </div>
+            @include('partials.company-footer-content', ['showLinks' => true])
         </footer>
     </div>
     @include('partials.ai-assistant-widget')
