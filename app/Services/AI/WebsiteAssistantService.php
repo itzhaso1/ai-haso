@@ -2,6 +2,7 @@
 
 namespace App\Services\AI;
 
+use App\Models\Plan;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\Workspace\WorkspaceResolverService;
@@ -27,6 +28,7 @@ class WebsiteAssistantService
     public function replyWithMeta(string $prompt, Request $request, ?User $user = null): array
     {
         $workspace = $this->workspaceResolverService->resolveFromRequest($request, $user);
+        $plans = $this->activePlansSnapshot();
         $products = [];
 
         if ($workspace) {
@@ -51,15 +53,17 @@ class WebsiteAssistantService
             ],
             [
                 'role' => 'user',
-                'content' => $prompt,
+                'content' => $this->buildUserPrompt($prompt, $plans),
             ],
         ];
 
         $providerName = $this->providerManager->normalize((string) config('ai.default_provider', 'google_ai_studio'));
         $model = $this->resolveModel($providerName);
         if ($providerName === 'google_ai_studio' && ! filled(config('services.google_ai_studio.key'))) {
+            $fallbackReply = $this->fallbackReply($prompt, $workspace !== null, $plans);
+
             return [
-                'reply' => 'المساعد يعمل الآن بوضع إرشادي فقط لأن مفتاح Gemini غير مضاف بعد. أضف GEMINI_API_KEY في ملف .env ثم نفّذ php artisan config:clear لتفعيل الردود الذكية الحقيقية.',
+                'reply' => $fallbackReply."\n\n(ملاحظة: الرد الحالي يعمل بوضع احتياطي لأن مفتاح Gemini غير مضاف بعد.)",
                 'source' => 'fallback',
                 'reason' => 'missing_gemini_key',
                 'model' => $model,
@@ -87,12 +91,14 @@ class WebsiteAssistantService
             }
 
             return [
-                'reply' => $this->fallbackReply($prompt, $workspace !== null),
+                'reply' => $this->fallbackReply($prompt, $workspace !== null, $plans),
                 'source' => 'fallback',
                 'reason' => 'empty_provider_response',
                 'model' => $model,
             ];
         } catch (Throwable $exception) {
+            $fallbackReply = $this->fallbackReply($prompt, $workspace !== null, $plans);
+
             Log::error('website-assistant-provider-failed', [
                 'provider' => $providerName,
                 'model' => $model,
@@ -100,7 +106,7 @@ class WebsiteAssistantService
             ]);
 
             return [
-                'reply' => "تعذر الوصول إلى مزود الذكاء الاصطناعي الآن (provider: {$providerName}, model: {$model}). تأكد من صحة الإعدادات ثم حاول مجددًا.",
+                'reply' => $fallbackReply."\n\n(ملاحظة تقنية: تعذر الوصول إلى مزود الذكاء الاصطناعي الآن - provider: {$providerName}, model: {$model})",
                 'source' => 'fallback',
                 'reason' => 'provider_error',
                 'model' => $model,
@@ -145,15 +151,56 @@ class WebsiteAssistantService
 - لا تقدم أي معلومات غير مؤكدة.
 - إذا لم توجد بيانات منتج مطابقة، صرّح بعدم التوفر بوضوح.
 - إذا طلب المستخدم دعم الدخول: اشرح تسجيل الدخول من /login أو إنشاء حساب من /register.
+- إذا سأل الزائر عن الأسعار أو الباقات، استخدم أسعار الباقات القادمة من قاعدة البيانات المرفقة في رسالة المستخدم.
+- إذا كانت هناك مشكلة شائعة (كلمة المرور، التحقق، عدم وصول رمز، عدم فتح الصفحة)، أعطِ خطوات حل عملية ومباشرة.
 - إذا كان السؤال تقنيًا لا يعتمد على بيانات مؤكدة، قدّم توجيهًا عامًا ثم اقترح التواصل مع الدعم.
 
 {$workspaceContext}
 PROMPT;
     }
 
-    private function fallbackReply(string $prompt, bool $hasWorkspace): string
+    /**
+     * @param  array<int, array{code:string,name:string,workspace_type:?string,billing_period:string,currency:string,price:string}>  $plans
+     */
+    private function buildUserPrompt(string $prompt, array $plans): string
+    {
+        $plansJson = json_encode($plans, JSON_UNESCAPED_UNICODE);
+
+        return <<<TEXT
+سؤال الزائر:
+{$prompt}
+
+الباقات المتاحة (من قاعدة البيانات):
+{$plansJson}
+TEXT;
+    }
+
+    /**
+     * @param  array<int, array{code:string,name:string,workspace_type:?string,billing_period:string,currency:string,price:string}>  $plans
+     */
+    private function fallbackReply(string $prompt, bool $hasWorkspace, array $plans): string
     {
         $text = mb_strtolower($prompt);
+
+        if (
+            str_contains($text, 'سعر')
+            || str_contains($text, 'اسعار')
+            || str_contains($text, 'باقات')
+            || str_contains($text, 'اشتراك')
+            || str_contains($text, 'plans')
+            || str_contains($text, 'pricing')
+        ) {
+            if (count($plans) === 0) {
+                return 'حاليًا لا توجد باقات نشطة في النظام. يمكن لمدير المنصة إضافتها من لوحة الأدمن: /platform/plans';
+            }
+
+            $lines = array_map(
+                fn (array $plan): string => "- {$plan['name']} ({$plan['workspace_type']}) : {$plan['price']} {$plan['currency']} / {$plan['billing_period']}",
+                $plans
+            );
+
+            return "هذه أسعار الباقات الحالية من قاعدة البيانات:\n".implode("\n", $lines);
+        }
 
         if (str_contains($text, 'تسجيل') || str_contains($text, 'دخول') || str_contains($text, 'login')) {
             return 'للدخول إلى حسابك: افتح صفحة /login ثم أدخل البريد أو رقم الهاتف مع كلمة المرور. إذا نسيت كلمة المرور استخدم "نسيت كلمة المرور".';
@@ -163,10 +210,45 @@ PROMPT;
             return 'لإنشاء حساب جديد: افتح صفحة /register، اختر نوع الحساب (فرد/شركة/متجر)، ثم أكمل بيانات التسجيل.';
         }
 
+        if (str_contains($text, 'نسيت') || str_contains($text, 'كلمة المرور') || str_contains($text, 'password')) {
+            return 'إذا نسيت كلمة المرور: افتح صفحة /forgot-password ثم أدخل البريد الإلكتروني، وستصلك رسالة إعادة تعيين كلمة المرور.';
+        }
+
+        if (str_contains($text, 'رمز') || str_contains($text, 'otp') || str_contains($text, 'تحقق')) {
+            return 'إذا واجهت مشكلة في رمز التحقق: تأكد من صحة الرقم، ثم أعد طلب الرمز من صفحة OTP. إذا استمرت المشكلة جرّب بعد دقيقة بسبب حماية معدل الطلب.';
+        }
+
+        if (str_contains($text, 'مشكلة') || str_contains($text, 'لا يعمل') || str_contains($text, 'error') || str_contains($text, 'خطأ')) {
+            return 'لحل المشكلة بسرعة: 1) حدّث الصفحة 2) تأكد من اتصال الإنترنت 3) سجّل خروج/دخول 4) جرّب متصفحًا آخر. إذا استمرت المشكلة، أرسل لنا لقطة شاشة ووقت الخطأ لدعم أسرع.';
+        }
+
         if ($hasWorkspace) {
             return 'يمكنني مساعدتك في الإرشاد داخل النظام أو البحث عن المنتجات المتاحة في مساحة العمل الحالية. اكتب اسم المنتج أو المواصفات المطلوبة.';
         }
 
         return 'أنا مساعد حاسم. يمكنني مساعدتك في تسجيل الدخول، إنشاء الحساب، والتنقل داخل المنصة خطوة بخطوة.';
+    }
+
+    /**
+     * @return array<int, array{code:string,name:string,workspace_type:?string,billing_period:string,currency:string,price:string}>
+     */
+    private function activePlansSnapshot(): array
+    {
+        return Plan::query()
+            ->where('is_active', true)
+            ->orderBy('workspace_type')
+            ->orderBy('price')
+            ->limit(20)
+            ->get(['code', 'name', 'workspace_type', 'billing_period', 'currency', 'price'])
+            ->map(fn (Plan $plan): array => [
+                'code' => (string) $plan->code,
+                'name' => (string) $plan->name,
+                'workspace_type' => $plan->workspace_type,
+                'billing_period' => (string) $plan->billing_period,
+                'currency' => (string) $plan->currency,
+                'price' => number_format((float) $plan->price, 2, '.', ''),
+            ])
+            ->values()
+            ->all();
     }
 }
