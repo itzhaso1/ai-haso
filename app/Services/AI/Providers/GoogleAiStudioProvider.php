@@ -15,25 +15,53 @@ class GoogleAiStudioProvider implements AiProviderInterface
             throw new RuntimeException('Google AI Studio API key is not configured.');
         }
 
-        $contents = array_map(static fn (array $message): array => [
-            'role' => $message['role'] === 'assistant' ? 'model' : 'user',
-            'parts' => [
-                ['text' => $message['content']],
-            ],
-        ], $messages);
+        $messageCollection = collect($messages);
+        $systemInstruction = (string) ($messageCollection->firstWhere('role', 'system')['content'] ?? '');
+
+        $contents = $messageCollection
+            ->reject(fn (array $message): bool => ($message['role'] ?? '') === 'system')
+            ->map(static fn (array $message): array => [
+                'role' => ($message['role'] ?? 'user') === 'assistant' ? 'model' : 'user',
+                'parts' => [
+                    ['text' => (string) ($message['content'] ?? '')],
+                ],
+            ])
+            ->values()
+            ->all();
+
+        if (count($contents) === 0) {
+            $contents[] = [
+                'role' => 'user',
+                'parts' => [
+                    ['text' => 'مرحبًا'],
+                ],
+            ];
+        }
 
         $endpoint = rtrim((string) config('ai.google_ai_studio.base_url'), '/').'/models/'.$model.':generateContent';
 
-        $response = Http::withHeaders([
-            'x-goog-api-key' => $apiKey,
-        ])
-            ->post($endpoint, [
-                'contents' => $contents,
-                'generationConfig' => [
-                    'temperature' => $temperature,
-                    'maxOutputTokens' => $maxTokens,
+        $payload = [
+            'contents' => $contents,
+            'generationConfig' => [
+                'temperature' => $temperature,
+                'maxOutputTokens' => $maxTokens,
+            ],
+        ];
+
+        if ($systemInstruction !== '') {
+            $payload['system_instruction'] = [
+                'parts' => [
+                    ['text' => $systemInstruction],
                 ],
+            ];
+        }
+
+        $response = Http::timeout(30)
+            ->retry(2, 300)
+            ->withHeaders([
+                'x-goog-api-key' => $apiKey,
             ])
+            ->post($endpoint, $payload)
             ->throw()
             ->json();
 

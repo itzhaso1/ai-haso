@@ -14,7 +14,7 @@ class AssistantController extends Controller
             'message' => ['required', 'string', 'max:1500'],
         ]);
 
-        $reply = $assistantService->reply(
+        $result = $assistantService->replyWithMeta(
             prompt: $validated['message'],
             request: $request,
             user: $request->user(),
@@ -22,7 +22,9 @@ class AssistantController extends Controller
 
         return response()->json([
             'data' => [
-                'reply' => $reply,
+                'reply' => $result['reply'],
+                'source' => $result['source'],
+                'reason' => $result['reason'],
             ],
         ]);
     }

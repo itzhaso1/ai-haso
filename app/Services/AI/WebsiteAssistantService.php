@@ -6,6 +6,7 @@ use App\Models\Product;
 use App\Models\User;
 use App\Services\Workspace\WorkspaceResolverService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class WebsiteAssistantService
@@ -16,6 +17,14 @@ class WebsiteAssistantService
     ) {}
 
     public function reply(string $prompt, Request $request, ?User $user = null): string
+    {
+        return $this->replyWithMeta($prompt, $request, $user)['reply'];
+    }
+
+    /**
+     * @return array{reply:string,source:string,reason:?string}
+     */
+    public function replyWithMeta(string $prompt, Request $request, ?User $user = null): array
     {
         $workspace = $this->workspaceResolverService->resolveFromRequest($request, $user);
         $products = [];
@@ -46,20 +55,50 @@ class WebsiteAssistantService
             ],
         ];
 
+        $providerName = $this->providerManager->normalize((string) config('ai.default_provider', 'google_ai_studio'));
+        if ($providerName === 'google_ai_studio' && ! filled(config('services.google_ai_studio.key'))) {
+            return [
+                'reply' => 'المساعد يعمل الآن بوضع إرشادي فقط لأن مفتاح Gemini غير مضاف بعد. أضف GEMINI_API_KEY في ملف .env ثم نفّذ php artisan config:clear لتفعيل الردود الذكية الحقيقية.',
+                'source' => 'fallback',
+                'reason' => 'missing_gemini_key',
+            ];
+        }
+
         try {
-            $provider = $this->providerManager->resolve('google_ai_studio');
+            $provider = $this->providerManager->resolve($providerName);
             $result = $provider->generate(
                 messages: $messages,
-                model: (string) config('ai.google_ai_studio.model', 'gemini-2.5-flash'),
-                temperature: (float) config('ai.google_ai_studio.temperature', 0.3),
-                maxTokens: (int) config('ai.google_ai_studio.max_tokens', 1024),
+                model: (string) config('ai.'.$providerName.'.model', 'gemini-2.5-flash'),
+                temperature: (float) config('ai.'.$providerName.'.temperature', 0.3),
+                maxTokens: (int) config('ai.'.$providerName.'.max_tokens', 1024),
             );
 
             $content = trim((string) ($result['content'] ?? ''));
 
-            return $content !== '' ? $content : $this->fallbackReply($prompt, $workspace !== null);
-        } catch (Throwable) {
-            return $this->fallbackReply($prompt, $workspace !== null);
+            if ($content !== '') {
+                return [
+                    'reply' => $content,
+                    'source' => $providerName,
+                    'reason' => null,
+                ];
+            }
+
+            return [
+                'reply' => $this->fallbackReply($prompt, $workspace !== null),
+                'source' => 'fallback',
+                'reason' => 'empty_provider_response',
+            ];
+        } catch (Throwable $exception) {
+            Log::error('website-assistant-provider-failed', [
+                'provider' => $providerName,
+                'message' => $exception->getMessage(),
+            ]);
+
+            return [
+                'reply' => 'تعذر الوصول إلى مزود الذكاء الاصطناعي الآن. تأكد من صحة الإعدادات ثم حاول مجددًا.',
+                'source' => 'fallback',
+                'reason' => 'provider_error',
+            ];
         }
     }
 
