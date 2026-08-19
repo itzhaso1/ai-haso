@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'price',
     'is_active',
     'features',
+    'permissions',
     'limits',
 ])]
 class Plan extends Model
@@ -25,6 +26,7 @@ class Plan extends Model
             'price' => 'decimal:2',
             'is_active' => 'boolean',
             'features' => 'array',
+            'permissions' => 'array',
             'limits' => 'array',
         ];
     }

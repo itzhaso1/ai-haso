@@ -49,6 +49,7 @@ class FoundationSeeder extends Seeder
                 'price' => 0,
                 'is_active' => true,
                 'features' => ['conversations', 'smart_replies', 'ai', 'subscription', 'usage'],
+                'permissions' => ['workspace.view', 'conversations.manage', 'ai.manage', 'subscriptions.manage'],
                 'limits' => ['ai_usage' => 500, 'conversations' => 300, 'whatsapp_numbers' => 0],
             ],
             [
@@ -60,6 +61,7 @@ class FoundationSeeder extends Seeder
                 'price' => 19,
                 'is_active' => true,
                 'features' => ['conversations', 'smart_replies', 'ai', 'subscription', 'usage', 'whatsapp'],
+                'permissions' => ['workspace.view', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'subscriptions.manage'],
                 'limits' => ['ai_usage' => 5000, 'conversations' => 5000, 'whatsapp_numbers' => 1],
             ],
             [
@@ -71,6 +73,7 @@ class FoundationSeeder extends Seeder
                 'price' => 99,
                 'is_active' => true,
                 'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp'],
+                'permissions' => ['workspace.view', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'subscriptions.manage'],
                 'limits' => ['products' => 1000, 'users' => 10, 'orders' => 2000, 'ai_usage' => 20000],
             ],
             [
@@ -82,6 +85,7 @@ class FoundationSeeder extends Seeder
                 'price' => 99,
                 'is_active' => true,
                 'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp'],
+                'permissions' => ['workspace.view', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'subscriptions.manage'],
                 'limits' => ['products' => 1000, 'users' => 10, 'orders' => 2000, 'ai_usage' => 20000],
             ],
             [
@@ -93,6 +97,7 @@ class FoundationSeeder extends Seeder
                 'price' => 199,
                 'is_active' => true,
                 'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'payments', 'employees', 'analytics'],
+                'permissions' => ['workspace.view', 'workspace.manage', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'payments.manage', 'employees.manage', 'subscriptions.manage'],
                 'limits' => ['products' => 5000, 'users' => 30, 'orders' => 15000, 'ai_usage' => 120000],
             ],
             [
@@ -104,6 +109,7 @@ class FoundationSeeder extends Seeder
                 'price' => 199,
                 'is_active' => true,
                 'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'payments', 'employees', 'analytics'],
+                'permissions' => ['workspace.view', 'workspace.manage', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'payments.manage', 'employees.manage', 'subscriptions.manage'],
                 'limits' => ['products' => 5000, 'users' => 30, 'orders' => 15000, 'ai_usage' => 120000],
             ],
             [
@@ -115,6 +121,7 @@ class FoundationSeeder extends Seeder
                 'price' => 499,
                 'is_active' => true,
                 'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'payments', 'employees', 'analytics'],
+                'permissions' => ['workspace.view', 'workspace.manage', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'payments.manage', 'employees.manage', 'subscriptions.manage'],
                 'limits' => ['products' => 50000, 'users' => 200, 'orders' => 200000, 'ai_usage' => 1000000],
             ],
             [
@@ -126,6 +133,7 @@ class FoundationSeeder extends Seeder
                 'price' => 499,
                 'is_active' => true,
                 'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'payments', 'employees', 'analytics'],
+                'permissions' => ['workspace.view', 'workspace.manage', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'payments.manage', 'employees.manage', 'subscriptions.manage'],
                 'limits' => ['products' => 50000, 'users' => 200, 'orders' => 200000, 'ai_usage' => 1000000],
             ],
         ];

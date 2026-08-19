@@ -7,7 +7,7 @@
             @include('partials.flash')
             <form method="POST" action="{{ route('platform.plans.update', $plan) }}" class="rounded-xl border bg-white p-6 space-y-4">
                 @csrf @method('PUT')
-                @include('platform.plans.form', ['plan' => $plan, 'featuresJson' => $featuresJson, 'limitsJson' => $limitsJson])
+                @include('platform.plans.form', ['plan' => $plan, 'featuresJson' => $featuresJson, 'permissionsJson' => $permissionsJson, 'limitsJson' => $limitsJson])
                 <button class="rounded-lg bg-blue-600 px-4 py-2 text-white">تحديث</button>
             </form>
         </div>

@@ -1,46 +1,17 @@
 <div
-    x-data="{
-        open: false,
-        loading: false,
-        message: '',
-        messages: [
-            { role: 'assistant', text: 'مرحبًا، أنا مساعد حاسم. كيف يمكنني مساعدتك اليوم؟' }
-        ],
-        async send() {
-            const text = this.message.trim();
-            if (!text || this.loading) return;
-
-            this.messages.push({ role: 'user', text });
-            this.message = '';
-            this.loading = true;
-
-            try {
-                const response = await fetch('{{ route('assistant.chat') }}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name=\"csrf-token\"]')?.content || '',
-                    },
-                    body: JSON.stringify({ message: text }),
-                });
-
-                const payload = await response.json();
-                const reply = payload?.data?.reply || 'تعذر إنشاء الرد الآن. حاول مرة أخرى.';
-                this.messages.push({ role: 'assistant', text: reply });
-            } catch (e) {
-                this.messages.push({ role: 'assistant', text: 'حدث خطأ أثناء الاتصال بالمساعد. حاول مجددًا.' });
-            } finally {
-                this.loading = false;
-                this.$nextTick(() => {
-                    this.$refs.log.scrollTop = this.$refs.log.scrollHeight;
-                });
-            }
-        }
-    }"
-    class="fixed bottom-6 left-6 z-[70]"
+    x-data="assistantWidget(@js(route('assistant.chat')))"
+    @pointermove.window="onDrag($event)"
+    @pointerup.window="endDrag()"
+    @pointercancel.window="endDrag()"
+    class="fixed z-[70]"
+    :style="launcherStyle()"
 >
-    <div x-cloak x-show="open" class="mb-3 w-[330px] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
+    <div
+        x-cloak
+        x-show="open"
+        x-transition.opacity
+        class="absolute bottom-16 left-0 w-[330px] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl"
+    >
         <div class="flex items-center justify-between border-b border-gray-100 bg-[#06C2A4] px-4 py-3 text-white">
             <div>
                 <p class="text-sm font-bold">مساعد حاسم</p>
@@ -78,9 +49,10 @@
     </div>
 
     <button
-        @click="open = !open"
+        @pointerdown.prevent="startDrag($event)"
+        @click="toggleFromLauncher()"
         type="button"
-        class="inline-flex h-14 w-14 items-center justify-center rounded-full bg-[#06C2A4] text-white shadow-xl transition hover:scale-[1.03] hover:bg-[#04a98e]"
+        class="inline-flex h-14 w-14 cursor-move items-center justify-center rounded-full bg-[#06C2A4] text-white shadow-xl transition hover:scale-[1.03] hover:bg-[#04a98e]"
         aria-label="فتح مساعد حاسم"
     >
         <svg class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor">

@@ -36,6 +36,7 @@ class PlanController extends Controller
         return view('platform.plans.edit', [
             'plan' => $plan,
             'featuresJson' => json_encode($plan->features ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
+            'permissionsJson' => json_encode($plan->permissions ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
             'limitsJson' => json_encode($plan->limits ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE),
         ]);
     }
@@ -60,15 +61,27 @@ class PlanController extends Controller
             'code' => ['nullable', 'string', 'max:100'],
             'name' => ['required', 'string', 'max:255'],
             'workspace_type' => ['required', 'in:individual,company,store'],
-            'billing_period' => ['required', 'in:monthly,quarterly,yearly,lifetime'],
+            'billing_period' => ['required', 'in:monthly,yearly,lifetime'],
             'currency' => ['required', 'string', 'size:3'],
             'price' => ['required', 'numeric', 'min:0'],
             'is_active' => ['nullable', 'boolean'],
+            'features' => ['nullable', 'array'],
+            'features.*' => ['string', 'max:100'],
+            'permissions' => ['nullable', 'array'],
+            'permissions.*' => ['string', 'max:100'],
             'features_json' => ['nullable', 'string'],
+            'permissions_json' => ['nullable', 'string'],
             'limits_json' => ['nullable', 'string'],
         ]);
 
-        $features = json_decode((string) $request->input('features_json', '[]'), true);
+        $featuresFromJson = json_decode((string) $request->input('features_json', '[]'), true);
+        $featuresFromCheckboxes = $request->input('features', []);
+        $features = is_array($featuresFromJson) && count($featuresFromJson) > 0 ? $featuresFromJson : $featuresFromCheckboxes;
+
+        $permissionsFromJson = json_decode((string) $request->input('permissions_json', '[]'), true);
+        $permissionsFromCheckboxes = $request->input('permissions', []);
+        $permissions = is_array($permissionsFromJson) && count($permissionsFromJson) > 0 ? $permissionsFromJson : $permissionsFromCheckboxes;
+
         $limits = json_decode((string) $request->input('limits_json', '{}'), true);
 
         return [
@@ -80,6 +93,7 @@ class PlanController extends Controller
             'price' => $data['price'],
             'is_active' => (bool) ($data['is_active'] ?? true),
             'features' => is_array($features) ? $features : [],
+            'permissions' => is_array($permissions) ? $permissions : [],
             'limits' => is_array($limits) ? $limits : [],
         ];
     }

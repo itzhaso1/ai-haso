@@ -64,6 +64,16 @@ npm run dev
   - `GEMINI_API_KEY=...`
   - `GEMINI_MODEL=gemini-2.5-flash`
 
+### WhatsApp Webhook (Meta)
+
+- Verification endpoint: `GET /api/webhooks/whatsapp`
+- Incoming messages endpoint: `POST /api/webhooks/whatsapp`
+- Configure in `.env`:
+  - `WHATSAPP_VERIFY_TOKEN=your_verify_token`
+  - `WHATSAPP_APP_SECRET=your_meta_app_secret`
+- Controller used:
+  - `App\Http\Controllers\Webhook\WhatsAppWebhookController`
+
 ## Default Platform Admin (local)
 
 - Email: `admin@hasem.local`

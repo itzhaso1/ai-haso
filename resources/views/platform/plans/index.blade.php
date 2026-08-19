@@ -15,6 +15,8 @@
                             <th class="px-4 py-3 text-right">الاسم</th>
                             <th class="px-4 py-3 text-right">النوع</th>
                             <th class="px-4 py-3 text-right">السعر</th>
+                            <th class="px-4 py-3 text-right">الخصائص</th>
+                            <th class="px-4 py-3 text-right">الصلاحيات</th>
                             <th class="px-4 py-3 text-right">الحالة</th>
                             <th class="px-4 py-3 text-right"></th>
                         </tr>
@@ -25,6 +27,8 @@
                                 <td class="px-4 py-3">{{ $plan->name }}</td>
                                 <td class="px-4 py-3">{{ $plan->workspace_type }}</td>
                                 <td class="px-4 py-3">{{ number_format((float)$plan->price, 2) }} {{ $plan->currency }}</td>
+                                <td class="px-4 py-3">{{ count($plan->features ?? []) }}</td>
+                                <td class="px-4 py-3">{{ count($plan->permissions ?? []) }}</td>
                                 <td class="px-4 py-3">{{ $plan->is_active ? 'نشط' : 'غير نشط' }}</td>
                                 <td class="px-4 py-3 text-left">
                                     <a href="{{ route('platform.plans.edit', $plan) }}" class="text-blue-600">تعديل</a>
@@ -35,7 +39,7 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="5" class="px-4 py-6 text-center text-gray-500">لا توجد خطط.</td></tr>
+                            <tr><td colspan="7" class="px-4 py-6 text-center text-gray-500">لا توجد خطط.</td></tr>
                         @endforelse
                     </tbody>
                 </table>

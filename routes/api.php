@@ -70,6 +70,6 @@ Route::middleware(['auth:sanctum', 'workspace.resolve', 'workspace.member'])
         Route::post('/roles-permissions/sync-permissions', [RolePermissionController::class, 'syncPermissions']);
     });
 
-Route::get('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'verify']);
-Route::post('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'handle']);
+Route::get('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'verify'])->name('webhooks.whatsapp.verify');
+Route::post('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'handle'])->name('webhooks.whatsapp.handle');
 Route::post('/webhooks/payments/{provider}', [PaymentWebhookController::class, 'handle']);
