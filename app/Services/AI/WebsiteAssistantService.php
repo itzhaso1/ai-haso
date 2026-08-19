@@ -22,7 +22,7 @@ class WebsiteAssistantService
     }
 
     /**
-     * @return array{reply:string,source:string,reason:?string}
+     * @return array{reply:string,source:string,reason:?string,model:?string}
      */
     public function replyWithMeta(string $prompt, Request $request, ?User $user = null): array
     {
@@ -56,11 +56,13 @@ class WebsiteAssistantService
         ];
 
         $providerName = $this->providerManager->normalize((string) config('ai.default_provider', 'google_ai_studio'));
+        $model = $this->resolveModel($providerName);
         if ($providerName === 'google_ai_studio' && ! filled(config('services.google_ai_studio.key'))) {
             return [
                 'reply' => 'المساعد يعمل الآن بوضع إرشادي فقط لأن مفتاح Gemini غير مضاف بعد. أضف GEMINI_API_KEY في ملف .env ثم نفّذ php artisan config:clear لتفعيل الردود الذكية الحقيقية.',
                 'source' => 'fallback',
                 'reason' => 'missing_gemini_key',
+                'model' => $model,
             ];
         }
 
@@ -68,9 +70,9 @@ class WebsiteAssistantService
             $provider = $this->providerManager->resolve($providerName);
             $result = $provider->generate(
                 messages: $messages,
-                model: (string) config('ai.'.$providerName.'.model', 'gemini-2.5-flash'),
-                temperature: (float) config('ai.'.$providerName.'.temperature', 0.3),
-                maxTokens: (int) config('ai.'.$providerName.'.max_tokens', 1024),
+                model: $model,
+                temperature: $this->resolveTemperature($providerName),
+                maxTokens: $this->resolveMaxTokens($providerName),
             );
 
             $content = trim((string) ($result['content'] ?? ''));
@@ -80,6 +82,7 @@ class WebsiteAssistantService
                     'reply' => $content,
                     'source' => $providerName,
                     'reason' => null,
+                    'model' => $model,
                 ];
             }
 
@@ -87,19 +90,46 @@ class WebsiteAssistantService
                 'reply' => $this->fallbackReply($prompt, $workspace !== null),
                 'source' => 'fallback',
                 'reason' => 'empty_provider_response',
+                'model' => $model,
             ];
         } catch (Throwable $exception) {
             Log::error('website-assistant-provider-failed', [
                 'provider' => $providerName,
+                'model' => $model,
                 'message' => $exception->getMessage(),
             ]);
 
             return [
-                'reply' => 'تعذر الوصول إلى مزود الذكاء الاصطناعي الآن. تأكد من صحة الإعدادات ثم حاول مجددًا.',
+                'reply' => "تعذر الوصول إلى مزود الذكاء الاصطناعي الآن (provider: {$providerName}, model: {$model}). تأكد من صحة الإعدادات ثم حاول مجددًا.",
                 'source' => 'fallback',
                 'reason' => 'provider_error',
+                'model' => $model,
             ];
         }
+    }
+
+    private function resolveModel(string $providerName): string
+    {
+        $configModel = (string) config('ai.'.$providerName.'.model', '');
+        if ($configModel !== '') {
+            return $configModel;
+        }
+
+        if ($providerName === 'google_ai_studio') {
+            return (string) config('services.google_ai_studio.model', 'gemini-2.5-flash');
+        }
+
+        return (string) config('ai.openai.model', 'gpt-4o-mini');
+    }
+
+    private function resolveTemperature(string $providerName): float
+    {
+        return (float) config('ai.'.$providerName.'.temperature', 0.3);
+    }
+
+    private function resolveMaxTokens(string $providerName): int
+    {
+        return (int) config('ai.'.$providerName.'.max_tokens', 1024);
     }
 
     private function buildSystemPrompt(bool $hasWorkspace, array $products): string

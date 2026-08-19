@@ -53,6 +53,7 @@ return [
 
     'google_ai_studio' => [
         'key' => env('GEMINI_API_KEY'),
+        'model' => env('GOOGLE_AI_STUDIO_MODEL', env('GEMINI_MODEL', 'gemini-2.5-flash')),
     ],
 
     'stripe' => [

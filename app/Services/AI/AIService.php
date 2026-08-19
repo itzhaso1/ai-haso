@@ -106,6 +106,10 @@ class AIService
 
     private function defaultModel(string $provider): string
     {
+        if ($provider === 'google_ai_studio') {
+            return (string) config('ai.google_ai_studio.model', config('services.google_ai_studio.model', 'gemini-2.5-flash'));
+        }
+
         return (string) config('ai.'.$provider.'.model', config('ai.openai.model'));
     }
 

@@ -25,6 +25,7 @@ class AssistantController extends Controller
                 'reply' => $result['reply'],
                 'source' => $result['source'],
                 'reason' => $result['reason'],
+                'model' => $result['model'],
             ],
         ]);
     }
