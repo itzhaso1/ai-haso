@@ -14,11 +14,15 @@
                     </div>
                     <div>
                         <label class="mb-1 block text-sm">Provider</label>
-                        <input name="provider" required value="{{ old('provider', $setting?->provider ?? 'openai') }}" class="w-full rounded-lg border-gray-300" />
+                        <select name="provider" class="w-full rounded-lg border-gray-300">
+                            @foreach(['google_ai_studio' => 'Google AI Studio (Gemini)', 'openai' => 'OpenAI'] as $value => $label)
+                                <option value="{{ $value }}" @selected(old('provider', $setting?->provider ?? config('ai.default_provider')) === $value)>{{ $label }}</option>
+                            @endforeach
+                        </select>
                     </div>
                     <div>
                         <label class="mb-1 block text-sm">Model</label>
-                        <input name="model" required value="{{ old('model', $setting?->model ?? 'gpt-4o-mini') }}" class="w-full rounded-lg border-gray-300" />
+                        <input name="model" required value="{{ old('model', $setting?->model ?? config('ai.google_ai_studio.model')) }}" class="w-full rounded-lg border-gray-300" />
                     </div>
                     <div>
                         <label class="mb-1 block text-sm">Max Tokens</label>
@@ -53,7 +57,7 @@
                     <label class="mb-1 block text-sm">Business Information JSON</label>
                     <textarea name="business_information_json" rows="5" class="w-full rounded-lg border-gray-300">{{ old('business_information_json', $businessInfoJson) }}</textarea>
                 </div>
-                <button class="rounded-lg bg-blue-600 px-4 py-2 text-white">حفظ الإعدادات</button>
+                <button class="rounded-lg bg-[#06C2A4] px-4 py-2 text-white hover:bg-[#04a98e]">حفظ الإعدادات</button>
             </form>
         </div>
     </div>

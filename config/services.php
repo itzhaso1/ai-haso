@@ -51,6 +51,10 @@ return [
         'key' => env('OPENAI_API_KEY'),
     ],
 
+    'google_ai_studio' => [
+        'key' => env('GEMINI_API_KEY'),
+    ],
+
     'stripe' => [
         'key' => env('STRIPE_KEY'),
         'secret' => env('STRIPE_SECRET'),

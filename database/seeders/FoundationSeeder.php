@@ -135,7 +135,7 @@ class FoundationSeeder extends Seeder
         }
 
         PlatformAdmin::query()->updateOrCreate(
-            ['email' => env('PLATFORM_ADMIN_EMAIL', 'admin@ai-haso.local')],
+            ['email' => env('PLATFORM_ADMIN_EMAIL', 'admin@hasem.local')],
             [
                 'name' => env('PLATFORM_ADMIN_NAME', 'Platform Admin'),
                 'password' => Hash::make(env('PLATFORM_ADMIN_PASSWORD', 'password')),

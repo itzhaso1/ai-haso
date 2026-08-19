@@ -1,4 +1,4 @@
-# AI-HASO Production Architecture (Laravel)
+# HASEM Production Architecture (Laravel)
 
 ## 1) System Architecture (High-Level)
 

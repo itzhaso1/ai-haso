@@ -23,8 +23,6 @@ use App\Policies\PaymentPolicy;
 use App\Policies\ProductPolicy;
 use App\Policies\SubscriptionPolicy;
 use App\Policies\WorkspacePolicy;
-use App\Services\AI\Contracts\AiProviderInterface;
-use App\Services\AI\Providers\OpenAiProvider;
 use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -37,7 +35,6 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(WorkspaceContext::class);
-        $this->app->bind(AiProviderInterface::class, OpenAiProvider::class);
     }
 
     /**

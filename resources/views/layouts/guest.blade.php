@@ -5,7 +5,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title>{{ config('app.name', 'AI-HASO') }}</title>
+        <title>{{ config('app.name', 'HASEM') }}</title>
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
@@ -16,9 +16,10 @@
     </head>
     <body class="font-sans text-gray-900 antialiased bg-white">
         <div class="min-h-screen flex flex-col sm:justify-center items-center pt-6 sm:pt-0 bg-gray-100">
-            <div>
-                <a href="/">
-                    <x-application-logo class="w-20 h-20 fill-current text-gray-500" />
+            <div class="text-center">
+                <a href="/" class="inline-flex flex-col items-center">
+                    <x-application-logo class="h-16 w-16 fill-current text-[#06C2A4]" />
+                    <span class="mt-3 text-2xl font-extrabold tracking-tight text-[#06C2A4]">حاسم</span>
                 </a>
             </div>
 
@@ -26,5 +27,6 @@
                 {{ $slot }}
             </div>
         </div>
+        @include('partials.ai-assistant-widget')
     </body>
 </html>

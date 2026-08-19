@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Workspace\Concerns\InteractsWithWorkspace;
 use App\Http\Requests\Conversation\StoreConversationRequest;
 use App\Http\Requests\Message\StoreMessageRequest;
+use App\Jobs\ProcessAIResponse;
 use App\Models\Conversation;
 use App\Models\Customer;
 use App\Services\Conversation\ConversationService;
@@ -140,7 +141,11 @@ class ConversationController extends Controller
         $payload['message_type'] = $payload['message_type'] ?? 'text';
         $payload['metadata'] = $this->parseJsonField($request, 'metadata_json');
 
-        $this->conversationService->addMessage($conversation, $payload, $request->user());
+        $sentMessage = $this->conversationService->addMessage($conversation, $payload, $request->user());
+
+        if ($sentMessage->direction === 'inbound' && $conversation->ai_enabled) {
+            ProcessAIResponse::dispatch($conversation->id, $sentMessage->id);
+        }
 
         return redirect()->route('workspace.conversations.index', [
             'conversation' => $conversation->id,

@@ -5,7 +5,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title>{{ config('app.name', 'AI-HASO') }}</title>
+        <title>{{ config('app.name', 'HASEM') }}</title>
 
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600;700;800&display=swap" rel="stylesheet" />
@@ -21,7 +21,7 @@
             <div x-data="{ sidebarOpen: false }" class="min-h-screen bg-[#F7FCFB]">
                 <aside class="fixed inset-y-0 right-0 z-40 hidden w-72 border-l border-gray-200 bg-white lg:flex lg:flex-col">
                     <div class="border-b border-gray-100 px-6 py-6">
-                        <a href="{{ route('workspace.dashboard') }}" class="text-3xl font-extrabold tracking-tight text-[#06C2A4]">حسام</a>
+                        <a href="{{ route('workspace.dashboard') }}" class="text-3xl font-extrabold tracking-tight text-[#06C2A4]">حاسم</a>
                         <p class="mt-2 text-xs text-gray-500">لوحة تحكم الأعمال الذكية</p>
                     </div>
                     <nav class="flex-1 overflow-y-auto px-4 py-4">
@@ -38,7 +38,7 @@
                                 </svg>
                             </button>
                             <div class="hidden items-center gap-3 lg:flex">
-                                <a href="{{ route('workspace.dashboard') }}" class="text-2xl font-bold text-[#06C2A4]">حسام</a>
+                                <a href="{{ route('workspace.dashboard') }}" class="text-2xl font-bold text-[#06C2A4]">حاسم</a>
                                 <span class="text-sm text-gray-500">منصة SaaS عربية احترافية</span>
                             </div>
                             <div class="flex items-center gap-2 sm:gap-3">
@@ -71,7 +71,7 @@
                         <button @click="sidebarOpen = false" type="button" class="absolute inset-0 bg-gray-900/40"></button>
                         <aside x-transition class="absolute inset-y-0 right-0 w-72 overflow-y-auto border-l border-gray-200 bg-white">
                             <div class="flex items-center justify-between border-b border-gray-100 px-5 py-5">
-                                <a href="{{ route('workspace.dashboard') }}" class="text-2xl font-extrabold text-[#06C2A4]">حسام</a>
+                                <a href="{{ route('workspace.dashboard') }}" class="text-2xl font-extrabold text-[#06C2A4]">حاسم</a>
                                 <button @click="sidebarOpen = false" type="button" class="rounded-md p-2 text-gray-600 hover:bg-gray-100">
                                     <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -98,7 +98,7 @@
 
                     <footer class="border-t border-gray-200 bg-white">
                         <div class="flex flex-col gap-3 px-4 py-6 text-sm text-gray-600 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-                            <p>© {{ now()->year }} حسام — منصة احترافية لإدارة الأعمال والمحادثات.</p>
+                            <p>© {{ now()->year }} حاسم — منصة احترافية لإدارة الأعمال والمحادثات.</p>
                             <p class="text-[#06C2A4]">تصميم نظيف · أداء سريع · جاهز للنمو</p>
                         </div>
                     </footer>
@@ -121,5 +121,6 @@
                 </main>
             </div>
         @endif
+        @include('partials.ai-assistant-widget')
     </body>
 </html>

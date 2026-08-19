@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ config('app.name', 'AI-HASO') }}</title>
+    <title>{{ config('app.name', 'HASEM') }}</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="bg-white text-gray-900 font-sans">
@@ -11,7 +11,7 @@
         <header class="border-b border-gray-100">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
                 <div>
-                    <h1 class="text-2xl font-bold text-blue-700">AI-HASO</h1>
+                    <h1 class="text-2xl font-bold text-[#06C2A4]">حاسم</h1>
                     <p class="text-sm text-gray-600">منصة SaaS لإدارة المحادثات والذكاء الاصطناعي والتجارة</p>
                 </div>
                 <div class="flex items-center gap-2">

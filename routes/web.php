@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AssistantController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Auth\PhoneOtpController;
 use App\Http\Controllers\Auth\SocialLoginController;
@@ -24,6 +25,10 @@ Route::get('/', function () {
     return view('landing');
 });
 
+Route::post('/assistant/chat', [AssistantController::class, 'chat'])
+    ->middleware('throttle:20,1')
+    ->name('assistant.chat');
+
 Route::middleware(['guest'])->group(function (): void {
     Route::get('/otp/login', [PhoneOtpController::class, 'create'])->name('otp.login');
     Route::post('/otp/request', [PhoneOtpController::class, 'requestOtp'])->name('otp.request');
@@ -38,7 +43,7 @@ Route::middleware(['guest'])->group(function (): void {
         ->name('social.callback');
 });
 
-Route::middleware(['auth', 'verified'])->group(function (): void {
+Route::middleware(['auth'])->group(function (): void {
     Route::get('/dashboard', fn () => redirect()->route('workspace.dashboard'))->name('dashboard');
 
     Route::get('/workspaces/choose', [WorkspaceSelectionController::class, 'choose'])->name('workspace.choose');
@@ -57,7 +62,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/notifications/{id}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
 });
 
-Route::middleware(['auth', 'verified', 'workspace.selected', 'workspace.member'])
+Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
     ->prefix('workspace')
     ->as('workspace.')
     ->group(function (): void {

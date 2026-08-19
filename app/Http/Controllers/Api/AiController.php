@@ -42,6 +42,10 @@ class AiController extends Controller
 
         $settings = AiSetting::query()->firstOrCreate([], [
             'name' => 'AI Assistant',
+            'provider' => config('ai.default_provider', 'google_ai_studio'),
+            'model' => config('ai.google_ai_studio.model', 'gemini-2.5-flash'),
+            'temperature' => config('ai.google_ai_studio.temperature', 0.3),
+            'max_tokens' => config('ai.google_ai_studio.max_tokens', 1024),
         ]);
         $settings->update($validated);
 

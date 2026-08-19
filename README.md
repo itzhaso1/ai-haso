@@ -1,4 +1,4 @@
-# AI-HASO (Laravel SaaS Platform)
+# HASEM (Laravel SaaS Platform)
 
 Production-oriented Laravel SaaS platform (Backend + Frontend inside Laravel) supporting:
 
@@ -47,9 +47,26 @@ php artisan serve
 npm run dev
 ```
 
+### Database (MySQL)
+
+- Default setup now targets **MySQL** (`DB_CONNECTION=mysql`).
+- Configure in `.env`:
+  - `DB_HOST`
+  - `DB_PORT`
+  - `DB_DATABASE`
+  - `DB_USERNAME`
+  - `DB_PASSWORD`
+
+### AI Connector (Google AI Studio)
+
+- Configure Gemini API key in `.env`:
+  - `AI_DEFAULT_PROVIDER=google_ai_studio`
+  - `GEMINI_API_KEY=...`
+  - `GEMINI_MODEL=gemini-2.5-flash`
+
 ## Default Platform Admin (local)
 
-- Email: `admin@ai-haso.local`
+- Email: `admin@hasem.local`
 - Password: `password`
 
 Override via `.env`:

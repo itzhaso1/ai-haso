@@ -33,7 +33,7 @@ class NewOrderNotification extends Notification implements ShouldQueue
             ->subject('طلب جديد '.$this->order->order_number)
             ->line('تم إنشاء طلب جديد بقيمة '.$this->order->total_amount.' '.$this->order->currency)
             ->action('عرض الطلبات', url('/workspace/orders'))
-            ->line('AI-HASO');
+            ->line('HASEM');
     }
 
     /**
