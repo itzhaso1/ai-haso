@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Workspace\Concerns\InteractsWithWorkspace;
 use App\Models\Plan;
 use App\Models\Subscription;
+use App\Models\SubscriptionCheckoutSession;
 use App\Services\Subscription\SubscriptionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,6 +27,10 @@ class SubscriptionController extends Controller
             'currentSubscription' => $this->subscriptionService->current($workspace),
             'subscriptions' => Subscription::query()->with('plan')->latest('id')->paginate(10),
             'availablePlans' => $this->subscriptionService->availablePlans($workspace->type),
+            'checkoutSessions' => SubscriptionCheckoutSession::query()
+                ->with(['plan', 'activatedSubscription'])
+                ->latest('id')
+                ->paginate(10, ['*'], 'checkouts'),
         ]);
     }
 
@@ -34,16 +39,55 @@ class SubscriptionController extends Controller
         $workspace = $this->currentWorkspace();
         $validated = $request->validate([
             'plan_id' => ['required', 'integer', 'exists:plans,id'],
+            'payment_provider' => ['nullable', 'in:hyperpay,local'],
         ]);
 
         $plan = Plan::query()
             ->whereKey($validated['plan_id'])
+            ->where('is_active', true)
             ->where('workspace_type', $workspace->type)
             ->firstOrFail();
 
-        $this->subscriptionService->activatePlan($workspace, $plan);
+        $checkoutSession = $this->subscriptionService->createCheckoutSession(
+            workspace: $workspace,
+            plan: $plan,
+            paymentProvider: (string) ($validated['payment_provider'] ?? 'hyperpay'),
+        );
 
-        return redirect()->route('workspace.subscriptions.index')->with('success', 'تم تفعيل الخطة الجديدة.');
+        return redirect()
+            ->route('workspace.subscriptions.checkout.show', $checkoutSession)
+            ->with('success', 'تم تجهيز عملية الاشتراك. أكمل الدفع لتفعيل الباقة.');
+    }
+
+    public function showCheckout(SubscriptionCheckoutSession $checkoutSession): View
+    {
+        return view('workspace.subscriptions.checkout', [
+            'checkoutSession' => $checkoutSession->load(['plan', 'activatedSubscription']),
+        ]);
+    }
+
+    public function confirmCheckoutPayment(Request $request, SubscriptionCheckoutSession $checkoutSession): RedirectResponse
+    {
+        $workspace = $this->currentWorkspace();
+        $validated = $request->validate([
+            'payment_reference' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        try {
+            $subscription = $this->subscriptionService->completeCheckoutAndActivate(
+                workspace: $workspace,
+                checkoutSession: $checkoutSession,
+                paymentReference: $validated['payment_reference'] ?? null,
+            );
+        } catch (\RuntimeException $exception) {
+            return redirect()
+                ->route('workspace.subscriptions.checkout.show', $checkoutSession)
+                ->with('error', $exception->getMessage());
+        }
+
+        return redirect()
+            ->route('workspace.subscriptions.index')
+            ->with('success', "تم تأكيد الدفع وتفعيل الباقة {$subscription->plan?->name} بنجاح.");
     }
 
     public function destroy(Subscription $subscription): RedirectResponse

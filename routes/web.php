@@ -20,9 +20,21 @@ use App\Http\Controllers\Workspace\ProductController;
 use App\Http\Controllers\Workspace\SubscriptionController;
 use App\Http\Controllers\Workspace\WhatsAppAccountController;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 
 Route::get('/', function () {
-    return view('landing');
+    $plans = collect();
+    if (Schema::hasTable('plans')) {
+        $plans = \App\Models\Plan::query()
+            ->where('is_active', true)
+            ->orderBy('workspace_type')
+            ->orderBy('price')
+            ->get();
+    }
+
+    return view('landing', [
+        'plansByType' => $plans->groupBy('workspace_type'),
+    ]);
 });
 
 Route::post('/assistant/chat', [AssistantController::class, 'chat'])
@@ -44,7 +56,7 @@ Route::middleware(['guest'])->group(function (): void {
 });
 
 Route::middleware(['auth'])->group(function (): void {
-    Route::get('/dashboard', fn () => redirect()->route('workspace.dashboard'))->name('dashboard');
+    Route::get('/dashboard', fn () => redirect()->route('workspace.subscriptions.index'))->name('dashboard');
 
     Route::get('/workspaces/choose', [WorkspaceSelectionController::class, 'choose'])->name('workspace.choose');
     Route::post('/workspaces/{workspace}/switch', [WorkspaceSelectionController::class, 'switch'])->name('workspace.switch');
@@ -87,6 +99,8 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
 
         Route::get('subscriptions', [SubscriptionController::class, 'index'])->name('subscriptions.index');
         Route::post('subscriptions', [SubscriptionController::class, 'store'])->name('subscriptions.store');
+        Route::get('subscriptions/checkout/{checkoutSession}', [SubscriptionController::class, 'showCheckout'])->name('subscriptions.checkout.show');
+        Route::post('subscriptions/checkout/{checkoutSession}/confirm-payment', [SubscriptionController::class, 'confirmCheckoutPayment'])->name('subscriptions.checkout.confirm-payment');
         Route::delete('subscriptions/{subscription}', [SubscriptionController::class, 'destroy'])->name('subscriptions.destroy');
 
         Route::get('ai-settings', [AiSettingController::class, 'edit'])->name('ai-settings.edit');

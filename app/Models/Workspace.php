@@ -63,6 +63,11 @@ class Workspace extends Model
         return $this->hasMany(Subscription::class);
     }
 
+    public function subscriptionCheckoutSessions(): HasMany
+    {
+        return $this->hasMany(SubscriptionCheckoutSession::class);
+    }
+
     public function featureFlags(): HasMany
     {
         return $this->hasMany(WorkspaceFeatureFlag::class);

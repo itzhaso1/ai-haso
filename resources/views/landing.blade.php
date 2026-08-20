@@ -26,7 +26,7 @@
                 </nav>
                 <div class="flex items-center gap-2">
                     @auth
-                        <a href="{{ route('workspace.dashboard') }}" class="rounded-lg bg-[#06C2A4] px-4 py-2 text-sm font-semibold text-white hover:bg-[#04a98e]">لوحة التحكم</a>
+                        <a href="{{ route('workspace.subscriptions.index') }}" class="rounded-lg bg-[#06C2A4] px-4 py-2 text-sm font-semibold text-white hover:bg-[#04a98e]">اشتراكي</a>
                     @else
                         <a href="{{ route('login') }}" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">تسجيل الدخول</a>
                         <a href="{{ route('register') }}" class="rounded-lg bg-[#06C2A4] px-4 py-2 text-sm font-semibold text-white hover:bg-[#04a98e]">إنشاء حساب</a>
@@ -51,7 +51,7 @@
                     </p>
                     <div class="mt-8 flex flex-wrap gap-3">
                         @auth
-                            <a href="{{ route('workspace.dashboard') }}" class="rounded-xl bg-[#06C2A4] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#04a98e]">ابدأ الآن</a>
+                            <a href="{{ route('workspace.subscriptions.index') }}" class="rounded-xl bg-[#06C2A4] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#04a98e]">إدارة الاشتراك</a>
                         @else
                             <a href="{{ route('register') }}" class="rounded-xl bg-[#06C2A4] px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#04a98e]">ابدأ مجانًا</a>
                             <a href="{{ route('login') }}" class="rounded-xl border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50">لدي حساب بالفعل</a>
@@ -97,22 +97,46 @@
                 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <div class="mx-auto max-w-3xl text-center">
                         <h2 class="text-3xl font-bold text-gray-900">نموذج الاشتراكات</h2>
-                        <p class="mt-4 text-gray-600">مرن وقابل للإدارة من لوحة Platform Admin.</p>
+                        <p class="mt-4 text-gray-600">باقات فعلية من قاعدة البيانات، جاهزة لرحلة: اختيار باقة ← دفع ← تفعيل.</p>
                     </div>
-                    <div class="mt-10 grid gap-5 md:grid-cols-3">
-                        <div class="rounded-2xl border border-gray-200 bg-white p-6">
-                            <p class="text-sm font-semibold text-gray-500">Individuals</p>
-                            <h3 class="mt-2 text-2xl font-bold">Free / Pro</h3>
+                    @php
+                        $plansByType = $plansByType ?? collect();
+                        $flattenPlans = $plansByType->flatten(1);
+                    @endphp
+                    @if($flattenPlans->count() > 0)
+                        <div class="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+                            @foreach($flattenPlans as $plan)
+                                <article class="rounded-2xl border {{ $loop->index === 1 ? 'border-2 border-[#06C2A4] bg-[#E8FAF6]' : 'border-gray-200 bg-white' }} p-6">
+                                    <p class="text-sm font-semibold {{ $loop->index === 1 ? 'text-[#069c83]' : 'text-gray-500' }}">{{ strtoupper($plan->workspace_type ?? 'general') }}</p>
+                                    <h3 class="mt-2 text-xl font-bold text-gray-900">{{ $plan->name }}</h3>
+                                    <p class="mt-2 text-2xl font-extrabold text-[#06C2A4]">
+                                        {{ number_format((float) $plan->price, 2) }} <span class="text-sm text-gray-600">{{ $plan->currency }}</span>
+                                    </p>
+                                    <p class="mt-1 text-xs text-gray-500">الفترة: {{ $plan->billing_period }}</p>
+                                    <div class="mt-3 flex flex-wrap gap-1">
+                                        @foreach(array_slice($plan->features ?? [], 0, 4) as $feature)
+                                            <span class="rounded-md bg-white/80 px-2 py-1 text-[11px] text-gray-700">{{ $feature }}</span>
+                                        @endforeach
+                                    </div>
+                                    <div class="mt-5">
+                                        @auth
+                                            <a href="{{ route('workspace.subscriptions.index') }}" class="inline-flex w-full justify-center rounded-lg bg-[#06C2A4] px-4 py-2 text-sm font-semibold text-white hover:bg-[#04a98e]">
+                                                اشترك الآن
+                                            </a>
+                                        @else
+                                            <a href="{{ route('register') }}" class="inline-flex w-full justify-center rounded-lg bg-[#06C2A4] px-4 py-2 text-sm font-semibold text-white hover:bg-[#04a98e]">
+                                                سجّل وابدأ الاشتراك
+                                            </a>
+                                        @endauth
+                                    </div>
+                                </article>
+                            @endforeach
                         </div>
-                        <div class="rounded-2xl border-2 border-[#06C2A4] bg-[#E8FAF6] p-6">
-                            <p class="text-sm font-semibold text-[#069c83]">Companies & Stores</p>
-                            <h3 class="mt-2 text-2xl font-bold text-gray-900">Basic / Pro</h3>
+                    @else
+                        <div class="mt-8 rounded-xl border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-500">
+                            لا توجد باقات مفعلة حاليًا. يمكن لمدير المنصة إعدادها من لوحة الأدمن.
                         </div>
-                        <div class="rounded-2xl border border-gray-200 bg-white p-6">
-                            <p class="text-sm font-semibold text-gray-500">Enterprise</p>
-                            <h3 class="mt-2 text-2xl font-bold">Custom</h3>
-                        </div>
-                    </div>
+                    @endif
                 </div>
             </section>
         </main>
