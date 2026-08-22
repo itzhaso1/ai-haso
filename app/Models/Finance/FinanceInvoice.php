@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[Fillable([
     'workspace_id',
     'customer_id',
+    'customer_name',
     'supplier_id',
     'invoice_number',
     'type',

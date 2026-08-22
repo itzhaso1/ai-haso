@@ -86,20 +86,52 @@
             ['label' => 'إعدادات المحاسبة', 'route' => 'workspace.finance.settings.index', 'active' => 'workspace.finance.settings.*'],
         ],
     ];
+
+    $sectionStates = [];
+    foreach ($sections as $sectionTitle => $links) {
+        $sectionKey = \Illuminate\Support\Str::slug($sectionTitle, '-');
+        $hasActiveLink = false;
+
+        foreach ($links as $link) {
+            $isModuleLink = isset($link['module_key']);
+            $isActive = $isModuleLink
+                ? request()->routeIs('workspace.finance.modules.show') && request()->route('key') === $link['module_key']
+                : request()->routeIs($link['active'] ?? $link['route']);
+
+            if ($isActive) {
+                $hasActiveLink = true;
+                break;
+            }
+        }
+
+        $sectionStates[$sectionKey] = $hasActiveLink;
+    }
 @endphp
 
-<div class="h-full overflow-y-auto px-4 py-5">
+<div x-data='{ openSections: @json($sectionStates) }' class="h-full overflow-y-auto px-4 py-5">
     <div class="mb-5 border-b border-slate-200 pb-4">
         <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">HASem</p>
-        <h2 class="mt-1 text-xl font-extrabold text-[#06C2A4]">Financial</h2>
+        <h2 class="mt-1 text-xl font-extrabold text-[#06C2A4]">المالية</h2>
         <p class="mt-1 text-xs text-slate-500">الفوترة والحسابات المتكاملة</p>
     </div>
 
     <nav class="space-y-4">
         @foreach($sections as $sectionTitle => $links)
+            @php
+                $sectionKey = \Illuminate\Support\Str::slug($sectionTitle, '-');
+            @endphp
             <div>
-                <h3 class="mb-2 px-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">{{ $sectionTitle }}</h3>
-                <div class="space-y-1">
+                <button
+                    type="button"
+                    @click="openSections['{{ $sectionKey }}'] = !openSections['{{ $sectionKey }}']"
+                    class="mb-2 flex w-full items-center justify-between rounded-lg px-2 py-1 text-[11px] font-bold tracking-wider text-slate-500 transition hover:bg-slate-100"
+                >
+                    <span>{{ $sectionTitle }}</span>
+                    <svg class="h-4 w-4 transition-transform" :class="openSections['{{ $sectionKey }}'] ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </button>
+                <div x-cloak x-show="openSections['{{ $sectionKey }}']" x-transition class="space-y-1">
                     @foreach($links as $link)
                         @php
                             $isModuleLink = isset($link['module_key']);

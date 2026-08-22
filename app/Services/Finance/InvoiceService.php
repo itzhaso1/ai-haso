@@ -30,34 +30,35 @@ class InvoiceService
 
         return DB::transaction(function () use ($workspace, $payload, $actorUserId, $profile): FinanceInvoice {
             $customerId = isset($payload['customer_id']) ? (int) $payload['customer_id'] : null;
+            $customerName = trim((string) ($payload['customer_name'] ?? ''));
             $supplierId = isset($payload['supplier_id']) ? (int) $payload['supplier_id'] : null;
             $type = (string) $payload['type'];
 
-            if ($type === 'sales' && ! $customerId) {
-                throw new RuntimeException('Sales invoice requires customer.');
+            if ($type === 'sales' && ! $customerId && $customerName === '') {
+                throw new RuntimeException('فاتورة المبيعات تتطلب عميلًا مسجلًا أو اسم عميل نقدي.');
             }
 
             if ($type === 'purchase' && ! $supplierId) {
-                throw new RuntimeException('Purchase invoice requires supplier.');
+                throw new RuntimeException('فاتورة الشراء تتطلب اختيار مورد.');
             }
 
             if ($customerId) {
                 $exists = Customer::query()->whereKey($customerId)->exists();
                 if (! $exists) {
-                    throw new RuntimeException('Customer is invalid for this workspace.');
+                    throw new RuntimeException('العميل المحدد غير صالح ضمن مساحة العمل الحالية.');
                 }
             }
 
             if ($supplierId) {
                 $exists = FinanceSupplier::query()->whereKey($supplierId)->exists();
                 if (! $exists) {
-                    throw new RuntimeException('Supplier is invalid for this workspace.');
+                    throw new RuntimeException('المورد المحدد غير صالح ضمن مساحة العمل الحالية.');
                 }
             }
 
             $items = $this->normalizeItems($payload['items'] ?? [], $profile['type'], $profile['rate']);
             if ($items === []) {
-                throw new RuntimeException('Invoice must include at least one item.');
+                throw new RuntimeException('يجب أن تحتوي الفاتورة على بند واحد على الأقل.');
             }
 
             $totals = $this->totals($items);
@@ -68,6 +69,7 @@ class InvoiceService
             $invoice = FinanceInvoice::withoutGlobalScopes()->create([
                 'workspace_id' => $workspace->id,
                 'customer_id' => $customerId,
+                'customer_name' => $type === 'sales' && $customerName !== '' ? $customerName : null,
                 'supplier_id' => $supplierId,
                 'invoice_number' => $payload['invoice_number'] ?: $this->nextInvoiceNumber($workspace->id),
                 'type' => $type,
@@ -122,7 +124,7 @@ class InvoiceService
         }
 
         if ((float) $invoice->amount_paid > 0) {
-            throw new RuntimeException('Paid/partially paid invoice cannot be cancelled directly.');
+            throw new RuntimeException('لا يمكن إلغاء فاتورة مدفوعة أو مدفوعة جزئيًا بشكل مباشر.');
         }
 
         $invoice->update([
@@ -253,7 +255,7 @@ class InvoiceService
         $inputVat = $this->chartOfAccountsService->byCode('1400');
 
         if (! $ar || ! $ap || ! $sales || ! $generalExpense || ! $outputVat || ! $inputVat) {
-            throw new RuntimeException('Chart of accounts is incomplete.');
+            throw new RuntimeException('دليل الحسابات غير مكتمل ولا يمكن ترحيل الفاتورة محاسبيًا.');
         }
 
         if ($invoice->type === 'sales') {

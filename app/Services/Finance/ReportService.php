@@ -43,8 +43,8 @@ class ReportService
                 $join->on('customers.id', '=', 'finance_invoices.customer_id')
                     ->on('customers.workspace_id', '=', 'finance_invoices.workspace_id');
             })
-            ->groupBy('customers.id', 'customers.name')
-            ->selectRaw("COALESCE(customers.name, 'عميل غير محدد') as customer_name")
+            ->groupBy('customers.id', 'customers.name', 'finance_invoices.customer_name')
+            ->selectRaw("COALESCE(customers.name, finance_invoices.customer_name, 'عميل غير محدد') as customer_name")
             ->selectRaw('COALESCE(SUM(finance_invoices.total), 0) as total')
             ->orderByDesc('total')
             ->limit(10)

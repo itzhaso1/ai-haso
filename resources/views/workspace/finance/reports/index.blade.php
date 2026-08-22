@@ -65,11 +65,11 @@
         </div>
 
         <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 class="mb-3 text-sm font-bold">VAT Summary</h3>
+            <h3 class="mb-3 text-sm font-bold">ملخص ضريبة القيمة المضافة</h3>
             <div class="grid gap-3 sm:grid-cols-3">
-                <div class="rounded-lg bg-slate-50 p-3 text-sm">Output VAT: <strong>{{ number_format((float) $vat['output'], 2) }}</strong></div>
-                <div class="rounded-lg bg-slate-50 p-3 text-sm">Input VAT: <strong>{{ number_format((float) $vat['input'], 2) }}</strong></div>
-                <div class="rounded-lg bg-slate-50 p-3 text-sm">Net VAT: <strong>{{ number_format((float) $vat['net'], 2) }}</strong></div>
+                <div class="rounded-lg bg-slate-50 p-3 text-sm">ضريبة المخرجات: <strong>{{ number_format((float) $vat['output'], 2) }}</strong></div>
+                <div class="rounded-lg bg-slate-50 p-3 text-sm">ضريبة المدخلات: <strong>{{ number_format((float) $vat['input'], 2) }}</strong></div>
+                <div class="rounded-lg bg-slate-50 p-3 text-sm">صافي الضريبة: <strong>{{ number_format((float) $vat['net'], 2) }}</strong></div>
             </div>
         </article>
     </div>

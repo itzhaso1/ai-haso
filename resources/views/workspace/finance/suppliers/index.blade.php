@@ -1,6 +1,12 @@
 @extends('layouts.financial', ['pageTitle' => 'الموردون'])
 
 @section('content')
+    @php
+        $supplierStatusLabels = [
+            'active' => 'نشط',
+            'inactive' => 'غير نشط',
+        ];
+    @endphp
     <div class="space-y-4">
         <h2 class="text-xl font-bold text-slate-900">إدارة الموردين</h2>
 
@@ -31,7 +37,7 @@
                                 <p class="text-sm font-semibold text-slate-900">{{ $supplier->name }}</p>
                                 <p class="text-xs text-slate-500">{{ $supplier->email ?? '-' }} | {{ $supplier->phone ?? '-' }}</p>
                             </div>
-                            <span class="rounded-full bg-slate-100 px-2 py-1 text-xs">{{ $supplier->status }}</span>
+                            <span class="rounded-full bg-slate-100 px-2 py-1 text-xs">{{ $supplierStatusLabels[$supplier->status] ?? $supplier->status }}</span>
                         </div>
                     </summary>
                     <form method="POST" action="{{ route('workspace.finance.suppliers.update', $supplier) }}" class="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -46,8 +52,8 @@
                         <input name="payment_terms" value="{{ $supplier->payment_terms }}" class="rounded-lg border-slate-300 text-sm">
                         <input name="opening_balance" type="number" step="0.01" value="{{ $supplier->opening_balance }}" class="rounded-lg border-slate-300 text-sm">
                         <select name="status" class="rounded-lg border-slate-300 text-sm">
-                            <option value="active" @selected($supplier->status === 'active')>active</option>
-                            <option value="inactive" @selected($supplier->status === 'inactive')>inactive</option>
+                            <option value="active" @selected($supplier->status === 'active')>نشط</option>
+                            <option value="inactive" @selected($supplier->status === 'inactive')>غير نشط</option>
                         </select>
                         <textarea name="address" rows="2" class="rounded-lg border-slate-300 text-sm sm:col-span-2 lg:col-span-4">{{ $supplier->address }}</textarea>
                         <button class="rounded-lg border border-[#06C2A4] px-4 py-2 text-sm font-semibold text-[#06C2A4] lg:col-span-4">تحديث المورد</button>

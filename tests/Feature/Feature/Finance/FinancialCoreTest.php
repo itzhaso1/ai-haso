@@ -185,6 +185,39 @@ class FinancialCoreTest extends TestCase
         $this->assertSame('345.00', number_format((float) $apLine->credit, 2, '.', ''));
     }
 
+    public function test_sales_invoice_accepts_walk_in_customer_name_without_registered_customer(): void
+    {
+        [$user, $workspace] = $this->createWorkspaceOwner('company');
+
+        $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.finance.invoices.store'), [
+                'type' => 'sales',
+                'customer_name' => 'عميل نقدي',
+                'issue_date' => now()->toDateString(),
+                'currency' => 'SAR',
+                'status' => 'unpaid',
+                'tax_profile_type' => 'standard',
+                'tax_rate' => 15,
+                'items_json' => json_encode([
+                    [
+                        'product_name' => 'خدمة سريعة',
+                        'quantity' => 1,
+                        'unit_price' => 100,
+                        'discount' => 0,
+                        'tax_rate' => 15,
+                        'tax_type' => 'standard',
+                    ],
+                ]),
+            ])
+            ->assertRedirect();
+
+        $invoice = FinanceInvoice::withoutGlobalScopes()->firstOrFail();
+        $this->assertNull($invoice->customer_id);
+        $this->assertSame('عميل نقدي', $invoice->customer_name);
+        $this->assertSame('115.00', (string) $invoice->total);
+    }
+
     public function test_finance_invoice_isolated_per_workspace(): void
     {
         [$userA, $workspaceA] = $this->createWorkspaceOwner('company');
@@ -329,6 +362,16 @@ class FinancialCoreTest extends TestCase
             ->withSession(['current_workspace_id' => $workspace->id])
             ->get(route('workspace.finance.dashboard'))
             ->assertForbidden();
+    }
+
+    public function test_reports_page_uses_safe_default_dates_when_filters_missing(): void
+    {
+        [$user, $workspace] = $this->createWorkspaceOwner('company');
+
+        $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->get(route('workspace.finance.reports.index'))
+            ->assertOk();
     }
 
     /**

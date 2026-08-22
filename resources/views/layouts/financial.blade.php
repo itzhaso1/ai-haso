@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" dir="rtl">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ $pageTitle ?? 'HASem Financial' }}</title>
+    <title>{{ $pageTitle ?? 'حاسم المالية' }}</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="bg-slate-100 font-sans text-slate-900 antialiased">
@@ -24,13 +24,13 @@
                         </button>
                         <div>
                             <p class="text-sm text-slate-500">{{ request()->attributes->get('workspace')?->name }}</p>
-                            <h1 class="text-lg font-bold text-slate-900">{{ $pageTitle ?? 'HASem Financial' }}</h1>
+                            <h1 class="text-lg font-bold text-slate-900">{{ $pageTitle ?? 'حاسم المالية' }}</h1>
                         </div>
                     </div>
 
                     <div class="flex items-center gap-2">
                         <a href="{{ route('workspace.dashboard') }}" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">
-                            ← العودة إلى Hasem
+                            ← العودة إلى حاسم
                         </a>
                         <span class="hidden rounded-lg bg-[#E8FAF6] px-3 py-2 text-xs font-semibold text-[#0f7668] sm:inline-block">
                             {{ auth()->user()?->name }}
@@ -49,7 +49,7 @@
             <button @click="mobileSidebar = false" type="button" class="absolute inset-0 bg-slate-900/50"></button>
             <aside x-transition class="absolute inset-y-0 right-0 w-80 border-l border-slate-200 bg-white">
                 <div class="flex items-center justify-between border-b border-slate-200 px-4 py-4">
-                    <h2 class="text-base font-bold text-slate-900">HASem Financial</h2>
+                    <h2 class="text-base font-bold text-slate-900">حاسم المالية</h2>
                     <button @click="mobileSidebar = false" type="button" class="rounded-md p-2 text-slate-600 hover:bg-slate-100">
                         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />

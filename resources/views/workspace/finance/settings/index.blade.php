@@ -1,7 +1,7 @@
 @extends('layouts.financial', ['pageTitle' => 'الإعدادات المالية'])
 
 @section('content')
-    <div class="space-y-4">
+    <div x-data="{ logoFileName: '' }" class="space-y-4">
         <h2 class="text-xl font-bold text-slate-900">إعدادات HASem Financial</h2>
 
         <div class="grid gap-4 xl:grid-cols-2">
@@ -27,7 +27,22 @@
                     <input name="invoice_prefix" value="{{ $setting?->invoice_prefix ?? 'INV' }}" class="rounded-lg border-slate-300 text-sm" placeholder="بادئة الفاتورة">
                     <input name="default_vat_rate" value="{{ $setting?->default_vat_rate ?? 15 }}" type="number" step="0.01" class="rounded-lg border-slate-300 text-sm" placeholder="VAT الافتراضي">
                     <input name="default_payment_terms" value="{{ $setting?->default_payment_terms }}" class="rounded-lg border-slate-300 text-sm sm:col-span-2" placeholder="شروط الدفع الافتراضية">
-                    <input type="file" name="logo" class="rounded-lg border-slate-300 text-sm sm:col-span-2">
+                    <div class="sm:col-span-2">
+                        <label class="mb-1 block text-xs font-semibold text-slate-600">شعار المنشأة</label>
+                        <input
+                            id="company_logo"
+                            type="file"
+                            name="logo"
+                            class="sr-only"
+                            @change="logoFileName = $event.target.files.length ? $event.target.files[0].name : ''"
+                        >
+                        <div class="flex items-center gap-2 rounded-xl border border-slate-300 bg-slate-50 p-2">
+                            <label for="company_logo" class="cursor-pointer rounded-lg bg-[#06C2A4] px-3 py-2 text-xs font-bold text-white hover:bg-[#05ab91]">
+                                اختيار ملف
+                            </label>
+                            <span class="truncate text-xs text-slate-600" x-text="logoFileName || 'لم يتم اختيار ملف بعد'"></span>
+                        </div>
+                    </div>
                     <label class="flex items-center gap-2 text-xs text-slate-600 sm:col-span-2">
                         <input type="checkbox" name="remove_logo" value="1" class="rounded border-slate-300 text-red-600">
                         حذف الشعار الحالي
@@ -41,14 +56,14 @@
                 <form method="POST" action="{{ route('workspace.finance.settings.tax-rates.store') }}" class="grid gap-2 sm:grid-cols-2">
                     @csrf
                     <input name="name" class="rounded-lg border-slate-300 text-sm" placeholder="اسم الضريبة" required>
-                    <input name="code" class="rounded-lg border-slate-300 text-sm" placeholder="Code (VAT_STD_15)" required>
+                    <input name="code" class="rounded-lg border-slate-300 text-sm" placeholder="رمز الضريبة (VAT_STD_15)" required>
                     <select name="type" class="rounded-lg border-slate-300 text-sm" required>
-                        <option value="standard">Standard VAT</option>
-                        <option value="zero_rated">Zero Rated</option>
-                        <option value="exempt">Exempt</option>
-                        <option value="out_of_scope">Out of Scope</option>
+                        <option value="standard">ضريبة قياسية</option>
+                        <option value="zero_rated">صفرية النسبة</option>
+                        <option value="exempt">معفاة</option>
+                        <option value="out_of_scope">خارج النطاق</option>
                     </select>
-                    <input name="rate" type="number" step="0.01" min="0" max="100" class="rounded-lg border-slate-300 text-sm" placeholder="Rate %" required>
+                    <input name="rate" type="number" step="0.01" min="0" max="100" class="rounded-lg border-slate-300 text-sm" placeholder="النسبة %" required>
                     <label class="flex items-center gap-2 text-xs text-slate-600">
                         <input type="checkbox" name="is_default" value="1" class="rounded border-slate-300 text-[#06C2A4]">
                         افتراضية
@@ -66,7 +81,7 @@
                             <span class="font-semibold">{{ $rate->name }}</span>
                             — {{ $rate->type }} — {{ number_format((float) $rate->rate, 2) }}%
                             @if($rate->is_default)
-                                <span class="rounded-full bg-[#E8FAF6] px-2 py-0.5 text-[#0f7668]">Default</span>
+                                <span class="rounded-full bg-[#E8FAF6] px-2 py-0.5 text-[#0f7668]">افتراضية</span>
                             @endif
                         </div>
                     @endforeach
@@ -79,8 +94,8 @@
                     @csrf
                     <input name="name" class="rounded-lg border-slate-300 text-sm" placeholder="اسم الحساب" required>
                     <select name="type" class="rounded-lg border-slate-300 text-sm" required>
-                        <option value="cash">Cash</option>
-                        <option value="bank">Bank</option>
+                        <option value="cash">نقدي</option>
+                        <option value="bank">بنكي</option>
                     </select>
                     <input name="currency" value="{{ $setting?->currency ?? 'SAR' }}" class="rounded-lg border-slate-300 text-sm" maxlength="3" required>
                     <input name="opening_balance" type="number" step="0.01" class="rounded-lg border-slate-300 text-sm" placeholder="الرصيد الافتتاحي">

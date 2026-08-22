@@ -1,7 +1,7 @@
 @extends('layouts.financial', ['pageTitle' => 'المصروفات'])
 
 @section('content')
-    <div class="space-y-4">
+    <div x-data="{ attachmentName: '' }" class="space-y-4">
         <h2 class="text-xl font-bold text-slate-900">المصروفات</h2>
 
         <form method="POST" action="{{ route('workspace.finance.expenses.store') }}" enctype="multipart/form-data" class="grid gap-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
@@ -42,7 +42,20 @@
                     <option value="{{ $account->id }}">{{ $account->name }} ({{ $account->type }})</option>
                 @endforeach
             </select>
-            <input type="file" name="attachment_file" class="rounded-lg border-slate-300 text-sm lg:col-span-2">
+            <div class="lg:col-span-2">
+                <label class="mb-1 block text-xs font-semibold text-slate-600">مرفق المصروف</label>
+                <input
+                    id="expense_attachment"
+                    type="file"
+                    name="attachment_file"
+                    class="sr-only"
+                    @change="attachmentName = $event.target.files.length ? $event.target.files[0].name : ''"
+                >
+                <div class="flex items-center gap-2 rounded-xl border border-slate-300 bg-slate-50 p-2">
+                    <label for="expense_attachment" class="cursor-pointer rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-white hover:bg-slate-700">اختيار مرفق</label>
+                    <span class="truncate text-xs text-slate-600" x-text="attachmentName || 'لا يوجد ملف محدد'"></span>
+                </div>
+            </div>
             <textarea name="description" rows="2" class="rounded-lg border-slate-300 text-sm lg:col-span-4" placeholder="وصف المصروف"></textarea>
             <button class="rounded-lg bg-[#06C2A4] px-4 py-2 text-sm font-semibold text-white lg:col-span-4">حفظ المصروف</button>
         </form>
@@ -66,7 +79,7 @@
                         <th class="px-3 py-3 text-right">التاريخ</th>
                         <th class="px-3 py-3 text-right">المورد</th>
                         <th class="px-3 py-3 text-right">المبلغ</th>
-                        <th class="px-3 py-3 text-right">VAT</th>
+                        <th class="px-3 py-3 text-right">ضريبة القيمة المضافة</th>
                         <th class="px-3 py-3 text-right">الإجمالي</th>
                         <th class="px-3 py-3 text-right">الحالة</th>
                         <th class="px-3 py-3 text-right">الدفع</th>

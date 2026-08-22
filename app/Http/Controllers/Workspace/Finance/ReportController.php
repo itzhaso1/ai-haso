@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Workspace\Finance;
 
 use App\Services\Finance\ReportService;
+use Illuminate\Support\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -16,8 +17,8 @@ class ReportController extends FinanceBaseController
     {
         $this->authorizeFinance($request, 'reports.view');
 
-        $from = $request->date('from', now()->startOfMonth())->toDateString();
-        $to = $request->date('to', now()->endOfMonth())->toDateString();
+        $from = $this->resolveDate($request->input('from'), now()->startOfMonth())->toDateString();
+        $to = $this->resolveDate($request->input('to'), now()->endOfMonth())->toDateString();
         $summary = $this->reportService->summary($from, $to);
 
         return view('workspace.finance.reports.index', [
@@ -25,5 +26,18 @@ class ReportController extends FinanceBaseController
             'to' => $to,
             ...$summary,
         ]);
+    }
+
+    private function resolveDate(?string $value, Carbon $fallback): Carbon
+    {
+        if (! $value) {
+            return $fallback;
+        }
+
+        try {
+            return Carbon::parse($value);
+        } catch (\Throwable) {
+            return $fallback;
+        }
     }
 }

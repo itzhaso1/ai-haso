@@ -1,9 +1,16 @@
 @extends('layouts.financial', ['pageTitle' => 'إنشاء فاتورة'])
 
 @section('content')
+    @php
+        $statusLabels = [
+            'draft' => 'مسودة',
+            'sent' => 'مرسلة',
+            'unpaid' => 'غير مدفوعة',
+        ];
+    @endphp
     <div x-data="financeInvoiceBuilder()" class="space-y-4">
         <div class="flex items-center justify-between">
-            <h2 class="text-xl font-bold text-slate-900">Invoice Builder</h2>
+            <h2 class="text-xl font-bold text-slate-900">منشئ الفواتير</h2>
             <a href="{{ route('workspace.finance.invoices.index') }}" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">رجوع</a>
         </div>
 
@@ -14,8 +21,8 @@
                 <div>
                     <label class="mb-1 block text-xs font-semibold text-slate-600">نوع الفاتورة</label>
                     <select name="type" x-model="form.type" class="w-full rounded-lg border-slate-300 text-sm" required>
-                        <option value="sales">Sales Invoice</option>
-                        <option value="purchase">Purchase Invoice</option>
+                        <option value="sales">فاتورة مبيعات</option>
+                        <option value="purchase">فاتورة شراء</option>
                     </select>
                 </div>
                 <div>
@@ -26,18 +33,31 @@
                     <label class="mb-1 block text-xs font-semibold text-slate-600">الحالة المبدئية</label>
                     <select name="status" class="w-full rounded-lg border-slate-300 text-sm">
                         @foreach(['draft', 'sent', 'unpaid'] as $status)
-                            <option value="{{ $status }}" @selected(old('status', 'unpaid') === $status)>{{ $status }}</option>
+                            <option value="{{ $status }}" @selected(old('status', 'unpaid') === $status)>{{ $statusLabels[$status] }}</option>
                         @endforeach
                     </select>
                 </div>
                 <div x-show="form.type === 'sales'">
-                    <label class="mb-1 block text-xs font-semibold text-slate-600">العميل</label>
+                    <label class="mb-1 block text-xs font-semibold text-slate-600">العميل المسجل (اختياري)</label>
                     <select name="customer_id" class="w-full rounded-lg border-slate-300 text-sm">
                         <option value="">اختر عميل</option>
                         @foreach($customers as $customer)
                             <option value="{{ $customer->id }}" @selected(old('customer_id') == $customer->id)>{{ $customer->name }} ({{ $customer->phone }})</option>
                         @endforeach
                     </select>
+                </div>
+                <div x-show="form.type === 'sales'">
+                    <label class="mb-1 block text-xs font-semibold text-slate-600">اسم عميل نقدي/عابر (اختياري)</label>
+                    <input
+                        type="text"
+                        name="customer_name"
+                        value="{{ old('customer_name') }}"
+                        class="w-full rounded-lg border-slate-300 text-sm"
+                        placeholder="مثال: عميل نقدي - نقطة البيع"
+                    >
+                    @error('customer_name')
+                        <p class="mt-1 text-xs font-semibold text-red-600">{{ $message }}</p>
+                    @enderror
                 </div>
                 <div x-show="form.type === 'purchase'">
                     <label class="mb-1 block text-xs font-semibold text-slate-600">المورد</label>
@@ -58,14 +78,14 @@
                 </div>
                 <div>
                     <label class="mb-1 block text-xs font-semibold text-slate-600">الشروط</label>
-                    <input type="text" name="payment_terms" value="{{ old('payment_terms') }}" class="w-full rounded-lg border-slate-300 text-sm" placeholder="Net 30">
+                    <input type="text" name="payment_terms" value="{{ old('payment_terms') }}" class="w-full rounded-lg border-slate-300 text-sm" placeholder="مثال: صافي 30 يوم">
                 </div>
                 <div>
                     <label class="mb-1 block text-xs font-semibold text-slate-600">العملة</label>
                     <input type="text" name="currency" value="{{ old('currency', 'SAR') }}" class="w-full rounded-lg border-slate-300 text-sm" maxlength="3">
                 </div>
                 <div>
-                    <label class="mb-1 block text-xs font-semibold text-slate-600">VAT Profile</label>
+                    <label class="mb-1 block text-xs font-semibold text-slate-600">نوع الضريبة</label>
                     <select x-model="form.tax_profile_type" name="tax_profile_type" class="w-full rounded-lg border-slate-300 text-sm">
                         @foreach($taxRates as $rate)
                             <option value="{{ $rate->type }}">{{ $rate->name }} ({{ number_format((float) $rate->rate, 2) }}%)</option>
@@ -87,13 +107,13 @@
                     <table class="min-w-full divide-y divide-slate-200 text-sm">
                         <thead class="bg-slate-50 text-slate-600">
                             <tr>
-                                <th class="px-3 py-2 text-right">Product</th>
-                                <th class="px-3 py-2 text-right">Description</th>
-                                <th class="px-3 py-2 text-right">Qty</th>
-                                <th class="px-3 py-2 text-right">Unit Price</th>
-                                <th class="px-3 py-2 text-right">Discount</th>
-                                <th class="px-3 py-2 text-right">VAT %</th>
-                                <th class="px-3 py-2 text-right">Total</th>
+                                <th class="px-3 py-2 text-right">المنتج</th>
+                                <th class="px-3 py-2 text-right">الوصف</th>
+                                <th class="px-3 py-2 text-right">الكمية</th>
+                                <th class="px-3 py-2 text-right">سعر الوحدة</th>
+                                <th class="px-3 py-2 text-right">الخصم</th>
+                                <th class="px-3 py-2 text-right">نسبة الضريبة %</th>
+                                <th class="px-3 py-2 text-right">الإجمالي</th>
                                 <th class="px-3 py-2"></th>
                             </tr>
                         </thead>
@@ -151,13 +171,13 @@
                 <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <h3 class="mb-3 text-sm font-bold text-slate-900">ملخص الحساب</h3>
                     <div class="space-y-2 text-sm">
-                        <div class="flex justify-between"><span>Subtotal</span><span x-text="format(summary.subtotal)"></span></div>
-                        <div class="flex justify-between"><span>Discount</span><span x-text="format(summary.discount)"></span></div>
-                        <div class="flex justify-between"><span>Taxable Amount</span><span x-text="format(summary.taxable_amount)"></span></div>
-                        <div class="flex justify-between"><span>VAT</span><span x-text="format(summary.tax_amount)"></span></div>
-                        <div class="flex justify-between border-t pt-2 font-bold"><span>Grand Total</span><span x-text="format(summary.total)"></span></div>
-                        <div class="flex justify-between"><span>Paid</span><span x-text="format(0)"></span></div>
-                        <div class="flex justify-between font-bold text-[#06C2A4]"><span>Remaining</span><span x-text="format(summary.total)"></span></div>
+                        <div class="flex justify-between"><span>الإجمالي قبل الضريبة</span><span x-text="format(summary.subtotal)"></span></div>
+                        <div class="flex justify-between"><span>الخصم</span><span x-text="format(summary.discount)"></span></div>
+                        <div class="flex justify-between"><span>المبلغ الخاضع للضريبة</span><span x-text="format(summary.taxable_amount)"></span></div>
+                        <div class="flex justify-between"><span>ضريبة القيمة المضافة</span><span x-text="format(summary.tax_amount)"></span></div>
+                        <div class="flex justify-between border-t pt-2 font-bold"><span>الإجمالي النهائي</span><span x-text="format(summary.total)"></span></div>
+                        <div class="flex justify-between"><span>المدفوع</span><span x-text="format(0)"></span></div>
+                        <div class="flex justify-between font-bold text-[#06C2A4]"><span>المتبقي</span><span x-text="format(summary.total)"></span></div>
                     </div>
                 </div>
 

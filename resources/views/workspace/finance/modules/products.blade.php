@@ -8,7 +8,7 @@
                 <thead class="bg-slate-50 text-slate-600">
                     <tr>
                         <th class="px-3 py-3 text-right">المنتج</th>
-                        <th class="px-3 py-3 text-right">SKU</th>
+                        <th class="px-3 py-3 text-right">رمز المنتج (SKU)</th>
                         <th class="px-3 py-3 text-right">السعر</th>
                         <th class="px-3 py-3 text-right">المخزون</th>
                         <th class="px-3 py-3 text-right">الفئة</th>

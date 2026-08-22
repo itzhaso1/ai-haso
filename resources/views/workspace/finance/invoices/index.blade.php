@@ -1,6 +1,17 @@
 @extends('layouts.financial', ['pageTitle' => 'الفواتير'])
 
 @section('content')
+    @php
+        $statusLabels = [
+            'draft' => 'مسودة',
+            'sent' => 'مرسلة',
+            'unpaid' => 'غير مدفوعة',
+            'partial' => 'مدفوعة جزئيًا',
+            'paid' => 'مدفوعة',
+            'overdue' => 'متأخرة',
+            'cancelled' => 'ملغاة',
+        ];
+    @endphp
     <div class="space-y-4">
         <div class="flex flex-wrap items-center justify-between gap-2">
             <h2 class="text-xl font-bold text-slate-900">الفواتير</h2>
@@ -19,7 +30,7 @@
             <select name="status" class="rounded-lg border-slate-300 text-sm">
                 <option value="">كل الحالات</option>
                 @foreach(['draft', 'sent', 'unpaid', 'partial', 'paid', 'overdue', 'cancelled'] as $status)
-                    <option value="{{ $status }}" @selected(request('status') === $status)>{{ $status }}</option>
+                    <option value="{{ $status }}" @selected(request('status') === $status)>{{ $statusLabels[$status] }}</option>
                 @endforeach
             </select>
             <button class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white sm:col-span-4">تطبيق الفلاتر</button>
@@ -44,12 +55,12 @@
                         <tr>
                             <td class="px-3 py-3 font-semibold text-slate-900">{{ $invoice->invoice_number }}</td>
                             <td class="px-3 py-3">{{ $invoice->type === 'sales' ? 'مبيعات' : 'مشتريات' }}</td>
-                            <td class="px-3 py-3">{{ $invoice->customer?->name ?? $invoice->supplier?->name ?? '-' }}</td>
+                            <td class="px-3 py-3">{{ $invoice->customer?->name ?? $invoice->customer_name ?? $invoice->supplier?->name ?? '-' }}</td>
                             <td class="px-3 py-3">{{ number_format((float) $invoice->total, 2) }} {{ $invoice->currency }}</td>
                             <td class="px-3 py-3">{{ number_format((float) $invoice->amount_paid, 2) }}</td>
                             <td class="px-3 py-3">{{ number_format((float) $invoice->amount_due, 2) }}</td>
                             <td class="px-3 py-3">
-                                <span class="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold">{{ $invoice->status }}</span>
+                                <span class="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold">{{ $statusLabels[$invoice->status] ?? $invoice->status }}</span>
                             </td>
                             <td class="px-3 py-3">
                                 <a href="{{ route('workspace.finance.invoices.show', $invoice) }}" class="text-[#06C2A4] hover:underline">عرض</a>

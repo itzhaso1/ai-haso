@@ -47,9 +47,9 @@
                         <tr>
                             <th class="px-2 py-2 text-right">الفترة</th>
                             <th class="px-2 py-2 text-right">الحالة</th>
-                            <th class="px-2 py-2 text-right">Gross</th>
-                            <th class="px-2 py-2 text-right">Deductions</th>
-                            <th class="px-2 py-2 text-right">Net</th>
+                            <th class="px-2 py-2 text-right">إجمالي الراتب</th>
+                            <th class="px-2 py-2 text-right">إجمالي الخصومات</th>
+                            <th class="px-2 py-2 text-right">صافي الراتب</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">

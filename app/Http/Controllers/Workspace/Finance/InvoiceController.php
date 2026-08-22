@@ -37,6 +37,7 @@ class InvoiceController extends FinanceBaseController
             ->when($request->string('search')->toString(), function ($query, $search): void {
                 $query->where(function ($inner) use ($search): void {
                     $inner->where('invoice_number', 'like', '%'.$search.'%')
+                        ->orWhere('customer_name', 'like', '%'.$search.'%')
                         ->orWhere('status', 'like', '%'.$search.'%');
                 });
             })
@@ -74,6 +75,7 @@ class InvoiceController extends FinanceBaseController
         $validated = $request->validate([
             'type' => ['required', 'in:sales,purchase'],
             'customer_id' => ['nullable', 'integer'],
+            'customer_name' => ['nullable', 'string', 'max:255'],
             'supplier_id' => ['nullable', 'integer'],
             'invoice_number' => ['nullable', 'string', 'max:255'],
             'issue_date' => ['required', 'date'],
@@ -86,6 +88,16 @@ class InvoiceController extends FinanceBaseController
             'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'items_json' => ['required', 'string'],
         ]);
+
+        if (
+            $validated['type'] === 'sales'
+            && empty($validated['customer_id'])
+            && trim((string) ($validated['customer_name'] ?? '')) === ''
+        ) {
+            return back()->withInput()->withErrors([
+                'customer_name' => 'يرجى اختيار عميل مسجل أو إدخال اسم عميل نقدي.',
+            ]);
+        }
 
         $items = json_decode($validated['items_json'], true);
         if (! is_array($items) || $items === []) {
