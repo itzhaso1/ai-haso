@@ -26,12 +26,14 @@ This repository now includes a functional multi-tenant foundation plus operation
    - Categories, products (+variants), inventory movements, customers, orders, payments.
 5. **Conversations & AI**
    - Conversations, messages, AI settings, AI response pipeline with provider abstraction.
-6. **Integrations**
+6. **Email CRM & Inbox Hub**
+   - Workspace-isolated email accounts (IMAP/SMTP settings), branded outbound templates, queue-based send/sync jobs, archived messages, and attachments.
+7. **Integrations**
    - WhatsApp webhook architecture + processing jobs.
    - Payment gateway abstraction + webhook processing + idempotency.
-7. **Subscriptions / Employees / Roles**
+8. **Subscriptions / Employees / Roles**
    - Plans, subscriptions, employee invitations, role/permission APIs (team-scoped).
-8. **Ops**
+9. **Ops**
    - Notifications (database/mail), queue jobs, audit/webhook logging schema.
 
 ## Local Setup

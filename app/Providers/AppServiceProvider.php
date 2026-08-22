@@ -5,6 +5,8 @@ namespace App\Providers;
 use App\Models\Category;
 use App\Models\Conversation;
 use App\Models\Customer;
+use App\Models\EmailAccount;
+use App\Models\EmailMessage;
 use App\Models\EmployeeInvitation;
 use App\Models\InventoryMovement;
 use App\Models\Order;
@@ -59,6 +61,8 @@ class AppServiceProvider extends ServiceProvider
         PaymentGateway::observe(WorkspaceAuditObserver::class);
         InventoryMovement::observe(WorkspaceAuditObserver::class);
         Conversation::observe(WorkspaceAuditObserver::class);
+        EmailAccount::observe(WorkspaceAuditObserver::class);
+        EmailMessage::observe(WorkspaceAuditObserver::class);
         Subscription::observe(WorkspaceAuditObserver::class);
         EmployeeInvitation::observe(WorkspaceAuditObserver::class);
         WhatsAppAccount::observe(WorkspaceAuditObserver::class);

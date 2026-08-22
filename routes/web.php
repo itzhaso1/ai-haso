@@ -12,6 +12,7 @@ use App\Http\Controllers\Workspace\ConversationController;
 use App\Http\Controllers\Workspace\CustomerController;
 use App\Http\Controllers\Workspace\DashboardController as WorkspaceDashboardController;
 use App\Http\Controllers\Workspace\EmployeeInvitationController;
+use App\Http\Controllers\Workspace\EmailController;
 use App\Http\Controllers\Workspace\InventoryController;
 use App\Http\Controllers\Workspace\OrderController;
 use App\Http\Controllers\Workspace\PaymentController;
@@ -107,6 +108,12 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
         Route::put('ai-settings', [AiSettingController::class, 'update'])->name('ai-settings.update');
 
         Route::resource('whatsapp-accounts', WhatsAppAccountController::class)->except(['show']);
+
+        Route::get('emails', [EmailController::class, 'index'])->name('emails.index');
+        Route::post('emails/accounts', [EmailController::class, 'storeAccount'])->name('emails.accounts.store');
+        Route::put('emails/accounts/{emailAccount}', [EmailController::class, 'updateAccount'])->name('emails.accounts.update');
+        Route::post('emails/accounts/{emailAccount}/sync', [EmailController::class, 'syncAccount'])->name('emails.accounts.sync');
+        Route::post('emails/messages/send', [EmailController::class, 'sendMessage'])->name('emails.messages.send');
 
         Route::get('employees', [EmployeeInvitationController::class, 'index'])->name('employees.index');
         Route::get('employees/invite', [EmployeeInvitationController::class, 'create'])->name('employees.create');

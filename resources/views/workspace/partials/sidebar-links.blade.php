@@ -10,6 +10,7 @@
         ['label' => 'المدفوعات', 'route' => 'workspace.payments.index', 'active' => 'workspace.payments.*'],
         ['label' => 'بوابات الدفع', 'route' => 'workspace.payment-gateways.index', 'active' => 'workspace.payment-gateways.*'],
         ['label' => 'الاشتراكات', 'route' => 'workspace.subscriptions.index', 'active' => 'workspace.subscriptions.*'],
+        ['label' => 'البريد الإلكتروني', 'route' => 'workspace.emails.index', 'active' => 'workspace.emails.*'],
         ['label' => 'واتساب', 'route' => 'workspace.whatsapp-accounts.index', 'active' => 'workspace.whatsapp-accounts.*'],
         ['label' => 'إعدادات الذكاء الاصطناعي', 'route' => 'workspace.ai-settings.edit', 'active' => 'workspace.ai-settings.*'],
         ['label' => 'الموظفون', 'route' => 'workspace.employees.index', 'active' => 'workspace.employees.*'],
