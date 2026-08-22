@@ -7,6 +7,7 @@ use App\Services\Email\WorkspaceEmailSender;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class SendEmailMessageJob implements ShouldQueue
 {
@@ -30,7 +31,18 @@ class SendEmailMessageJob implements ShouldQueue
         }
 
         try {
+            $emailMessage->forceFill([
+                'delivery_status' => 'sending',
+                'delivery_error' => null,
+            ])->save();
+
             $workspaceEmailSender->send($emailMessage);
+
+            $emailMessage->forceFill([
+                'delivery_status' => 'sent',
+                'delivery_error' => null,
+                'delivered_at' => now(),
+            ])->save();
         } catch (\Throwable $exception) {
             Log::error('email-send-job-failed', [
                 'email_message_id' => $this->emailMessageId,
@@ -40,5 +52,18 @@ class SendEmailMessageJob implements ShouldQueue
 
             throw $exception;
         }
+    }
+
+    public function failed(Throwable $exception): void
+    {
+        $emailMessage = EmailMessage::withoutGlobalScopes()->find($this->emailMessageId);
+        if (! $emailMessage) {
+            return;
+        }
+
+        $emailMessage->forceFill([
+            'delivery_status' => 'failed',
+            'delivery_error' => $exception->getMessage(),
+        ])->save();
     }
 }

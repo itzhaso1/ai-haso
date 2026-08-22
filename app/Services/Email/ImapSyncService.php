@@ -61,10 +61,12 @@ class ImapSyncService
                     'subject' => $this->decodeMimeHeader((string) ($overview->subject ?? '(بدون عنوان)')),
                     'body' => trim($body),
                     'type' => 'inbound',
+                    'delivery_status' => 'received',
                     'message_id' => $externalMessageId,
                     'in_reply_to' => $inReplyTo,
                     'thread_key' => $threadKey,
                     'created_at' => isset($overview->date) ? Carbon::parse((string) $overview->date) : now(),
+                    'delivered_at' => now(),
                 ]);
 
                 $structure = imap_fetchstructure($stream, $messageNumber);

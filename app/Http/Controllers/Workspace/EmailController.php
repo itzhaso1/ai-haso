@@ -4,89 +4,128 @@ namespace App\Http\Controllers\Workspace;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Workspace\Concerns\InteractsWithWorkspace;
-use App\Jobs\SendEmailMessageJob;
 use App\Jobs\SyncEmailInboxJob;
 use App\Models\EmailAccount;
 use App\Models\EmailAttachment;
 use App\Models\EmailMessage;
+use App\Services\Email\WorkspaceEmailSender;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class EmailController extends Controller
 {
     use InteractsWithWorkspace;
 
-    public function index(Request $request): View
+    public function index(Request $request): RedirectResponse
+    {
+        return redirect()->route('workspace.emails.inbox', $this->forwardListFilters($request));
+    }
+
+    public function inbox(Request $request): View
     {
         $accounts = EmailAccount::query()->latest('id')->get();
         $currentAccount = $this->resolveCurrentAccount($request, $accounts);
-        $folder = $this->resolveFolder((string) $request->string('folder', 'inbound'));
         $search = trim((string) $request->string('search', ''));
 
-        $messagesQuery = EmailMessage::query()
-            ->with('account')
-            ->latest('created_at');
-        if ($currentAccount) {
-            $messagesQuery->where('email_account_id', $currentAccount->id);
-        }
-        if ($folder !== 'all') {
-            $messagesQuery->where('type', $folder);
-        }
-        if ($search !== '') {
-            $messagesQuery->where(function ($query) use ($search): void {
-                $query
-                    ->where('subject', 'like', '%'.$search.'%')
-                    ->orWhere('sender', 'like', '%'.$search.'%')
-                    ->orWhere('recipient', 'like', '%'.$search.'%')
-                    ->orWhere('body', 'like', '%'.$search.'%');
-            });
-        }
-        $messages = $messagesQuery->paginate(20)->withQueryString();
+        $messages = $this->buildMessagesQuery($currentAccount, 'inbound', $search)
+            ->paginate(20)
+            ->withQueryString();
 
-        $selectedMessage = null;
-        $threadMessages = collect();
-        if ($request->filled('message')) {
-            $candidate = EmailMessage::query()
-                ->with(['account', 'attachments'])
-                ->find($request->integer('message'));
-
-            if ($candidate && (! $currentAccount || $candidate->email_account_id === $currentAccount->id)) {
-                $selectedMessage = $candidate;
-            }
-
-            if ($selectedMessage) {
-                $threadKey = $selectedMessage->thread_key ?: ($selectedMessage->in_reply_to ?: $selectedMessage->message_id ?: (string) $selectedMessage->id);
-                $threadMessages = EmailMessage::query()
-                    ->with(['attachments', 'account'])
-                    ->where('email_account_id', $selectedMessage->email_account_id)
-                    ->when($threadKey, function ($query) use ($threadKey, $selectedMessage): void {
-                        $query->where(function ($threadQuery) use ($threadKey, $selectedMessage): void {
-                            $threadQuery
-                                ->where('thread_key', $threadKey)
-                                ->orWhere('message_id', $threadKey)
-                                ->orWhere('in_reply_to', $threadKey)
-                                ->orWhere('id', $selectedMessage->id);
-                        });
-                    })
-                    ->orderBy('created_at')
-                    ->get();
-            }
-        }
-
-        return view('workspace.emails.hub', [
+        return view('workspace.emails.inbox', [
             'accounts' => $accounts,
             'currentAccount' => $currentAccount,
-            'folder' => $folder,
             'search' => $search,
             'messages' => $messages,
-            'selectedMessage' => $selectedMessage,
+        ]);
+    }
+
+    public function sent(Request $request): View
+    {
+        $accounts = EmailAccount::query()->latest('id')->get();
+        $currentAccount = $this->resolveCurrentAccount($request, $accounts);
+        $search = trim((string) $request->string('search', ''));
+
+        $messages = $this->buildMessagesQuery($currentAccount, 'outbound', $search)
+            ->paginate(20)
+            ->withQueryString();
+
+        return view('workspace.emails.sent', [
+            'accounts' => $accounts,
+            'currentAccount' => $currentAccount,
+            'search' => $search,
+            'messages' => $messages,
+        ]);
+    }
+
+    public function showMessage(Request $request, EmailMessage $emailMessage): View
+    {
+        $emailMessage->load(['account', 'attachments']);
+        $threadKey = $emailMessage->thread_key ?: ($emailMessage->in_reply_to ?: $emailMessage->message_id ?: (string) $emailMessage->id);
+        $threadMessages = EmailMessage::query()
+            ->with(['attachments', 'account'])
+            ->where('email_account_id', $emailMessage->email_account_id)
+            ->when($threadKey, function ($query) use ($threadKey, $emailMessage): void {
+                $query->where(function ($threadQuery) use ($threadKey, $emailMessage): void {
+                    $threadQuery
+                        ->where('thread_key', $threadKey)
+                        ->orWhere('message_id', $threadKey)
+                        ->orWhere('in_reply_to', $threadKey)
+                        ->orWhere('id', $emailMessage->id);
+                });
+            })
+            ->orderBy('created_at')
+            ->get();
+
+        return view('workspace.emails.show', [
+            'message' => $emailMessage,
             'threadMessages' => $threadMessages,
+            'returnTo' => $this->resolveReturnTo($request),
+            'accountId' => $request->integer('account_id') ?: $emailMessage->email_account_id,
+            'search' => trim((string) $request->string('search', '')),
+        ]);
+    }
+
+    public function compose(Request $request): View
+    {
+        $accounts = EmailAccount::query()->latest('name')->get();
+        $currentAccount = $this->resolveCurrentAccount($request, $accounts);
+        $draft = $this->resolveComposeDraft($request, $currentAccount);
+
+        return view('workspace.emails.compose', [
+            'accounts' => $accounts,
+            'currentAccount' => $currentAccount,
+            'draft' => $draft,
+        ]);
+    }
+
+    public function clearComposeDraft(Request $request): RedirectResponse
+    {
+        $request->session()->forget('emails.compose_draft');
+
+        return redirect()
+            ->route('workspace.emails.compose', array_filter([
+                'account_id' => $request->integer('account_id') ?: null,
+            ]))
+            ->with('success', 'تم تنظيف مسودة الرسالة.');
+    }
+
+    public function accounts(Request $request): View
+    {
+        $accounts = EmailAccount::query()->latest('id')->get();
+        $editingAccount = null;
+        if ($request->filled('account_id')) {
+            $editingAccount = EmailAccount::query()->find($request->integer('account_id'));
+        }
+
+        return view('workspace.emails.accounts', [
+            'accounts' => $accounts,
+            'editingAccount' => $editingAccount,
         ]);
     }
 
@@ -130,7 +169,7 @@ class EmailController extends Controller
             'aliases' => $this->parseAliases((string) ($validated['aliases'] ?? '')),
         ]);
 
-        return redirect()->route('workspace.emails.index')->with('success', 'تم حفظ حساب البريد بنجاح.');
+        return redirect()->route('workspace.emails.accounts.index')->with('success', 'تم حفظ حساب الشركة بنجاح.');
     }
 
     public function updateAccount(Request $request, EmailAccount $emailAccount): RedirectResponse
@@ -186,7 +225,38 @@ class EmailController extends Controller
 
         $emailAccount->update($payload);
 
-        return redirect()->route('workspace.emails.index', ['account_id' => $emailAccount->id])->with('success', 'تم تحديث إعدادات الحساب.');
+        return redirect()
+            ->route('workspace.emails.accounts.index', ['account_id' => $emailAccount->id])
+            ->with('success', 'تم تحديث بيانات الحساب بنجاح.');
+    }
+
+    public function destroyAccount(EmailAccount $emailAccount): RedirectResponse
+    {
+        $attachmentPaths = EmailAttachment::query()
+            ->whereIn('message_id', EmailMessage::withoutGlobalScopes()
+                ->where('workspace_id', $emailAccount->workspace_id)
+                ->where('email_account_id', $emailAccount->id)
+                ->select('id')
+            )
+            ->pluck('file_path')
+            ->filter()
+            ->values()
+            ->all();
+
+        $logoPath = $emailAccount->logo_path ? [$emailAccount->logo_path] : [];
+        $pathsToDelete = array_values(array_unique(array_merge($attachmentPaths, $logoPath)));
+
+        DB::transaction(function () use ($emailAccount): void {
+            $emailAccount->forceDelete();
+        });
+
+        if (! empty($pathsToDelete)) {
+            Storage::disk('public')->delete($pathsToDelete);
+        }
+
+        return redirect()
+            ->route('workspace.emails.accounts.index')
+            ->with('success', 'تم حذف حساب البريد وكل ملفاته المرتبطة.');
     }
 
     public function syncAccount(EmailAccount $emailAccount): RedirectResponse
@@ -194,20 +264,28 @@ class EmailController extends Controller
         SyncEmailInboxJob::dispatch($emailAccount->id)->onQueue('emails');
 
         return redirect()
-            ->route('workspace.emails.index', ['account_id' => $emailAccount->id])
+            ->route('workspace.emails.accounts.index', ['account_id' => $emailAccount->id])
             ->with('success', 'تم جدولة مزامنة البريد في الخلفية.');
     }
 
-    public function sendMessage(Request $request): RedirectResponse
+    public function sendMessage(Request $request, WorkspaceEmailSender $workspaceEmailSender): RedirectResponse
     {
         $workspace = $this->currentWorkspace();
         $validated = $request->validate([
-            'email_account_id' => ['required', 'integer', 'exists:email_accounts,id'],
+            'email_account_id' => [
+                'required',
+                'integer',
+                Rule::exists('email_accounts', 'id')->where(fn ($query) => $query->where('workspace_id', $workspace->id)),
+            ],
             'recipient' => ['required', 'string', 'max:1000'],
             'subject' => ['nullable', 'string', 'max:255'],
             'body' => ['required', 'string'],
             'sender_alias' => ['nullable', 'string', 'max:255'],
-            'reply_to_message_id' => ['nullable', 'integer', 'exists:email_messages,id'],
+            'reply_to_message_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('email_messages', 'id')->where(fn ($query) => $query->where('workspace_id', $workspace->id)),
+            ],
             'attachments' => ['nullable', 'array', 'max:10'],
             'attachments.*' => ['file', 'max:10240'],
         ]);
@@ -222,6 +300,15 @@ class EmailController extends Controller
             }
         }
 
+        $request->session()->put('emails.compose_draft', [
+            'email_account_id' => $emailAccount->id,
+            'sender_alias' => (string) ($validated['sender_alias'] ?? ''),
+            'recipient' => $validated['recipient'],
+            'subject' => $validated['subject'] ?? '',
+            'body' => $validated['body'],
+            'reply_to_message_id' => $replyToMessage?->id,
+        ]);
+
         $sender = $emailAccount->email;
         if (! empty($validated['sender_alias'])) {
             $sender = trim($validated['sender_alias']).' <'.$emailAccount->email.'>';
@@ -229,38 +316,56 @@ class EmailController extends Controller
 
         $threadKey = $replyToMessage?->thread_key ?: ($replyToMessage?->message_id ?: Str::uuid()->toString());
 
-        $message = EmailMessage::query()->create([
-            'workspace_id' => $workspace->id,
-            'email_account_id' => $emailAccount->id,
-            'sender' => $sender,
-            'recipient' => $validated['recipient'],
-            'subject' => $validated['subject'] ?? '(بدون عنوان)',
-            'body' => $validated['body'],
-            'type' => 'outbound',
-            'message_id' => '<'.Str::uuid().'@'.Str::after($emailAccount->email, '@').'>',
-            'in_reply_to' => $replyToMessage?->message_id,
-            'thread_key' => $threadKey,
-        ]);
-
-        foreach ($request->file('attachments', []) as $file) {
-            $path = $file->store('workspaces/'.$workspace->id.'/emails/attachments', 'public');
-
-            EmailAttachment::query()->create([
-                'message_id' => $message->id,
-                'file_path' => $path,
-                'file_type' => $file->getClientMimeType(),
-                'file_size' => $file->getSize(),
+        $message = DB::transaction(function () use ($workspace, $emailAccount, $sender, $validated, $replyToMessage, $threadKey, $request): EmailMessage {
+            $message = EmailMessage::query()->create([
+                'workspace_id' => $workspace->id,
+                'email_account_id' => $emailAccount->id,
+                'sender' => $sender,
+                'recipient' => $validated['recipient'],
+                'subject' => $validated['subject'] ?? '(بدون عنوان)',
+                'body' => $validated['body'],
+                'type' => 'outbound',
+                'delivery_status' => 'sending',
+                'message_id' => '<'.Str::uuid().'@'.Str::after($emailAccount->email, '@').'>',
+                'in_reply_to' => $replyToMessage?->message_id,
+                'thread_key' => $threadKey,
             ]);
+
+            foreach ($request->file('attachments', []) as $file) {
+                $path = $file->store('workspaces/'.$workspace->id.'/emails/attachments', 'public');
+
+                EmailAttachment::query()->create([
+                    'message_id' => $message->id,
+                    'file_path' => $path,
+                    'file_type' => $file->getClientMimeType(),
+                    'file_size' => $file->getSize(),
+                ]);
+            }
+
+            return $message->load(['account', 'attachments']);
+        });
+
+        try {
+            $workspaceEmailSender->send($message);
+            $message->forceFill([
+                'delivery_status' => 'sent',
+                'delivery_error' => null,
+                'delivered_at' => now(),
+            ])->save();
+
+            return redirect()
+                ->route('workspace.emails.compose', ['account_id' => $emailAccount->id])
+                ->with('success', 'تم إرسال الرسالة بنجاح.');
+        } catch (\Throwable $exception) {
+            $message->forceFill([
+                'delivery_status' => 'failed',
+                'delivery_error' => $exception->getMessage(),
+            ])->save();
+
+            return redirect()
+                ->route('workspace.emails.compose', ['account_id' => $emailAccount->id])
+                ->with('error', 'فشل إرسال الرسالة: '.$exception->getMessage());
         }
-
-        SendEmailMessageJob::dispatch($message->id)->onQueue('emails');
-
-        return redirect()
-            ->route('workspace.emails.index', [
-                'account_id' => $emailAccount->id,
-                'message' => $message->id,
-            ])
-            ->with('success', 'تمت جدولة إرسال البريد في الخلفية.');
     }
 
     public function destroyMessage(Request $request, EmailMessage $emailMessage): RedirectResponse
@@ -280,13 +385,40 @@ class EmailController extends Controller
             Storage::disk('public')->delete($attachmentPaths);
         }
 
+        $targetRoute = $this->resolveReturnTo($request) === 'sent'
+            ? 'workspace.emails.sent'
+            : 'workspace.emails.inbox';
+
         return redirect()
-            ->route('workspace.emails.index', array_filter([
+            ->route($targetRoute, array_filter([
                 'account_id' => $request->integer('account_id') ?: null,
-                'folder' => $request->string('folder', 'inbound')->toString(),
                 'search' => $request->string('search')->toString() ?: null,
             ]))
             ->with('success', 'تم حذف الرسالة والمرفقات المرتبطة بها بنجاح.');
+    }
+
+    private function buildMessagesQuery(?EmailAccount $currentAccount, string $type, string $search)
+    {
+        $messagesQuery = EmailMessage::query()
+            ->with('account')
+            ->where('type', $type)
+            ->latest('created_at');
+
+        if ($currentAccount) {
+            $messagesQuery->where('email_account_id', $currentAccount->id);
+        }
+
+        if ($search !== '') {
+            $messagesQuery->where(function ($query) use ($search): void {
+                $query
+                    ->where('subject', 'like', '%'.$search.'%')
+                    ->orWhere('sender', 'like', '%'.$search.'%')
+                    ->orWhere('recipient', 'like', '%'.$search.'%')
+                    ->orWhere('body', 'like', '%'.$search.'%');
+            });
+        }
+
+        return $messagesQuery;
     }
 
     private function resolveCurrentAccount(Request $request, Collection $accounts): ?EmailAccount
@@ -301,9 +433,48 @@ class EmailController extends Controller
         return $accounts->first();
     }
 
-    private function resolveFolder(string $folder): string
+    private function resolveComposeDraft(Request $request, ?EmailAccount $currentAccount): array
     {
-        return in_array($folder, ['all', 'inbound', 'outbound'], true) ? $folder : 'inbound';
+        $storedDraft = $request->session()->get('emails.compose_draft', []);
+        $draft = [
+            'email_account_id' => $storedDraft['email_account_id'] ?? $currentAccount?->id,
+            'sender_alias' => $storedDraft['sender_alias'] ?? '',
+            'recipient' => $storedDraft['recipient'] ?? '',
+            'subject' => $storedDraft['subject'] ?? '',
+            'body' => $storedDraft['body'] ?? '',
+            'reply_to_message_id' => $storedDraft['reply_to_message_id'] ?? null,
+        ];
+
+        if ($request->filled('reply_to_message_id') && empty($draft['body'])) {
+            $replyMessage = EmailMessage::query()->find($request->integer('reply_to_message_id'));
+            if ($replyMessage) {
+                $draft['reply_to_message_id'] = $replyMessage->id;
+                $draft['email_account_id'] = $replyMessage->email_account_id;
+                $draft['recipient'] = $replyMessage->sender;
+                $draft['subject'] = 'Re: '.($replyMessage->subject ?: '(بدون عنوان)');
+                $draft['body'] = "\n\n---\n".$replyMessage->body;
+            }
+        }
+
+        return $draft;
+    }
+
+    /**
+     * @return array<string, string|int>
+     */
+    private function forwardListFilters(Request $request): array
+    {
+        return array_filter([
+            'account_id' => $request->integer('account_id') ?: null,
+            'search' => trim((string) $request->string('search', '')) ?: null,
+        ]);
+    }
+
+    private function resolveReturnTo(Request $request): string
+    {
+        $returnTo = (string) $request->string('return_to', 'inbox');
+
+        return in_array($returnTo, ['inbox', 'sent'], true) ? $returnTo : 'inbox';
     }
 
     /**

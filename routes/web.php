@@ -118,11 +118,20 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
         Route::resource('whatsapp-accounts', WhatsAppAccountController::class)->except(['show']);
 
         Route::get('emails', [EmailController::class, 'index'])->name('emails.index');
+        Route::get('emails/inbox', [EmailController::class, 'inbox'])->name('emails.inbox');
+        Route::get('emails/sent', [EmailController::class, 'sent'])->name('emails.sent');
+        Route::get('emails/messages/{emailMessage}', [EmailController::class, 'showMessage'])->name('emails.messages.show');
+        Route::delete('emails/messages/{emailMessage}', [EmailController::class, 'destroyMessage'])->name('emails.messages.destroy');
+
+        Route::get('emails/compose', [EmailController::class, 'compose'])->name('emails.compose');
+        Route::post('emails/compose/clear', [EmailController::class, 'clearComposeDraft'])->name('emails.compose.clear');
+        Route::post('emails/messages/send', [EmailController::class, 'sendMessage'])->name('emails.messages.send');
+
+        Route::get('emails/accounts', [EmailController::class, 'accounts'])->name('emails.accounts.index');
         Route::post('emails/accounts', [EmailController::class, 'storeAccount'])->name('emails.accounts.store');
         Route::put('emails/accounts/{emailAccount}', [EmailController::class, 'updateAccount'])->name('emails.accounts.update');
+        Route::delete('emails/accounts/{emailAccount}', [EmailController::class, 'destroyAccount'])->name('emails.accounts.destroy');
         Route::post('emails/accounts/{emailAccount}/sync', [EmailController::class, 'syncAccount'])->name('emails.accounts.sync');
-        Route::post('emails/messages/send', [EmailController::class, 'sendMessage'])->name('emails.messages.send');
-        Route::delete('emails/messages/{emailMessage}', [EmailController::class, 'destroyMessage'])->name('emails.messages.destroy');
 
         Route::prefix('finance')->as('finance.')->group(function (): void {
             Route::get('/', [FinanceDashboardController::class, 'index'])->name('dashboard');

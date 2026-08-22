@@ -15,6 +15,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'subject',
     'body',
     'type',
+    'delivery_status',
+    'delivery_error',
+    'delivered_at',
     'message_id',
     'in_reply_to',
     'thread_key',
@@ -22,6 +25,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class EmailMessage extends WorkspaceScopedModel
 {
     use BelongsToWorkspace;
+
+    protected function casts(): array
+    {
+        return [
+            'delivered_at' => 'datetime',
+        ];
+    }
 
     public function account(): BelongsTo
     {
