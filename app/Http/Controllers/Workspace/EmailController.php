@@ -79,7 +79,7 @@ class EmailController extends Controller
             }
         }
 
-        return view('workspace.emails.index', [
+        return view('workspace.emails.hub', [
             'accounts' => $accounts,
             'currentAccount' => $currentAccount,
             'folder' => $folder,

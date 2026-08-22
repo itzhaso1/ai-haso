@@ -38,7 +38,7 @@
                     </tr>
                     <tr>
                         <td style="padding:14px 24px;border-top:1px solid #f1f5f9;color:#6b7280;font-size:12px;">
-                            تم إرسال هذه الرسالة عبر مركز البريد الإلكتروني الخاص بمنصّة حاسم.
+                            مع التحية، {{ $companyName ?: $accountName }}
                         </td>
                     </tr>
                 </table>

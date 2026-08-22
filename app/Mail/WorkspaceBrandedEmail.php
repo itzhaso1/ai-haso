@@ -12,6 +12,7 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Symfony\Component\Mime\Email;
 
 class WorkspaceBrandedEmail extends Mailable
@@ -53,6 +54,7 @@ class WorkspaceBrandedEmail extends Mailable
                 'brandColor' => $this->emailAccount->brand_color ?: '#06C2A4',
                 'logoUrl' => $this->emailAccount->logo_path ? Storage::disk('public')->url($this->emailAccount->logo_path) : null,
                 'accountName' => $this->emailAccount->name,
+                'companyName' => $this->emailAccount->name,
             ]
         );
     }
@@ -63,9 +65,17 @@ class WorkspaceBrandedEmail extends Mailable
     public function attachments(): array
     {
         return $this->emailMessage->attachments
-            ->map(function ($attachment): Attachment {
-                $mailAttachment = Attachment::fromStorageDisk('public', $attachment->file_path)
-                    ->as(basename($attachment->file_path));
+            ->map(function ($attachment): ?Attachment {
+                $absolutePath = Storage::disk('public')->path($attachment->file_path);
+                if (! is_file($absolutePath)) {
+                    return null;
+                }
+
+                $storedName = basename((string) $attachment->file_path);
+                $displayName = Str::contains($storedName, '_') ? Str::after($storedName, '_') : $storedName;
+
+                $mailAttachment = Attachment::fromPath($absolutePath)
+                    ->as($displayName);
 
                 if ($attachment->file_type) {
                     $mailAttachment = $mailAttachment->withMime($attachment->file_type);
@@ -73,6 +83,8 @@ class WorkspaceBrandedEmail extends Mailable
 
                 return $mailAttachment;
             })
+            ->filter()
+            ->values()
             ->all();
     }
 }
