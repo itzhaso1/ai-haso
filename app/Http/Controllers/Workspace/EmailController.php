@@ -98,24 +98,36 @@ class EmailController extends Controller
         $accounts = EmailAccount::query()->latest('name')->get();
         $currentAccount = $this->resolveCurrentAccount($request, $accounts);
         $draft = $this->resolveComposeDraft($request, $currentAccount);
+        $oldRecipient = $request->session()->getOldInput('recipient');
+        if (is_string($oldRecipient)) {
+            $draft['recipient'] = $oldRecipient;
+        }
+
+        $oldSelectedIds = $request->session()->getOldInput('recipient_contact_ids', []);
+        if (! empty($oldSelectedIds) && is_array($oldSelectedIds)) {
+            $draft['recipient_contact_ids'] = $oldSelectedIds;
+        }
+
         $contacts = EmailContact::query()
             ->orderBy('name')
-            ->limit(30)
+            ->limit(100)
             ->get(['id', 'name', 'email']);
-        $recognizedContact = null;
-        if (! empty($draft['recipient'])) {
-            $recognizedContact = $this->findContactByEmail((string) $draft['recipient']);
-            if ($recognizedContact && empty($draft['recipient_contact_id'])) {
-                $draft['recipient_contact_id'] = $recognizedContact->id;
-            }
-        }
+        $selectedContactIds = collect($draft['recipient_contact_ids'] ?? [])
+            ->map(fn ($id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values();
+        $selectedContacts = EmailContact::query()
+            ->whereIn('id', $selectedContactIds)
+            ->orderBy('name')
+            ->get(['id', 'name', 'email']);
 
         return view('workspace.emails.compose', [
             'accounts' => $accounts,
             'currentAccount' => $currentAccount,
             'draft' => $draft,
             'contacts' => $contacts,
-            'recognizedContact' => $recognizedContact,
+            'selectedContacts' => $selectedContacts,
         ]);
     }
 
@@ -445,7 +457,7 @@ class EmailController extends Controller
                 'integer',
                 Rule::exists('email_accounts', 'id')->where(fn ($query) => $query->where('workspace_id', $workspace->id)),
             ],
-            'recipient' => ['required', 'string', 'max:1000'],
+            'recipient' => ['nullable', 'string', 'max:4000'],
             'subject' => ['nullable', 'string', 'max:255'],
             'body' => ['required', 'string'],
             'sender_alias' => ['nullable', 'string', 'max:255'],
@@ -456,7 +468,8 @@ class EmailController extends Controller
             ],
             'attachments' => ['nullable', 'array', 'max:10'],
             'attachments.*' => ['file', 'max:10240'],
-            'recipient_contact_id' => [
+            'recipient_contact_ids' => ['nullable', 'array', 'max:200'],
+            'recipient_contact_ids.*' => [
                 'nullable',
                 'integer',
                 Rule::exists('email_contacts', 'id')->where(fn ($query) => $query->where('workspace_id', $workspace->id)),
@@ -473,23 +486,44 @@ class EmailController extends Controller
             }
         }
 
-        $selectedContact = null;
-        if (! empty($validated['recipient_contact_id'])) {
-            $selectedContact = EmailContact::query()->find($validated['recipient_contact_id']);
-        }
-        $recognizedContact = $selectedContact;
-        if (! $recognizedContact) {
-            $recognizedContact = $this->findContactByEmail((string) $validated['recipient']);
+        $selectedContactIds = collect($validated['recipient_contact_ids'] ?? [])
+            ->map(fn ($id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+        $selectedContactsById = EmailContact::query()
+            ->whereIn('id', $selectedContactIds)
+            ->get(['id', 'name', 'email'])
+            ->keyBy('id');
+        $selectedRecipientEmails = collect($selectedContactIds)
+            ->map(fn (int $id): ?string => $selectedContactsById->get($id)?->email)
+            ->filter()
+            ->values()
+            ->all();
+        $manualRecipientEmails = $this->parseRecipientEmails((string) ($validated['recipient'] ?? ''));
+        $combinedRecipients = collect(array_merge($selectedRecipientEmails, $manualRecipientEmails))
+            ->map(fn (string $email): string => $this->normalizeEmail($email))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        if (count($combinedRecipients) === 0) {
+            return redirect()
+                ->route('workspace.emails.compose', ['account_id' => $emailAccount->id])
+                ->withInput()
+                ->with('error', 'يرجى إدخال مستلم واحد على الأقل أو اختيار جهات اتصال.');
         }
 
         $request->session()->put('emails.compose_draft', [
             'email_account_id' => $emailAccount->id,
             'sender_alias' => (string) ($validated['sender_alias'] ?? ''),
-            'recipient' => $validated['recipient'],
+            'recipient' => implode(', ', $combinedRecipients),
             'subject' => $validated['subject'] ?? '',
             'body' => $validated['body'],
             'reply_to_message_id' => $replyToMessage?->id,
-            'recipient_contact_id' => $recognizedContact?->id,
+            'recipient_contact_ids' => $selectedContactIds,
         ]);
 
         $sender = $emailAccount->email;
@@ -504,7 +538,7 @@ class EmailController extends Controller
                 'workspace_id' => $workspace->id,
                 'email_account_id' => $emailAccount->id,
                 'sender' => $sender,
-                'recipient' => $validated['recipient'],
+                'recipient' => implode(', ', $combinedRecipients),
                 'subject' => $validated['subject'] ?? '(بدون عنوان)',
                 'body' => $validated['body'],
                 'type' => 'outbound',
@@ -626,7 +660,7 @@ class EmailController extends Controller
             'subject' => $storedDraft['subject'] ?? '',
             'body' => $storedDraft['body'] ?? '',
             'reply_to_message_id' => $storedDraft['reply_to_message_id'] ?? null,
-            'recipient_contact_id' => $storedDraft['recipient_contact_id'] ?? null,
+            'recipient_contact_ids' => $storedDraft['recipient_contact_ids'] ?? [],
         ];
 
         if ($request->filled('reply_to_message_id') && empty($draft['body'])) {
@@ -642,12 +676,23 @@ class EmailController extends Controller
 
         if ($request->filled('recipient')) {
             $draft['recipient'] = trim((string) $request->string('recipient'));
-            $detectedContact = $this->findContactByEmail((string) $draft['recipient']);
-            $draft['recipient_contact_id'] = $detectedContact?->id;
+        }
+
+        if ($request->filled('recipient_contact_ids')) {
+            $recipientContactIds = $request->input('recipient_contact_ids', []);
+            if (is_array($recipientContactIds)) {
+                $draft['recipient_contact_ids'] = $recipientContactIds;
+            }
         }
 
         if ($request->filled('recipient_contact_id')) {
-            $draft['recipient_contact_id'] = $request->integer('recipient_contact_id') ?: null;
+            $legacySingleContactId = $request->integer('recipient_contact_id');
+            if ($legacySingleContactId) {
+                $draft['recipient_contact_ids'] = array_values(array_unique(array_merge(
+                    is_array($draft['recipient_contact_ids']) ? $draft['recipient_contact_ids'] : [],
+                    [$legacySingleContactId]
+                )));
+            }
         }
 
         return $draft;
@@ -681,6 +726,19 @@ class EmailController extends Controller
         return EmailContact::query()
             ->where('normalized_email', $normalizedEmail)
             ->first();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function parseRecipientEmails(string $value): array
+    {
+        return collect(preg_split('/[\r\n,;]+/', $value) ?: [])
+            ->map(fn (string $part): string => $this->normalizeEmail($part))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private function normalizeEmail(string $email): string

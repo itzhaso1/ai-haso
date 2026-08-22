@@ -106,6 +106,65 @@ class EmailInboxHubTest extends TestCase
         ]);
     }
 
+    public function test_bulk_send_can_target_selected_subset_of_contacts(): void
+    {
+        [$user, $workspace] = $this->createWorkspaceOwner('company');
+        $account = EmailAccount::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Company Mail',
+            'email' => 'company@mail.test',
+            'password' => 'secret',
+            'imap_host' => 'imap.mail.test',
+            'imap_port' => 993,
+            'smtp_host' => 'smtp.mail.test',
+            'smtp_port' => 587,
+            'brand_color' => '#06C2A4',
+            'aliases' => ['Support'],
+        ]);
+
+        $contactA = EmailContact::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'شركة ألف',
+            'email' => 'a@example.com',
+            'normalized_email' => 'a@example.com',
+        ]);
+        EmailContact::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'شركة باء',
+            'email' => 'b@example.com',
+            'normalized_email' => 'b@example.com',
+        ]);
+        $contactC = EmailContact::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'شركة جيم',
+            'email' => 'c@example.com',
+            'normalized_email' => 'c@example.com',
+        ]);
+
+        $this->mock(WorkspaceEmailSender::class, function ($mock): void {
+            $mock->shouldReceive('send')->once();
+        });
+
+        $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.emails.messages.send'), [
+                'email_account_id' => $account->id,
+                'recipient' => '',
+                'recipient_contact_ids' => [$contactA->id, $contactC->id],
+                'subject' => 'Bulk',
+                'body' => 'Bulk body',
+            ])
+            ->assertRedirect(route('workspace.emails.compose', ['account_id' => $account->id]))
+            ->assertSessionHas('success', 'تم إرسال الرسالة بنجاح.');
+
+        $this->assertDatabaseHas('email_messages', [
+            'workspace_id' => $workspace->id,
+            'email_account_id' => $account->id,
+            'recipient' => 'a@example.com, c@example.com',
+            'delivery_status' => 'sent',
+        ]);
+    }
+
     public function test_workspace_can_update_email_account_settings(): void
     {
         [$user, $workspace] = $this->createWorkspaceOwner('company');
@@ -246,6 +305,34 @@ class EmailInboxHubTest extends TestCase
             'email_account_id' => $account->id,
             'delivery_status' => 'failed',
         ]);
+    }
+
+    public function test_send_fails_when_no_recipients_or_selected_contacts(): void
+    {
+        [$user, $workspace] = $this->createWorkspaceOwner('company');
+        $account = EmailAccount::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'No Recipient Sender',
+            'email' => 'noreply@mail.test',
+            'password' => 'secret',
+            'imap_host' => 'imap.mail.test',
+            'imap_port' => 993,
+            'smtp_host' => 'smtp.mail.test',
+            'smtp_port' => 587,
+            'brand_color' => '#06C2A4',
+            'aliases' => ['Support'],
+        ]);
+
+        $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.emails.messages.send'), [
+                'email_account_id' => $account->id,
+                'recipient' => '',
+                'subject' => 'No recipient',
+                'body' => 'Body',
+            ])
+            ->assertRedirect(route('workspace.emails.compose', ['account_id' => $account->id]))
+            ->assertSessionHas('error', 'يرجى إدخال مستلم واحد على الأقل أو اختيار جهات اتصال.');
     }
 
     public function test_workspace_can_delete_company_email_account_with_related_files(): void
