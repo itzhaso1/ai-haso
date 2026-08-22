@@ -114,6 +114,7 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
         Route::put('emails/accounts/{emailAccount}', [EmailController::class, 'updateAccount'])->name('emails.accounts.update');
         Route::post('emails/accounts/{emailAccount}/sync', [EmailController::class, 'syncAccount'])->name('emails.accounts.sync');
         Route::post('emails/messages/send', [EmailController::class, 'sendMessage'])->name('emails.messages.send');
+        Route::delete('emails/messages/{emailMessage}', [EmailController::class, 'destroyMessage'])->name('emails.messages.destroy');
 
         Route::get('employees', [EmployeeInvitationController::class, 'index'])->name('employees.index');
         Route::get('employees/invite', [EmployeeInvitationController::class, 'create'])->name('employees.create');

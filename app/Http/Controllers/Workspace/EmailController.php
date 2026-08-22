@@ -11,6 +11,10 @@ use App\Models\EmailAttachment;
 use App\Models\EmailMessage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 
@@ -22,22 +26,42 @@ class EmailController extends Controller
     {
         $accounts = EmailAccount::query()->latest('id')->get();
         $currentAccount = $this->resolveCurrentAccount($request, $accounts);
+        $folder = $this->resolveFolder((string) $request->string('folder', 'inbound'));
+        $search = trim((string) $request->string('search', ''));
 
-        $messagesQuery = EmailMessage::query()->with('account')->latest('created_at');
+        $messagesQuery = EmailMessage::query()
+            ->with('account')
+            ->latest('created_at');
         if ($currentAccount) {
             $messagesQuery->where('email_account_id', $currentAccount->id);
+        }
+        if ($folder !== 'all') {
+            $messagesQuery->where('type', $folder);
+        }
+        if ($search !== '') {
+            $messagesQuery->where(function ($query) use ($search): void {
+                $query
+                    ->where('subject', 'like', '%'.$search.'%')
+                    ->orWhere('sender', 'like', '%'.$search.'%')
+                    ->orWhere('recipient', 'like', '%'.$search.'%')
+                    ->orWhere('body', 'like', '%'.$search.'%');
+            });
         }
         $messages = $messagesQuery->paginate(20)->withQueryString();
 
         $selectedMessage = null;
         $threadMessages = collect();
         if ($request->filled('message')) {
-            $selectedMessage = EmailMessage::query()
+            $candidate = EmailMessage::query()
                 ->with(['account', 'attachments'])
                 ->find($request->integer('message'));
 
+            if ($candidate && (! $currentAccount || $candidate->email_account_id === $currentAccount->id)) {
+                $selectedMessage = $candidate;
+            }
+
             if ($selectedMessage) {
-                $threadKey = $selectedMessage->thread_key ?: ($selectedMessage->in_reply_to ?: $selectedMessage->message_id);
+                $threadKey = $selectedMessage->thread_key ?: ($selectedMessage->in_reply_to ?: $selectedMessage->message_id ?: (string) $selectedMessage->id);
                 $threadMessages = EmailMessage::query()
                     ->with(['attachments', 'account'])
                     ->where('email_account_id', $selectedMessage->email_account_id)
@@ -58,6 +82,8 @@ class EmailController extends Controller
         return view('workspace.emails.index', [
             'accounts' => $accounts,
             'currentAccount' => $currentAccount,
+            'folder' => $folder,
+            'search' => $search,
             'messages' => $messages,
             'selectedMessage' => $selectedMessage,
             'threadMessages' => $threadMessages,
@@ -69,7 +95,12 @@ class EmailController extends Controller
         $workspace = $this->currentWorkspace();
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255'],
+            'email' => [
+                'required',
+                'email',
+                'max:255',
+                Rule::unique('email_accounts', 'email')->where(fn ($query) => $query->where('workspace_id', $workspace->id)),
+            ],
             'password' => ['required', 'string', 'max:255'],
             'imap_host' => ['required', 'string', 'max:255'],
             'imap_port' => ['required', 'integer', 'min:1', 'max:65535'],
@@ -104,9 +135,17 @@ class EmailController extends Controller
 
     public function updateAccount(Request $request, EmailAccount $emailAccount): RedirectResponse
     {
+        $workspace = $this->currentWorkspace();
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255'],
+            'email' => [
+                'required',
+                'email',
+                'max:255',
+                Rule::unique('email_accounts', 'email')
+                    ->where(fn ($query) => $query->where('workspace_id', $workspace->id))
+                    ->ignore($emailAccount->id),
+            ],
             'password' => ['nullable', 'string', 'max:255'],
             'imap_host' => ['required', 'string', 'max:255'],
             'imap_port' => ['required', 'integer', 'min:1', 'max:65535'],
@@ -114,6 +153,7 @@ class EmailController extends Controller
             'smtp_port' => ['required', 'integer', 'min:1', 'max:65535'],
             'brand_color' => ['nullable', 'regex:/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/'],
             'logo' => ['nullable', 'image', 'max:4096'],
+            'remove_logo' => ['nullable', 'boolean'],
             'aliases' => ['nullable', 'string'],
         ]);
 
@@ -132,7 +172,15 @@ class EmailController extends Controller
             $payload['password'] = $validated['password'];
         }
 
+        if ($request->boolean('remove_logo') && $emailAccount->logo_path) {
+            Storage::disk('public')->delete($emailAccount->logo_path);
+            $payload['logo_path'] = null;
+        }
+
         if ($request->hasFile('logo')) {
+            if ($emailAccount->logo_path) {
+                Storage::disk('public')->delete($emailAccount->logo_path);
+            }
             $payload['logo_path'] = $request->file('logo')->store('workspaces/'.$emailAccount->workspace_id.'/email-logos', 'public');
         }
 
@@ -169,6 +217,9 @@ class EmailController extends Controller
 
         if (! empty($validated['reply_to_message_id'])) {
             $replyToMessage = EmailMessage::query()->findOrFail($validated['reply_to_message_id']);
+            if ($replyToMessage->email_account_id !== $emailAccount->id) {
+                abort(404);
+            }
         }
 
         $sender = $emailAccount->email;
@@ -212,7 +263,33 @@ class EmailController extends Controller
             ->with('success', 'تمت جدولة إرسال البريد في الخلفية.');
     }
 
-    private function resolveCurrentAccount(Request $request, \Illuminate\Support\Collection $accounts): ?EmailAccount
+    public function destroyMessage(Request $request, EmailMessage $emailMessage): RedirectResponse
+    {
+        $attachmentPaths = $emailMessage->attachments
+            ->pluck('file_path')
+            ->filter()
+            ->values()
+            ->all();
+
+        DB::transaction(function () use ($emailMessage): void {
+            $emailMessage->attachments()->delete();
+            $emailMessage->delete();
+        });
+
+        if (! empty($attachmentPaths)) {
+            Storage::disk('public')->delete($attachmentPaths);
+        }
+
+        return redirect()
+            ->route('workspace.emails.index', array_filter([
+                'account_id' => $request->integer('account_id') ?: null,
+                'folder' => $request->string('folder', 'inbound')->toString(),
+                'search' => $request->string('search')->toString() ?: null,
+            ]))
+            ->with('success', 'تم حذف الرسالة والمرفقات المرتبطة بها بنجاح.');
+    }
+
+    private function resolveCurrentAccount(Request $request, Collection $accounts): ?EmailAccount
     {
         if ($request->filled('account_id')) {
             $selected = EmailAccount::query()->find($request->integer('account_id'));
@@ -222,6 +299,11 @@ class EmailController extends Controller
         }
 
         return $accounts->first();
+    }
+
+    private function resolveFolder(string $folder): string
+    {
+        return in_array($folder, ['all', 'inbound', 'outbound'], true) ? $folder : 'inbound';
     }
 
     /**

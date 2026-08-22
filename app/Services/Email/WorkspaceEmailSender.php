@@ -6,7 +6,6 @@ use App\Mail\WorkspaceBrandedEmail;
 use App\Models\EmailMessage;
 use Illuminate\Mail\Mailer;
 use Illuminate\Support\Str;
-use Symfony\Component\Mailer\Mailer as SymfonyMailer;
 use Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport;
 
 class WorkspaceEmailSender
@@ -28,8 +27,8 @@ class WorkspaceEmailSender
         $transport->setUsername($account->email);
         $transport->setPassword((string) $account->password);
 
-        $symfonyMailer = new SymfonyMailer($transport);
-        $mailer = new Mailer('workspace-dynamic-smtp', app('view'), $symfonyMailer, app('events'));
+        // Illuminate\Mail\Mailer expects a Symfony TransportInterface, not Symfony Mailer.
+        $mailer = new Mailer('workspace-dynamic-smtp', app('view'), $transport, app('events'));
 
         $recipients = collect(explode(',', (string) $emailMessage->recipient))
             ->map(fn (string $recipient): string => trim($recipient))
