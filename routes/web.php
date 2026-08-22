@@ -127,6 +127,13 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
         Route::post('emails/compose/clear', [EmailController::class, 'clearComposeDraft'])->name('emails.compose.clear');
         Route::post('emails/messages/send', [EmailController::class, 'sendMessage'])->name('emails.messages.send');
 
+        Route::get('emails/contacts', [EmailController::class, 'contacts'])->name('emails.contacts.index');
+        Route::post('emails/contacts', [EmailController::class, 'storeContact'])->name('emails.contacts.store');
+        Route::put('emails/contacts/{emailContact}', [EmailController::class, 'updateContact'])->name('emails.contacts.update');
+        Route::delete('emails/contacts/{emailContact}', [EmailController::class, 'destroyContact'])->name('emails.contacts.destroy');
+        Route::get('emails/contacts/search', [EmailController::class, 'searchContacts'])->name('emails.contacts.search');
+        Route::get('emails/contacts/lookup', [EmailController::class, 'lookupContact'])->name('emails.contacts.lookup');
+
         Route::get('emails/accounts', [EmailController::class, 'accounts'])->name('emails.accounts.index');
         Route::post('emails/accounts', [EmailController::class, 'storeAccount'])->name('emails.accounts.store');
         Route::put('emails/accounts/{emailAccount}', [EmailController::class, 'updateAccount'])->name('emails.accounts.update');

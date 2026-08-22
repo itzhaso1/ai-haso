@@ -4,6 +4,7 @@ namespace Tests\Feature\Feature\Email;
 
 use App\Models\EmailAccount;
 use App\Models\EmailAttachment;
+use App\Models\EmailContact;
 use App\Models\EmailMessage;
 use App\Models\User;
 use App\Models\Workspace;
@@ -298,6 +299,70 @@ class EmailInboxHubTest extends TestCase
         $this->assertDatabaseMissing('email_messages', ['id' => $message->id]);
         Storage::disk('public')->assertMissing($logoPath);
         Storage::disk('public')->assertMissing($attachmentPath);
+    }
+
+    public function test_contact_email_is_unique_case_insensitive(): void
+    {
+        [$user, $workspace] = $this->createWorkspaceOwner('company');
+
+        EmailContact::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'شركة أحمد للهواتف',
+            'email' => 'ahmed@example.com',
+            'normalized_email' => 'ahmed@example.com',
+        ]);
+
+        $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.emails.contacts.store'), [
+                'name' => 'أحمد للاتصالات',
+                'email' => 'AHMED@EXAMPLE.COM',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('error', function (string $message): bool {
+                return str_contains($message, 'هذا البريد الإلكتروني مسجل مسبقًا')
+                    && str_contains($message, 'شركة أحمد للهواتف')
+                    && str_contains($message, 'ahmed@example.com');
+            });
+
+        $this->assertDatabaseCount('email_contacts', 1);
+        $this->assertDatabaseHas('email_contacts', [
+            'workspace_id' => $workspace->id,
+            'name' => 'شركة أحمد للهواتف',
+            'normalized_email' => 'ahmed@example.com',
+        ]);
+    }
+
+    public function test_contact_lookup_and_search_work_by_name_and_email(): void
+    {
+        [$user, $workspace] = $this->createWorkspaceOwner('company');
+        EmailContact::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'شركة أحمد للهواتف',
+            'email' => 'ahmed@example.com',
+            'normalized_email' => 'ahmed@example.com',
+        ]);
+
+        $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->getJson(route('workspace.emails.contacts.lookup', ['email' => 'AHMED@EXAMPLE.COM']))
+            ->assertOk()
+            ->assertJsonPath('found', true)
+            ->assertJsonPath('contact.name', 'شركة أحمد للهواتف');
+
+        $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->getJson(route('workspace.emails.contacts.search', ['q' => 'أحمد']))
+            ->assertOk()
+            ->assertJsonCount(1, 'contacts')
+            ->assertJsonPath('contacts.0.email', 'ahmed@example.com');
+
+        $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->getJson(route('workspace.emails.contacts.search', ['q' => 'ahmed@example.com']))
+            ->assertOk()
+            ->assertJsonCount(1, 'contacts')
+            ->assertJsonPath('contacts.0.name', 'شركة أحمد للهواتف');
     }
 
     /**

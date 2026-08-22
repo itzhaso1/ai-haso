@@ -7,8 +7,10 @@ use App\Http\Controllers\Workspace\Concerns\InteractsWithWorkspace;
 use App\Jobs\SyncEmailInboxJob;
 use App\Models\EmailAccount;
 use App\Models\EmailAttachment;
+use App\Models\EmailContact;
 use App\Models\EmailMessage;
 use App\Services\Email\WorkspaceEmailSender;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -96,11 +98,24 @@ class EmailController extends Controller
         $accounts = EmailAccount::query()->latest('name')->get();
         $currentAccount = $this->resolveCurrentAccount($request, $accounts);
         $draft = $this->resolveComposeDraft($request, $currentAccount);
+        $contacts = EmailContact::query()
+            ->orderBy('name')
+            ->limit(30)
+            ->get(['id', 'name', 'email']);
+        $recognizedContact = null;
+        if (! empty($draft['recipient'])) {
+            $recognizedContact = $this->findContactByEmail((string) $draft['recipient']);
+            if ($recognizedContact && empty($draft['recipient_contact_id'])) {
+                $draft['recipient_contact_id'] = $recognizedContact->id;
+            }
+        }
 
         return view('workspace.emails.compose', [
             'accounts' => $accounts,
             'currentAccount' => $currentAccount,
             'draft' => $draft,
+            'contacts' => $contacts,
+            'recognizedContact' => $recognizedContact,
         ]);
     }
 
@@ -126,6 +141,159 @@ class EmailController extends Controller
         return view('workspace.emails.accounts', [
             'accounts' => $accounts,
             'editingAccount' => $editingAccount,
+        ]);
+    }
+
+    public function contacts(Request $request): View
+    {
+        $search = trim((string) $request->string('search', ''));
+        $contacts = EmailContact::query()
+            ->when($search !== '', function ($query) use ($search): void {
+                $query->where(function ($innerQuery) use ($search): void {
+                    $innerQuery
+                        ->where('name', 'like', '%'.$search.'%')
+                        ->orWhere('email', 'like', '%'.$search.'%')
+                        ->orWhere('normalized_email', 'like', '%'.strtolower($search).'%');
+                });
+            })
+            ->orderBy('name')
+            ->paginate(20)
+            ->withQueryString();
+
+        $editingContact = null;
+        if ($request->filled('contact_id')) {
+            $editingContact = EmailContact::query()->find($request->integer('contact_id'));
+        }
+
+        return view('workspace.emails.contacts', [
+            'contacts' => $contacts,
+            'editingContact' => $editingContact,
+            'search' => $search,
+        ]);
+    }
+
+    public function storeContact(Request $request): RedirectResponse
+    {
+        $workspace = $this->currentWorkspace();
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255'],
+        ]);
+
+        $normalizedEmail = $this->normalizeEmail((string) $validated['email']);
+        $existing = EmailContact::withoutGlobalScopes()
+            ->where('workspace_id', $workspace->id)
+            ->where('normalized_email', $normalizedEmail)
+            ->first();
+
+        if ($existing) {
+            return redirect()
+                ->route('workspace.emails.contacts.index', ['contact_id' => $existing->id])
+                ->withInput()
+                ->with('error', 'هذا البريد الإلكتروني مسجل مسبقًا: '.$existing->name.' — ['.$existing->email.']');
+        }
+
+        EmailContact::query()->create([
+            'workspace_id' => $workspace->id,
+            'name' => $validated['name'],
+            'email' => trim((string) $validated['email']),
+            'normalized_email' => $normalizedEmail,
+        ]);
+
+        return redirect()
+            ->route('workspace.emails.contacts.index')
+            ->with('success', 'تمت إضافة جهة الاتصال بنجاح.');
+    }
+
+    public function updateContact(Request $request, EmailContact $emailContact): RedirectResponse
+    {
+        $workspace = $this->currentWorkspace();
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255'],
+        ]);
+
+        $normalizedEmail = $this->normalizeEmail((string) $validated['email']);
+        $existing = EmailContact::withoutGlobalScopes()
+            ->where('workspace_id', $workspace->id)
+            ->where('normalized_email', $normalizedEmail)
+            ->where('id', '!=', $emailContact->id)
+            ->first();
+
+        if ($existing) {
+            return redirect()
+                ->route('workspace.emails.contacts.index', ['contact_id' => $existing->id])
+                ->withInput()
+                ->with('error', 'هذا البريد الإلكتروني مسجل مسبقًا: '.$existing->name.' — ['.$existing->email.']');
+        }
+
+        $emailContact->update([
+            'name' => $validated['name'],
+            'email' => trim((string) $validated['email']),
+            'normalized_email' => $normalizedEmail,
+        ]);
+
+        return redirect()
+            ->route('workspace.emails.contacts.index', ['contact_id' => $emailContact->id])
+            ->with('success', 'تم تحديث جهة الاتصال بنجاح.');
+    }
+
+    public function destroyContact(EmailContact $emailContact): RedirectResponse
+    {
+        $emailContact->delete();
+
+        return redirect()
+            ->route('workspace.emails.contacts.index')
+            ->with('success', 'تم حذف جهة الاتصال بنجاح.');
+    }
+
+    public function searchContacts(Request $request): JsonResponse
+    {
+        $query = trim((string) $request->string('q', ''));
+        $contacts = EmailContact::query()
+            ->when($query !== '', function ($builder) use ($query): void {
+                $builder->where(function ($innerBuilder) use ($query): void {
+                    $innerBuilder
+                        ->where('name', 'like', '%'.$query.'%')
+                        ->orWhere('email', 'like', '%'.$query.'%')
+                        ->orWhere('normalized_email', 'like', '%'.strtolower($query).'%');
+                });
+            })
+            ->orderBy('name')
+            ->limit(10)
+            ->get(['id', 'name', 'email']);
+
+        return response()->json([
+            'contacts' => $contacts->map(fn (EmailContact $contact): array => [
+                'id' => $contact->id,
+                'name' => $contact->name,
+                'email' => $contact->email,
+                'registered' => true,
+                'label' => $contact->name.' — '.$contact->email.' — ✓ مسجل مسبقًا',
+            ])->all(),
+        ]);
+    }
+
+    public function lookupContact(Request $request): JsonResponse
+    {
+        $email = trim((string) $request->string('email', ''));
+        $contact = $this->findContactByEmail($email);
+
+        if (! $contact) {
+            return response()->json([
+                'found' => false,
+            ]);
+        }
+
+        return response()->json([
+            'found' => true,
+            'contact' => [
+                'id' => $contact->id,
+                'name' => $contact->name,
+                'email' => $contact->email,
+                'registered' => true,
+                'label' => $contact->name.' — '.$contact->email.' — ✓ مسجل مسبقًا',
+            ],
         ]);
     }
 
@@ -288,6 +456,11 @@ class EmailController extends Controller
             ],
             'attachments' => ['nullable', 'array', 'max:10'],
             'attachments.*' => ['file', 'max:10240'],
+            'recipient_contact_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('email_contacts', 'id')->where(fn ($query) => $query->where('workspace_id', $workspace->id)),
+            ],
         ]);
 
         $emailAccount = EmailAccount::query()->findOrFail($validated['email_account_id']);
@@ -300,6 +473,15 @@ class EmailController extends Controller
             }
         }
 
+        $selectedContact = null;
+        if (! empty($validated['recipient_contact_id'])) {
+            $selectedContact = EmailContact::query()->find($validated['recipient_contact_id']);
+        }
+        $recognizedContact = $selectedContact;
+        if (! $recognizedContact) {
+            $recognizedContact = $this->findContactByEmail((string) $validated['recipient']);
+        }
+
         $request->session()->put('emails.compose_draft', [
             'email_account_id' => $emailAccount->id,
             'sender_alias' => (string) ($validated['sender_alias'] ?? ''),
@@ -307,6 +489,7 @@ class EmailController extends Controller
             'subject' => $validated['subject'] ?? '',
             'body' => $validated['body'],
             'reply_to_message_id' => $replyToMessage?->id,
+            'recipient_contact_id' => $recognizedContact?->id,
         ]);
 
         $sender = $emailAccount->email;
@@ -443,6 +626,7 @@ class EmailController extends Controller
             'subject' => $storedDraft['subject'] ?? '',
             'body' => $storedDraft['body'] ?? '',
             'reply_to_message_id' => $storedDraft['reply_to_message_id'] ?? null,
+            'recipient_contact_id' => $storedDraft['recipient_contact_id'] ?? null,
         ];
 
         if ($request->filled('reply_to_message_id') && empty($draft['body'])) {
@@ -454,6 +638,16 @@ class EmailController extends Controller
                 $draft['subject'] = 'Re: '.($replyMessage->subject ?: '(بدون عنوان)');
                 $draft['body'] = "\n\n---\n".$replyMessage->body;
             }
+        }
+
+        if ($request->filled('recipient')) {
+            $draft['recipient'] = trim((string) $request->string('recipient'));
+            $detectedContact = $this->findContactByEmail((string) $draft['recipient']);
+            $draft['recipient_contact_id'] = $detectedContact?->id;
+        }
+
+        if ($request->filled('recipient_contact_id')) {
+            $draft['recipient_contact_id'] = $request->integer('recipient_contact_id') ?: null;
         }
 
         return $draft;
@@ -475,6 +669,35 @@ class EmailController extends Controller
         $returnTo = (string) $request->string('return_to', 'inbox');
 
         return in_array($returnTo, ['inbox', 'sent'], true) ? $returnTo : 'inbox';
+    }
+
+    private function findContactByEmail(string $email): ?EmailContact
+    {
+        $normalizedEmail = $this->normalizeEmail($email);
+        if ($normalizedEmail === '') {
+            return null;
+        }
+
+        return EmailContact::query()
+            ->where('normalized_email', $normalizedEmail)
+            ->first();
+    }
+
+    private function normalizeEmail(string $email): string
+    {
+        $candidate = trim($email);
+
+        if (str_contains($candidate, '<') && str_contains($candidate, '>')) {
+            $start = strpos($candidate, '<');
+            $end = strrpos($candidate, '>');
+            if ($start !== false && $end !== false && $end > $start) {
+                $candidate = substr($candidate, $start + 1, $end - $start - 1);
+            }
+        }
+
+        $candidate = strtolower(trim($candidate));
+
+        return filter_var($candidate, FILTER_VALIDATE_EMAIL) ? $candidate : '';
     }
 
     /**

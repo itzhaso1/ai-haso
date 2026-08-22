@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\Conversation;
 use App\Models\Customer;
 use App\Models\EmailAccount;
+use App\Models\EmailContact;
 use App\Models\EmailMessage;
 use App\Models\EmployeeInvitation;
 use App\Models\Finance\FinanceExpense;
@@ -70,6 +71,7 @@ class AppServiceProvider extends ServiceProvider
         InventoryMovement::observe(WorkspaceAuditObserver::class);
         Conversation::observe(WorkspaceAuditObserver::class);
         EmailAccount::observe(WorkspaceAuditObserver::class);
+        EmailContact::observe(WorkspaceAuditObserver::class);
         EmailMessage::observe(WorkspaceAuditObserver::class);
         FinanceSetting::observe(WorkspaceAuditObserver::class);
         FinanceTaxRate::observe(WorkspaceAuditObserver::class);
