@@ -14,6 +14,7 @@
         ['label' => 'واتساب', 'route' => 'workspace.whatsapp-accounts.index', 'active' => 'workspace.whatsapp-accounts.*'],
         ['label' => 'إعدادات الذكاء الاصطناعي', 'route' => 'workspace.ai-settings.edit', 'active' => 'workspace.ai-settings.*'],
         ['label' => 'الموظفون', 'route' => 'workspace.employees.index', 'active' => 'workspace.employees.*'],
+        ['label' => 'الفوترة والحسابات', 'route' => 'workspace.finance.dashboard', 'active' => 'workspace.finance.*'],
     ];
 @endphp
 

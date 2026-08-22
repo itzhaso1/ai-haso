@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToWorkspace;
+use App\Models\Finance\FinanceInvoice;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -14,6 +15,11 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'phone',
     'whatsapp',
     'email',
+    'vat_number',
+    'commercial_registration',
+    'address',
+    'payment_terms',
+    'balance',
     'orders_count',
     'total_purchases',
     'last_order_at',
@@ -30,6 +36,7 @@ class Customer extends WorkspaceScopedModel
     {
         return [
             'total_purchases' => 'decimal:2',
+            'balance' => 'decimal:2',
             'last_order_at' => 'datetime',
             'last_conversation_at' => 'datetime',
             'metadata' => 'array',
@@ -44,5 +51,10 @@ class Customer extends WorkspaceScopedModel
     public function conversations(): HasMany
     {
         return $this->hasMany(Conversation::class);
+    }
+
+    public function financeInvoices(): HasMany
+    {
+        return $this->hasMany(FinanceInvoice::class);
     }
 }

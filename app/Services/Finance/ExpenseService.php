@@ -1,0 +1,200 @@
+<?php
+
+namespace App\Services\Finance;
+
+use App\Models\Finance\FinanceExpense;
+use App\Models\Finance\FinanceExpenseCategory;
+use App\Models\Finance\FinanceSupplier;
+use App\Models\Finance\FinanceTreasuryAccount;
+use App\Models\Workspace;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use RuntimeException;
+
+class ExpenseService
+{
+    public function __construct(
+        private readonly TaxService $taxService,
+        private readonly AccountingService $accountingService,
+        private readonly ChartOfAccountsService $chartOfAccountsService,
+    ) {}
+
+    /**
+     * @param  array<string,mixed>  $payload
+     */
+    public function create(Workspace $workspace, array $payload, int $actorUserId): FinanceExpense
+    {
+        $this->chartOfAccountsService->ensureDefaultAccounts($workspace);
+
+        return DB::transaction(function () use ($workspace, $payload, $actorUserId): FinanceExpense {
+            $supplier = null;
+            if (! empty($payload['supplier_id'])) {
+                $supplier = FinanceSupplier::query()->whereKey((int) $payload['supplier_id'])->first();
+                if (! $supplier) {
+                    throw new RuntimeException('Supplier is invalid for this workspace.');
+                }
+            }
+
+            $category = null;
+            if (! empty($payload['category_id'])) {
+                $category = FinanceExpenseCategory::query()->whereKey((int) $payload['category_id'])->first();
+                if (! $category) {
+                    throw new RuntimeException('Expense category is invalid for this workspace.');
+                }
+            }
+
+            $treasury = null;
+            if (! empty($payload['treasury_account_id'])) {
+                $treasury = FinanceTreasuryAccount::query()->whereKey((int) $payload['treasury_account_id'])->first();
+                if (! $treasury) {
+                    throw new RuntimeException('Treasury account is invalid for this workspace.');
+                }
+            }
+
+            $amount = round((float) ($payload['amount'] ?? 0), 2);
+            if ($amount <= 0) {
+                throw new RuntimeException('Expense amount must be greater than zero.');
+            }
+
+            $taxType = (string) ($payload['tax_profile_type'] ?? 'standard');
+            $taxRate = (float) ($payload['tax_rate'] ?? 0);
+            $calc = $this->taxService->calculateAmount($amount, $taxType, $taxRate);
+            $status = (string) ($payload['status'] ?? 'approved');
+
+            $attachmentPath = null;
+            if (($payload['attachment_file'] ?? null) instanceof UploadedFile) {
+                /** @var UploadedFile $attachment */
+                $attachment = $payload['attachment_file'];
+                $attachmentPath = $attachment->store('workspaces/'.$workspace->id.'/finance/expenses', 'public');
+            }
+
+            $expense = FinanceExpense::withoutGlobalScopes()->create([
+                'workspace_id' => $workspace->id,
+                'supplier_id' => $supplier?->id,
+                'category_id' => $category?->id,
+                'treasury_account_id' => $treasury?->id,
+                'expense_number' => $payload['expense_number'] ?: $this->nextExpenseNumber($workspace->id),
+                'expense_date' => $payload['expense_date'] ?? now()->toDateString(),
+                'description' => $payload['description'] ?? null,
+                'amount' => $amount,
+                'tax_rate' => $taxRate,
+                'tax_amount' => $calc['tax_amount'],
+                'total' => $calc['total'],
+                'currency' => $payload['currency'] ?? 'SAR',
+                'payment_method' => $payload['payment_method'] ?? 'cash',
+                'status' => $status,
+                'is_recurring' => (bool) ($payload['is_recurring'] ?? false),
+                'recurring_frequency' => $payload['recurring_frequency'] ?? null,
+                'next_due_date' => $payload['next_due_date'] ?? null,
+                'attachment_path' => $attachmentPath,
+                'metadata' => is_array($payload['metadata'] ?? null) ? $payload['metadata'] : null,
+                'created_by' => $actorUserId,
+            ]);
+
+            if (! in_array($status, ['draft', 'cancelled'], true)) {
+                $this->postExpenseEntry($expense, $category, $treasury, $actorUserId);
+            }
+
+            return $expense;
+        });
+    }
+
+    public function delete(FinanceExpense $expense): void
+    {
+        if ($expense->attachment_path) {
+            Storage::disk('public')->delete($expense->attachment_path);
+        }
+
+        $expense->delete();
+    }
+
+    private function postExpenseEntry(
+        FinanceExpense $expense,
+        ?FinanceExpenseCategory $category,
+        ?FinanceTreasuryAccount $treasury,
+        int $actorUserId
+    ): void {
+        $expenseAccount = $category?->linkedAccount ?? $this->chartOfAccountsService->byCode('5900');
+        $inputVat = $this->chartOfAccountsService->byCode('1400');
+        $ap = $this->chartOfAccountsService->byCode('2000');
+        $cash = $this->chartOfAccountsService->byCode('1000');
+        $bank = $this->chartOfAccountsService->byCode('1100');
+
+        if (! $expenseAccount || ! $inputVat || ! $ap || ! $cash || ! $bank) {
+            throw new RuntimeException('Chart of accounts is incomplete.');
+        }
+
+        $creditAccount = $ap;
+        if ($expense->status === 'paid' && $expense->payment_method !== 'credit') {
+            if ($treasury?->linkedAccount) {
+                $creditAccount = $treasury->linkedAccount;
+            } else {
+                $creditAccount = $treasury?->type === 'bank' ? $bank : $cash;
+            }
+        }
+
+        $lines = [
+            [
+                'account_id' => $expenseAccount->id,
+                'debit' => (float) $expense->amount,
+                'credit' => 0,
+                'description' => 'Expense amount',
+                'entity_type' => FinanceExpense::class,
+                'entity_id' => $expense->id,
+            ],
+        ];
+
+        if ((float) $expense->tax_amount > 0) {
+            $lines[] = [
+                'account_id' => $inputVat->id,
+                'debit' => (float) $expense->tax_amount,
+                'credit' => 0,
+                'description' => 'Input VAT on expense',
+                'entity_type' => FinanceExpense::class,
+                'entity_id' => $expense->id,
+            ];
+        }
+
+        $lines[] = [
+            'account_id' => $creditAccount->id,
+            'debit' => 0,
+            'credit' => (float) $expense->total,
+            'description' => $creditAccount->id === $ap->id ? 'Accounts payable for expense' : 'Cash/Bank expense payment',
+            'entity_type' => FinanceExpense::class,
+            'entity_id' => $expense->id,
+        ];
+
+        $this->accountingService->createEntry(
+            workspaceId: (int) $expense->workspace_id,
+            entryDate: $expense->expense_date?->toDateString() ?? now()->toDateString(),
+            type: 'expense',
+            lines: $lines,
+            description: 'Expense '.$expense->expense_number,
+            referenceType: FinanceExpense::class,
+            referenceId: $expense->id,
+            postedBy: $actorUserId
+        );
+
+        if ($creditAccount->code !== '2000' && $treasury) {
+            $treasury->update([
+                'current_balance' => round((float) $treasury->current_balance - (float) $expense->total, 2),
+            ]);
+        }
+    }
+
+    private function nextExpenseNumber(int $workspaceId): string
+    {
+        $prefix = 'EXP-'.date('Y').'-';
+        $last = FinanceExpense::withoutGlobalScopes()
+            ->where('workspace_id', $workspaceId)
+            ->where('expense_number', 'like', $prefix.'%')
+            ->lockForUpdate()
+            ->orderByDesc('id')
+            ->first();
+
+        $counter = $last ? ((int) substr($last->expense_number, -6) + 1) : 1;
+
+        return $prefix.str_pad((string) $counter, 6, '0', STR_PAD_LEFT);
+    }
+}

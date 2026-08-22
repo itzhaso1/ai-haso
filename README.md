@@ -35,6 +35,11 @@ This repository now includes a functional multi-tenant foundation plus operation
    - Plans, subscriptions, employee invitations, role/permission APIs (team-scoped).
 9. **Ops**
    - Notifications (database/mail), queue jobs, audit/webhook logging schema.
+10. **HASem Financial**
+   - Dedicated full-page financial app (`/workspace/finance`) with its own layout/sidebar/header.
+   - Double-entry accounting foundations (chart of accounts, journal entries/lines, fiscal periods).
+   - Sales/purchase invoices + invoice items + partial/full payments + VAT-aware calculations.
+   - Suppliers, expenses, tax settings, treasury (cash/bank), accounting dashboard, and reports.
 
 ## Local Setup
 

@@ -29,6 +29,22 @@ class FoundationSeeder extends Seeder
             'payments.manage',
             'employees.manage',
             'subscriptions.manage',
+            'finance.view',
+            'finance.manage',
+            'invoices.view',
+            'invoices.create',
+            'invoices.edit',
+            'invoices.cancel',
+            'invoices.delete',
+            'expenses.view',
+            'expenses.create',
+            'expenses.edit',
+            'accounting.view',
+            'accounting.manage',
+            'payroll.view',
+            'payroll.manage',
+            'reports.view',
+            'finance.settings',
         ];
 
         foreach ($permissions as $permission) {
@@ -38,6 +54,44 @@ class FoundationSeeder extends Seeder
         foreach (['owner', 'admin', 'manager', 'agent'] as $roleName) {
             Role::findOrCreate($roleName, 'web');
         }
+
+        $ownerRole = Role::findByName('owner', 'web');
+        $adminRole = Role::findByName('admin', 'web');
+        $managerRole = Role::findByName('manager', 'web');
+        $agentRole = Role::findByName('agent', 'web');
+
+        $allPermissions = Permission::query()->pluck('name')->all();
+        $ownerRole->syncPermissions($allPermissions);
+        $adminRole->syncPermissions($allPermissions);
+        $managerRole->syncPermissions([
+            'workspace.view',
+            'products.manage',
+            'inventory.manage',
+            'customers.manage',
+            'orders.manage',
+            'conversations.manage',
+            'payments.manage',
+            'finance.view',
+            'invoices.view',
+            'invoices.create',
+            'invoices.edit',
+            'expenses.view',
+            'expenses.create',
+            'expenses.edit',
+            'accounting.view',
+            'reports.view',
+            'payroll.view',
+        ]);
+        $agentRole->syncPermissions([
+            'workspace.view',
+            'customers.manage',
+            'orders.manage',
+            'conversations.manage',
+            'finance.view',
+            'invoices.view',
+            'expenses.view',
+            'reports.view',
+        ]);
 
         $plans = [
             [
@@ -72,8 +126,8 @@ class FoundationSeeder extends Seeder
                 'currency' => 'USD',
                 'price' => 99,
                 'is_active' => true,
-                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp'],
-                'permissions' => ['workspace.view', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'subscriptions.manage'],
+                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'finance'],
+                'permissions' => ['workspace.view', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'subscriptions.manage', 'finance.view', 'invoices.view', 'expenses.view', 'accounting.view', 'reports.view'],
                 'limits' => ['products' => 1000, 'users' => 10, 'orders' => 2000, 'ai_usage' => 20000],
             ],
             [
@@ -84,8 +138,8 @@ class FoundationSeeder extends Seeder
                 'currency' => 'USD',
                 'price' => 99,
                 'is_active' => true,
-                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp'],
-                'permissions' => ['workspace.view', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'subscriptions.manage'],
+                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'finance'],
+                'permissions' => ['workspace.view', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'subscriptions.manage', 'finance.view', 'invoices.view', 'expenses.view', 'accounting.view', 'reports.view'],
                 'limits' => ['products' => 1000, 'users' => 10, 'orders' => 2000, 'ai_usage' => 20000],
             ],
             [
@@ -96,8 +150,8 @@ class FoundationSeeder extends Seeder
                 'currency' => 'USD',
                 'price' => 199,
                 'is_active' => true,
-                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'payments', 'employees', 'analytics'],
-                'permissions' => ['workspace.view', 'workspace.manage', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'payments.manage', 'employees.manage', 'subscriptions.manage'],
+                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'payments', 'employees', 'analytics', 'finance'],
+                'permissions' => ['workspace.view', 'workspace.manage', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'payments.manage', 'employees.manage', 'subscriptions.manage', 'finance.view', 'finance.manage', 'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.cancel', 'expenses.view', 'expenses.create', 'expenses.edit', 'accounting.view', 'accounting.manage', 'payroll.view', 'reports.view', 'finance.settings'],
                 'limits' => ['products' => 5000, 'users' => 30, 'orders' => 15000, 'ai_usage' => 120000],
             ],
             [
@@ -108,8 +162,8 @@ class FoundationSeeder extends Seeder
                 'currency' => 'USD',
                 'price' => 199,
                 'is_active' => true,
-                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'payments', 'employees', 'analytics'],
-                'permissions' => ['workspace.view', 'workspace.manage', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'payments.manage', 'employees.manage', 'subscriptions.manage'],
+                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'payments', 'employees', 'analytics', 'finance'],
+                'permissions' => ['workspace.view', 'workspace.manage', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'payments.manage', 'employees.manage', 'subscriptions.manage', 'finance.view', 'finance.manage', 'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.cancel', 'expenses.view', 'expenses.create', 'expenses.edit', 'accounting.view', 'accounting.manage', 'payroll.view', 'reports.view', 'finance.settings'],
                 'limits' => ['products' => 5000, 'users' => 30, 'orders' => 15000, 'ai_usage' => 120000],
             ],
             [
@@ -120,8 +174,8 @@ class FoundationSeeder extends Seeder
                 'currency' => 'USD',
                 'price' => 499,
                 'is_active' => true,
-                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'payments', 'employees', 'analytics'],
-                'permissions' => ['workspace.view', 'workspace.manage', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'payments.manage', 'employees.manage', 'subscriptions.manage'],
+                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'payments', 'employees', 'analytics', 'finance'],
+                'permissions' => ['workspace.view', 'workspace.manage', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'payments.manage', 'employees.manage', 'subscriptions.manage', 'finance.view', 'finance.manage', 'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.cancel', 'expenses.view', 'expenses.create', 'expenses.edit', 'accounting.view', 'accounting.manage', 'payroll.view', 'reports.view', 'finance.settings'],
                 'limits' => ['products' => 50000, 'users' => 200, 'orders' => 200000, 'ai_usage' => 1000000],
             ],
             [
@@ -132,8 +186,8 @@ class FoundationSeeder extends Seeder
                 'currency' => 'USD',
                 'price' => 499,
                 'is_active' => true,
-                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'payments', 'employees', 'analytics'],
-                'permissions' => ['workspace.view', 'workspace.manage', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'payments.manage', 'employees.manage', 'subscriptions.manage'],
+                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'payments', 'employees', 'analytics', 'finance'],
+                'permissions' => ['workspace.view', 'workspace.manage', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'payments.manage', 'employees.manage', 'subscriptions.manage', 'finance.view', 'finance.manage', 'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.cancel', 'expenses.view', 'expenses.create', 'expenses.edit', 'accounting.view', 'accounting.manage', 'payroll.view', 'reports.view', 'finance.settings'],
                 'limits' => ['products' => 50000, 'users' => 200, 'orders' => 200000, 'ai_usage' => 1000000],
             ],
         ];

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToWorkspace;
+use App\Models\Finance\FinanceInvoiceItem;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,10 +17,14 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'slug',
     'description',
     'sku',
+    'barcode',
     'price',
     'sale_price',
+    'cost_price',
+    'vat_rate',
     'currency',
     'stock',
+    'inventory_tracking',
     'status',
     'brand',
     'weight',
@@ -36,7 +41,10 @@ class Product extends WorkspaceScopedModel
         return [
             'price' => 'decimal:2',
             'sale_price' => 'decimal:2',
+            'cost_price' => 'decimal:2',
+            'vat_rate' => 'decimal:2',
             'weight' => 'decimal:3',
+            'inventory_tracking' => 'boolean',
             'images' => 'array',
             'attributes' => 'array',
         ];
@@ -55,5 +63,10 @@ class Product extends WorkspaceScopedModel
     public function inventoryMovements(): HasMany
     {
         return $this->hasMany(InventoryMovement::class);
+    }
+
+    public function financeInvoiceItems(): HasMany
+    {
+        return $this->hasMany(FinanceInvoiceItem::class);
     }
 }

@@ -2,6 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Finance\FinanceAccount;
+use App\Models\Finance\FinanceExpense;
+use App\Models\Finance\FinanceInvoice;
+use App\Models\Finance\FinanceJournalEntry;
+use App\Models\Finance\FinancePayrollRun;
+use App\Models\Finance\FinanceSetting;
+use App\Models\Finance\FinanceSupplier;
+use App\Models\Finance\FinanceTaxRate;
+use App\Models\Finance\FinanceTreasuryAccount;
 use Database\Factories\WorkspaceFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -116,5 +125,50 @@ class Workspace extends Model
     public function whatsappAccounts(): HasMany
     {
         return $this->hasMany(WhatsAppAccount::class);
+    }
+
+    public function financeSetting(): HasOne
+    {
+        return $this->hasOne(FinanceSetting::class);
+    }
+
+    public function financeTaxRates(): HasMany
+    {
+        return $this->hasMany(FinanceTaxRate::class);
+    }
+
+    public function financeAccounts(): HasMany
+    {
+        return $this->hasMany(FinanceAccount::class);
+    }
+
+    public function financeTreasuryAccounts(): HasMany
+    {
+        return $this->hasMany(FinanceTreasuryAccount::class);
+    }
+
+    public function financeSuppliers(): HasMany
+    {
+        return $this->hasMany(FinanceSupplier::class);
+    }
+
+    public function financeInvoices(): HasMany
+    {
+        return $this->hasMany(FinanceInvoice::class);
+    }
+
+    public function financeExpenses(): HasMany
+    {
+        return $this->hasMany(FinanceExpense::class);
+    }
+
+    public function financeJournalEntries(): HasMany
+    {
+        return $this->hasMany(FinanceJournalEntry::class);
+    }
+
+    public function financePayrollRuns(): HasMany
+    {
+        return $this->hasMany(FinancePayrollRun::class);
     }
 }

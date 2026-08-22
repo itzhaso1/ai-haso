@@ -13,6 +13,14 @@ use App\Http\Controllers\Workspace\CustomerController;
 use App\Http\Controllers\Workspace\DashboardController as WorkspaceDashboardController;
 use App\Http\Controllers\Workspace\EmployeeInvitationController;
 use App\Http\Controllers\Workspace\EmailController;
+use App\Http\Controllers\Workspace\Finance\AccountingController as FinanceAccountingController;
+use App\Http\Controllers\Workspace\Finance\DashboardController as FinanceDashboardController;
+use App\Http\Controllers\Workspace\Finance\ExpenseController as FinanceExpenseController;
+use App\Http\Controllers\Workspace\Finance\InvoiceController as FinanceInvoiceController;
+use App\Http\Controllers\Workspace\Finance\ModulePageController as FinanceModulePageController;
+use App\Http\Controllers\Workspace\Finance\ReportController as FinanceReportController;
+use App\Http\Controllers\Workspace\Finance\SettingsController as FinanceSettingsController;
+use App\Http\Controllers\Workspace\Finance\SupplierController as FinanceSupplierController;
 use App\Http\Controllers\Workspace\InventoryController;
 use App\Http\Controllers\Workspace\OrderController;
 use App\Http\Controllers\Workspace\PaymentController;
@@ -115,6 +123,45 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
         Route::post('emails/accounts/{emailAccount}/sync', [EmailController::class, 'syncAccount'])->name('emails.accounts.sync');
         Route::post('emails/messages/send', [EmailController::class, 'sendMessage'])->name('emails.messages.send');
         Route::delete('emails/messages/{emailMessage}', [EmailController::class, 'destroyMessage'])->name('emails.messages.destroy');
+
+        Route::prefix('finance')->as('finance.')->group(function (): void {
+            Route::get('/', [FinanceDashboardController::class, 'index'])->name('dashboard');
+
+            Route::get('invoices', [FinanceInvoiceController::class, 'index'])->name('invoices.index');
+            Route::get('invoices/create', [FinanceInvoiceController::class, 'create'])->name('invoices.create');
+            Route::post('invoices', [FinanceInvoiceController::class, 'store'])->name('invoices.store');
+            Route::get('invoices/{invoice}', [FinanceInvoiceController::class, 'show'])->name('invoices.show');
+            Route::get('invoices/{invoice}/pdf', [FinanceInvoiceController::class, 'downloadPdf'])->name('invoices.pdf');
+            Route::post('invoices/{invoice}/cancel', [FinanceInvoiceController::class, 'cancel'])->name('invoices.cancel');
+            Route::post('invoices/{invoice}/payments', [FinanceInvoiceController::class, 'storePayment'])->name('invoices.payments.store');
+
+            Route::get('suppliers', [FinanceSupplierController::class, 'index'])->name('suppliers.index');
+            Route::post('suppliers', [FinanceSupplierController::class, 'store'])->name('suppliers.store');
+            Route::put('suppliers/{supplier}', [FinanceSupplierController::class, 'update'])->name('suppliers.update');
+
+            Route::get('expenses', [FinanceExpenseController::class, 'index'])->name('expenses.index');
+            Route::post('expenses', [FinanceExpenseController::class, 'store'])->name('expenses.store');
+
+            Route::get('accounting', [FinanceAccountingController::class, 'dashboard'])->name('accounting.dashboard');
+            Route::get('reports', [FinanceReportController::class, 'index'])->name('reports.index');
+
+            Route::get('settings', [FinanceSettingsController::class, 'index'])->name('settings.index');
+            Route::put('settings/company', [FinanceSettingsController::class, 'updateCompany'])->name('settings.company.update');
+            Route::post('settings/tax-rates', [FinanceSettingsController::class, 'storeTaxRate'])->name('settings.tax-rates.store');
+            Route::post('settings/treasury-accounts', [FinanceSettingsController::class, 'storeTreasuryAccount'])->name('settings.treasury-accounts.store');
+
+            Route::get('customers', [FinanceModulePageController::class, 'customers'])->name('customers.index');
+            Route::get('products', [FinanceModulePageController::class, 'products'])->name('products.index');
+            Route::get('inventory', [FinanceModulePageController::class, 'inventory'])->name('inventory.index');
+            Route::get('payroll', [FinanceModulePageController::class, 'payroll'])->name('payroll.index');
+            Route::get('vat', [FinanceModulePageController::class, 'vat'])->name('vat.index');
+            Route::get('banks', [FinanceModulePageController::class, 'banks'])->name('banks.index');
+            Route::get('modules/{key}', [FinanceModulePageController::class, 'placeholder'])->name('modules.show');
+
+            Route::get('sales', [FinanceModulePageController::class, 'sales'])->name('sales.index');
+            Route::get('purchases', [FinanceModulePageController::class, 'purchases'])->name('purchases.index');
+            Route::get('cashbox', [FinanceModulePageController::class, 'cashbox'])->name('cashbox.index');
+        });
 
         Route::get('employees', [EmployeeInvitationController::class, 'index'])->name('employees.index');
         Route::get('employees/invite', [EmployeeInvitationController::class, 'create'])->name('employees.create');
