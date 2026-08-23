@@ -36,9 +36,10 @@ return new class extends Migration
 
             $table->timestamps();
 
-            $table->index(['workspace_id', 'checkout_status']);
-            $table->index(['workspace_id', 'payment_status']);
-            $table->index(['workspace_id', 'subscription_status']);
+            // Explicit short names to stay within MySQL's 64-char identifier limit.
+            $table->index(['workspace_id', 'checkout_status'], 'sub_chk_sessions_ws_checkout_idx');
+            $table->index(['workspace_id', 'payment_status'], 'sub_chk_sessions_ws_payment_idx');
+            $table->index(['workspace_id', 'subscription_status'], 'sub_chk_sessions_ws_subscr_idx');
         });
     }
 
