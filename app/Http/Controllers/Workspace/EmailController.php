@@ -533,7 +533,7 @@ class EmailController extends Controller
 
         $threadKey = $replyToMessage?->thread_key ?: ($replyToMessage?->message_id ?: Str::uuid()->toString());
 
-        $message = DB::transaction(function () use ($workspace, $emailAccount, $sender, $validated, $replyToMessage, $threadKey, $request): EmailMessage {
+        $message = DB::transaction(function () use ($workspace, $emailAccount, $sender, $validated, $replyToMessage, $threadKey, $request, $combinedRecipients): EmailMessage {
             $message = EmailMessage::query()->create([
                 'workspace_id' => $workspace->id,
                 'email_account_id' => $emailAccount->id,
