@@ -32,6 +32,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        // MySQL may block dropping parent tables during refresh if any FK-linked
+        // child table still exists (including partially managed legacy tables).
+        Schema::disableForeignKeyConstraints();
         Schema::dropIfExists('workspaces');
+        Schema::enableForeignKeyConstraints();
     }
 };
