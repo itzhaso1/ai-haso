@@ -4,8 +4,13 @@ namespace Tests\Feature\Feature\Finance;
 
 use App\Models\Customer;
 use App\Models\Finance\FinanceExpense;
+use App\Models\Finance\FinanceFiscalYear;
 use App\Models\Finance\FinanceInvoice;
 use App\Models\Finance\FinanceJournalEntry;
+use App\Models\Finance\FinancePayrollAdjustment;
+use App\Models\Finance\FinancePriceList;
+use App\Models\Finance\FinanceSalaryAdvance;
+use App\Models\Finance\FinanceSalaryAdvanceRepayment;
 use App\Models\Finance\FinanceSupplier;
 use App\Models\User;
 use App\Models\Workspace;
@@ -372,6 +377,213 @@ class FinancialCoreTest extends TestCase
             ->withSession(['current_workspace_id' => $workspace->id])
             ->get(route('workspace.finance.reports.index'))
             ->assertOk();
+    }
+
+    public function test_sales_module_page_is_functional_with_filters(): void
+    {
+        [$user, $workspace] = $this->createWorkspaceOwner('company');
+        $customer = Customer::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'عميل المبيعات',
+            'phone' => '0501002000',
+        ]);
+
+        $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.finance.invoices.store'), [
+                'type' => 'sales',
+                'customer_id' => $customer->id,
+                'issue_date' => now()->toDateString(),
+                'currency' => 'SAR',
+                'status' => 'unpaid',
+                'tax_profile_type' => 'standard',
+                'tax_rate' => 15,
+                'items_json' => json_encode([
+                    [
+                        'product_name' => 'خدمة مبيعات',
+                        'quantity' => 1,
+                        'unit_price' => 100,
+                        'discount' => 0,
+                        'tax_rate' => 15,
+                        'tax_type' => 'standard',
+                    ],
+                ]),
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->get(route('workspace.finance.sales.index', ['status' => 'unpaid', 'customer_id' => $customer->id]))
+            ->assertOk()
+            ->assertSee('وحدة المبيعات');
+    }
+
+    public function test_price_lists_module_allows_create_and_add_items_and_isolated_by_workspace(): void
+    {
+        [$userA, $workspaceA] = $this->createWorkspaceOwner('company');
+        [$userB, $workspaceB] = $this->createWorkspaceOwner('store');
+
+        $this->actingAs($userA)
+            ->withSession(['current_workspace_id' => $workspaceA->id])
+            ->post(route('workspace.finance.price-lists.store'), [
+                'name' => 'قائمة جملة',
+                'currency' => 'SAR',
+            ])
+            ->assertRedirect();
+
+        $listA = FinancePriceList::withoutGlobalScopes()
+            ->where('workspace_id', $workspaceA->id)
+            ->where('name', 'قائمة جملة')
+            ->firstOrFail();
+
+        $this->actingAs($userA)
+            ->withSession(['current_workspace_id' => $workspaceA->id])
+            ->post(route('workspace.finance.price-lists.items.store', $listA), [
+                'product_name' => 'خدمة دعم',
+                'price' => 250,
+                'min_quantity' => 1,
+                'tax_rate' => 15,
+            ])
+            ->assertRedirect();
+
+        $listA->refresh();
+        $this->assertSame(1, $listA->items()->count());
+
+        $listB = FinancePriceList::withoutGlobalScopes()->create([
+            'workspace_id' => $workspaceB->id,
+            'name' => 'قائمة خاصة B',
+            'currency' => 'SAR',
+            'status' => 'draft',
+        ]);
+
+        $this->actingAs($userA)
+            ->withSession(['current_workspace_id' => $workspaceA->id])
+            ->put(route('workspace.finance.price-lists.update', $listB), [
+                'name' => 'اختراق',
+                'currency' => 'SAR',
+            ])
+            ->assertNotFound();
+    }
+
+    public function test_payroll_adjustment_posting_creates_journal_entry(): void
+    {
+        [$owner, $workspace] = $this->createWorkspaceOwner('company');
+        $employee = User::factory()->create();
+        $workspace->users()->attach($employee->id, [
+            'membership_role' => 'agent',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.finance.payroll-adjustments.store'), [
+                'type' => 'bonus',
+                'user_id' => $employee->id,
+                'title' => 'مكافأة أداء',
+                'amount' => 500,
+                'effective_date' => now()->toDateString(),
+                'status' => 'approved',
+            ])
+            ->assertRedirect();
+
+        $adjustment = FinancePayrollAdjustment::withoutGlobalScopes()->firstOrFail();
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.finance.payroll-adjustments.post', $adjustment))
+            ->assertRedirect();
+
+        $adjustment->refresh();
+        $this->assertSame('posted', $adjustment->status);
+        $this->assertNotNull($adjustment->posted_journal_entry_id);
+
+        $entry = FinanceJournalEntry::withoutGlobalScopes()->findOrFail($adjustment->posted_journal_entry_id);
+        $entry->load('lines');
+        $this->assertEquals((float) $entry->lines->sum('debit'), (float) $entry->lines->sum('credit'));
+    }
+
+    public function test_salary_advance_issue_and_repayments_update_status_and_balances(): void
+    {
+        [$owner, $workspace] = $this->createWorkspaceOwner('company');
+        $employee = User::factory()->create();
+        $workspace->users()->attach($employee->id, [
+            'membership_role' => 'agent',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.finance.salary-advances.store'), [
+                'user_id' => $employee->id,
+                'amount' => 500,
+                'issued_at' => now()->toDateString(),
+                'type' => 'salary_advance',
+                'payment_method' => 'cash',
+            ])
+            ->assertRedirect();
+
+        $advance = FinanceSalaryAdvance::withoutGlobalScopes()->firstOrFail();
+        $this->assertSame('open', $advance->status);
+        $this->assertSame('500.00', (string) $advance->remaining_amount);
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.finance.salary-advances.repay', $advance), [
+                'payment_date' => now()->toDateString(),
+                'amount' => 200,
+                'method' => 'cash',
+            ])
+            ->assertRedirect();
+
+        $advance->refresh();
+        $this->assertSame('open', $advance->status);
+        $this->assertSame('300.00', (string) $advance->remaining_amount);
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.finance.salary-advances.repay', $advance), [
+                'payment_date' => now()->toDateString(),
+                'amount' => 300,
+                'method' => 'payroll_deduction',
+            ])
+            ->assertRedirect();
+
+        $advance->refresh();
+        $this->assertSame('closed', $advance->status);
+        $this->assertSame('0.00', (string) $advance->remaining_amount);
+        $this->assertSame(2, FinanceSalaryAdvanceRepayment::withoutGlobalScopes()->count());
+    }
+
+    public function test_fiscal_year_module_prevents_overlapping_year_ranges(): void
+    {
+        [$user, $workspace] = $this->createWorkspaceOwner('company');
+
+        $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.finance.fiscal-years.store'), [
+                'name' => 'FY-2030',
+                'start_date' => '2030-01-01',
+                'end_date' => '2030-12-31',
+            ])
+            ->assertRedirect();
+
+        $response = $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.finance.fiscal-years.store'), [
+                'name' => 'FY-2030-overlap',
+                'start_date' => '2030-06-01',
+                'end_date' => '2031-05-31',
+            ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHas('error');
+
+        $this->assertFalse(FinanceFiscalYear::withoutGlobalScopes()
+            ->where('workspace_id', $workspace->id)
+            ->where('name', 'FY-2030-overlap')
+            ->exists());
     }
 
     /**

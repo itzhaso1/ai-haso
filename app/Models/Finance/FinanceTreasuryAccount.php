@@ -50,4 +50,9 @@ class FinanceTreasuryAccount extends WorkspaceScopedModel
     {
         return $this->hasMany(FinanceExpense::class, 'treasury_account_id');
     }
+
+    public function salaryAdvanceRepayments(): HasMany
+    {
+        return $this->hasMany(FinanceSalaryAdvanceRepayment::class, 'treasury_account_id');
+    }
 }

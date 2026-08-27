@@ -16,9 +16,14 @@ use App\Http\Controllers\Workspace\EmailController;
 use App\Http\Controllers\Workspace\Finance\AccountingController as FinanceAccountingController;
 use App\Http\Controllers\Workspace\Finance\DashboardController as FinanceDashboardController;
 use App\Http\Controllers\Workspace\Finance\ExpenseController as FinanceExpenseController;
+use App\Http\Controllers\Workspace\Finance\FiscalYearController as FinanceFiscalYearController;
 use App\Http\Controllers\Workspace\Finance\InvoiceController as FinanceInvoiceController;
 use App\Http\Controllers\Workspace\Finance\ModulePageController as FinanceModulePageController;
+use App\Http\Controllers\Workspace\Finance\PayrollAdjustmentController as FinancePayrollAdjustmentController;
+use App\Http\Controllers\Workspace\Finance\PriceListController as FinancePriceListController;
 use App\Http\Controllers\Workspace\Finance\ReportController as FinanceReportController;
+use App\Http\Controllers\Workspace\Finance\SalaryAdvanceController as FinanceSalaryAdvanceController;
+use App\Http\Controllers\Workspace\Finance\SalesController as FinanceSalesController;
 use App\Http\Controllers\Workspace\Finance\SettingsController as FinanceSettingsController;
 use App\Http\Controllers\Workspace\Finance\SupplierController as FinanceSupplierController;
 use App\Http\Controllers\Workspace\InventoryController;
@@ -172,9 +177,39 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::get('payroll', [FinanceModulePageController::class, 'payroll'])->name('payroll.index');
             Route::get('vat', [FinanceModulePageController::class, 'vat'])->name('vat.index');
             Route::get('banks', [FinanceModulePageController::class, 'banks'])->name('banks.index');
-            Route::get('modules/{key}', [FinanceModulePageController::class, 'placeholder'])->name('modules.show');
+            Route::get('sales', [FinanceSalesController::class, 'index'])->name('sales.index');
+            Route::get('price-lists', [FinancePriceListController::class, 'index'])->name('price-lists.index');
+            Route::post('price-lists', [FinancePriceListController::class, 'store'])->name('price-lists.store');
+            Route::put('price-lists/{priceList}', [FinancePriceListController::class, 'update'])->name('price-lists.update');
+            Route::post('price-lists/{priceList}/items', [FinancePriceListController::class, 'addItem'])->name('price-lists.items.store');
+            Route::put('price-lists/items/{item}', [FinancePriceListController::class, 'updateItem'])->name('price-lists.items.update');
+            Route::delete('price-lists/items/{item}', [FinancePriceListController::class, 'deleteItem'])->name('price-lists.items.destroy');
+            Route::post('price-lists/{priceList}/approve', [FinancePriceListController::class, 'approve'])->name('price-lists.approve');
+            Route::post('price-lists/{priceList}/mark-draft', [FinancePriceListController::class, 'markDraft'])->name('price-lists.mark-draft');
+            Route::post('price-lists/{priceList}/cancel', [FinancePriceListController::class, 'cancel'])->name('price-lists.cancel');
 
-            Route::get('sales', [FinanceModulePageController::class, 'sales'])->name('sales.index');
+            Route::get('allowances', [FinancePayrollAdjustmentController::class, 'allowances'])->name('allowances.index');
+            Route::get('bonuses', [FinancePayrollAdjustmentController::class, 'bonuses'])->name('bonuses.index');
+            Route::get('deductions', [FinancePayrollAdjustmentController::class, 'deductions'])->name('deductions.index');
+            Route::post('payroll-adjustments', [FinancePayrollAdjustmentController::class, 'store'])->name('payroll-adjustments.store');
+            Route::post('payroll-adjustments/{adjustment}/approve', [FinancePayrollAdjustmentController::class, 'approve'])->name('payroll-adjustments.approve');
+            Route::post('payroll-adjustments/{adjustment}/post', [FinancePayrollAdjustmentController::class, 'post'])->name('payroll-adjustments.post');
+            Route::post('payroll-adjustments/{adjustment}/cancel', [FinancePayrollAdjustmentController::class, 'cancel'])->name('payroll-adjustments.cancel');
+
+            Route::get('salary-advances', [FinanceSalaryAdvanceController::class, 'index'])->name('salary-advances.index');
+            Route::post('salary-advances', [FinanceSalaryAdvanceController::class, 'store'])->name('salary-advances.store');
+            Route::post('salary-advances/{advance}/repay', [FinanceSalaryAdvanceController::class, 'repay'])->name('salary-advances.repay');
+
+            Route::get('fiscal-years', [FinanceFiscalYearController::class, 'index'])->name('fiscal-years.index');
+            Route::post('fiscal-years', [FinanceFiscalYearController::class, 'store'])->name('fiscal-years.store');
+            Route::put('fiscal-years/{fiscalYear}', [FinanceFiscalYearController::class, 'update'])->name('fiscal-years.update');
+            Route::post('fiscal-years/{fiscalYear}/close', [FinanceFiscalYearController::class, 'close'])->name('fiscal-years.close');
+            Route::post('fiscal-years/{fiscalYear}/open', [FinanceFiscalYearController::class, 'open'])->name('fiscal-years.open');
+            Route::post('fiscal-years/{fiscalYear}/generate-monthly-periods', [FinanceFiscalYearController::class, 'generateMonthlyPeriods'])->name('fiscal-years.generate-monthly-periods');
+            Route::post('fiscal-years/{fiscalYear}/periods', [FinanceFiscalYearController::class, 'storePeriod'])->name('fiscal-years.periods.store');
+            Route::post('fiscal-years/periods/{period}/status', [FinanceFiscalYearController::class, 'setPeriodStatus'])->name('fiscal-years.periods.set-status');
+
+            Route::get('modules/{key}', [FinanceModulePageController::class, 'placeholder'])->name('modules.show');
             Route::get('purchases', [FinanceModulePageController::class, 'purchases'])->name('purchases.index');
             Route::get('cashbox', [FinanceModulePageController::class, 'cashbox'])->name('cashbox.index');
         });

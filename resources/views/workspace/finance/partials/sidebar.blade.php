@@ -25,7 +25,7 @@
         'المنتجات والخدمات' => [
             ['label' => 'المنتجات', 'route' => 'workspace.finance.products.index', 'active' => 'workspace.finance.products.*'],
             ['label' => 'الخدمات', 'route' => 'workspace.finance.modules.show', 'params' => ['key' => 'services'], 'module_key' => 'services'],
-            ['label' => 'الأسعار', 'route' => 'workspace.finance.modules.show', 'params' => ['key' => 'price-lists'], 'module_key' => 'price-lists'],
+            ['label' => 'الأسعار', 'route' => 'workspace.finance.price-lists.index', 'active' => 'workspace.finance.price-lists.*'],
         ],
         'المخزون' => [
             ['label' => 'المخزون', 'route' => 'workspace.finance.inventory.index', 'active' => 'workspace.finance.inventory.*'],
@@ -40,16 +40,16 @@
             ['label' => 'القيود اليومية', 'route' => 'workspace.finance.accounting.dashboard', 'active' => 'workspace.finance.accounting.*'],
             ['label' => 'دفتر الأستاذ', 'route' => 'workspace.finance.modules.show', 'params' => ['key' => 'general-ledger'], 'module_key' => 'general-ledger'],
             ['label' => 'ميزان المراجعة', 'route' => 'workspace.finance.accounting.dashboard', 'active' => 'workspace.finance.accounting.*'],
-            ['label' => 'السنوات المالية', 'route' => 'workspace.finance.modules.show', 'params' => ['key' => 'fiscal-years'], 'module_key' => 'fiscal-years'],
-            ['label' => 'الفترات المحاسبية', 'route' => 'workspace.finance.modules.show', 'params' => ['key' => 'accounting-periods'], 'module_key' => 'accounting-periods'],
+            ['label' => 'السنوات المالية', 'route' => 'workspace.finance.fiscal-years.index', 'active' => 'workspace.finance.fiscal-years.*'],
+            ['label' => 'الفترات المحاسبية', 'route' => 'workspace.finance.fiscal-years.index', 'active' => 'workspace.finance.fiscal-years.*'],
         ],
         'الرواتب' => [
             ['label' => 'الموظفون', 'route' => 'workspace.finance.payroll.index', 'active' => 'workspace.finance.payroll.*'],
             ['label' => 'مسيرات الرواتب', 'route' => 'workspace.finance.payroll.index', 'active' => 'workspace.finance.payroll.*'],
-            ['label' => 'البدلات', 'route' => 'workspace.finance.modules.show', 'params' => ['key' => 'allowances'], 'module_key' => 'allowances'],
-            ['label' => 'الخصومات', 'route' => 'workspace.finance.modules.show', 'params' => ['key' => 'deductions'], 'module_key' => 'deductions'],
-            ['label' => 'السلف', 'route' => 'workspace.finance.modules.show', 'params' => ['key' => 'salary-advances'], 'module_key' => 'salary-advances'],
-            ['label' => 'المكافآت', 'route' => 'workspace.finance.modules.show', 'params' => ['key' => 'bonuses'], 'module_key' => 'bonuses'],
+            ['label' => 'البدلات', 'route' => 'workspace.finance.allowances.index', 'active' => 'workspace.finance.allowances.*'],
+            ['label' => 'الخصومات', 'route' => 'workspace.finance.deductions.index', 'active' => 'workspace.finance.deductions.*'],
+            ['label' => 'السلف', 'route' => 'workspace.finance.salary-advances.index', 'active' => 'workspace.finance.salary-advances.*'],
+            ['label' => 'المكافآت', 'route' => 'workspace.finance.bonuses.index', 'active' => 'workspace.finance.bonuses.*'],
         ],
         'الضرائب' => [
             ['label' => 'VAT', 'route' => 'workspace.finance.vat.index', 'active' => 'workspace.finance.vat.*'],

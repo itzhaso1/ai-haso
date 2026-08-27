@@ -41,4 +41,9 @@ class FinancePayrollRun extends WorkspaceScopedModel
     {
         return $this->belongsTo(User::class, 'processed_by');
     }
+
+    public function adjustments(): HasMany
+    {
+        return $this->hasMany(FinancePayrollAdjustment::class, 'payroll_run_id');
+    }
 }
