@@ -7,7 +7,11 @@ use App\Http\Controllers\Auth\SocialLoginController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\WorkspaceSelectionController;
 use App\Http\Controllers\Workspace\AiSettingController;
+use App\Http\Controllers\Workspace\Appointments\BookingController as AppointmentsBookingController;
+use App\Http\Controllers\Workspace\Appointments\CustomerProfileController as AppointmentsCustomerProfileController;
+use App\Http\Controllers\Workspace\Appointments\CustomerPortalController as AppointmentsCustomerPortalController;
 use App\Http\Controllers\Workspace\Appointments\DashboardController as AppointmentsDashboardController;
+use App\Http\Controllers\Workspace\Appointments\RequestController as AppointmentsRequestController;
 use App\Http\Controllers\Workspace\CategoryController;
 use App\Http\Controllers\Workspace\ConversationController;
 use App\Http\Controllers\Workspace\CustomerController;
@@ -55,6 +59,11 @@ Route::get('/', function () {
 Route::post('/assistant/chat', [AssistantController::class, 'chat'])
     ->middleware('throttle:20,1')
     ->name('assistant.chat');
+
+Route::get('/appointments/portal/{token}', [AppointmentsCustomerPortalController::class, 'show'])->name('appointments.portal.show');
+Route::post('/appointments/portal/{token}/confirm', [AppointmentsCustomerPortalController::class, 'confirmAttendance'])->name('appointments.portal.confirm');
+Route::post('/appointments/portal/{token}/reschedule', [AppointmentsCustomerPortalController::class, 'requestReschedule'])->name('appointments.portal.reschedule');
+Route::post('/appointments/portal/{token}/cancel', [AppointmentsCustomerPortalController::class, 'requestCancellation'])->name('appointments.portal.cancel');
 
 Route::middleware(['guest'])->group(function (): void {
     Route::get('/otp/login', [PhoneOtpController::class, 'create'])->name('otp.login');
@@ -227,6 +236,17 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
 
             Route::post('bookings', [AppointmentsDashboardController::class, 'storeBooking'])->name('bookings.store');
             Route::post('bookings/{booking}/status', [AppointmentsDashboardController::class, 'updateBookingStatus'])->name('bookings.status');
+            Route::post('bookings/{booking}/payment-link', [AppointmentsBookingController::class, 'createPaymentLink'])->name('bookings.payment-link');
+            Route::get('calendar/events', [AppointmentsBookingController::class, 'calendarEvents'])->name('calendar.events');
+            Route::get('customers/{customer}/profile', [AppointmentsCustomerProfileController::class, 'show'])->name('customers.profile');
+
+            Route::post('requests', [AppointmentsRequestController::class, 'store'])->name('requests.store');
+            Route::post('requests/{appointmentRequest}/approve', [AppointmentsRequestController::class, 'approve'])->name('requests.approve');
+            Route::post('requests/{appointmentRequest}/reject', [AppointmentsRequestController::class, 'reject'])->name('requests.reject');
+            Route::post('requests/{appointmentRequest}/awaiting-customer', [AppointmentsRequestController::class, 'markAwaitingCustomer'])->name('requests.awaiting-customer');
+            Route::post('requests/{appointmentRequest}/cancel', [AppointmentsRequestController::class, 'cancel'])->name('requests.cancel');
+            Route::post('requests/{appointmentRequest}/slots', [AppointmentsRequestController::class, 'proposeSlots'])->name('requests.slots.store');
+            Route::post('requests/{appointmentRequest}/slots/{slot}/select', [AppointmentsRequestController::class, 'selectSlot'])->name('requests.slots.select');
         });
 
         Route::get('employees', [EmployeeInvitationController::class, 'index'])->name('employees.index');

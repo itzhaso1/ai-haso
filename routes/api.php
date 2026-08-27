@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AiController;
+use App\Http\Controllers\Api\AppointmentAiActionController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ConversationController;
 use App\Http\Controllers\Api\CustomerController;
@@ -68,6 +69,8 @@ Route::middleware(['auth:sanctum', 'workspace.resolve', 'workspace.member'])
         Route::get('/roles-permissions', [RolePermissionController::class, 'index']);
         Route::post('/roles-permissions/assign-role', [RolePermissionController::class, 'assignRole']);
         Route::post('/roles-permissions/sync-permissions', [RolePermissionController::class, 'syncPermissions']);
+
+        Route::post('/appointments/ai/actions', [AppointmentAiActionController::class, 'execute']);
     });
 
 Route::get('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'verify'])->name('webhooks.whatsapp.verify');

@@ -2,6 +2,11 @@
 
 namespace App\Models;
 
+use App\Models\Appointment\AppointmentBooking;
+use App\Models\Appointment\AppointmentRequest;
+use App\Models\Appointment\AppointmentService;
+use App\Models\Appointment\AppointmentStaff;
+use App\Models\Appointment\AppointmentSetting;
 use App\Models\Finance\FinanceAccount;
 use App\Models\Finance\FinanceExpense;
 use App\Models\Finance\FinanceInvoice;
@@ -170,5 +175,30 @@ class Workspace extends Model
     public function financePayrollRuns(): HasMany
     {
         return $this->hasMany(FinancePayrollRun::class);
+    }
+
+    public function appointmentSetting(): HasOne
+    {
+        return $this->hasOne(AppointmentSetting::class);
+    }
+
+    public function appointmentServices(): HasMany
+    {
+        return $this->hasMany(AppointmentService::class);
+    }
+
+    public function appointmentStaff(): HasMany
+    {
+        return $this->hasMany(AppointmentStaff::class);
+    }
+
+    public function appointmentRequests(): HasMany
+    {
+        return $this->hasMany(AppointmentRequest::class);
+    }
+
+    public function appointmentBookings(): HasMany
+    {
+        return $this->hasMany(AppointmentBooking::class);
     }
 }

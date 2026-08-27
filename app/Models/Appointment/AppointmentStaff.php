@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\WorkspaceScopedModel;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -18,6 +19,10 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'phone',
     'color',
     'is_active',
+    'working_days',
+    'working_hours',
+    'vacation_periods',
+    'staff_permissions',
     'metadata',
 ])]
 class AppointmentStaff extends WorkspaceScopedModel
@@ -28,6 +33,10 @@ class AppointmentStaff extends WorkspaceScopedModel
     {
         return [
             'is_active' => 'boolean',
+            'working_days' => 'array',
+            'working_hours' => 'array',
+            'vacation_periods' => 'array',
+            'staff_permissions' => 'array',
             'metadata' => 'array',
         ];
     }
@@ -40,5 +49,12 @@ class AppointmentStaff extends WorkspaceScopedModel
     public function bookings(): HasMany
     {
         return $this->hasMany(AppointmentBooking::class, 'staff_id');
+    }
+
+    public function services(): BelongsToMany
+    {
+        return $this->belongsToMany(AppointmentService::class, 'appointment_service_staff', 'staff_id', 'service_id')
+            ->withPivot(['workspace_id', 'is_primary'])
+            ->withTimestamps();
     }
 }

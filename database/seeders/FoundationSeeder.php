@@ -56,13 +56,18 @@ class FoundationSeeder extends Seeder
             'finance.settings',
             'appointments.view',
             'appointments.manage',
+            'appointments.requests.view',
+            'appointments.requests.manage',
+            'appointments.calendar.view',
+            'appointments.billing.manage',
+            'appointments.settings.manage',
         ];
 
         foreach ($permissions as $permission) {
             Permission::findOrCreate($permission, 'web');
         }
 
-        foreach (['owner', 'admin', 'manager', 'agent'] as $roleName) {
+        foreach (['owner', 'admin', 'manager', 'agent', 'receptionist', 'staff_doctor', 'accountant'] as $roleName) {
             Role::findOrCreate($roleName, 'web');
         }
 
@@ -70,6 +75,9 @@ class FoundationSeeder extends Seeder
         $adminRole = Role::findByName('admin', 'web');
         $managerRole = Role::findByName('manager', 'web');
         $agentRole = Role::findByName('agent', 'web');
+        $receptionistRole = Role::findByName('receptionist', 'web');
+        $staffDoctorRole = Role::findByName('staff_doctor', 'web');
+        $accountantRole = Role::findByName('accountant', 'web');
 
         $allPermissions = Permission::query()->pluck('name')->all();
         $ownerRole->syncPermissions($allPermissions);
@@ -99,6 +107,11 @@ class FoundationSeeder extends Seeder
             'payroll.view',
             'appointments.view',
             'appointments.manage',
+            'appointments.requests.view',
+            'appointments.requests.manage',
+            'appointments.calendar.view',
+            'appointments.billing.manage',
+            'appointments.settings.manage',
         ]);
         $agentRole->syncPermissions([
             'workspace.view',
@@ -115,6 +128,36 @@ class FoundationSeeder extends Seeder
             'expenses.view',
             'reports.view',
             'appointments.view',
+            'appointments.requests.view',
+            'appointments.calendar.view',
+        ]);
+        $receptionistRole->syncPermissions([
+            'workspace.view',
+            'customers.manage',
+            'conversations.manage',
+            'appointments.view',
+            'appointments.manage',
+            'appointments.requests.view',
+            'appointments.requests.manage',
+            'appointments.calendar.view',
+            'appointments.billing.manage',
+            'invoices.view',
+            'payments.manage',
+        ]);
+        $staffDoctorRole->syncPermissions([
+            'workspace.view',
+            'appointments.view',
+            'appointments.requests.view',
+            'appointments.calendar.view',
+        ]);
+        $accountantRole->syncPermissions([
+            'workspace.view',
+            'finance.view',
+            'invoices.view',
+            'payments.manage',
+            'reports.view',
+            'appointments.view',
+            'appointments.billing.manage',
         ]);
 
         $plans = [

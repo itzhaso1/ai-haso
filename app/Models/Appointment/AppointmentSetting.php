@@ -15,6 +15,9 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
     'start_hour',
     'end_hour',
     'allow_walk_in',
+    'automation_mode',
+    'auto_confirm_after_payment',
+    'reminder_offsets',
     'metadata',
 ])]
 class AppointmentSetting extends WorkspaceScopedModel
@@ -26,6 +29,8 @@ class AppointmentSetting extends WorkspaceScopedModel
         return [
             'slot_interval_minutes' => 'integer',
             'allow_walk_in' => 'boolean',
+            'auto_confirm_after_payment' => 'boolean',
+            'reminder_offsets' => 'array',
             'metadata' => 'array',
         ];
     }
