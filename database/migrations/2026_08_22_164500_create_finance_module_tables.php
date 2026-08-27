@@ -84,8 +84,8 @@ return new class extends Migration
             $table->enum('status', ['open', 'closed'])->default('open');
             $table->timestamps();
 
-            $table->unique(['workspace_id', 'name']);
-            $table->index(['workspace_id', 'status', 'start_date', 'end_date']);
+            $table->unique(['workspace_id', 'name'], 'fin_fy_ws_name_uniq');
+            $table->index(['workspace_id', 'status', 'start_date', 'end_date'], 'fin_fy_ws_status_dates_idx');
         });
 
         Schema::create('finance_accounting_periods', function (Blueprint $table): void {
@@ -98,8 +98,8 @@ return new class extends Migration
             $table->enum('status', ['open', 'closed'])->default('open');
             $table->timestamps();
 
-            $table->unique(['workspace_id', 'fiscal_year_id', 'name']);
-            $table->index(['workspace_id', 'status', 'start_date', 'end_date']);
+            $table->unique(['workspace_id', 'fiscal_year_id', 'name'], 'fin_period_ws_fy_name_uniq');
+            $table->index(['workspace_id', 'status', 'start_date', 'end_date'], 'fin_period_ws_status_dates_idx');
         });
 
         Schema::create('finance_treasury_accounts', function (Blueprint $table): void {
@@ -243,7 +243,7 @@ return new class extends Migration
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
-            $table->index(['workspace_id', 'invoice_id', 'payment_date']);
+            $table->index(['workspace_id', 'invoice_id', 'payment_date'], 'fin_inv_pay_ws_inv_date_idx');
         });
 
         Schema::create('finance_expense_categories', function (Blueprint $table): void {
