@@ -7,6 +7,7 @@ use App\Http\Controllers\Auth\SocialLoginController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\WorkspaceSelectionController;
 use App\Http\Controllers\Workspace\AiSettingController;
+use App\Http\Controllers\Workspace\Appointments\DashboardController as AppointmentsDashboardController;
 use App\Http\Controllers\Workspace\CategoryController;
 use App\Http\Controllers\Workspace\ConversationController;
 use App\Http\Controllers\Workspace\CustomerController;
@@ -212,6 +213,20 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::get('modules/{key}', [FinanceModulePageController::class, 'placeholder'])->name('modules.show');
             Route::get('purchases', [FinanceModulePageController::class, 'purchases'])->name('purchases.index');
             Route::get('cashbox', [FinanceModulePageController::class, 'cashbox'])->name('cashbox.index');
+        });
+
+        Route::prefix('appointments')->as('appointments.')->group(function (): void {
+            Route::get('/', [AppointmentsDashboardController::class, 'index'])->name('dashboard');
+            Route::post('settings', [AppointmentsDashboardController::class, 'updateSettings'])->name('settings.update');
+
+            Route::post('services', [AppointmentsDashboardController::class, 'storeService'])->name('services.store');
+            Route::put('services/{service}', [AppointmentsDashboardController::class, 'updateService'])->name('services.update');
+
+            Route::post('staff', [AppointmentsDashboardController::class, 'storeStaff'])->name('staff.store');
+            Route::put('staff/{staff}', [AppointmentsDashboardController::class, 'updateStaff'])->name('staff.update');
+
+            Route::post('bookings', [AppointmentsDashboardController::class, 'storeBooking'])->name('bookings.store');
+            Route::post('bookings/{booking}/status', [AppointmentsDashboardController::class, 'updateBookingStatus'])->name('bookings.status');
         });
 
         Route::get('employees', [EmployeeInvitationController::class, 'index'])->name('employees.index');

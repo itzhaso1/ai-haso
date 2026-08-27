@@ -15,6 +15,7 @@
         ['label' => 'إعدادات الذكاء الاصطناعي', 'route' => 'workspace.ai-settings.edit', 'active' => 'workspace.ai-settings.*'],
         ['label' => 'الموظفون', 'route' => 'workspace.employees.index', 'active' => 'workspace.employees.*'],
         ['label' => 'الفوترة والحسابات', 'route' => 'workspace.finance.dashboard', 'active' => 'workspace.finance.*'],
+        ['label' => 'حجز المواعيد', 'route' => 'workspace.appointments.dashboard', 'active' => 'workspace.appointments.*'],
     ];
 @endphp
 
@@ -24,7 +25,7 @@
             $isActive = request()->routeIs($link['active']);
         @endphp
         <a href="{{ route($link['route']) }}"
-            class="{{ $isActive ? 'bg-[#06C2A4] text-white shadow-sm' : 'text-gray-700 hover:bg-[#E8FAF6] hover:text-[#06C2A4]' }} flex items-center justify-between rounded-xl px-4 py-2.5 text-sm font-medium transition">
+            class="{{ $isActive ? 'bg-slate-900 text-white shadow-sm' : 'text-gray-700 hover:bg-slate-100 hover:text-slate-900' }} flex items-center justify-between rounded-xl px-4 py-2.5 text-sm font-medium transition">
             <span>{{ $link['label'] }}</span>
             @if($isActive)
                 <span class="h-2 w-2 rounded-full bg-white/95"></span>
