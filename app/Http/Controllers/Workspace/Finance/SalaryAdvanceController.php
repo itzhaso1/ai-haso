@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Workspace\Finance;
 
 use App\Models\Finance\FinanceSalaryAdvance;
+use App\Models\Finance\FinanceEmployee;
 use App\Models\Finance\FinanceTreasuryAccount;
-use App\Models\WorkspaceUser;
 use App\Services\Finance\FinanceBootstrapService;
 use App\Services\Finance\SalaryAdvanceService;
 use Illuminate\Http\RedirectResponse;
@@ -29,12 +29,13 @@ class SalaryAdvanceController extends FinanceBaseController
         $search = trim((string) $request->string('search', ''));
 
         $advances = FinanceSalaryAdvance::query()
-            ->with(['user', 'repayments.treasuryAccount'])
+            ->with(['financeEmployee', 'user', 'repayments.treasuryAccount'])
             ->when($status !== '', fn ($query) => $query->where('status', $status))
             ->when($type !== '', fn ($query) => $query->where('type', $type))
             ->when($search !== '', function ($query) use ($search): void {
                 $query->where(function ($inner) use ($search): void {
                     $inner->where('notes', 'like', '%'.$search.'%')
+                        ->orWhereHas('financeEmployee', fn ($employeeQuery) => $employeeQuery->where('full_name', 'like', '%'.$search.'%'))
                         ->orWhereHas('user', fn ($userQuery) => $userQuery->where('name', 'like', '%'.$search.'%'));
                 });
             })
@@ -43,11 +44,10 @@ class SalaryAdvanceController extends FinanceBaseController
             ->paginate(15)
             ->withQueryString();
 
-        $employees = WorkspaceUser::query()
-            ->where('workspace_id', $workspace->id)
+        $employees = FinanceEmployee::query()
             ->where('status', 'active')
-            ->with('user')
-            ->orderBy('membership_role')
+            ->orderBy('full_name')
+            ->orderBy('employee_code')
             ->get();
 
         $treasuryAccounts = FinanceTreasuryAccount::query()
@@ -75,8 +75,15 @@ class SalaryAdvanceController extends FinanceBaseController
         $this->financeBootstrapService->ensureWorkspaceFinanceSetup($workspace);
 
         $validated = $request->validate([
-            'user_id' => [
+            'finance_employee_id' => [
                 'required',
+                'integer',
+                Rule::exists('finance_employees', 'id')->where(
+                    fn ($query) => $query->where('workspace_id', $workspace->id)->where('status', 'active')
+                ),
+            ],
+            'user_id' => [
+                'nullable',
                 'integer',
                 Rule::exists('workspace_users', 'user_id')->where(
                     fn ($query) => $query->where('workspace_id', $workspace->id)->where('status', 'active')

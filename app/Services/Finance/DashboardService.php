@@ -2,9 +2,14 @@
 
 namespace App\Services\Finance;
 
+use App\Models\Contract\Contract;
+use App\Models\Finance\FinanceEmployee;
+use App\Models\Finance\FinanceEmployeePayrollRecord;
 use App\Models\Finance\FinanceExpense;
 use App\Models\Finance\FinanceInvoice;
 use App\Models\Finance\FinanceInvoicePayment;
+use App\Models\Finance\FinancePayrollAdjustment;
+use App\Models\Finance\FinanceSalaryAdvance;
 use App\Models\Finance\FinanceTaxRate;
 use App\Models\Finance\FinanceTreasuryAccount;
 use App\Support\Tenancy\WorkspaceContext;
@@ -55,6 +60,24 @@ class DashboardService
 
         $cashBalance = (float) FinanceTreasuryAccount::query()->where('type', 'cash')->sum('current_balance');
         $bankBalance = (float) FinanceTreasuryAccount::query()->where('type', 'bank')->sum('current_balance');
+        $companyEmployees = (int) FinanceEmployee::query()->where('status', 'active')->count();
+        $payrollPaidTotal = (float) FinanceEmployeePayrollRecord::query()
+            ->where('payment_status', 'paid')
+            ->sum('net_amount');
+        $allowancesAndBonusesTotal = (float) FinancePayrollAdjustment::query()
+            ->whereIn('type', ['allowance', 'bonus'])
+            ->where('status', 'posted')
+            ->sum('amount');
+        $deductionsTotal = (float) FinancePayrollAdjustment::query()
+            ->where('type', 'deduction')
+            ->where('status', 'posted')
+            ->sum('amount');
+        $openAdvancesTotal = (float) FinanceSalaryAdvance::query()
+            ->where('status', 'open')
+            ->sum('remaining_amount');
+        $activeContractsCount = (int) Contract::query()
+            ->where('status', 'open')
+            ->count();
 
         $salesTaxable = (float) (clone $salesInvoices)->sum('taxable_amount');
         $purchaseTaxable = (float) (clone $purchaseInvoices)->sum('taxable_amount');
@@ -75,6 +98,12 @@ class DashboardService
                 'net_vat' => round($outputVat - $inputVat, 2),
                 'cash_balance' => round($cashBalance, 2),
                 'bank_balance' => round($bankBalance, 2),
+                'company_employees' => $companyEmployees,
+                'payroll_paid_total' => round($payrollPaidTotal, 2),
+                'allowances_bonuses_total' => round($allowancesAndBonusesTotal, 2),
+                'deductions_total' => round($deductionsTotal, 2),
+                'open_advances_total' => round($openAdvancesTotal, 2),
+                'active_contracts_count' => $activeContractsCount,
             ],
             'charts' => [
                 'sales' => $this->monthlySeries('finance_invoices', 'total', [

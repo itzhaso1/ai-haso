@@ -11,10 +11,10 @@
                     @csrf
                     <div>
                         <label class="mb-1 block text-xs font-semibold text-slate-600">الموظف</label>
-                        <select name="user_id" required class="w-full rounded-lg border-slate-300 text-sm">
+                        <select name="finance_employee_id" required class="w-full rounded-lg border-slate-300 text-sm">
                             <option value="">اختر موظفًا</option>
                             @foreach($employees as $employee)
-                                <option value="{{ $employee->user_id }}">{{ $employee->user?->name }}</option>
+                                <option value="{{ $employee->id }}">{{ $employee->full_name }} ({{ $employee->employee_code }})</option>
                             @endforeach
                         </select>
                     </div>
@@ -84,7 +84,7 @@
                         <div class="rounded-xl border border-slate-200 p-3">
                             <div class="flex flex-wrap items-center justify-between gap-2">
                                 <div>
-                                    <p class="font-semibold">{{ $advance->user?->name }} — {{ $advance->type }}</p>
+                                    <p class="font-semibold">{{ $advance->financeEmployee?->full_name ?: $advance->user?->name ?: '—' }} — {{ $advance->type }}</p>
                                     <p class="text-xs text-slate-500">
                                         تاريخ الإصدار: {{ $advance->issued_at?->format('Y-m-d') }}
                                         | الحالة: {{ $advance->status }}

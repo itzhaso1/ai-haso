@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[Fillable([
     'workspace_id',
+    'finance_employee_id',
     'user_id',
     'type',
     'title',
@@ -42,6 +43,11 @@ class FinancePayrollAdjustment extends WorkspaceScopedModel
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function financeEmployee(): BelongsTo
+    {
+        return $this->belongsTo(FinanceEmployee::class);
     }
 
     public function payrollRun(): BelongsTo

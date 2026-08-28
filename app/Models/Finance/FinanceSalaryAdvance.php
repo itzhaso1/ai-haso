@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'workspace_id',
+    'finance_employee_id',
     'user_id',
     'amount',
     'remaining_amount',
@@ -36,6 +37,11 @@ class FinanceSalaryAdvance extends WorkspaceScopedModel
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function financeEmployee(): BelongsTo
+    {
+        return $this->belongsTo(FinanceEmployee::class);
     }
 
     public function repayments(): HasMany

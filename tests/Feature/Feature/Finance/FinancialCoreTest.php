@@ -5,6 +5,7 @@ namespace Tests\Feature\Feature\Finance;
 use App\Models\Customer;
 use App\Models\Finance\FinanceExpense;
 use App\Models\Finance\FinanceAccountingPeriod;
+use App\Models\Finance\FinanceEmployee;
 use App\Models\Finance\FinanceFiscalYear;
 use App\Models\Finance\FinanceInvoice;
 use App\Models\Finance\FinanceJournalEntry;
@@ -856,18 +857,21 @@ class FinancialCoreTest extends TestCase
     public function test_payroll_adjustment_posting_creates_journal_entry(): void
     {
         [$owner, $workspace] = $this->createWorkspaceOwner('company');
-        $employee = User::factory()->create();
-        $workspace->users()->attach($employee->id, [
-            'membership_role' => 'agent',
+        $financeEmployee = FinanceEmployee::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'employee_code' => 'FIN-EMP-1001',
+            'full_name' => 'موظف شركة للاختبار',
+            'job_title' => 'محاسب',
+            'basic_salary' => 5000,
             'status' => 'active',
-            'joined_at' => now(),
+            'created_by' => $owner->id,
         ]);
 
         $this->actingAs($owner)
             ->withSession(['current_workspace_id' => $workspace->id])
             ->post(route('workspace.finance.payroll-adjustments.store'), [
                 'type' => 'bonus',
-                'user_id' => $employee->id,
+                'finance_employee_id' => $financeEmployee->id,
                 'title' => 'مكافأة أداء',
                 'amount' => 500,
                 'effective_date' => now()->toDateString(),
@@ -894,17 +898,20 @@ class FinancialCoreTest extends TestCase
     public function test_salary_advance_issue_and_repayments_update_status_and_balances(): void
     {
         [$owner, $workspace] = $this->createWorkspaceOwner('company');
-        $employee = User::factory()->create();
-        $workspace->users()->attach($employee->id, [
-            'membership_role' => 'agent',
+        $financeEmployee = FinanceEmployee::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'employee_code' => 'FIN-EMP-1002',
+            'full_name' => 'موظف سلف',
+            'job_title' => 'موظف مالي',
+            'basic_salary' => 4500,
             'status' => 'active',
-            'joined_at' => now(),
+            'created_by' => $owner->id,
         ]);
 
         $this->actingAs($owner)
             ->withSession(['current_workspace_id' => $workspace->id])
             ->post(route('workspace.finance.salary-advances.store'), [
-                'user_id' => $employee->id,
+                'finance_employee_id' => $financeEmployee->id,
                 'amount' => 500,
                 'issued_at' => now()->toDateString(),
                 'type' => 'salary_advance',

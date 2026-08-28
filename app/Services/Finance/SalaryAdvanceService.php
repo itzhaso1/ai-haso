@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance;
 
+use App\Models\Finance\FinanceEmployee;
 use App\Models\Finance\FinanceSalaryAdvance;
 use App\Models\Finance\FinanceSalaryAdvanceRepayment;
 use App\Models\Finance\FinanceJournalEntry;
@@ -29,14 +30,20 @@ class SalaryAdvanceService
             throw new RuntimeException('قيمة السلفة يجب أن تكون أكبر من صفر.');
         }
 
-        $workspaceUserExists = WorkspaceUser::query()
+        $financeEmployee = FinanceEmployee::query()
             ->where('workspace_id', $workspace->id)
-            ->where('user_id', (int) $payload['user_id'])
+            ->whereKey((int) ($payload['finance_employee_id'] ?? 0))
             ->where('status', 'active')
-            ->exists();
-        if (! $workspaceUserExists) {
-            throw new RuntimeException('الموظف المحدد غير مرتبط بمساحة العمل الحالية.');
+            ->first();
+        if (! $financeEmployee) {
+            throw new RuntimeException('الموظف المحدد غير موجود ضمن موظفي الشركة في قسم الفوترة.');
         }
+
+        $legacyUserId = $this->resolveLegacyWorkspaceUserId(
+            workspaceId: $workspace->id,
+            requestedUserId: (int) ($payload['user_id'] ?? 0),
+            actorUserId: $actorUserId
+        );
 
         [$treasuryAccount, $treasuryFinanceAccount] = $this->resolveTreasuryAccount(
             treasuryAccountId: (int) ($payload['treasury_account_id'] ?? 0),
@@ -47,10 +54,11 @@ class SalaryAdvanceService
             throw new RuntimeException('حسابات السلف غير مكتملة في دليل الحسابات.');
         }
 
-        return DB::transaction(function () use ($workspace, $payload, $actorUserId, $amount, $treasuryAccount, $treasuryFinanceAccount, $employeeAdvances): FinanceSalaryAdvance {
+        return DB::transaction(function () use ($workspace, $payload, $actorUserId, $amount, $treasuryAccount, $treasuryFinanceAccount, $employeeAdvances, $financeEmployee, $legacyUserId): FinanceSalaryAdvance {
             $advance = FinanceSalaryAdvance::withoutGlobalScopes()->create([
                 'workspace_id' => $workspace->id,
-                'user_id' => (int) $payload['user_id'],
+                'finance_employee_id' => $financeEmployee->id,
+                'user_id' => $legacyUserId,
                 'amount' => $amount,
                 'remaining_amount' => $amount,
                 'issued_at' => $payload['issued_at'],
@@ -296,5 +304,42 @@ class SalaryAdvanceService
         }
 
         return [$treasury, $financeAccount];
+    }
+
+    private function resolveLegacyWorkspaceUserId(int $workspaceId, int $requestedUserId, int $actorUserId): int
+    {
+        if ($requestedUserId > 0) {
+            $requestedExists = WorkspaceUser::query()
+                ->where('workspace_id', $workspaceId)
+                ->where('user_id', $requestedUserId)
+                ->where('status', 'active')
+                ->exists();
+            if ($requestedExists) {
+                return $requestedUserId;
+            }
+        }
+
+        if ($actorUserId > 0) {
+            $actorExists = WorkspaceUser::query()
+                ->where('workspace_id', $workspaceId)
+                ->where('user_id', $actorUserId)
+                ->where('status', 'active')
+                ->exists();
+            if ($actorExists) {
+                return $actorUserId;
+            }
+        }
+
+        $fallbackUserId = WorkspaceUser::query()
+            ->where('workspace_id', $workspaceId)
+            ->where('status', 'active')
+            ->orderBy('id')
+            ->value('user_id');
+
+        if (! $fallbackUserId) {
+            throw new RuntimeException('لا يوجد مستخدم نشط في مساحة العمل لحفظ السجل المحاسبي.');
+        }
+
+        return (int) $fallbackUserId;
     }
 }

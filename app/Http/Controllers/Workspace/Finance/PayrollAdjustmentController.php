@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Workspace\Finance;
 
 use App\Models\Finance\FinancePayrollAdjustment;
+use App\Models\Finance\FinanceEmployee;
 use App\Models\Finance\FinancePayrollRun;
-use App\Models\WorkspaceUser;
 use App\Services\Finance\FinanceBootstrapService;
 use App\Services\Finance\PayrollAdjustmentService;
 use Illuminate\Http\RedirectResponse;
@@ -42,8 +42,15 @@ class PayrollAdjustmentController extends FinanceBaseController
 
         $validated = $request->validate([
             'type' => ['required', 'in:allowance,bonus,deduction'],
-            'user_id' => [
+            'finance_employee_id' => [
                 'required',
+                'integer',
+                Rule::exists('finance_employees', 'id')->where(
+                    fn ($query) => $query->where('workspace_id', $workspace->id)->where('status', 'active')
+                ),
+            ],
+            'user_id' => [
+                'nullable',
                 'integer',
                 Rule::exists('workspace_users', 'user_id')->where(
                     fn ($query) => $query->where('workspace_id', $workspace->id)->where('status', 'active')
@@ -57,7 +64,12 @@ class PayrollAdjustmentController extends FinanceBaseController
         ]);
 
         try {
-            $this->payrollAdjustmentService->create($workspace, $validated['type'], $validated);
+            $this->payrollAdjustmentService->create(
+                workspace: $workspace,
+                type: $validated['type'],
+                payload: $validated,
+                actorUserId: (int) $request->user()?->id
+            );
         } catch (\RuntimeException $exception) {
             return back()->withInput()->with('error', $exception->getMessage());
         }
@@ -126,12 +138,13 @@ class PayrollAdjustmentController extends FinanceBaseController
         $search = trim((string) $request->string('search', ''));
 
         $adjustments = FinancePayrollAdjustment::query()
-            ->with(['user', 'postedJournalEntry', 'payrollRun'])
+            ->with(['financeEmployee', 'user', 'postedJournalEntry', 'payrollRun'])
             ->where('type', $type)
             ->when($status !== '', fn ($query) => $query->where('status', $status))
             ->when($search !== '', function ($query) use ($search): void {
                 $query->where(function ($inner) use ($search): void {
                     $inner->where('title', 'like', '%'.$search.'%')
+                        ->orWhereHas('financeEmployee', fn ($employeeQuery) => $employeeQuery->where('full_name', 'like', '%'.$search.'%'))
                         ->orWhereHas('user', fn ($userQuery) => $userQuery->where('name', 'like', '%'.$search.'%'));
                 });
             })
@@ -140,11 +153,10 @@ class PayrollAdjustmentController extends FinanceBaseController
             ->paginate(15)
             ->withQueryString();
 
-        $employees = WorkspaceUser::query()
-            ->where('workspace_id', $workspace->id)
+        $employees = FinanceEmployee::query()
             ->where('status', 'active')
-            ->with('user')
-            ->orderBy('membership_role')
+            ->orderBy('full_name')
+            ->orderBy('employee_code')
             ->get();
 
         $runs = FinancePayrollRun::query()

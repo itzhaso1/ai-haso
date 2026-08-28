@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance;
 
+use App\Models\Finance\FinanceEmployee;
 use App\Models\Finance\FinancePayrollAdjustment;
 use App\Models\Finance\FinancePayrollRun;
 use App\Models\WorkspaceUser;
@@ -20,25 +21,32 @@ class PayrollAdjustmentService
     /**
      * @param  array<string,mixed>  $payload
      */
-    public function create(Workspace $workspace, string $type, array $payload): FinancePayrollAdjustment
+    public function create(Workspace $workspace, string $type, array $payload, int $actorUserId): FinancePayrollAdjustment
     {
         $amount = round((float) ($payload['amount'] ?? 0), 2);
         if ($amount <= 0) {
             throw new RuntimeException('قيمة الحركة يجب أن تكون أكبر من صفر.');
         }
 
-        $workspaceUserExists = WorkspaceUser::query()
+        $financeEmployee = FinanceEmployee::query()
             ->where('workspace_id', $workspace->id)
-            ->where('user_id', (int) $payload['user_id'])
+            ->whereKey((int) ($payload['finance_employee_id'] ?? 0))
             ->where('status', 'active')
-            ->exists();
-        if (! $workspaceUserExists) {
-            throw new RuntimeException('الموظف المحدد غير مرتبط بمساحة العمل الحالية.');
+            ->first();
+        if (! $financeEmployee) {
+            throw new RuntimeException('الموظف المحدد غير موجود ضمن موظفي الشركة في قسم الفوترة.');
         }
+
+        $legacyUserId = $this->resolveLegacyWorkspaceUserId(
+            workspaceId: $workspace->id,
+            requestedUserId: (int) ($payload['user_id'] ?? 0),
+            actorUserId: $actorUserId
+        );
 
         return FinancePayrollAdjustment::withoutGlobalScopes()->create([
             'workspace_id' => $workspace->id,
-            'user_id' => (int) $payload['user_id'],
+            'finance_employee_id' => $financeEmployee->id,
+            'user_id' => $legacyUserId,
             'type' => $type,
             'title' => trim((string) $payload['title']),
             'amount' => $amount,
@@ -158,5 +166,42 @@ class PayrollAdjustmentService
 
             return $adjustment->refresh();
         });
+    }
+
+    private function resolveLegacyWorkspaceUserId(int $workspaceId, int $requestedUserId, int $actorUserId): int
+    {
+        if ($requestedUserId > 0) {
+            $requestedExists = WorkspaceUser::query()
+                ->where('workspace_id', $workspaceId)
+                ->where('user_id', $requestedUserId)
+                ->where('status', 'active')
+                ->exists();
+            if ($requestedExists) {
+                return $requestedUserId;
+            }
+        }
+
+        if ($actorUserId > 0) {
+            $actorExists = WorkspaceUser::query()
+                ->where('workspace_id', $workspaceId)
+                ->where('user_id', $actorUserId)
+                ->where('status', 'active')
+                ->exists();
+            if ($actorExists) {
+                return $actorUserId;
+            }
+        }
+
+        $fallbackUserId = WorkspaceUser::query()
+            ->where('workspace_id', $workspaceId)
+            ->where('status', 'active')
+            ->orderBy('id')
+            ->value('user_id');
+
+        if (! $fallbackUserId) {
+            throw new RuntimeException('لا يوجد مستخدم نشط في مساحة العمل لحفظ السجل المحاسبي.');
+        }
+
+        return (int) $fallbackUserId;
     }
 }

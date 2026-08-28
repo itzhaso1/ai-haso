@@ -12,10 +12,10 @@
                     <input type="hidden" name="type" value="{{ $type }}">
                     <div>
                         <label class="mb-1 block text-xs font-semibold text-slate-600">الموظف</label>
-                        <select name="user_id" required class="w-full rounded-lg border-slate-300 text-sm">
+                        <select name="finance_employee_id" required class="w-full rounded-lg border-slate-300 text-sm">
                             <option value="">اختر موظفًا</option>
                             @foreach($employees as $employee)
-                                <option value="{{ $employee->user_id }}">{{ $employee->user?->name }}</option>
+                                <option value="{{ $employee->id }}">{{ $employee->full_name }} ({{ $employee->employee_code }})</option>
                             @endforeach
                         </select>
                     </div>
@@ -75,7 +75,7 @@
                         <tbody class="divide-y divide-slate-100">
                             @forelse($adjustments as $adjustment)
                                 <tr>
-                                    <td class="px-2 py-2">{{ $adjustment->user?->name }}</td>
+                                    <td class="px-2 py-2">{{ $adjustment->financeEmployee?->full_name ?: $adjustment->user?->name ?: '—' }}</td>
                                     <td class="px-2 py-2">{{ $adjustment->title }}</td>
                                     <td class="px-2 py-2">{{ number_format((float) $adjustment->amount, 2) }}</td>
                                     <td class="px-2 py-2">{{ $adjustment->effective_date?->format('Y-m-d') }}</td>

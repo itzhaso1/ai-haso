@@ -16,6 +16,12 @@
             ['label' => 'صافي VAT', 'value' => $cards['net_vat'] ?? 0],
             ['label' => 'رصيد الصندوق', 'value' => $cards['cash_balance'] ?? 0],
             ['label' => 'رصيد البنوك', 'value' => $cards['bank_balance'] ?? 0],
+            ['label' => 'عدد موظفي الشركة', 'value' => $cards['company_employees'] ?? 0],
+            ['label' => 'إجمالي الرواتب المدفوعة', 'value' => $cards['payroll_paid_total'] ?? 0],
+            ['label' => 'إجمالي البدلات والمكافآت', 'value' => $cards['allowances_bonuses_total'] ?? 0],
+            ['label' => 'إجمالي الخصومات', 'value' => $cards['deductions_total'] ?? 0],
+            ['label' => 'إجمالي السلف المفتوحة', 'value' => $cards['open_advances_total'] ?? 0],
+            ['label' => 'العقود الفعالة', 'value' => $cards['active_contracts_count'] ?? 0],
         ];
 
         $seriesMap = [
