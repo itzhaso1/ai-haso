@@ -15,12 +15,14 @@ use App\Http\Controllers\Workspace\Appointments\ModulePageController as Appointm
 use App\Http\Controllers\Workspace\Appointments\RequestController as AppointmentsRequestController;
 use App\Http\Controllers\Workspace\CategoryController;
 use App\Http\Controllers\Workspace\ConversationController;
+use App\Http\Controllers\Workspace\ContractController as WorkspaceContractController;
 use App\Http\Controllers\Workspace\CustomerController;
 use App\Http\Controllers\Workspace\DashboardController as WorkspaceDashboardController;
 use App\Http\Controllers\Workspace\EmployeeInvitationController;
 use App\Http\Controllers\Workspace\EmailController;
 use App\Http\Controllers\Workspace\Finance\AccountingController as FinanceAccountingController;
 use App\Http\Controllers\Workspace\Finance\DashboardController as FinanceDashboardController;
+use App\Http\Controllers\Workspace\Finance\FinanceEmployeeController as FinanceEmployeeController;
 use App\Http\Controllers\Workspace\Finance\ExpenseController as FinanceExpenseController;
 use App\Http\Controllers\Workspace\Finance\FiscalYearController as FinanceFiscalYearController;
 use App\Http\Controllers\Workspace\Finance\InvoiceController as FinanceInvoiceController;
@@ -111,6 +113,18 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
         Route::resource('products', ProductController::class)->except(['show']);
         Route::resource('customers', CustomerController::class)->except(['show']);
         Route::resource('orders', OrderController::class)->except(['show']);
+        Route::get('contracts', [WorkspaceContractController::class, 'index'])->name('contracts.index');
+        Route::get('contracts/create', [WorkspaceContractController::class, 'create'])->name('contracts.create');
+        Route::post('contracts', [WorkspaceContractController::class, 'store'])->name('contracts.store');
+        Route::get('contracts/{contract}', [WorkspaceContractController::class, 'show'])->name('contracts.show');
+        Route::get('contracts/{contract}/edit', [WorkspaceContractController::class, 'edit'])->name('contracts.edit');
+        Route::put('contracts/{contract}', [WorkspaceContractController::class, 'update'])->name('contracts.update');
+        Route::post('contracts/{contract}/activate', [WorkspaceContractController::class, 'activate'])->name('contracts.activate');
+        Route::post('contracts/{contract}/close', [WorkspaceContractController::class, 'close'])->name('contracts.close');
+        Route::post('contracts/{contract}/cancel', [WorkspaceContractController::class, 'cancel'])->name('contracts.cancel');
+        Route::get('contracts/{contract}/pdf', [WorkspaceContractController::class, 'downloadPdf'])->name('contracts.pdf');
+        Route::get('contracts/{contract}/attachments/{attachment}', [WorkspaceContractController::class, 'downloadAttachment'])->name('contracts.attachments.download');
+        Route::delete('contracts/{contract}/attachments/{attachment}', [WorkspaceContractController::class, 'destroyAttachment'])->name('contracts.attachments.destroy');
         Route::resource('conversations', ConversationController::class)->except(['show']);
         Route::post('conversations/{conversation}/messages', [ConversationController::class, 'storeMessage'])->name('conversations.messages.store');
 
@@ -187,6 +201,9 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::get('customers', [FinanceModulePageController::class, 'customers'])->name('customers.index');
             Route::get('products', [FinanceModulePageController::class, 'products'])->name('products.index');
             Route::get('inventory', [FinanceModulePageController::class, 'inventory'])->name('inventory.index');
+            Route::get('employees', [FinanceEmployeeController::class, 'index'])->name('employees.index');
+            Route::post('employees', [FinanceEmployeeController::class, 'store'])->name('employees.store');
+            Route::put('employees/{employee}', [FinanceEmployeeController::class, 'update'])->name('employees.update');
             Route::get('payroll', [FinanceModulePageController::class, 'payroll'])->name('payroll.index');
             Route::get('vat', [FinanceModulePageController::class, 'vat'])->name('vat.index');
             Route::get('banks', [FinanceModulePageController::class, 'banks'])->name('banks.index');

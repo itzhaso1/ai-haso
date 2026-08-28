@@ -30,6 +30,7 @@
             ['label' => 'الخصومات', 'route' => 'workspace.finance.deductions.index', 'active' => 'workspace.finance.deductions.*'],
             ['label' => 'المكافآت', 'route' => 'workspace.finance.bonuses.index', 'active' => 'workspace.finance.bonuses.*'],
             ['label' => 'السلف', 'route' => 'workspace.finance.salary-advances.index', 'active' => 'workspace.finance.salary-advances.*'],
+            ['label' => 'موظفو المالية', 'route' => 'workspace.finance.employees.index', 'active' => 'workspace.finance.employees.*'],
             ['label' => 'الحسابات البنكية', 'route' => 'workspace.finance.banks.index', 'active' => 'workspace.finance.banks.*'],
         ],
         'الإعدادات' => [
