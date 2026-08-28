@@ -55,7 +55,7 @@ class EmployeeController extends Controller
             'invited_by' => $request->user()?->id,
         ]);
 
-        Notification::route('mail', $validated['email'])
+        Notification::route('central_mail', $validated['email'])
             ->notify(new EmployeeInvitationNotification($invitation));
 
         return response()->json(['data' => $invitation], 201);

@@ -5,6 +5,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Auth\PhoneOtpController;
 use App\Http\Controllers\Auth\SocialLoginController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\Webhook\ResendWebhookController;
 use App\Http\Controllers\WorkspaceSelectionController;
 use App\Http\Controllers\Workspace\AiSettingController;
 use App\Http\Controllers\Workspace\Appointments\BookingController as AppointmentsBookingController;
@@ -62,6 +63,10 @@ Route::get('/', function () {
 Route::post('/assistant/chat', [AssistantController::class, 'chat'])
     ->middleware('throttle:20,1')
     ->name('assistant.chat');
+
+Route::post('/webhooks/resend', [ResendWebhookController::class, 'handle'])
+    ->middleware('throttle:120,1')
+    ->name('webhooks.resend');
 
 Route::middleware('throttle:30,1')->group(function (): void {
     Route::get('/appointments/portal/{token}', [AppointmentsCustomerPortalController::class, 'show'])->name('appointments.portal.show');

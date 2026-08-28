@@ -2,12 +2,12 @@
 
 namespace App\Notifications;
 
+use App\Contracts\Email\CentralEmailNotification;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class LowStockNotification extends Notification implements ShouldQueue
+class LowStockNotification extends Notification implements ShouldQueue, CentralEmailNotification
 {
     use Queueable;
 
@@ -23,18 +23,24 @@ class LowStockNotification extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
-        return ['database', 'mail'];
+        return ['database', 'central_mail'];
     }
 
     /**
-     * Get the mail representation of the notification.
+     * @return array<string, mixed>
      */
-    public function toMail(object $notifiable): MailMessage
+    public function toCentralEmail(object $notifiable): array
     {
-        return (new MailMessage)
-            ->subject('تنبيه انخفاض المخزون')
-            ->line('المنتج '.$this->productName.' وصل إلى مخزون منخفض ('.$this->stock.').')
-            ->action('عرض المنتجات', url('/workspace/products'));
+        return [
+            'template' => 'general_notification',
+            'subject' => 'تنبيه انخفاض المخزون',
+            'data' => [
+                'headline' => 'تنبيه انخفاض المخزون',
+                'intro' => 'المنتج '.$this->productName.' وصل إلى مخزون منخفض ('.$this->stock.').',
+                'action_text' => 'عرض المنتجات',
+                'action_url' => url('/workspace/products'),
+            ],
+        ];
     }
 
     /**

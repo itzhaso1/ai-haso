@@ -2,13 +2,13 @@
 
 namespace App\Notifications;
 
+use App\Contracts\Email\CentralEmailNotification;
 use App\Models\Appointment\AppointmentBooking;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class AppointmentLifecycleNotification extends Notification implements ShouldQueue
+class AppointmentLifecycleNotification extends Notification implements ShouldQueue, CentralEmailNotification
 {
     use Queueable;
 
@@ -23,19 +23,31 @@ class AppointmentLifecycleNotification extends Notification implements ShouldQue
      */
     public function via(object $notifiable): array
     {
-        return ['database', 'mail'];
+        return ['database', 'central_mail'];
     }
 
-    public function toMail(object $notifiable): MailMessage
+    /**
+     * @return array<string, mixed>
+     */
+    public function toCentralEmail(object $notifiable): array
     {
-        return (new MailMessage)
-            ->subject($this->title)
-            ->line($this->message)
-            ->line('رقم الموعد: '.$this->booking->booking_number)
-            ->line('حالة الموعد: '.$this->booking->appointment_status)
-            ->line('حالة الدفع: '.$this->booking->payment_status)
-            ->action('فتح لوحة المواعيد', url('/workspace/appointments'))
-            ->line('HASEM Appointments');
+        return [
+            'template' => 'general_notification',
+            'subject' => $this->title,
+            'workspace_id' => $this->booking->workspace_id,
+            'data' => [
+                'headline' => $this->title,
+                'intro' => $this->message,
+                'lines' => [
+                    'رقم الموعد: '.$this->booking->booking_number,
+                    'حالة الموعد: '.$this->booking->appointment_status,
+                    'حالة الدفع: '.$this->booking->payment_status,
+                ],
+                'action_text' => 'فتح لوحة المواعيد',
+                'action_url' => url('/workspace/appointments'),
+                'footer' => 'HASEM Appointments',
+            ],
+        ];
     }
 
     /**

@@ -47,6 +47,7 @@ use App\Models\WhatsAppAccount;
 use App\Models\Workspace;
 use App\Observers\FinanceInvoicePaymentObserver;
 use App\Observers\WorkspaceAuditObserver;
+use App\Notifications\Channels\CentralMailChannel;
 use App\Policies\CategoryPolicy;
 use App\Policies\ConversationPolicy;
 use App\Policies\CustomerPolicy;
@@ -57,6 +58,7 @@ use App\Policies\SubscriptionPolicy;
 use App\Policies\WorkspacePolicy;
 use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -74,6 +76,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Notification::extend('central_mail', fn ($app) => $app->make(CentralMailChannel::class));
+
         Gate::policy(Workspace::class, WorkspacePolicy::class);
         Gate::policy(Category::class, CategoryPolicy::class);
         Gate::policy(Product::class, ProductPolicy::class);

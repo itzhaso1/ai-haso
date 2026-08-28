@@ -36,12 +36,13 @@ class SendEmailMessageJob implements ShouldQueue
                 'delivery_error' => null,
             ])->save();
 
-            $workspaceEmailSender->send($emailMessage);
+            $emailLog = $workspaceEmailSender->send($emailMessage);
 
             $emailMessage->forceFill([
                 'delivery_status' => 'sent',
                 'delivery_error' => null,
                 'delivered_at' => now(),
+                'message_id' => $emailLog->provider_message_id ?: $emailMessage->message_id,
             ])->save();
         } catch (\Throwable $exception) {
             Log::error('email-send-job-failed', [

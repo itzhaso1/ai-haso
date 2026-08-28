@@ -2,13 +2,13 @@
 
 namespace App\Notifications;
 
+use App\Contracts\Email\CentralEmailNotification;
 use App\Models\Order;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class NewOrderNotification extends Notification implements ShouldQueue
+class NewOrderNotification extends Notification implements ShouldQueue, CentralEmailNotification
 {
     use Queueable;
 
@@ -21,19 +21,26 @@ class NewOrderNotification extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
-        return ['database', 'mail'];
+        return ['database', 'central_mail'];
     }
 
     /**
-     * Get the mail representation of the notification.
+     * @return array<string, mixed>
      */
-    public function toMail(object $notifiable): MailMessage
+    public function toCentralEmail(object $notifiable): array
     {
-        return (new MailMessage)
-            ->subject('طلب جديد '.$this->order->order_number)
-            ->line('تم إنشاء طلب جديد بقيمة '.$this->order->total_amount.' '.$this->order->currency)
-            ->action('عرض الطلبات', url('/workspace/orders'))
-            ->line('HASEM');
+        return [
+            'template' => 'general_notification',
+            'subject' => 'طلب جديد '.$this->order->order_number,
+            'workspace_id' => $this->order->workspace_id,
+            'data' => [
+                'headline' => 'طلب جديد '.$this->order->order_number,
+                'intro' => 'تم إنشاء طلب جديد بقيمة '.$this->order->total_amount.' '.$this->order->currency,
+                'action_text' => 'عرض الطلبات',
+                'action_url' => url('/workspace/orders'),
+                'footer' => 'HASEM',
+            ],
+        ];
     }
 
     /**

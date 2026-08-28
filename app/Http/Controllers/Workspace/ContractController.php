@@ -13,6 +13,7 @@ use App\Services\Contracts\ContractPdfService;
 use App\Services\Contracts\ContractService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -175,9 +176,15 @@ class ContractController extends Controller
                 ->route($this->contractRouteName('show'), $contract)
                 ->with('success', 'تم تفعيل العقد وإرساله عبر البريد.');
         } catch (\Throwable $exception) {
+            Log::warning('contract-activation-email-failed', [
+                'contract_id' => $contract->id,
+                'workspace_id' => $contract->workspace_id,
+                'error' => $exception->getMessage(),
+            ]);
+
             return redirect()
                 ->route($this->contractRouteName('show'), $contract)
-                ->with('error', 'تم تفعيل العقد لكن فشل إرسال البريد: '.$exception->getMessage());
+                ->with('error', 'تم تفعيل العقد لكن تعذر إرسال البريد حاليًا.');
         }
     }
 

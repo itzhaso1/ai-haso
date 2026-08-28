@@ -100,7 +100,7 @@ class DomainNotificationService
             return;
         }
 
-        \Illuminate\Support\Facades\Notification::route('mail', (string) $booking->customer_email)
+        \Illuminate\Support\Facades\Notification::route('central_mail', (string) $booking->customer_email)
             ->notify(new AppointmentCustomerReminderNotification($booking));
     }
 }

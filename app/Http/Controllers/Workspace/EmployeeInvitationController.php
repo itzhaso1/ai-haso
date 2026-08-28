@@ -58,7 +58,7 @@ class EmployeeInvitationController extends Controller
             'expires_at' => now()->addDays(7),
         ]);
 
-        Notification::route('mail', $payload['email'])
+        Notification::route('central_mail', $payload['email'])
             ->notify(new EmployeeInvitationNotification($invitation));
 
         return redirect()->route('workspace.employees.index')->with('success', 'تم إرسال الدعوة بنجاح.');

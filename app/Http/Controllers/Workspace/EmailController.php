@@ -563,11 +563,12 @@ class EmailController extends Controller
         });
 
         try {
-            $workspaceEmailSender->send($message);
+            $emailLog = $workspaceEmailSender->send($message);
             $message->forceFill([
                 'delivery_status' => 'sent',
                 'delivery_error' => null,
                 'delivered_at' => now(),
+                'message_id' => $emailLog->provider_message_id ?: $message->message_id,
             ])->save();
 
             return redirect()
@@ -576,12 +577,12 @@ class EmailController extends Controller
         } catch (\Throwable $exception) {
             $message->forceFill([
                 'delivery_status' => 'failed',
-                'delivery_error' => $exception->getMessage(),
+                'delivery_error' => 'Email delivery failed.',
             ])->save();
 
             return redirect()
                 ->route('workspace.emails.compose', ['account_id' => $emailAccount->id])
-                ->with('error', 'فشل إرسال الرسالة: '.$exception->getMessage());
+                ->with('error', 'تعذر إرسال الرسالة حاليًا. يرجى المحاولة لاحقًا.');
         }
     }
 

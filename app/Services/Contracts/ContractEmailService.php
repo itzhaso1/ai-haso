@@ -2,22 +2,21 @@
 
 namespace App\Services\Contracts;
 
-use App\Mail\WorkspaceBrandedEmail;
 use App\Models\Contract\Contract;
 use App\Models\EmailAccount;
 use App\Models\EmailAttachment;
 use App\Models\EmailMessage;
-use Illuminate\Mail\Mailer;
+use App\Services\Email\CentralEmailService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
-use Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport;
 
 class ContractEmailService
 {
     public function __construct(
         private readonly ContractPdfService $contractPdfService,
+        private readonly CentralEmailService $centralEmailService,
     ) {}
 
     /**
@@ -32,13 +31,14 @@ class ContractEmailService
 
         $ccRecipients = $this->parseEmails((string) ($payload['cc'] ?? ''));
         $account = EmailAccount::query()->findOrFail((int) $payload['email_account_id']);
+        $allRecipients = array_values(array_unique(array_merge($toRecipients, $ccRecipients)));
 
-        $message = DB::transaction(function () use ($contract, $payload, $toRecipients, $ccRecipients): EmailMessage {
+        $message = DB::transaction(function () use ($contract, $payload, $allRecipients, $account): EmailMessage {
             $message = EmailMessage::query()->create([
                 'workspace_id' => $contract->workspace_id,
-                'email_account_id' => (int) $payload['email_account_id'],
-                'sender' => '',
-                'recipient' => implode(', ', array_values(array_unique(array_merge($toRecipients, $ccRecipients)))),
+                'email_account_id' => $account->id,
+                'sender' => (string) config('email_templates.default_from_address'),
+                'recipient' => implode(', ', $allRecipients),
                 'subject' => (string) ($payload['subject'] ?? ('تفعيل العقد '.$contract->contract_number)),
                 'body' => (string) ($payload['message'] ?? 'تم تفعيل العقد وإرفاق نسخة PDF.'),
                 'type' => 'outbound',
@@ -63,35 +63,50 @@ class ContractEmailService
         });
 
         try {
-            $transport = new EsmtpTransport(
-                $account->smtp_host,
-                (int) $account->smtp_port,
-                (int) $account->smtp_port === 465 ? true : null
-            );
-            $transport->setUsername($account->email);
-            $transport->setPassword((string) $account->password);
-
-            $mailer = new Mailer('workspace-dynamic-smtp', app('view'), $transport, app('events'));
-            $mailer->to($toRecipients);
-            if ($ccRecipients !== []) {
-                $mailer->cc($ccRecipients);
-            }
-            $mailer->send(new WorkspaceBrandedEmail($message, $account));
+            $emailLog = $this->centralEmailService->send([
+                'to' => $toRecipients,
+                'cc' => $ccRecipients,
+                'template' => 'contract_email',
+                'subject' => $message->subject,
+                'workspace_id' => $contract->workspace_id,
+                'email_message_id' => $message->id,
+                'attachments' => [[
+                    'storage_disk' => 'public',
+                    'storage_path' => (string) $message->attachments->first()?->file_path,
+                    'name' => 'contract-'.$contract->contract_number.'.pdf',
+                    'mime' => 'application/pdf',
+                ]],
+                'data' => [
+                    'headline' => 'تفعيل العقد '.$contract->contract_number,
+                    'intro' => (string) $message->body,
+                    'lines' => [
+                        'عنوان العقد: '.$contract->title,
+                        'قيمة العقد: '.number_format((float) $contract->value, 2).' '.$contract->currency,
+                    ],
+                    'brand_name' => $account->name,
+                    'brand_color' => $account->brand_color ?: '#0f172a',
+                ],
+                'meta' => [
+                    'source' => 'contract_activation',
+                    'contract_id' => $contract->id,
+                ],
+            ]);
 
             $message->forceFill([
-                'sender' => $account->email,
+                'sender' => (string) config('email_templates.default_from_address'),
                 'delivery_status' => 'sent',
                 'delivery_error' => null,
                 'delivered_at' => now(),
+                'message_id' => $emailLog->provider_message_id ?: $message->message_id,
             ])->save();
         } catch (\Throwable $exception) {
             $message->forceFill([
-                'sender' => $account->email,
+                'sender' => (string) config('email_templates.default_from_address'),
                 'delivery_status' => 'failed',
-                'delivery_error' => $exception->getMessage(),
+                'delivery_error' => 'Email delivery failed.',
             ])->save();
 
-            throw new RuntimeException('فشل إرسال العقد عبر البريد: '.$exception->getMessage(), previous: $exception);
+            throw new RuntimeException('فشل إرسال العقد عبر البريد.', previous: $exception);
         }
 
         return $message->fresh(['attachments']);

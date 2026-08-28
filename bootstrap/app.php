@@ -24,6 +24,10 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->validateCsrfTokens(except: [
+            'webhooks/resend',
+        ]);
+
         $middleware->alias([
             'workspace.resolve' => ResolveWorkspaceContext::class,
             'workspace.member' => EnsureWorkspaceMembership::class,

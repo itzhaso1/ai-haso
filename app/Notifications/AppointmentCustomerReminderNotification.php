@@ -2,13 +2,13 @@
 
 namespace App\Notifications;
 
+use App\Contracts\Email\CentralEmailNotification;
 use App\Models\Appointment\AppointmentBooking;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class AppointmentCustomerReminderNotification extends Notification implements ShouldQueue
+class AppointmentCustomerReminderNotification extends Notification implements ShouldQueue, CentralEmailNotification
 {
     use Queueable;
 
@@ -19,17 +19,28 @@ class AppointmentCustomerReminderNotification extends Notification implements Sh
      */
     public function via(object $notifiable): array
     {
-        return ['mail'];
+        return ['central_mail'];
     }
 
-    public function toMail(object $notifiable): MailMessage
+    /**
+     * @return array<string, mixed>
+     */
+    public function toCentralEmail(object $notifiable): array
     {
-        return (new MailMessage)
-            ->subject('تذكير بموعدك القادم')
-            ->line('هذا تذكير بموعدك القادم معنا.')
-            ->line('رقم الموعد: '.$this->booking->booking_number)
-            ->line('الخدمة: '.($this->booking->service?->name ?? '—'))
-            ->line('الوقت: '.$this->booking->starts_at?->toDateTimeString())
-            ->line('يمكنك استخدام رابط العميل لتأكيد الحضور أو طلب التعديل عند الحاجة.');
+        return [
+            'template' => 'general_notification',
+            'subject' => 'تذكير بموعدك القادم',
+            'workspace_id' => $this->booking->workspace_id,
+            'data' => [
+                'headline' => 'تذكير بموعدك القادم',
+                'intro' => 'هذا تذكير بموعدك القادم معنا.',
+                'lines' => [
+                    'رقم الموعد: '.$this->booking->booking_number,
+                    'الخدمة: '.($this->booking->service?->name ?? '—'),
+                    'الوقت: '.$this->booking->starts_at?->toDateTimeString(),
+                    'يمكنك استخدام رابط العميل لتأكيد الحضور أو طلب التعديل عند الحاجة.',
+                ],
+            ],
+        ];
     }
 }

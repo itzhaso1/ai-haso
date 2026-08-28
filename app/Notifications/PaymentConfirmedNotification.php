@@ -2,13 +2,13 @@
 
 namespace App\Notifications;
 
+use App\Contracts\Email\CentralEmailNotification;
 use App\Models\Payment;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class PaymentConfirmedNotification extends Notification implements ShouldQueue
+class PaymentConfirmedNotification extends Notification implements ShouldQueue, CentralEmailNotification
 {
     use Queueable;
 
@@ -21,19 +21,28 @@ class PaymentConfirmedNotification extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
-        return ['database', 'mail'];
+        return ['database', 'central_mail'];
     }
 
     /**
-     * Get the mail representation of the notification.
+     * @return array<string, mixed>
      */
-    public function toMail(object $notifiable): MailMessage
+    public function toCentralEmail(object $notifiable): array
     {
-        return (new MailMessage)
-            ->subject('تم تأكيد عملية الدفع')
-            ->line('تم تأكيد دفعة للطلب '.$this->payment->order->order_number)
-            ->line('المبلغ: '.$this->payment->amount.' '.$this->payment->currency)
-            ->action('عرض المدفوعات', url('/workspace/payments'));
+        return [
+            'template' => 'finance_notification',
+            'subject' => 'تم تأكيد عملية الدفع',
+            'workspace_id' => $this->payment->workspace_id,
+            'data' => [
+                'headline' => 'تم تأكيد عملية الدفع',
+                'intro' => 'تم تأكيد دفعة للطلب '.$this->payment->order->order_number,
+                'lines' => [
+                    'المبلغ: '.$this->payment->amount.' '.$this->payment->currency,
+                ],
+                'action_text' => 'عرض المدفوعات',
+                'action_url' => url('/workspace/payments'),
+            ],
+        ];
     }
 
     /**
