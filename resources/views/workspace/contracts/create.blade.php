@@ -1,13 +1,8 @@
-<x-app-layout>
-    <x-slot name="header">
-        <h2 class="text-xl font-semibold text-gray-900">إنشاء عقد</h2>
-    </x-slot>
+@extends('layouts.financial', ['pageTitle' => 'إنشاء عقد'])
 
-    <div class="py-8">
-        <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-            @include('workspace.partials.nav')
-            @include('partials.flash')
-            @include('workspace.contracts._form')
-        </div>
+@section('content')
+    <div class="space-y-4">
+        <h2 class="text-xl font-bold text-slate-900">إنشاء عقد جديد</h2>
+        @include('workspace.contracts._form')
     </div>
-</x-app-layout>
+@endsection

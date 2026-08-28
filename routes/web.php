@@ -174,6 +174,18 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
 
         Route::prefix('finance')->as('finance.')->group(function (): void {
             Route::get('/', [FinanceDashboardController::class, 'index'])->name('dashboard');
+            Route::get('contracts', [WorkspaceContractController::class, 'index'])->name('contracts.index');
+            Route::get('contracts/create', [WorkspaceContractController::class, 'create'])->name('contracts.create');
+            Route::post('contracts', [WorkspaceContractController::class, 'store'])->name('contracts.store');
+            Route::get('contracts/{contract}', [WorkspaceContractController::class, 'show'])->name('contracts.show');
+            Route::get('contracts/{contract}/edit', [WorkspaceContractController::class, 'edit'])->name('contracts.edit');
+            Route::put('contracts/{contract}', [WorkspaceContractController::class, 'update'])->name('contracts.update');
+            Route::post('contracts/{contract}/activate', [WorkspaceContractController::class, 'activate'])->name('contracts.activate');
+            Route::post('contracts/{contract}/close', [WorkspaceContractController::class, 'close'])->name('contracts.close');
+            Route::post('contracts/{contract}/cancel', [WorkspaceContractController::class, 'cancel'])->name('contracts.cancel');
+            Route::get('contracts/{contract}/pdf', [WorkspaceContractController::class, 'downloadPdf'])->name('contracts.pdf');
+            Route::get('contracts/{contract}/attachments/{attachment}', [WorkspaceContractController::class, 'downloadAttachment'])->name('contracts.attachments.download');
+            Route::delete('contracts/{contract}/attachments/{attachment}', [WorkspaceContractController::class, 'destroyAttachment'])->name('contracts.attachments.destroy');
 
             Route::get('invoices', [FinanceInvoiceController::class, 'index'])->name('invoices.index');
             Route::get('invoices/create', [FinanceInvoiceController::class, 'create'])->name('invoices.create');
@@ -203,7 +215,10 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::get('inventory', [FinanceModulePageController::class, 'inventory'])->name('inventory.index');
             Route::get('employees', [FinanceEmployeeController::class, 'index'])->name('employees.index');
             Route::post('employees', [FinanceEmployeeController::class, 'store'])->name('employees.store');
+            Route::get('employees/{employee}', [FinanceEmployeeController::class, 'show'])->name('employees.show');
             Route::put('employees/{employee}', [FinanceEmployeeController::class, 'update'])->name('employees.update');
+            Route::delete('employees/{employee}', [FinanceEmployeeController::class, 'destroy'])->name('employees.destroy');
+            Route::post('employees/{employee}/payroll-records', [FinanceEmployeeController::class, 'storePayrollRecord'])->name('employees.payroll-records.store');
             Route::get('payroll', [FinanceModulePageController::class, 'payroll'])->name('payroll.index');
             Route::get('vat', [FinanceModulePageController::class, 'vat'])->name('vat.index');
             Route::get('banks', [FinanceModulePageController::class, 'banks'])->name('banks.index');

@@ -6,6 +6,7 @@
         'المبيعات' => [
             ['label' => 'المبيعات', 'route' => 'workspace.finance.sales.index', 'active' => 'workspace.finance.sales.*'],
             ['label' => 'الفواتير', 'route' => 'workspace.finance.invoices.index', 'active' => 'workspace.finance.invoices.*'],
+            ['label' => 'العقود', 'route' => 'workspace.finance.contracts.index', 'active' => 'workspace.finance.contracts.*'],
             ['label' => 'العملاء', 'route' => 'workspace.finance.customers.index', 'active' => 'workspace.finance.customers.*'],
             ['label' => 'قوائم الأسعار', 'route' => 'workspace.finance.price-lists.index', 'active' => 'workspace.finance.price-lists.*'],
         ],

@@ -3,7 +3,8 @@
 namespace App\Http\Controllers\Workspace\Finance;
 
 use App\Models\Customer;
-use App\Models\Finance\FinanceEmployeeProfile;
+use App\Models\Finance\FinanceEmployee;
+use App\Models\Finance\FinanceEmployeePayrollRecord;
 use App\Models\Finance\FinanceExpense;
 use App\Models\Finance\FinanceInvoice;
 use App\Models\Finance\FinanceInvoiceItem;
@@ -13,7 +14,6 @@ use App\Models\Finance\FinanceTaxRate;
 use App\Models\Finance\FinanceTreasuryAccount;
 use App\Models\InventoryMovement;
 use App\Models\Product;
-use App\Models\WorkspaceUser;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -84,26 +84,22 @@ class ModulePageController extends FinanceBaseController
     {
         $this->authorizeFinance($request, 'payroll.view');
 
-        $workspace = $this->currentWorkspace();
-
-        $profiles = FinanceEmployeeProfile::query()
-            ->with('user')
+        $employees = FinanceEmployee::query()
+            ->withCount('payrollRecords')
             ->latest('id')
             ->paginate(12);
 
         $runs = FinancePayrollRun::query()->latest('period_month')->limit(12)->get();
-
-        $employees = WorkspaceUser::query()
-            ->where('workspace_id', $workspace->id)
-            ->with('user')
-            ->where('status', 'active')
-            ->orderBy('membership_role')
+        $latestRecords = FinanceEmployeePayrollRecord::query()
+            ->with('employee')
+            ->latest('period_start')
+            ->limit(20)
             ->get();
 
         return view('workspace.finance.modules.payroll', [
-            'profiles' => $profiles,
-            'runs' => $runs,
             'employees' => $employees,
+            'runs' => $runs,
+            'latestRecords' => $latestRecords,
         ]);
     }
 

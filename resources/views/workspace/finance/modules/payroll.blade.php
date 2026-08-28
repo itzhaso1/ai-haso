@@ -2,40 +2,46 @@
 
 @section('content')
     <div class="space-y-4">
-        <h2 class="text-xl font-bold text-slate-900">الرواتب (مرتبطة بموظفي الـWorkspace الحاليين)</h2>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 class="text-xl font-bold text-slate-900">الرواتب والمستحقات</h2>
+            <a href="{{ route('workspace.finance.employees.index') }}" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">إدارة موظفي المالية</a>
+        </div>
 
         <div class="grid gap-4 xl:grid-cols-2">
             <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h3 class="mb-3 text-sm font-bold">الموظفون الحاليون</h3>
+                <h3 class="mb-3 text-sm font-bold">موظفو المالية</h3>
                 <div class="space-y-2">
                     @forelse($employees as $employee)
                         <div class="rounded-lg border border-slate-200 p-3 text-sm">
-                            <p class="font-semibold">{{ $employee->user?->name }}</p>
-                            <p class="text-xs text-slate-500">{{ $employee->membership_role }} | {{ $employee->user?->email }}</p>
+                            <div class="flex items-center justify-between gap-2">
+                                <p class="font-semibold">{{ $employee->full_name }}</p>
+                                <span class="text-xs text-slate-500">{{ $employee->employee_code }}</span>
+                            </div>
+                            <p class="text-xs text-slate-500">{{ $employee->job_title ?: 'بدون مسمى' }} | سجلات: {{ $employee->payroll_records_count }}</p>
                         </div>
                     @empty
                         <p class="text-sm text-slate-500">لا يوجد موظفون.</p>
                     @endforelse
                 </div>
+                <div class="mt-3">{{ $employees->links() }}</div>
             </article>
 
             <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h3 class="mb-3 text-sm font-bold">ملفات الرواتب</h3>
+                <h3 class="mb-3 text-sm font-bold">آخر سجلات الاستحقاقات</h3>
                 <div class="space-y-2">
-                    @forelse($profiles as $profile)
+                    @forelse($latestRecords as $record)
                         <div class="rounded-lg border border-slate-200 p-3 text-sm">
-                            <p class="font-semibold">{{ $profile->user?->name }}</p>
+                            <p class="font-semibold">{{ $record->employee?->full_name ?: '—' }}</p>
                             <p class="text-xs text-slate-500">
-                                Basic: {{ number_format((float) $profile->basic_salary, 2) }}
-                                | Housing: {{ number_format((float) $profile->housing_allowance, 2) }}
-                                | Transport: {{ number_format((float) $profile->transport_allowance, 2) }}
+                                {{ $record->period_start->format('Y-m-d') }} → {{ $record->period_end->format('Y-m-d') }}
+                                | صافي: {{ number_format((float) $record->net_amount, 2) }}
+                                | الحالة: {{ $record->payment_status }}
                             </p>
                         </div>
                     @empty
-                        <p class="text-sm text-slate-500">لا توجد ملفات رواتب بعد.</p>
+                        <p class="text-sm text-slate-500">لا توجد سجلات استحقاقات بعد.</p>
                     @endforelse
                 </div>
-                <div class="mt-3">{{ $profiles->links() }}</div>
             </article>
         </div>
 

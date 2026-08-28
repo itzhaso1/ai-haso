@@ -4,7 +4,8 @@ namespace Tests\Feature\Feature\Workspace;
 
 use App\Models\Contract\Contract as WorkspaceContract;
 use App\Models\Customer;
-use App\Models\Finance\FinanceEmployeeProfile;
+use App\Models\Finance\FinanceEmployee;
+use App\Models\Finance\FinanceEmployeePayrollRecord;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -28,12 +29,12 @@ class WorkspaceModulesNavigationTest extends TestCase
             ->assertSee('Communication')
             ->assertSee('Payments & Subscriptions')
             ->assertSee('Finance')
-            ->assertSee('Contracts')
             ->assertSee(route('workspace.categories.index'), false)
             ->assertSee(route('workspace.products.index'), false)
             ->assertSee(route('workspace.inventory.index'), false)
             ->assertSee(route('workspace.customers.index'), false)
             ->assertSee(route('workspace.finance.dashboard'), false)
+            ->assertSee(route('workspace.finance.contracts.index'), false)
             ->assertSee(route('workspace.appointments.dashboard'), false);
     }
 
@@ -91,50 +92,52 @@ class WorkspaceModulesNavigationTest extends TestCase
             ->assertNotFound();
     }
 
-    public function test_finance_employees_module_uses_workspace_members_without_duplication(): void
+    public function test_finance_employees_module_uses_independent_finance_employee_records(): void
     {
         [$ownerA, $workspaceA] = $this->createWorkspaceOwner('company');
         [$ownerB, $workspaceB] = $this->createWorkspaceOwner('store');
 
-        $foreignUser = User::factory()->create();
-        $workspaceB->users()->attach($foreignUser->id, [
-            'membership_role' => 'agent',
-            'status' => 'active',
-            'joined_at' => now(),
-        ]);
-
         $this->actingAs($ownerA)
             ->withSession(['current_workspace_id' => $workspaceA->id])
             ->post(route('workspace.finance.employees.store'), [
-                'user_id' => $foreignUser->id,
-                'finance_role' => 'accountant',
-            ])
-            ->assertSessionHasErrors('user_id');
-
-        $localUser = User::factory()->create();
-        $workspaceA->users()->attach($localUser->id, [
-            'membership_role' => 'agent',
-            'status' => 'active',
-            'joined_at' => now(),
-        ]);
-
-        $this->actingAs($ownerA)
-            ->withSession(['current_workspace_id' => $workspaceA->id])
-            ->post(route('workspace.finance.employees.store'), [
-                'user_id' => $localUser->id,
-                'finance_role' => 'cashier',
+                'full_name' => 'Finance Employee A',
+                'job_title' => 'Payroll Officer',
                 'basic_salary' => 5000,
-                'is_active' => 1,
+                'status' => 'active',
             ])
             ->assertRedirect();
 
-        $profile = FinanceEmployeeProfile::withoutGlobalScopes()
+        $employee = FinanceEmployee::withoutGlobalScopes()
             ->where('workspace_id', $workspaceA->id)
-            ->where('user_id', $localUser->id)
+            ->where('full_name', 'Finance Employee A')
             ->firstOrFail();
 
-        $this->assertSame('cashier', $profile->finance_role);
-        $this->assertSame('5000.00', (string) $profile->basic_salary);
+        $this->assertSame('Payroll Officer', $employee->job_title);
+        $this->assertSame('5000.00', (string) $employee->basic_salary);
+
+        $this->actingAs($ownerA)
+            ->withSession(['current_workspace_id' => $workspaceA->id])
+            ->post(route('workspace.finance.employees.payroll-records.store', $employee), [
+                'period_start' => '2026-08-01',
+                'period_end' => '2026-08-31',
+                'basic_salary' => 5000,
+                'allowances_total' => 500,
+                'deductions_total' => 250,
+                'payment_status' => 'pending',
+            ])
+            ->assertRedirect();
+
+        $record = FinanceEmployeePayrollRecord::withoutGlobalScopes()
+            ->where('workspace_id', $workspaceA->id)
+            ->where('finance_employee_id', $employee->id)
+            ->firstOrFail();
+
+        $this->assertSame('5250.00', (string) $record->net_amount);
+
+        $this->actingAs($ownerB)
+            ->withSession(['current_workspace_id' => $workspaceB->id])
+            ->get(route('workspace.finance.employees.show', $employee))
+            ->assertNotFound();
     }
 
     /**

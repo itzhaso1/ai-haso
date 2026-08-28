@@ -13,6 +13,7 @@ use App\Services\Contracts\ContractPdfService;
 use App\Services\Contracts\ContractService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -54,6 +55,7 @@ class ContractController extends Controller
                 'status' => $status,
                 'search' => $search,
             ],
+            'routePrefix' => $this->contractRoutePrefix(),
         ]);
     }
 
@@ -65,8 +67,9 @@ class ContractController extends Controller
             'contract' => new Contract(['currency' => 'SAR', 'status' => 'draft']),
             'customers' => \App\Models\Customer::query()->orderBy('name')->get(['id', 'name']),
             'emailAccounts' => EmailAccount::query()->orderBy('name')->get(['id', 'name', 'email']),
-            'formAction' => route('workspace.contracts.store'),
+            'formAction' => route($this->contractRouteName('store')),
             'method' => 'POST',
+            'routePrefix' => $this->contractRoutePrefix(),
         ]);
     }
 
@@ -85,7 +88,7 @@ class ContractController extends Controller
             $request->file('attachments', [])
         );
 
-        return redirect()->route('workspace.contracts.show', $contract)->with('success', 'تم إنشاء العقد بنجاح.');
+        return redirect()->route($this->contractRouteName('show'), $contract)->with('success', 'تم إنشاء العقد بنجاح.');
     }
 
     public function show(Request $request, Contract $contract): View
@@ -96,6 +99,7 @@ class ContractController extends Controller
         return view('workspace.contracts.show', [
             'contract' => $contract,
             'emailAccounts' => EmailAccount::query()->orderBy('name')->get(['id', 'name', 'email']),
+            'routePrefix' => $this->contractRoutePrefix(),
         ]);
     }
 
@@ -108,8 +112,9 @@ class ContractController extends Controller
             'contract' => $contract,
             'customers' => \App\Models\Customer::query()->orderBy('name')->get(['id', 'name']),
             'emailAccounts' => EmailAccount::query()->orderBy('name')->get(['id', 'name', 'email']),
-            'formAction' => route('workspace.contracts.update', $contract),
+            'formAction' => route($this->contractRouteName('update'), $contract),
             'method' => 'PUT',
+            'routePrefix' => $this->contractRoutePrefix(),
         ]);
     }
 
@@ -119,7 +124,7 @@ class ContractController extends Controller
 
         if (in_array($contract->status, ['closed', 'cancelled'], true)) {
             return redirect()
-                ->route('workspace.contracts.show', $contract)
+                ->route($this->contractRouteName('show'), $contract)
                 ->with('error', 'لا يمكن تعديل عقد مغلق أو ملغي.');
         }
 
@@ -127,7 +132,7 @@ class ContractController extends Controller
         $payload = $request->validate($this->rules($workspace->id, $contract->id));
         $updated = $this->contractService->update($contract, $payload, $request->file('attachments', []));
 
-        return redirect()->route('workspace.contracts.show', $updated)->with('success', 'تم تحديث العقد.');
+        return redirect()->route($this->contractRouteName('show'), $updated)->with('success', 'تم تحديث العقد.');
     }
 
     public function activate(Request $request, Contract $contract): RedirectResponse
@@ -153,7 +158,7 @@ class ContractController extends Controller
 
         if (! $request->boolean('send_email')) {
             return redirect()
-                ->route('workspace.contracts.show', $contract)
+                ->route($this->contractRouteName('show'), $contract)
                 ->with('success', 'تم تفعيل العقد بنجاح.');
         }
 
@@ -167,11 +172,11 @@ class ContractController extends Controller
             ]);
 
             return redirect()
-                ->route('workspace.contracts.show', $contract)
+                ->route($this->contractRouteName('show'), $contract)
                 ->with('success', 'تم تفعيل العقد وإرساله عبر البريد.');
         } catch (\Throwable $exception) {
             return redirect()
-                ->route('workspace.contracts.show', $contract)
+                ->route($this->contractRouteName('show'), $contract)
                 ->with('error', 'تم تفعيل العقد لكن فشل إرسال البريد: '.$exception->getMessage());
         }
     }
@@ -181,7 +186,7 @@ class ContractController extends Controller
         $this->authorizeContracts($request, 'contracts.manage');
         $this->contractService->close($contract);
 
-        return redirect()->route('workspace.contracts.show', $contract)->with('success', 'تم إغلاق العقد.');
+        return redirect()->route($this->contractRouteName('show'), $contract)->with('success', 'تم إغلاق العقد.');
     }
 
     public function cancel(Request $request, Contract $contract): RedirectResponse
@@ -189,7 +194,7 @@ class ContractController extends Controller
         $this->authorizeContracts($request, 'contracts.manage');
         $this->contractService->cancel($contract);
 
-        return redirect()->route('workspace.contracts.show', $contract)->with('success', 'تم إلغاء العقد.');
+        return redirect()->route($this->contractRouteName('show'), $contract)->with('success', 'تم إلغاء العقد.');
     }
 
     public function downloadPdf(Request $request, Contract $contract)
@@ -217,7 +222,7 @@ class ContractController extends Controller
 
         $this->contractService->deleteAttachment($attachment);
 
-        return redirect()->route('workspace.contracts.show', $contract)->with('success', 'تم حذف المرفق.');
+        return redirect()->route($this->contractRouteName('show'), $contract)->with('success', 'تم حذف المرفق.');
     }
 
     /**
@@ -274,5 +279,19 @@ class ContractController extends Controller
             ->exists();
 
         abort_unless($isElevatedMember, 403, 'You are not allowed to access contracts module.');
+    }
+
+    private function contractRoutePrefix(): string
+    {
+        if (Route::has('workspace.finance.contracts.index')) {
+            return 'workspace.finance.contracts';
+        }
+
+        return 'workspace.contracts';
+    }
+
+    private function contractRouteName(string $suffix): string
+    {
+        return $this->contractRoutePrefix().'.'.$suffix;
     }
 }

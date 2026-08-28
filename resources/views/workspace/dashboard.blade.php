@@ -84,15 +84,8 @@
                             ['label' => 'VAT', 'route' => 'workspace.finance.vat.index', 'active' => 'workspace.finance.vat.*'],
                             ['label' => 'Reports', 'route' => 'workspace.finance.reports.index', 'active' => 'workspace.finance.reports.*'],
                             ['label' => 'Finance Employees', 'route' => 'workspace.finance.employees.index', 'active' => 'workspace.finance.employees.*'],
+                            ['label' => 'العقود', 'route' => 'workspace.finance.contracts.index', 'active' => 'workspace.finance.contracts.*'],
                             ['label' => 'Finance Settings', 'route' => 'workspace.finance.settings.index', 'active' => 'workspace.finance.settings.*'],
-                        ],
-                    ],
-                    [
-                        'title' => 'Contracts',
-                        'description' => 'العقود المفتوحة، التفعيل، والمتابعة.',
-                        'icon' => 'document',
-                        'links' => [
-                            ['label' => 'Open Contracts', 'route' => 'workspace.contracts.index', 'active' => 'workspace.contracts.*'],
                         ],
                     ],
                     [
@@ -121,7 +114,6 @@
                     'wallet' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M2.25 7.5A2.25 2.25 0 0 1 4.5 5.25h15A2.25 2.25 0 0 1 21.75 7.5v9A2.25 2.25 0 0 1 19.5 18.75h-15A2.25 2.25 0 0 1 2.25 16.5v-9Zm15.75 4.5h3.75v3H18a1.5 1.5 0 0 1 0-3Z" />',
                     'id-card' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h12A2.25 2.25 0 0 1 20.25 6v12A2.25 2.25 0 0 1 18 20.25H6A2.25 2.25 0 0 1 3.75 18V6Zm4.5 3.75a2.25 2.25 0 1 0 4.5 0 2.25 2.25 0 0 0-4.5 0Zm-.75 6h6m1.5-6h2.25m-2.25 3h2.25m-2.25 3h2.25" />',
                     'bank' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M3 9.75 12 4.5l9 5.25M4.5 10.5V18m5.25-7.5V18m5.25-7.5V18m5.25-7.5V18M3 21h18" />',
-                    'document' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M6.75 3.75h7.5l3 3V20.25a1.5 1.5 0 0 1-1.5 1.5h-9a1.5 1.5 0 0 1-1.5-1.5V5.25a1.5 1.5 0 0 1 1.5-1.5Zm7.5 0V7.5h3" />',
                     'calendar' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M7.5 2.25v3m9-3v3m-12 3h15m-15 0V19.5a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V8.25m-15 0A1.5 1.5 0 0 1 6 6.75h12a1.5 1.5 0 0 1 1.5 1.5" />',
                     'spark' => '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M12 3.75 13.9 8.1 18.25 10l-4.35 1.9L12 16.25l-1.9-4.35L5.75 10l4.35-1.9L12 3.75Zm6.75 12.75 1.125 2.625L22.5 20.25l-2.625 1.125L18.75 24l-1.125-2.625L15 20.25l2.625-1.125L18.75 16.5Z" />',
                 ];
