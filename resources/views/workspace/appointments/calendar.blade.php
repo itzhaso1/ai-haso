@@ -36,8 +36,13 @@
         <template x-if="loading">
             <div class="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">جاري تحميل المواعيد...</div>
         </template>
+        <template x-if="!loading && errorMessage">
+            <div class="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+                <p x-text="errorMessage"></p>
+            </div>
+        </template>
 
-        <template x-if="!loading && mode === 'day'">
+        <template x-if="!loading && !errorMessage && mode === 'day'">
             <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <h3 class="mb-3 text-sm font-bold text-slate-900">مواعيد اليوم حسب الموظف</h3>
                 <div class="overflow-x-auto">
@@ -62,7 +67,7 @@
             </div>
         </template>
 
-        <template x-if="!loading && mode === 'week'">
+        <template x-if="!loading && !errorMessage && mode === 'week'">
             <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <h3 class="mb-3 text-sm font-bold text-slate-900">Week View حسب الموظف</h3>
                 <div class="overflow-x-auto">
@@ -94,7 +99,7 @@
             </div>
         </template>
 
-        <template x-if="!loading && mode === 'month'">
+        <template x-if="!loading && !errorMessage && mode === 'month'">
             <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div class="mb-2 grid grid-cols-7 gap-2 text-center text-xs font-bold text-slate-500">
                     <span>الأحد</span><span>الاثنين</span><span>الثلاثاء</span><span>الأربعاء</span><span>الخميس</span><span>الجمعة</span><span>السبت</span>
@@ -126,19 +131,30 @@
                 staffId: '',
                 loading: false,
                 events: [],
+                errorMessage: '',
                 init() {
                     this.load();
                 },
                 async load() {
                     this.loading = true;
+                    this.errorMessage = '';
                     const params = new URLSearchParams({ view: this.mode, date: this.date });
                     if (this.staffId) {
                         params.set('staff_id', this.staffId);
                     }
-                    const response = await fetch(`${this.endpoint}?${params.toString()}`);
-                    const payload = await response.json();
-                    this.events = Array.isArray(payload.data) ? payload.data : [];
-                    this.loading = false;
+                    try {
+                        const response = await fetch(`${this.endpoint}?${params.toString()}`);
+                        if (!response.ok) {
+                            throw new Error(`HTTP_${response.status}`);
+                        }
+                        const payload = await response.json();
+                        this.events = Array.isArray(payload.data) ? payload.data : [];
+                    } catch (error) {
+                        this.events = [];
+                        this.errorMessage = 'تعذر تحميل بيانات التقويم حاليًا. حاول تحديث الصفحة أو تغيير الفلتر.';
+                    } finally {
+                        this.loading = false;
+                    }
                 },
                 bookingUrl(id) {
                     return `{{ url('/workspace/appointments/bookings') }}/${id}`;

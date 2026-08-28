@@ -54,6 +54,18 @@ class ModulePageController extends AppointmentsBaseController
         $pendingRequests = AppointmentRequest::query()
             ->whereIn('status', ['new', 'reviewing', 'awaiting_customer'])
             ->count();
+        $needsConfirmationCount = AppointmentBooking::query()
+            ->whereBetween('starts_at', [$todayStartUtc, $todayEndUtc])
+            ->where('appointment_status', 'scheduled')
+            ->count();
+        $inProgressCount = AppointmentBooking::query()
+            ->whereBetween('starts_at', [$todayStartUtc, $todayEndUtc])
+            ->where('appointment_status', 'in_progress')
+            ->count();
+        $unpaidTodayCount = AppointmentBooking::query()
+            ->whereBetween('starts_at', [$todayStartUtc, $todayEndUtc])
+            ->whereIn('payment_status', ['unpaid', 'pending', 'partially_paid'])
+            ->count();
 
         $upcoming = AppointmentBooking::query()
             ->where('starts_at', '>=', now('UTC'))
@@ -101,6 +113,9 @@ class ModulePageController extends AppointmentsBaseController
                 'today' => $bookingsToday,
                 'pending_requests' => $pendingRequests,
                 'upcoming' => $upcoming,
+                'needs_confirmation' => $needsConfirmationCount,
+                'in_progress' => $inProgressCount,
+                'confirmed' => (int) ($todayByStatus['confirmed'] ?? 0),
                 'completed' => (int) ($todayByStatus['completed'] ?? 0),
                 'cancelled' => (int) ($todayByStatus['cancelled'] ?? 0),
                 'no_show' => $noShowCount,
@@ -116,6 +131,11 @@ class ModulePageController extends AppointmentsBaseController
                 'new' => $newRequestsCount,
                 'awaiting_customer' => $awaitingCustomerCount,
                 'needs_attention' => $pendingRequests,
+            ],
+            'attentionCards' => [
+                'waiting_requests' => $pendingRequests,
+                'unpaid_bookings' => $unpaidTodayCount,
+                'needs_confirmation' => $needsConfirmationCount,
             ],
             'latestBookings' => $latestBookings,
             'latestRequests' => $latestRequests,
@@ -137,6 +157,7 @@ class ModulePageController extends AppointmentsBaseController
             'to_date' => trim((string) $request->string('to_date')),
             'status' => trim((string) $request->string('status')),
             'payment_status' => trim((string) $request->string('payment_status')),
+            'payment_bucket' => trim((string) $request->string('payment_bucket')),
             'staff_id' => $request->integer('staff_id') ?: null,
             'service_id' => $request->integer('service_id') ?: null,
             'source' => trim((string) $request->string('source')),
@@ -150,12 +171,31 @@ class ModulePageController extends AppointmentsBaseController
 
         $bookings = $this->appointmentService->listBookings($filters, 20);
         $stats = $this->bookingStats($timezone);
+        $activeFiltersCount = collect([
+            $filters['search'] ?? '',
+            $filters['date'] ?? '',
+            $filters['from_date'] ?? '',
+            $filters['to_date'] ?? '',
+            $filters['status'] ?? '',
+            $filters['payment_status'] ?? '',
+            $filters['payment_bucket'] ?? '',
+            $filters['staff_id'] ?? null,
+            $filters['service_id'] ?? null,
+            $filters['source'] ?? '',
+        ])->filter(function ($value): bool {
+            if (is_numeric($value)) {
+                return (int) $value > 0;
+            }
+
+            return trim((string) $value) !== '';
+        })->count();
 
         return view('workspace.appointments.bookings.index', [
             'timezone' => $timezone,
             'filters' => $filters,
             'bookings' => $bookings,
             'bookingStats' => $stats,
+            'activeFiltersCount' => $activeFiltersCount,
             'allServices' => AppointmentServiceModel::query()->orderBy('name')->get(['id', 'name', 'duration_minutes']),
             'allStaff' => AppointmentStaff::query()->orderBy('name')->get(['id', 'name']),
             'allResources' => AppointmentResource::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
@@ -258,10 +298,17 @@ class ModulePageController extends AppointmentsBaseController
             $filters['staff_user_id'] = (int) optional($request->user())->id;
         }
 
+        $requestSummary = AppointmentRequest::query()
+            ->selectRaw('status, COUNT(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status')
+            ->all();
+
         return view('workspace.appointments.requests.index', [
             'timezone' => $timezone,
             'filters' => $filters,
             'appointmentRequests' => $this->appointmentRequestService->listRequests($filters, 20),
+            'requestSummary' => $requestSummary,
             'allServices' => AppointmentServiceModel::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'allStaff' => AppointmentStaff::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'customers' => Customer::query()->orderBy('name')->limit(200)->get(['id', 'name', 'phone']),
@@ -604,8 +651,16 @@ class ModulePageController extends AppointmentsBaseController
         $completed = AppointmentBooking::query()->where('appointment_status', 'completed')->count();
         $cancelled = AppointmentBooking::query()->where('appointment_status', 'cancelled')->count();
         $noShow = AppointmentBooking::query()->where('appointment_status', 'no_show')->count();
+        $needsConfirmation = AppointmentBooking::query()
+            ->where('appointment_status', 'scheduled')
+            ->where('starts_at', '>=', $nowUtc)
+            ->count();
+        $paymentAttention = AppointmentBooking::query()
+            ->whereIn('payment_status', ['unpaid', 'pending', 'partially_paid'])
+            ->whereIn('appointment_status', ['scheduled', 'confirmed', 'checked_in', 'in_progress'])
+            ->count();
 
-        return compact('today', 'upcoming', 'completed', 'cancelled', 'noShow');
+        return compact('today', 'upcoming', 'needsConfirmation', 'completed', 'cancelled', 'noShow', 'paymentAttention');
     }
 
     /**

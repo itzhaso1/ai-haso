@@ -2,34 +2,42 @@
 
 @section('content')
     <div class="space-y-6">
-        <section class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <section class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <p class="text-xs text-slate-500">مواعيد اليوم</p>
+                <p class="text-xs text-slate-500">Today - Total</p>
                 <p class="mt-2 text-2xl font-bold text-slate-900">{{ number_format((int) $todayCards['today']) }}</p>
             </article>
-            <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <p class="text-xs text-slate-500">طلبات بانتظار المعالجة</p>
-                <p class="mt-2 text-2xl font-bold text-amber-600">{{ number_format((int) $todayCards['pending_requests']) }}</p>
+            <article class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+                <p class="text-xs text-emerald-700">Confirmed</p>
+                <p class="mt-2 text-2xl font-bold text-emerald-800">{{ number_format((int) $todayCards['confirmed']) }}</p>
+            </article>
+            <article class="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+                <p class="text-xs text-amber-700">Waiting confirmation</p>
+                <p class="mt-2 text-2xl font-bold text-amber-800">{{ number_format((int) $todayCards['needs_confirmation']) }}</p>
+            </article>
+            <article class="rounded-2xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
+                <p class="text-xs text-blue-700">In progress</p>
+                <p class="mt-2 text-2xl font-bold text-blue-800">{{ number_format((int) $todayCards['in_progress']) }}</p>
             </article>
             <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <p class="text-xs text-slate-500">المواعيد القادمة</p>
-                <p class="mt-2 text-2xl font-bold text-blue-600">{{ number_format((int) $todayCards['upcoming']) }}</p>
+                <p class="text-xs text-slate-500">Upcoming</p>
+                <p class="mt-2 text-2xl font-bold text-slate-900">{{ number_format((int) $todayCards['upcoming']) }}</p>
             </article>
-            <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <p class="text-xs text-slate-500">مكتملة اليوم</p>
-                <p class="mt-2 text-2xl font-bold text-emerald-600">{{ number_format((int) $todayCards['completed']) }}</p>
+            <article class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+                <p class="text-xs text-emerald-700">Completed</p>
+                <p class="mt-2 text-2xl font-bold text-emerald-800">{{ number_format((int) $todayCards['completed']) }}</p>
             </article>
-            <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <p class="text-xs text-slate-500">ملغاة اليوم</p>
-                <p class="mt-2 text-2xl font-bold text-rose-600">{{ number_format((int) $todayCards['cancelled']) }}</p>
+            <article class="rounded-2xl border border-rose-200 bg-rose-50 p-4 shadow-sm">
+                <p class="text-xs text-rose-700">Cancelled</p>
+                <p class="mt-2 text-2xl font-bold text-rose-800">{{ number_format((int) $todayCards['cancelled']) }}</p>
             </article>
-            <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <p class="text-xs text-slate-500">لم يحضر</p>
-                <p class="mt-2 text-2xl font-bold text-violet-600">{{ number_format((int) $todayCards['no_show']) }}</p>
+            <article class="rounded-2xl border border-violet-200 bg-violet-50 p-4 shadow-sm">
+                <p class="text-xs text-violet-700">No-show</p>
+                <p class="mt-2 text-2xl font-bold text-violet-800">{{ number_format((int) $todayCards['no_show']) }}</p>
             </article>
         </section>
 
-        <section class="grid gap-4 xl:grid-cols-2">
+        <section class="grid gap-4 xl:grid-cols-3">
             <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <h2 class="mb-3 text-sm font-bold text-slate-900">Payments Today</h2>
                 <div class="grid gap-2 sm:grid-cols-2">
@@ -53,22 +61,23 @@
             </article>
 
             <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h2 class="mb-3 text-sm font-bold text-slate-900">Requests</h2>
+                <h2 class="mb-3 text-sm font-bold text-slate-900">Attention Needed</h2>
                 <div class="grid gap-2 sm:grid-cols-3">
-                    <div class="rounded-xl bg-slate-100 p-3">
-                        <p class="text-xs text-slate-600">New</p>
-                        <p class="text-lg font-bold text-slate-900">{{ number_format((int) $requestCards['new']) }}</p>
-                    </div>
-                    <div class="rounded-xl bg-blue-50 p-3">
-                        <p class="text-xs text-blue-700">Awaiting Customer</p>
-                        <p class="text-lg font-bold text-blue-800">{{ number_format((int) $requestCards['awaiting_customer']) }}</p>
-                    </div>
                     <div class="rounded-xl bg-amber-50 p-3">
-                        <p class="text-xs text-amber-700">Needs Attention</p>
-                        <p class="text-lg font-bold text-amber-800">{{ number_format((int) $requestCards['needs_attention']) }}</p>
+                        <p class="text-xs text-amber-700">طلبات بانتظار المراجعة</p>
+                        <p class="text-lg font-bold text-amber-800">{{ number_format((int) $attentionCards['waiting_requests']) }}</p>
+                    </div>
+                    <div class="rounded-xl bg-rose-50 p-3">
+                        <p class="text-xs text-rose-700">حجوزات غير مدفوعة / قيد الانتظار</p>
+                        <p class="text-lg font-bold text-rose-800">{{ number_format((int) $attentionCards['unpaid_bookings']) }}</p>
+                    </div>
+                    <div class="rounded-xl bg-slate-100 p-3">
+                        <p class="text-xs text-slate-700">مواعيد تحتاج تأكيد</p>
+                        <p class="text-lg font-bold text-slate-800">{{ number_format((int) $attentionCards['needs_confirmation']) }}</p>
                     </div>
                 </div>
-                <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                <h3 class="mb-2 mt-4 text-xs font-bold text-slate-600">Quick Actions</h3>
+                <div class="grid gap-2 sm:grid-cols-2">
                     <a href="{{ route('workspace.appointments.bookings.index') }}" class="rounded-lg border border-slate-300 px-3 py-2 text-center text-xs font-semibold text-slate-700 hover:bg-slate-100">New booking</a>
                     <a href="{{ route('workspace.appointments.requests.index') }}" class="rounded-lg border border-slate-300 px-3 py-2 text-center text-xs font-semibold text-slate-700 hover:bg-slate-100">New request</a>
                     <a href="{{ route('workspace.appointments.calendar.index') }}" class="rounded-lg border border-slate-300 px-3 py-2 text-center text-xs font-semibold text-slate-700 hover:bg-slate-100">Calendar</a>
@@ -77,9 +86,27 @@
             </article>
 
             <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h2 class="mb-3 text-sm font-bold text-slate-900">Requests Snapshot</h2>
+                <div class="space-y-2 text-xs">
+                    <div class="flex items-center justify-between rounded-lg bg-slate-50 p-2">
+                        <span>New</span>
+                        <span class="font-bold">{{ number_format((int) $requestCards['new']) }}</span>
+                    </div>
+                    <div class="flex items-center justify-between rounded-lg bg-slate-50 p-2">
+                        <span>Awaiting customer</span>
+                        <span class="font-bold">{{ number_format((int) $requestCards['awaiting_customer']) }}</span>
+                    </div>
+                    <div class="flex items-center justify-between rounded-lg bg-slate-50 p-2">
+                        <span>Needs attention</span>
+                        <span class="font-bold">{{ number_format((int) $requestCards['needs_attention']) }}</span>
+                    </div>
+                </div>
+            </article>
+
+            <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div class="mb-3 flex items-center justify-between">
-                    <h2 class="text-sm font-bold text-slate-900">حجوزات اليوم</h2>
-                    <a href="{{ route('workspace.appointments.bookings.index') }}" class="text-xs font-semibold text-slate-600 hover:text-slate-900">فتح صفحة الحجوزات</a>
+                    <h2 class="text-sm font-bold text-slate-900">Upcoming appointments</h2>
+                    <a href="{{ route('workspace.appointments.bookings.index', ['from_date' => now($timezone)->toDateString()]) }}" class="text-xs font-semibold text-slate-600 hover:text-slate-900">فتح صفحة الحجوزات</a>
                 </div>
                 <div class="space-y-2">
                     @forelse($latestBookings as $booking)

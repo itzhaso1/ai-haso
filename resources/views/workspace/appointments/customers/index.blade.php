@@ -11,7 +11,7 @@
         </div>
 
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <table class="hidden min-w-full divide-y divide-slate-200 text-sm lg:table">
                 <thead class="bg-slate-50">
                     <tr>
                         <th class="px-2 py-2 text-right">العميل</th>
@@ -55,6 +55,28 @@
                     @endforelse
                 </tbody>
             </table>
+        </div>
+
+        <div class="space-y-2 lg:hidden">
+            @forelse($customers as $customer)
+                @php($lastAppointment = $lastAppointments[$customer->id] ?? null)
+                <article class="rounded-xl border border-slate-200 p-3">
+                    <p class="text-sm font-bold text-slate-900">{{ $customer->name }}</p>
+                    <p class="text-xs text-slate-500">{{ $customer->phone ?: '—' }} @if($customer->email) • {{ $customer->email }} @endif</p>
+                    <div class="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-600">
+                        <p>الحجوزات: <span class="font-semibold">{{ (int) ($bookingCounts[$customer->id] ?? 0) }}</span></p>
+                        <p>القادمة: <span class="font-semibold">{{ (int) ($upcomingCounts[$customer->id] ?? 0) }}</span></p>
+                        <p>المدفوع: <span class="font-semibold">{{ number_format((float) ($invoicePaidTotals[$customer->id] ?? 0), 2) }}</span></p>
+                        <p>المتبقي: <span class="font-semibold">{{ number_format((float) ($outstandingTotals[$customer->id] ?? 0), 2) }}</span></p>
+                    </div>
+                    <p class="mt-1 text-xs text-slate-500">آخر موعد: {{ $lastAppointment ? \Illuminate\Support\Carbon::parse($lastAppointment, 'UTC')->timezone($timezone)->locale('ar')->translatedFormat('j F - g:i A') : '—' }}</p>
+                    <a href="{{ route('workspace.appointments.customers.profile', $customer) }}" class="mt-3 inline-flex rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">فتح الملف</a>
+                </article>
+            @empty
+                <div class="rounded-xl border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">
+                    لا يوجد عملاء بعد.
+                </div>
+            @endforelse
         </div>
 
         <div class="mt-3">{{ $customers->links() }}</div>

@@ -6,6 +6,13 @@
         $paymentStatus = (string) $booking->payment_status;
         $invoicePaid = (float) ($booking->invoice?->amount_paid ?? 0);
         $invoiceDue = (float) ($booking->invoice?->amount_due ?? 0);
+        $detailActionKeys = match ($appointmentStatus) {
+            'scheduled' => ['confirm', 'reschedule', 'cancel', 'reminder', 'payment'],
+            'confirmed' => ['check_in', 'reschedule', 'cancel', 'reminder', 'payment'],
+            'checked_in' => ['start'],
+            'in_progress' => ['complete'],
+            default => [],
+        };
     @endphp
 
     <div class="space-y-4">
@@ -185,46 +192,57 @@
             </section>
 
             <aside class="space-y-4">
-                @if($canManageBookings)
+                @if($canManageBookings || $canManageBilling)
                 <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <h3 class="mb-3 text-sm font-bold text-slate-900">Actions</h3>
                     <div class="space-y-2">
-                        <form method="POST" action="{{ route('workspace.appointments.bookings.status', $booking) }}">
-                            @csrf
-                            <input type="hidden" name="status" value="confirmed">
-                            <button class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">Confirm</button>
-                        </form>
-                        <form method="POST" action="{{ route('workspace.appointments.bookings.status', $booking) }}">
-                            @csrf
-                            <input type="hidden" name="status" value="completed">
-                            <button class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">Mark Completed</button>
-                        </form>
-                        <form method="POST" action="{{ route('workspace.appointments.bookings.status', $booking) }}">
-                            @csrf
-                            <input type="hidden" name="status" value="checked_in">
-                            <button class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">Check-in</button>
-                        </form>
-                        <form method="POST" action="{{ route('workspace.appointments.bookings.status', $booking) }}">
-                            @csrf
-                            <input type="hidden" name="status" value="in_progress">
-                            <button class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">In Progress</button>
-                        </form>
-                        <form method="POST" action="{{ route('workspace.appointments.bookings.status', $booking) }}">
-                            @csrf
-                            <input type="hidden" name="status" value="no_show">
-                            <button class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">Mark No Show</button>
-                        </form>
-                        <form method="POST" action="{{ route('workspace.appointments.bookings.send-reminder', $booking) }}">
-                            @csrf
-                            <button class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">Send Reminder</button>
-                        </form>
-                        <form method="POST" action="{{ route('workspace.appointments.bookings.status', $booking) }}" class="space-y-2">
-                            @csrf
-                            <input type="hidden" name="status" value="cancelled">
-                            <textarea name="cancel_reason" rows="2" placeholder="سبب الإلغاء" class="w-full rounded-lg border-slate-300 text-xs"></textarea>
-                            <button class="w-full rounded-lg border border-rose-300 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50">Cancel</button>
-                        </form>
-                        @if($canManageBilling)
+                        @if($detailActionKeys === [] || (! $canManageBookings && ! in_array('payment', $detailActionKeys, true)))
+                            <p class="text-xs text-slate-500">لا توجد إجراءات تشغيلية متاحة لهذه الحالة.</p>
+                        @endif
+
+                        @if($canManageBookings && in_array('confirm', $detailActionKeys, true))
+                            <form method="POST" action="{{ route('workspace.appointments.bookings.status', $booking) }}">
+                                @csrf
+                                <input type="hidden" name="status" value="confirmed">
+                                <button class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">Confirm</button>
+                            </form>
+                        @endif
+                        @if($canManageBookings && in_array('check_in', $detailActionKeys, true))
+                            <form method="POST" action="{{ route('workspace.appointments.bookings.status', $booking) }}">
+                                @csrf
+                                <input type="hidden" name="status" value="checked_in">
+                                <button class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">Check-in</button>
+                            </form>
+                        @endif
+                        @if($canManageBookings && in_array('start', $detailActionKeys, true))
+                            <form method="POST" action="{{ route('workspace.appointments.bookings.status', $booking) }}">
+                                @csrf
+                                <input type="hidden" name="status" value="in_progress">
+                                <button class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">Start appointment</button>
+                            </form>
+                        @endif
+                        @if($canManageBookings && in_array('complete', $detailActionKeys, true))
+                            <form method="POST" action="{{ route('workspace.appointments.bookings.status', $booking) }}">
+                                @csrf
+                                <input type="hidden" name="status" value="completed">
+                                <button class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">Complete</button>
+                            </form>
+                        @endif
+                        @if($canManageBookings && in_array('reminder', $detailActionKeys, true))
+                            <form method="POST" action="{{ route('workspace.appointments.bookings.send-reminder', $booking) }}">
+                                @csrf
+                                <button class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">Send Reminder</button>
+                            </form>
+                        @endif
+                        @if($canManageBookings && in_array('cancel', $detailActionKeys, true))
+                            <form method="POST" action="{{ route('workspace.appointments.bookings.status', $booking) }}" class="space-y-2">
+                                @csrf
+                                <input type="hidden" name="status" value="cancelled">
+                                <textarea name="cancel_reason" rows="2" placeholder="سبب الإلغاء" class="w-full rounded-lg border-slate-300 text-xs"></textarea>
+                                <button class="w-full rounded-lg border border-rose-300 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50">Cancel</button>
+                            </form>
+                        @endif
+                        @if(in_array('payment', $detailActionKeys, true) && $canManageBilling)
                             @if($booking->payment_link)
                                 <a href="{{ $booking->payment_link }}" target="_blank" class="inline-flex w-full items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">Send Payment Link</a>
                             @else
@@ -238,7 +256,7 @@
                 </article>
                 @endif
 
-                @if($canManageBookings)
+                @if($canManageBookings && in_array('reschedule', $detailActionKeys, true))
                 <article id="reschedule-form" class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <h3 class="mb-3 text-sm font-bold text-slate-900">Reschedule</h3>
                     <form method="POST" action="{{ route('workspace.appointments.bookings.reschedule', $booking) }}" class="space-y-2">

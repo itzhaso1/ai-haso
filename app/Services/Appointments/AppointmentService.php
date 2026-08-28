@@ -633,6 +633,7 @@ class AppointmentService
         $toDate = trim((string) ($filters['to_date'] ?? ''));
         $status = trim((string) ($filters['status'] ?? ''));
         $paymentStatus = trim((string) ($filters['payment_status'] ?? ''));
+        $paymentBucket = trim((string) ($filters['payment_bucket'] ?? ''));
         $staffId = (int) ($filters['staff_id'] ?? 0);
         $staffUserId = (int) ($filters['staff_user_id'] ?? 0);
         $serviceId = (int) ($filters['service_id'] ?? 0);
@@ -651,6 +652,10 @@ class AppointmentService
             ->when($toRange !== null, fn ($query) => $query->where('starts_at', '<=', $toRange['end']))
             ->when($status !== '', fn ($query) => $query->where('appointment_status', $status))
             ->when($paymentStatus !== '', fn ($query) => $query->where('payment_status', $paymentStatus))
+            ->when(
+                $paymentBucket === 'attention',
+                fn ($query) => $query->whereIn('payment_status', ['unpaid', 'pending', 'partially_paid'])
+            )
             ->when($staffId > 0, fn ($query) => $query->where('staff_id', $staffId))
             ->when($staffUserId > 0, fn ($query) => $query->whereHas('staff', fn ($staffQuery) => $staffQuery->where('user_id', $staffUserId)))
             ->when($serviceId > 0, fn ($query) => $query->where('service_id', $serviceId))
