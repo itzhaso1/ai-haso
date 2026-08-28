@@ -5,6 +5,7 @@
         $hours = is_array($businessHours ?? null) ? $businessHours : [];
         $rules = is_array($bookingRules ?? null) ? $bookingRules : [];
         $cancelRules = is_array($cancellationRules ?? null) ? $cancellationRules : [];
+        $channels = is_array($reminderChannels ?? null) ? $reminderChannels : ['in_app'];
     @endphp
 
     <div class="space-y-4">
@@ -17,7 +18,7 @@
                     <div>
                         <label class="mb-1 block text-xs font-semibold text-slate-600">نوع النشاط</label>
                         <select name="business_type" class="w-full rounded-lg border-slate-300 text-sm">
-                            @foreach(['pharmacy' => 'صيدلية', 'clinic' => 'عيادة', 'hospital' => 'مستشفى', 'salon' => 'صالون', 'general' => 'عام', 'other' => 'أخرى'] as $value => $label)
+                            @foreach(['pharmacy' => 'صيدلية', 'clinic' => 'عيادة', 'hospital' => 'مستشفى', 'salon' => 'صالون', 'law_firm' => 'مكتب محاماة', 'consulting' => 'استشارات', 'education' => 'تعليم', 'maintenance' => 'صيانة', 'photography' => 'تصوير', 'training' => 'تدريب', 'general' => 'عام', 'other' => 'أخرى'] as $value => $label)
                                 <option value="{{ $value }}" @selected(($setting?->business_type ?? 'general') === $value)>{{ $label }}</option>
                             @endforeach
                         </select>
@@ -68,6 +69,19 @@
                         <input type="checkbox" name="auto_confirm_after_payment" value="1" @checked(old('auto_confirm_after_payment', $setting?->auto_confirm_after_payment ?? true)) class="rounded border-slate-300">
                         تأكيد الموعد تلقائيًا بعد الدفع
                     </label>
+                </div>
+
+                <div class="rounded-xl border border-slate-200 p-3">
+                    <h3 class="mb-2 text-sm font-bold text-slate-900">قنوات التذكير</h3>
+                    <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                        @foreach(['in_app' => 'داخل النظام', 'email' => 'Email', 'whatsapp' => 'WhatsApp', 'sms' => 'SMS'] as $channel => $label)
+                            <label class="flex items-center gap-2 text-xs text-slate-700">
+                                <input type="checkbox" name="reminder_channels[]" value="{{ $channel }}" @checked(in_array($channel, old('reminder_channels', $channels), true)) class="rounded border-slate-300">
+                                {{ $label }}
+                            </label>
+                        @endforeach
+                    </div>
+                    <p class="mt-2 text-[11px] text-slate-500">لن يتم إرسال WhatsApp/SMS إلا عند توفر مزود فعلي.</p>
                 </div>
 
                 <div class="rounded-xl border border-slate-200 p-3">

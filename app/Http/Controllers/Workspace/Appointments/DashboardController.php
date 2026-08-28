@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Workspace\Appointments;
 
+use App\Models\Appointment\AppointmentBooking;
 use App\Models\Appointment\AppointmentResource;
 use App\Models\Appointment\AppointmentService as AppointmentServiceModel;
 use App\Models\Appointment\AppointmentStaff;
@@ -20,7 +21,7 @@ class DashboardController extends AppointmentsBaseController
         $workspace = $this->currentWorkspace();
 
         $validated = $request->validate([
-            'business_type' => ['required', Rule::in(['pharmacy', 'clinic', 'hospital', 'salon', 'general', 'other'])],
+            'business_type' => ['required', Rule::in(['pharmacy', 'clinic', 'hospital', 'salon', 'law_firm', 'consulting', 'education', 'maintenance', 'photography', 'training', 'general', 'other'])],
             'business_label' => ['nullable', 'string', 'max:255'],
             'timezone' => ['required', 'string', 'max:64'],
             'slot_interval_minutes' => ['required', 'integer', 'min:5', 'max:240'],
@@ -30,6 +31,8 @@ class DashboardController extends AppointmentsBaseController
             'automation_mode' => ['required', Rule::in(['AUTO', 'APPROVAL', 'MANUAL'])],
             'auto_confirm_after_payment' => ['nullable', 'boolean'],
             'reminder_offsets' => ['nullable', 'string', 'max:255'],
+            'reminder_channels' => ['nullable', 'array'],
+            'reminder_channels.*' => ['string', Rule::in(['in_app', 'email', 'whatsapp', 'sms'])],
             'business_hours' => ['nullable', 'array'],
             'business_hours.*.closed' => ['nullable', 'boolean'],
             'business_hours.*.ranges' => ['nullable', 'array'],
@@ -60,6 +63,7 @@ class DashboardController extends AppointmentsBaseController
                 'business_hours' => $validated['business_hours'] ?? [],
                 'booking_rules' => $validated['booking_rules'] ?? [],
                 'cancellation_rules' => $validated['cancellation_rules'] ?? [],
+                'reminder_channels' => $validated['reminder_channels'] ?? ['in_app'],
             ],
         ]);
 
@@ -236,10 +240,14 @@ class DashboardController extends AppointmentsBaseController
             'cancel_reason' => ['nullable', 'string'],
         ]);
 
-        $this->appointmentService->updateBookingStatus($booking, [
-            'appointment_status' => $validated['status'],
-            'cancel_reason' => $validated['cancel_reason'] ?? null,
-        ]);
+        try {
+            $this->appointmentService->updateBookingStatus($booking, [
+                'appointment_status' => $validated['status'],
+                'cancel_reason' => $validated['cancel_reason'] ?? null,
+            ]);
+        } catch (\RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
 
         return back()->with('success', 'تم تحديث حالة الموعد.');
     }

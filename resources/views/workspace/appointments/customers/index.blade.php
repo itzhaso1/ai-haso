@@ -18,7 +18,11 @@
                         <th class="px-2 py-2 text-right">الجوال</th>
                         <th class="px-2 py-2 text-right">البريد</th>
                         <th class="px-2 py-2 text-right">الحجوزات</th>
+                        <th class="px-2 py-2 text-right">القادمة</th>
+                        <th class="px-2 py-2 text-right">آخر موعد</th>
                         <th class="px-2 py-2 text-right">الطلبات</th>
+                        <th class="px-2 py-2 text-right">إجمالي المدفوع</th>
+                        <th class="px-2 py-2 text-right">المتبقي</th>
                         <th class="px-2 py-2 text-right">الإجراءات</th>
                     </tr>
                 </thead>
@@ -29,14 +33,21 @@
                             <td class="px-2 py-2 text-slate-700">{{ $customer->phone ?: '—' }}</td>
                             <td class="px-2 py-2 text-slate-700">{{ $customer->email ?: '—' }}</td>
                             <td class="px-2 py-2 text-slate-700">{{ (int) ($bookingCounts[$customer->id] ?? 0) }}</td>
+                            <td class="px-2 py-2 text-slate-700">{{ (int) ($upcomingCounts[$customer->id] ?? 0) }}</td>
+                            <td class="px-2 py-2 text-xs text-slate-600">
+                                @php($lastAppointment = $lastAppointments[$customer->id] ?? null)
+                                {{ $lastAppointment ? \Illuminate\Support\Carbon::parse($lastAppointment, 'UTC')->timezone($timezone)->locale('ar')->translatedFormat('j F - g:i A') : '—' }}
+                            </td>
                             <td class="px-2 py-2 text-slate-700">{{ (int) ($requestCounts[$customer->id] ?? 0) }}</td>
+                            <td class="px-2 py-2 text-slate-700">{{ number_format((float) ($invoicePaidTotals[$customer->id] ?? 0), 2) }}</td>
+                            <td class="px-2 py-2 text-slate-700">{{ number_format((float) ($outstandingTotals[$customer->id] ?? 0), 2) }}</td>
                             <td class="px-2 py-2">
                                 <a href="{{ route('workspace.appointments.customers.profile', $customer) }}" class="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">فتح الملف</a>
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="px-4 py-10 text-center">
+                            <td colspan="10" class="px-4 py-10 text-center">
                                 <p class="text-sm font-semibold text-slate-700">لا يوجد عملاء</p>
                                 <p class="mt-1 text-xs text-slate-500">عند إضافة أول عميل سيظهر هنا مع تاريخه في المواعيد.</p>
                             </td>

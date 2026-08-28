@@ -3,6 +3,7 @@
 namespace Tests\Feature\Feature\Appointments;
 
 use App\Models\Appointment\AppointmentBooking;
+use App\Models\Appointment\AppointmentReminder;
 use App\Models\Appointment\AppointmentRequest;
 use App\Models\Appointment\AppointmentService;
 use App\Models\Appointment\AppointmentSetting;
@@ -12,8 +13,10 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Appointments\AppointmentAiActionService;
 use App\Services\Appointments\AppointmentBillingService;
+use App\Services\Appointments\AppointmentReminderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use RuntimeException;
 use Tests\TestCase;
 
 class AppointmentModuleTest extends TestCase
@@ -356,6 +359,123 @@ class AppointmentModuleTest extends TestCase
             ->get(route('workspace.appointments.settings.index'))
             ->assertOk()
             ->assertSee('Settings');
+    }
+
+    public function test_reschedule_booking_prevents_staff_conflict(): void
+    {
+        [$owner, $workspace] = $this->createWorkspaceOwner('company');
+
+        $service = AppointmentService::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'جلسة متابعة',
+            'duration_minutes' => 30,
+            'price' => 0,
+            'is_active' => true,
+        ]);
+        $staff = AppointmentStaff::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'موظف 1',
+            'is_active' => true,
+        ]);
+
+        $day = Carbon::now('Asia/Riyadh')->next(Carbon::MONDAY);
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.appointments.bookings.store'), [
+                'service_id' => $service->id,
+                'staff_id' => $staff->id,
+                'customer_name' => 'عميل أول',
+                'customer_phone' => '0501234567',
+                'starts_at' => $day->copy()->setTime(10, 0)->toDateTimeString(),
+                'status' => 'scheduled',
+                'source' => 'dashboard',
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.appointments.bookings.store'), [
+                'service_id' => $service->id,
+                'staff_id' => $staff->id,
+                'customer_name' => 'عميل ثاني',
+                'customer_phone' => '0501234568',
+                'starts_at' => $day->copy()->setTime(11, 0)->toDateTimeString(),
+                'status' => 'scheduled',
+                'source' => 'dashboard',
+            ])
+            ->assertRedirect();
+
+        $bookingToMove = AppointmentBooking::query()->orderByDesc('id')->firstOrFail();
+        $response = $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.appointments.bookings.reschedule', $bookingToMove), [
+                'starts_at' => $day->copy()->setTime(10, 15)->toDateTimeString(),
+                'staff_id' => $staff->id,
+                'reason' => 'اختبار منع التعارض',
+            ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHas('error');
+    }
+
+    public function test_reminder_scheduling_is_idempotent_for_same_booking_slot(): void
+    {
+        [$owner, $workspace] = $this->createWorkspaceOwner('company');
+        $service = AppointmentService::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'خدمة تذكير',
+            'duration_minutes' => 30,
+            'price' => 0,
+            'is_active' => true,
+        ]);
+        $booking = AppointmentBooking::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'booking_number' => 'APT-20300101-0009',
+            'service_id' => $service->id,
+            'customer_name' => 'عميل التذكير',
+            'starts_at' => Carbon::now('UTC')->addDays(2),
+            'ends_at' => Carbon::now('UTC')->addDays(2)->addMinutes(30),
+            'status' => 'scheduled',
+            'appointment_status' => 'scheduled',
+            'payment_status' => 'unpaid',
+            'source' => 'dashboard',
+            'source_channel' => 'dashboard',
+            'booked_by' => $owner->id,
+        ]);
+
+        $serviceObj = app(AppointmentReminderService::class);
+        $serviceObj->scheduleForBooking($booking, ['in_app'], [120]);
+        $serviceObj->scheduleForBooking($booking, ['in_app'], [120]);
+
+        $this->assertSame(1, AppointmentReminder::withoutGlobalScopes()->where('booking_id', $booking->id)->count());
+    }
+
+    public function test_ai_create_booking_is_blocked_in_approval_mode(): void
+    {
+        [$owner, $workspace] = $this->createWorkspaceOwner('company');
+        AppointmentSetting::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'business_type' => 'general',
+            'business_label' => 'Workspace',
+            'timezone' => 'Asia/Riyadh',
+            'slot_interval_minutes' => 30,
+            'start_hour' => '08:00:00',
+            'end_hour' => '22:00:00',
+            'allow_walk_in' => true,
+            'automation_mode' => 'APPROVAL',
+            'auto_confirm_after_payment' => true,
+            'reminder_offsets' => [1440, 120],
+            'metadata' => [],
+        ]);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('APPROVAL');
+        app(AppointmentAiActionService::class)->execute(
+            workspace: $workspace,
+            action: 'create_booking',
+            payload: [],
+            actor: $owner
+        );
     }
 
     /**

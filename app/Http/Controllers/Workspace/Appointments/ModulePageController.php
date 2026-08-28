@@ -6,12 +6,14 @@ use App\Models\Appointment\AppointmentBooking;
 use App\Models\Appointment\AppointmentRequest;
 use App\Models\Appointment\AppointmentRequestSlot;
 use App\Models\Appointment\AppointmentResource;
+use App\Models\Appointment\AppointmentReminder;
 use App\Models\Appointment\AppointmentService as AppointmentServiceModel;
 use App\Models\Appointment\AppointmentSetting;
 use App\Models\Appointment\AppointmentStaff;
 use App\Models\AuditLog;
 use App\Models\Customer;
 use App\Models\Finance\FinanceInvoice;
+use App\Models\Finance\FinanceInvoicePayment;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\WorkspaceUser;
@@ -62,6 +64,22 @@ class ModulePageController extends AppointmentsBaseController
             ->whereBetween('starts_at', [$todayStartUtc, $todayEndUtc])
             ->where('appointment_status', 'no_show')
             ->count();
+        $paymentByStatus = AppointmentBooking::query()
+            ->selectRaw('payment_status, COUNT(*) as total')
+            ->whereBetween('starts_at', [$todayStartUtc, $todayEndUtc])
+            ->groupBy('payment_status')
+            ->pluck('total', 'payment_status')
+            ->all();
+        $todayInvoiceIds = AppointmentBooking::query()
+            ->whereBetween('starts_at', [$todayStartUtc, $todayEndUtc])
+            ->whereNotNull('finance_invoice_id')
+            ->pluck('finance_invoice_id')
+            ->all();
+        $revenueToday = $todayInvoiceIds === [] ? 0.0 : (float) FinanceInvoice::query()
+            ->whereIn('id', $todayInvoiceIds)
+            ->sum('amount_paid');
+        $newRequestsCount = AppointmentRequest::query()->where('status', 'new')->count();
+        $awaitingCustomerCount = AppointmentRequest::query()->where('status', 'awaiting_customer')->count();
 
         $latestBookings = AppointmentBooking::query()
             ->with(['service:id,name', 'staff:id,name'])
@@ -88,6 +106,17 @@ class ModulePageController extends AppointmentsBaseController
                 'no_show' => $noShowCount,
             ],
             'todayByStatus' => $todayByStatus,
+            'paymentCards' => [
+                'paid' => (int) ($paymentByStatus['paid'] ?? 0),
+                'pending' => (int) ($paymentByStatus['pending'] ?? 0),
+                'unpaid' => (int) ($paymentByStatus['unpaid'] ?? 0),
+                'revenue' => $revenueToday,
+            ],
+            'requestCards' => [
+                'new' => $newRequestsCount,
+                'awaiting_customer' => $awaitingCustomerCount,
+                'needs_attention' => $pendingRequests,
+            ],
             'latestBookings' => $latestBookings,
             'latestRequests' => $latestRequests,
             'statusLabels' => $this->appointmentStatusLabels(),
@@ -103,7 +132,9 @@ class ModulePageController extends AppointmentsBaseController
         $timezone = $this->appointmentService->workspaceTimezone($workspace->id, $setting);
 
         $filters = [
-            'date' => trim((string) $request->string('date', now($timezone)->toDateString())),
+            'date' => trim((string) $request->string('date')),
+            'from_date' => trim((string) $request->string('from_date')),
+            'to_date' => trim((string) $request->string('to_date')),
             'status' => trim((string) $request->string('status')),
             'payment_status' => trim((string) $request->string('payment_status')),
             'staff_id' => $request->integer('staff_id') ?: null,
@@ -152,12 +183,32 @@ class ModulePageController extends AppointmentsBaseController
             'request.slots',
             'resources',
             'booker',
-            'invoice',
+            'invoice.payments',
             'order',
             'latestPayment',
         ]);
 
         $timezone = $this->appointmentService->workspaceTimezone($booking->workspace_id);
+        $customerUpcomingBookings = collect();
+        $customerPastBookings = collect();
+        $lastCustomerAppointment = null;
+        if ($booking->customer_id) {
+            $customerUpcomingBookings = AppointmentBooking::query()
+                ->where('customer_id', $booking->customer_id)
+                ->where('starts_at', '>=', now('UTC'))
+                ->where('id', '!=', $booking->id)
+                ->orderBy('starts_at')
+                ->limit(5)
+                ->get(['id', 'booking_number', 'starts_at', 'appointment_status']);
+            $customerPastBookings = AppointmentBooking::query()
+                ->where('customer_id', $booking->customer_id)
+                ->where('starts_at', '<', now('UTC'))
+                ->where('id', '!=', $booking->id)
+                ->orderByDesc('starts_at')
+                ->limit(5)
+                ->get(['id', 'booking_number', 'starts_at', 'appointment_status']);
+            $lastCustomerAppointment = $customerPastBookings->first();
+        }
 
         return view('workspace.appointments.bookings.show', [
             'booking' => $booking,
@@ -166,6 +217,10 @@ class ModulePageController extends AppointmentsBaseController
             'paymentStatusLabels' => $this->paymentStatusLabels(),
             'sourceLabels' => $this->sourceLabels(),
             'timelineEntries' => $this->buildBookingTimeline($booking),
+            'customerUpcomingBookings' => $customerUpcomingBookings,
+            'customerPastBookings' => $customerPastBookings,
+            'lastCustomerAppointment' => $lastCustomerAppointment,
+            'allStaff' => AppointmentStaff::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'canManageBookings' => $this->hasPermission($request, 'appointments.manage'),
             'canManageBilling' => $this->hasPermission($request, 'appointments.billing.manage'),
             'canManageRequests' => $this->hasPermission($request, 'appointments.requests.manage'),
@@ -181,6 +236,7 @@ class ModulePageController extends AppointmentsBaseController
         return view('workspace.appointments.calendar', [
             'timezone' => $timezone,
             'defaultDate' => now($timezone)->toDateString(),
+            'allStaff' => AppointmentStaff::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
         ]);
     }
 
@@ -259,6 +315,20 @@ class ModulePageController extends AppointmentsBaseController
             ->groupBy('customer_id')
             ->pluck('total', 'customer_id')
             ->all();
+        $upcomingCounts = AppointmentBooking::query()
+            ->selectRaw('customer_id, COUNT(*) as total')
+            ->whereIn('customer_id', $customerIds)
+            ->where('starts_at', '>=', now('UTC'))
+            ->whereIn('appointment_status', ['scheduled', 'confirmed', 'checked_in', 'in_progress'])
+            ->groupBy('customer_id')
+            ->pluck('total', 'customer_id')
+            ->all();
+        $lastAppointments = AppointmentBooking::query()
+            ->selectRaw('customer_id, MAX(starts_at) as last_starts_at')
+            ->whereIn('customer_id', $customerIds)
+            ->groupBy('customer_id')
+            ->pluck('last_starts_at', 'customer_id')
+            ->all();
 
         $requestCounts = AppointmentRequest::query()
             ->selectRaw('customer_id, COUNT(*) as total')
@@ -266,12 +336,29 @@ class ModulePageController extends AppointmentsBaseController
             ->groupBy('customer_id')
             ->pluck('total', 'customer_id')
             ->all();
+        $invoicePaidTotals = FinanceInvoice::query()
+            ->selectRaw('customer_id, SUM(amount_paid) as total_paid')
+            ->whereIn('customer_id', $customerIds)
+            ->groupBy('customer_id')
+            ->pluck('total_paid', 'customer_id')
+            ->all();
+        $outstandingTotals = FinanceInvoice::query()
+            ->selectRaw('customer_id, SUM(amount_due) as total_due')
+            ->whereIn('customer_id', $customerIds)
+            ->groupBy('customer_id')
+            ->pluck('total_due', 'customer_id')
+            ->all();
 
         return view('workspace.appointments.customers.index', [
             'customers' => $customers,
             'search' => $search,
             'bookingCounts' => $bookingCounts,
+            'upcomingCounts' => $upcomingCounts,
+            'lastAppointments' => $lastAppointments,
             'requestCounts' => $requestCounts,
+            'invoicePaidTotals' => $invoicePaidTotals,
+            'outstandingTotals' => $outstandingTotals,
+            'timezone' => $this->appointmentService->workspaceTimezone(),
         ]);
     }
 
@@ -286,12 +373,14 @@ class ModulePageController extends AppointmentsBaseController
         $businessHours = $metadata['business_hours'] ?? [];
         $bookingRules = $metadata['booking_rules'] ?? [];
         $cancellationRules = $metadata['cancellation_rules'] ?? [];
+        $reminderChannels = is_array($metadata['reminder_channels'] ?? null) ? $metadata['reminder_channels'] : ['in_app'];
 
         return view('workspace.appointments.settings.index', [
             'setting' => $setting,
             'businessHours' => $businessHours,
             'bookingRules' => $bookingRules,
             'cancellationRules' => $cancellationRules,
+            'reminderChannels' => $reminderChannels,
             'services' => AppointmentServiceModel::query()
                 ->with('staffMembers:id,name')
                 ->latest('id')
@@ -402,12 +491,34 @@ class ModulePageController extends AppointmentsBaseController
         }
         if ($booking->finance_invoice_id) {
             $entityMap[FinanceInvoice::class] = ['id' => $booking->finance_invoice_id, 'label' => 'الفاتورة'];
+            $invoicePaymentIds = FinanceInvoicePayment::query()
+                ->where('invoice_id', $booking->finance_invoice_id)
+                ->pluck('id')
+                ->all();
+            foreach ($invoicePaymentIds as $invoicePaymentId) {
+                $entityMap[FinanceInvoicePayment::class.'#'.$invoicePaymentId] = [
+                    'id' => $invoicePaymentId,
+                    'label' => 'دفعة الفاتورة',
+                    'entity_type' => FinanceInvoicePayment::class,
+                ];
+            }
         }
         if ($booking->order_id) {
             $entityMap[Order::class] = ['id' => $booking->order_id, 'label' => 'طلب الدفع'];
         }
         if ($booking->latest_payment_id) {
             $entityMap[Payment::class] = ['id' => $booking->latest_payment_id, 'label' => 'الدفع'];
+        }
+        $reminderIds = AppointmentReminder::query()
+            ->where('booking_id', $booking->id)
+            ->pluck('id')
+            ->all();
+        foreach ($reminderIds as $reminderId) {
+            $entityMap[AppointmentReminder::class.'#'.$reminderId] = [
+                'id' => $reminderId,
+                'label' => 'التذكير',
+                'entity_type' => AppointmentReminder::class,
+            ];
         }
 
         $logs = AuditLog::query()
@@ -517,6 +628,8 @@ class ModulePageController extends AppointmentsBaseController
             FinanceInvoice::class => 'الفاتورة',
             Order::class => 'طلب الدفع',
             Payment::class => 'الدفعة',
+            FinanceInvoicePayment::class => 'دفعة الفاتورة',
+            AppointmentReminder::class => 'تذكير الموعد',
             default => 'العنصر',
         };
 

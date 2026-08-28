@@ -19,13 +19,6 @@ class AppointmentAiActionController extends Controller
 
     public function execute(Request $request): JsonResponse
     {
-        abort_unless(
-            $request->user()?->can('appointments.manage')
-            || $request->user()?->can('appointments.requests.manage')
-            || $request->user()?->can('workspace.manage'),
-            403
-        );
-
         $validated = $request->validate([
             'action' => ['required', 'string', Rule::in(AppointmentAiActionService::ALLOWED_ACTIONS)],
             'payload' => ['nullable', 'array'],
@@ -34,10 +27,14 @@ class AppointmentAiActionController extends Controller
 
         $workspace = $this->workspaceResolverService->resolveFromRequest($request, $request->user());
         abort_unless($workspace, 422, 'لا يمكن تحديد مساحة العمل.');
+        $this->assertActionPermission($request, (string) $validated['action']);
 
         $conversation = null;
         if (! empty($validated['conversation_id'])) {
-            $conversation = Conversation::query()->whereKey((int) $validated['conversation_id'])->first();
+            $conversation = Conversation::query()
+                ->whereKey((int) $validated['conversation_id'])
+                ->where('workspace_id', $workspace->id)
+                ->first();
         }
 
         $result = $this->appointmentAiActionService->execute(
@@ -49,5 +46,42 @@ class AppointmentAiActionController extends Controller
         );
 
         return response()->json(['data' => $result]);
+    }
+
+    private function assertActionPermission(Request $request, string $action): void
+    {
+        $user = $request->user();
+        abort_unless($user, 403);
+
+        $permissionMap = [
+            'create_appointment_request' => ['appointments.requests.manage', 'appointments.manage'],
+            'get_appointment_request' => ['appointments.requests.view', 'appointments.view'],
+            'suggest_slots' => ['appointments.requests.manage'],
+            'select_slot' => ['appointments.requests.manage'],
+            'approve_request' => ['appointments.requests.manage'],
+            'reject_request' => ['appointments.requests.manage'],
+            'create_booking' => ['appointments.manage'],
+            'get_booking' => ['appointments.view'],
+            'get_appointment' => ['appointments.view'],
+            'request_reschedule' => ['appointments.requests.manage'],
+            'request_cancellation' => ['appointments.requests.manage'],
+            'send_payment_link' => ['appointments.billing.manage'],
+            'send_confirmation' => ['appointments.manage'],
+            'send_reminder' => ['appointments.manage'],
+            'create_customer' => ['appointments.manage', 'appointments.requests.manage'],
+            'get_customer' => ['appointments.view', 'appointments.requests.view'],
+            'update_customer' => ['appointments.manage', 'appointments.requests.manage'],
+        ];
+
+        $allowedPermissions = $permissionMap[$action] ?? ['appointments.manage'];
+        $allowed = $user->can('workspace.manage');
+        foreach ($allowedPermissions as $permission) {
+            if ($user->can($permission)) {
+                $allowed = true;
+                break;
+            }
+        }
+
+        abort_unless($allowed, 403, 'ليس لديك صلاحية تنفيذ هذا الإجراء.');
     }
 }

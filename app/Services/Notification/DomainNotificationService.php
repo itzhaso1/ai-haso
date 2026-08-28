@@ -7,6 +7,7 @@ use App\Models\Appointment\AppointmentRequest;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
+use App\Notifications\AppointmentCustomerReminderNotification;
 use App\Notifications\AppointmentLifecycleNotification;
 use App\Notifications\AppointmentRequestNotification;
 use App\Notifications\LowStockNotification;
@@ -47,7 +48,7 @@ class DomainNotificationService
     public function notifyAppointmentRequestCreated(AppointmentRequest $request): void
     {
         $recipients = $request->workspace->users()
-            ->wherePivotIn('membership_role', ['owner', 'admin', 'manager', 'agent'])
+            ->wherePivotIn('membership_role', ['owner', 'admin', 'manager', 'agent', 'receptionist', 'staff_doctor'])
             ->wherePivot('status', 'active')
             ->get();
 
@@ -57,10 +58,23 @@ class DomainNotificationService
         }
     }
 
+    public function notifyAppointmentRequestStatusChanged(AppointmentRequest $request, string $title, string $message): void
+    {
+        $recipients = $request->workspace->users()
+            ->wherePivotIn('membership_role', ['owner', 'admin', 'manager', 'agent', 'receptionist', 'staff_doctor'])
+            ->wherePivot('status', 'active')
+            ->get();
+
+        /** @var User $recipient */
+        foreach ($recipients as $recipient) {
+            $recipient->notify(new AppointmentRequestNotification($request, $title, $message));
+        }
+    }
+
     public function notifyAppointmentBookingStatusChanged(AppointmentBooking $booking, string $title, string $message): void
     {
         $recipients = $booking->workspace->users()
-            ->wherePivotIn('membership_role', ['owner', 'admin', 'manager', 'agent'])
+            ->wherePivotIn('membership_role', ['owner', 'admin', 'manager', 'agent', 'receptionist', 'staff_doctor', 'accountant'])
             ->wherePivot('status', 'active')
             ->get();
 
@@ -68,5 +82,25 @@ class DomainNotificationService
         foreach ($recipients as $recipient) {
             $recipient->notify(new AppointmentLifecycleNotification($booking, $title, $message));
         }
+    }
+
+    public function notifyAppointmentReminderDue(AppointmentBooking $booking, string $title): void
+    {
+        $this->notifyAppointmentBookingStatusChanged(
+            booking: $booking,
+            title: $title,
+            message: 'الموعد قريب. الرجاء المتابعة مع العميل وتجهيز الخدمة.'
+        );
+    }
+
+    public function notifyAppointmentReminderByEmail(AppointmentBooking $booking): void
+    {
+        $booking->loadMissing('service');
+        if (! filled($booking->customer_email)) {
+            return;
+        }
+
+        \Illuminate\Support\Facades\Notification::route('mail', (string) $booking->customer_email)
+            ->notify(new AppointmentCustomerReminderNotification($booking));
     }
 }

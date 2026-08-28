@@ -32,8 +32,10 @@
                     <a href="{{ route('workspace.appointments.calendar.index') }}" class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">عرض Calendar</a>
                 </div>
 
-                <form method="GET" action="{{ route('workspace.appointments.bookings.index') }}" class="mb-3 grid gap-2 md:grid-cols-4 xl:grid-cols-7">
+                <form method="GET" action="{{ route('workspace.appointments.bookings.index') }}" class="mb-3 grid gap-2 md:grid-cols-4 xl:grid-cols-8">
                     <input type="date" name="date" value="{{ $filters['date'] }}" class="rounded-lg border-slate-300 text-sm">
+                    <input type="date" name="from_date" value="{{ $filters['from_date'] ?? '' }}" class="rounded-lg border-slate-300 text-sm" placeholder="من">
+                    <input type="date" name="to_date" value="{{ $filters['to_date'] ?? '' }}" class="rounded-lg border-slate-300 text-sm" placeholder="إلى">
 
                     <select name="staff_id" class="rounded-lg border-slate-300 text-sm">
                         <option value="">كل الموظفين</option>
@@ -72,7 +74,7 @@
 
                     <input type="text" name="search" value="{{ $filters['search'] }}" placeholder="بحث بالاسم / الجوال / رقم الحجز" class="rounded-lg border-slate-300 text-sm">
 
-                    <button class="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white md:col-span-2 xl:col-span-7">تطبيق الفلاتر</button>
+                    <button class="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white md:col-span-2 xl:col-span-8">تطبيق الفلاتر</button>
                 </form>
 
                 <div class="overflow-x-auto">
@@ -80,12 +82,15 @@
                         <thead class="bg-slate-50">
                             <tr>
                                 <th class="px-2 py-2 text-right">العميل</th>
+                                <th class="px-2 py-2 text-right">الهاتف</th>
                                 <th class="px-2 py-2 text-right">الخدمة</th>
                                 <th class="px-2 py-2 text-right">الموظف</th>
                                 <th class="px-2 py-2 text-right">التاريخ والوقت</th>
+                                <th class="px-2 py-2 text-right">المدة</th>
                                 <th class="px-2 py-2 text-right">حالة الموعد</th>
                                 <th class="px-2 py-2 text-right">حالة الدفع</th>
                                 <th class="px-2 py-2 text-right">المصدر</th>
+                                <th class="px-2 py-2 text-right">آخر تحديث</th>
                                 <th class="px-2 py-2 text-right">الإجراءات</th>
                             </tr>
                         </thead>
@@ -94,15 +99,16 @@
                                 <tr>
                                     <td class="px-2 py-2">
                                         <p class="font-semibold text-slate-900">{{ $booking->customer_name }}</p>
-                                        <p class="text-xs text-slate-500">{{ $booking->customer_phone }}</p>
                                         <p class="text-[11px] text-slate-400">{{ $booking->booking_number }}</p>
                                     </td>
+                                    <td class="px-2 py-2 text-xs text-slate-600">{{ $booking->customer_phone ?: '—' }}</td>
                                     <td class="px-2 py-2 text-slate-700">{{ $booking->service?->name ?: '—' }}</td>
                                     <td class="px-2 py-2 text-slate-700">{{ $booking->staff?->name ?: 'غير محدد' }}</td>
                                     <td class="px-2 py-2 text-xs text-slate-600">
                                         <p>{{ $booking->starts_at?->timezone($timezone)->locale('ar')->translatedFormat('l، j F') }}</p>
                                         <p>{{ $booking->starts_at?->timezone($timezone)->locale('ar')->translatedFormat('g:i A') }} - {{ $booking->ends_at?->timezone($timezone)->locale('ar')->translatedFormat('g:i A') }}</p>
                                     </td>
+                                    <td class="px-2 py-2 text-xs text-slate-600">{{ max(1, (int) $booking->starts_at?->diffInMinutes($booking->ends_at)) }} دقيقة</td>
                                     <td class="px-2 py-2">
                                         @php($status = (string) $booking->appointment_status)
                                         @include('workspace.appointments.partials.status-badge', [
@@ -128,18 +134,66 @@
                                         ])
                                     </td>
                                     <td class="px-2 py-2 text-xs text-slate-600">{{ $sourceLabels[$booking->source_channel] ?? $booking->source_channel }}</td>
+                                    <td class="px-2 py-2 text-xs text-slate-500">{{ $booking->updated_at?->timezone($timezone)->locale('ar')->translatedFormat('j F - g:i A') }}</td>
                                     <td class="px-2 py-2">
                                         <div class="flex flex-wrap gap-1">
                                             <a href="{{ route('workspace.appointments.bookings.show', $booking) }}" class="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">تفاصيل</a>
+                                            @if($booking->customer_id)
+                                                <a href="{{ route('workspace.appointments.customers.profile', $booking->customer_id) }}" class="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">العميل</a>
+                                            @endif
+                                            @if($canManageBookings)
+                                                <form method="POST" action="{{ route('workspace.appointments.bookings.status', $booking) }}">
+                                                    @csrf
+                                                    <input type="hidden" name="status" value="confirmed">
+                                                    <button class="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">Confirm</button>
+                                                </form>
+                                                <form method="POST" action="{{ route('workspace.appointments.bookings.status', $booking) }}">
+                                                    @csrf
+                                                    <input type="hidden" name="status" value="checked_in">
+                                                    <button class="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">Check-in</button>
+                                                </form>
+                                                <form method="POST" action="{{ route('workspace.appointments.bookings.status', $booking) }}">
+                                                    @csrf
+                                                    <input type="hidden" name="status" value="in_progress">
+                                                    <button class="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">In Progress</button>
+                                                </form>
+                                                <form method="POST" action="{{ route('workspace.appointments.bookings.status', $booking) }}">
+                                                    @csrf
+                                                    <input type="hidden" name="status" value="completed">
+                                                    <button class="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">Complete</button>
+                                                </form>
+                                                <form method="POST" action="{{ route('workspace.appointments.bookings.status', $booking) }}">
+                                                    @csrf
+                                                    <input type="hidden" name="status" value="no_show">
+                                                    <button class="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">No-show</button>
+                                                </form>
+                                                <form method="POST" action="{{ route('workspace.appointments.bookings.status', $booking) }}">
+                                                    @csrf
+                                                    <input type="hidden" name="status" value="cancelled">
+                                                    <button class="rounded-md border border-rose-300 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50">Cancel</button>
+                                                </form>
+                                                <a href="{{ route('workspace.appointments.bookings.show', $booking) }}#reschedule-form" class="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">Reschedule</a>
+                                                <form method="POST" action="{{ route('workspace.appointments.bookings.send-reminder', $booking) }}">
+                                                    @csrf
+                                                    <input type="hidden" name="channel" value="in_app">
+                                                    <input type="hidden" name="minutes_before" value="5">
+                                                    <button class="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">Send Reminder</button>
+                                                </form>
+                                            @endif
                                             @if($canManageBilling && $booking->payment_link)
                                                 <a href="{{ $booking->payment_link }}" target="_blank" class="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">الدفع</a>
+                                            @elseif($canManageBilling)
+                                                <form method="POST" action="{{ route('workspace.appointments.bookings.payment-link', $booking) }}">
+                                                    @csrf
+                                                    <button class="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100">Send Payment Link</button>
+                                                </form>
                                             @endif
                                         </div>
                                     </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="8" class="px-4 py-10 text-center">
+                                    <td colspan="11" class="px-4 py-10 text-center">
                                         <p class="text-sm font-semibold text-slate-700">لا توجد حجوزات مطابقة</p>
                                         <p class="mt-1 text-xs text-slate-500">جرّب تغيير الفلاتر أو أنشئ حجزًا جديدًا.</p>
                                     </td>

@@ -61,10 +61,12 @@ Route::post('/assistant/chat', [AssistantController::class, 'chat'])
     ->middleware('throttle:20,1')
     ->name('assistant.chat');
 
-Route::get('/appointments/portal/{token}', [AppointmentsCustomerPortalController::class, 'show'])->name('appointments.portal.show');
-Route::post('/appointments/portal/{token}/confirm', [AppointmentsCustomerPortalController::class, 'confirmAttendance'])->name('appointments.portal.confirm');
-Route::post('/appointments/portal/{token}/reschedule', [AppointmentsCustomerPortalController::class, 'requestReschedule'])->name('appointments.portal.reschedule');
-Route::post('/appointments/portal/{token}/cancel', [AppointmentsCustomerPortalController::class, 'requestCancellation'])->name('appointments.portal.cancel');
+Route::middleware('throttle:30,1')->group(function (): void {
+    Route::get('/appointments/portal/{token}', [AppointmentsCustomerPortalController::class, 'show'])->name('appointments.portal.show');
+    Route::post('/appointments/portal/{token}/confirm', [AppointmentsCustomerPortalController::class, 'confirmAttendance'])->name('appointments.portal.confirm');
+    Route::post('/appointments/portal/{token}/reschedule', [AppointmentsCustomerPortalController::class, 'requestReschedule'])->name('appointments.portal.reschedule');
+    Route::post('/appointments/portal/{token}/cancel', [AppointmentsCustomerPortalController::class, 'requestCancellation'])->name('appointments.portal.cancel');
+});
 
 Route::middleware(['guest'])->group(function (): void {
     Route::get('/otp/login', [PhoneOtpController::class, 'create'])->name('otp.login');
@@ -248,6 +250,7 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
 
             Route::post('bookings', [AppointmentsDashboardController::class, 'storeBooking'])->name('bookings.store');
             Route::post('bookings/{booking}/status', [AppointmentsDashboardController::class, 'updateBookingStatus'])->name('bookings.status');
+            Route::post('bookings/{booking}/reschedule', [AppointmentsBookingController::class, 'reschedule'])->name('bookings.reschedule');
             Route::post('bookings/{booking}/payment-link', [AppointmentsBookingController::class, 'createPaymentLink'])->name('bookings.payment-link');
             Route::post('bookings/{booking}/send-reminder', [AppointmentsBookingController::class, 'sendReminder'])->name('bookings.send-reminder');
             Route::get('calendar/events', [AppointmentsBookingController::class, 'calendarEvents'])->name('calendar.events');

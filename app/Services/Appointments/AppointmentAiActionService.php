@@ -5,6 +5,7 @@ namespace App\Services\Appointments;
 use App\Models\Appointment\AppointmentBooking;
 use App\Models\Appointment\AppointmentReminder;
 use App\Models\Appointment\AppointmentRequest;
+use App\Models\Appointment\AppointmentRequestSlot;
 use App\Models\Appointment\AppointmentSetting;
 use App\Models\Conversation;
 use App\Models\Customer;
@@ -17,6 +18,13 @@ class AppointmentAiActionService
     /** @var array<int, string> */
     public const ALLOWED_ACTIONS = [
         'create_appointment_request',
+        'get_appointment_request',
+        'suggest_slots',
+        'select_slot',
+        'approve_request',
+        'reject_request',
+        'create_booking',
+        'get_booking',
         'get_customer',
         'create_customer',
         'update_customer',
@@ -52,9 +60,17 @@ class AppointmentAiActionService
         $setting = AppointmentSetting::query()->first();
         $automationMode = (string) ($setting?->automation_mode ?? 'APPROVAL');
         $actorId = $actor?->id;
+        $this->assertAutomationModeForAction($automationMode, $action);
 
         return match ($action) {
             'create_appointment_request' => $this->createRequestAction($workspace, $payload, $actorId, $automationMode, $conversation),
+            'get_appointment_request' => $this->getAppointmentRequestAction($payload),
+            'suggest_slots' => $this->suggestSlotsAction($payload, $actorId),
+            'select_slot' => $this->selectSlotAction($payload, $actorId),
+            'approve_request' => $this->approveRequestAction($payload, $actorId),
+            'reject_request' => $this->rejectRequestAction($payload, $actorId),
+            'create_booking' => $this->createBookingAction($workspace, $payload, $actorId),
+            'get_booking' => $this->getAppointmentAction($payload),
             'get_customer' => $this->getCustomerAction($payload),
             'create_customer' => $this->createCustomerAction($payload),
             'update_customer' => $this->updateCustomerAction($payload),
@@ -92,6 +108,142 @@ class AppointmentAiActionService
             'status' => $request->status,
             'automation_mode' => $request->automation_mode,
             'message' => 'تم إنشاء طلب الموعد بنجاح.',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function getAppointmentRequestAction(array $payload): array
+    {
+        $query = AppointmentRequest::query()->with(['service', 'staff', 'booking', 'slots']);
+        if (! empty($payload['request_id'])) {
+            $query->whereKey((int) $payload['request_id']);
+        } else {
+            throw new RuntimeException('request_id مطلوب.');
+        }
+        $request = $query->firstOrFail();
+
+        return [
+            'request' => [
+                'id' => $request->id,
+                'status' => $request->status,
+                'customer_name' => $request->customer_name,
+                'service' => $request->service?->name,
+                'staff' => $request->staff?->name,
+                'requested_date' => $request->requested_date?->toDateString(),
+                'requested_time' => $request->requested_time,
+                'source' => $request->source,
+                'booking_id' => $request->booking?->id,
+                'slots' => $request->slots->map(fn (AppointmentRequestSlot $slot) => [
+                    'id' => $slot->id,
+                    'starts_at' => $slot->starts_at?->toDateTimeString(),
+                    'ends_at' => $slot->ends_at?->toDateTimeString(),
+                    'status' => $slot->status,
+                ])->all(),
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function suggestSlotsAction(array $payload, ?int $actorId): array
+    {
+        $request = AppointmentRequest::query()->whereKey((int) ($payload['request_id'] ?? 0))->firstOrFail();
+        $slots = is_array($payload['slots'] ?? null) ? $payload['slots'] : [];
+        if ($slots === []) {
+            throw new RuntimeException('يجب تمرير slots لاقتراح المواعيد.');
+        }
+
+        $created = $this->appointmentRequestService->proposeSlots($request, $slots, $actorId);
+
+        return [
+            'request_id' => $request->id,
+            'created_slots' => collect($created)->map(fn ($slot) => [
+                'id' => $slot->id,
+                'starts_at' => $slot->starts_at?->toDateTimeString(),
+                'ends_at' => $slot->ends_at?->toDateTimeString(),
+                'status' => $slot->status,
+            ])->all(),
+            'message' => 'تم اقتراح المواعيد للعميل.',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function selectSlotAction(array $payload, ?int $actorId): array
+    {
+        $request = AppointmentRequest::query()->whereKey((int) ($payload['request_id'] ?? 0))->firstOrFail();
+        $slot = AppointmentRequestSlot::query()
+            ->where('request_id', $request->id)
+            ->whereKey((int) ($payload['slot_id'] ?? 0))
+            ->firstOrFail();
+        $booking = $this->appointmentRequestService->selectSlot($request, $slot, $actorId);
+
+        return [
+            'request_id' => $request->id,
+            'booking_id' => $booking->id,
+            'booking_number' => $booking->booking_number,
+            'status' => $booking->appointment_status,
+            'message' => 'تم اختيار الموعد المقترح وتحويله إلى حجز.',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function approveRequestAction(array $payload, ?int $actorId): array
+    {
+        $request = AppointmentRequest::query()->whereKey((int) ($payload['request_id'] ?? 0))->firstOrFail();
+        $booking = $this->appointmentRequestService->approveRequest($request, $payload, $actorId);
+
+        return [
+            'request_id' => $request->id,
+            'booking_id' => $booking->id,
+            'booking_number' => $booking->booking_number,
+            'message' => 'تم اعتماد الطلب بنجاح.',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function rejectRequestAction(array $payload, ?int $actorId): array
+    {
+        $request = AppointmentRequest::query()->whereKey((int) ($payload['request_id'] ?? 0))->firstOrFail();
+        $request = $this->appointmentRequestService->rejectRequest($request, $actorId, (string) ($payload['reason'] ?? ''));
+
+        return [
+            'request_id' => $request->id,
+            'status' => $request->status,
+            'message' => 'تم رفض الطلب.',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function createBookingAction(Workspace $workspace, array $payload, ?int $actorId): array
+    {
+        $booking = $this->appointmentService->createBooking($workspace, [
+            ...$payload,
+            'source_channel' => $payload['source_channel'] ?? 'ai_chat',
+        ], $actorId);
+
+        return [
+            'booking_id' => $booking->id,
+            'booking_number' => $booking->booking_number,
+            'appointment_status' => $booking->appointment_status,
+            'payment_status' => $booking->payment_status,
+            'message' => 'تم إنشاء الحجز عبر AI وفق القواعد.',
         ];
     }
 
@@ -328,12 +480,30 @@ class AppointmentAiActionService
     {
         $booking = AppointmentBooking::query()->whereKey((int) ($payload['booking_id'] ?? 0))->firstOrFail();
         $minutesBefore = max(5, (int) ($payload['minutes_before'] ?? 120));
+        $channel = (string) ($payload['channel'] ?? 'in_app');
+        $sendAt = $booking->starts_at?->copy()->subMinutes($minutesBefore) ?? now()->addMinutes(1);
+
+        $existing = AppointmentReminder::query()
+            ->where('workspace_id', $booking->workspace_id)
+            ->where('booking_id', $booking->id)
+            ->where('channel', $channel)
+            ->where('send_at', $sendAt)
+            ->first();
+        if ($existing) {
+            return [
+                'reminder_id' => $existing->id,
+                'status' => $existing->status,
+                'send_at' => $existing->send_at?->toDateTimeString(),
+                'message' => 'التذكير موجود مسبقًا.',
+            ];
+        }
 
         $reminder = AppointmentReminder::query()->create([
+            'workspace_id' => $booking->workspace_id,
             'booking_id' => $booking->id,
-            'channel' => (string) ($payload['channel'] ?? 'in_app'),
+            'channel' => $channel,
             'status' => 'queued',
-            'send_at' => $booking->starts_at?->copy()->subMinutes($minutesBefore) ?? now()->addMinutes(1),
+            'send_at' => $sendAt,
             'metadata' => [
                 'requested_by' => 'ai_action',
                 'custom_message' => $payload['message'] ?? null,
@@ -346,5 +516,31 @@ class AppointmentAiActionService
             'send_at' => $reminder->send_at?->toDateTimeString(),
             'message' => 'تمت جدولة التذكير بنجاح.',
         ];
+    }
+
+    private function assertAutomationModeForAction(string $mode, string $action): void
+    {
+        $restrictedInManual = [
+            'approve_request',
+            'reject_request',
+            'select_slot',
+            'create_booking',
+            'send_confirmation',
+        ];
+
+        $restrictedInApproval = [
+            'approve_request',
+            'select_slot',
+            'create_booking',
+            'send_confirmation',
+        ];
+
+        if ($mode === 'MANUAL' && in_array($action, $restrictedInManual, true)) {
+            throw new RuntimeException('هذا الإجراء غير مسموح للـAI في وضع MANUAL.');
+        }
+
+        if ($mode === 'APPROVAL' && in_array($action, $restrictedInApproval, true)) {
+            throw new RuntimeException('هذا الإجراء غير مسموح للـAI في وضع APPROVAL بدون موافقة بشرية.');
+        }
     }
 }

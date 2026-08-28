@@ -194,6 +194,11 @@ class AppointmentRequestService
             'تم اعتماد طلب الموعد',
             'تمت الموافقة على طلب الموعد وإنشاء الحجز بنجاح.'
         );
+        $this->domainNotificationService->notifyAppointmentRequestStatusChanged(
+            $request->refresh(),
+            'تم اعتماد طلب الموعد',
+            'تمت الموافقة على الطلب وتحويله إلى حجز فعلي.'
+        );
 
         return $booking;
     }
@@ -239,6 +244,12 @@ class AppointmentRequestService
             ]);
         });
 
+        $this->domainNotificationService->notifyAppointmentRequestStatusChanged(
+            $request->refresh(),
+            'تم اقتراح مواعيد للعميل',
+            'تم إرسال خيارات متعددة للعميل وبانتظار اختياره.'
+        );
+
         return $created;
     }
 
@@ -280,8 +291,14 @@ class AppointmentRequestService
             'rejected_at' => now(),
             'notes' => trim((string) ($request->notes ?? '')).($reason ? "\nسبب الرفض: {$reason}" : ''),
         ]);
+        $request = $request->refresh();
+        $this->domainNotificationService->notifyAppointmentRequestStatusChanged(
+            $request,
+            'تم رفض طلب الموعد',
+            'تم رفض طلب الموعد من فريق العمل.'
+        );
 
-        return $request->refresh();
+        return $request;
     }
 
     public function cancelRequest(AppointmentRequest $request, ?string $reason = null): AppointmentRequest
@@ -291,8 +308,14 @@ class AppointmentRequestService
             'cancelled_at' => now(),
             'notes' => trim((string) ($request->notes ?? '')).($reason ? "\nسبب الإلغاء: {$reason}" : ''),
         ]);
+        $request = $request->refresh();
+        $this->domainNotificationService->notifyAppointmentRequestStatusChanged(
+            $request,
+            'تم إلغاء طلب الموعد',
+            'تم إلغاء الطلب حسب طلب العميل أو فريق العمل.'
+        );
 
-        return $request->refresh();
+        return $request;
     }
 
     public function markAwaitingCustomer(AppointmentRequest $request, string $message): AppointmentRequest
@@ -301,8 +324,14 @@ class AppointmentRequestService
             'status' => 'awaiting_customer',
             'notes' => trim((string) ($request->notes ?? ''))."\n".$message,
         ]);
+        $request = $request->refresh();
+        $this->domainNotificationService->notifyAppointmentRequestStatusChanged(
+            $request,
+            'الطلب بانتظار العميل',
+            'تم طلب معلومات/اختيار إضافي من العميل لإكمال الحجز.'
+        );
 
-        return $request->refresh();
+        return $request;
     }
 
     /**

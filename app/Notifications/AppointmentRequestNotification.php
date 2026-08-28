@@ -12,7 +12,11 @@ class AppointmentRequestNotification extends Notification implements ShouldQueue
 {
     use Queueable;
 
-    public function __construct(public readonly AppointmentRequest $appointmentRequest) {}
+    public function __construct(
+        public readonly AppointmentRequest $appointmentRequest,
+        public readonly ?string $title = null,
+        public readonly ?string $message = null,
+    ) {}
 
     /**
      * @return array<int, string>
@@ -25,8 +29,8 @@ class AppointmentRequestNotification extends Notification implements ShouldQueue
     public function toMail(object $notifiable): MailMessage
     {
         return (new MailMessage)
-            ->subject('طلب موعد جديد')
-            ->line('تم إنشاء طلب موعد جديد باسم: '.$this->appointmentRequest->customer_name)
+            ->subject($this->title ?: 'تحديث طلب موعد')
+            ->line($this->message ?: 'تم إنشاء/تحديث طلب موعد للعميل: '.$this->appointmentRequest->customer_name)
             ->line('القناة: '.$this->appointmentRequest->source)
             ->action('فتح لوحة المواعيد', url('/workspace/appointments'))
             ->line('HASEM Appointments');
@@ -38,7 +42,9 @@ class AppointmentRequestNotification extends Notification implements ShouldQueue
     public function toArray(object $notifiable): array
     {
         return [
-            'type' => 'appointment_request_created',
+            'type' => $this->title ? 'appointment_request_update' : 'appointment_request_created',
+            'title' => $this->title ?: 'تحديث طلب موعد',
+            'message' => $this->message ?: 'تم تحديث حالة طلب الموعد',
             'request_id' => $this->appointmentRequest->id,
             'workspace_id' => $this->appointmentRequest->workspace_id,
             'customer_name' => $this->appointmentRequest->customer_name,

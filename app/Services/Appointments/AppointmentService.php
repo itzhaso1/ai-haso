@@ -9,6 +9,7 @@ use App\Models\Appointment\AppointmentSetting;
 use App\Models\Appointment\AppointmentStaff;
 use App\Models\Customer;
 use App\Models\Workspace;
+use App\Services\Notification\DomainNotificationService;
 use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
@@ -29,7 +30,11 @@ class AppointmentService
     /** @var array<int, string> */
     private const WEEK_DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
-    public function __construct(private readonly WorkspaceContext $workspaceContext) {}
+    public function __construct(
+        private readonly WorkspaceContext $workspaceContext,
+        private readonly AppointmentReminderService $appointmentReminderService,
+        private readonly DomainNotificationService $domainNotificationService,
+    ) {}
 
     public function ensureSetup(Workspace $workspace): void
     {
@@ -71,6 +76,9 @@ class AppointmentService
         );
         $metadata['cancellation_rules'] = $this->normalizeCancellationRulesInput(
             $incomingMetadata['cancellation_rules'] ?? ($metadata['cancellation_rules'] ?? [])
+        );
+        $metadata['reminder_channels'] = $this->normalizeReminderChannelsInput(
+            $incomingMetadata['reminder_channels'] ?? ($metadata['reminder_channels'] ?? ['in_app'])
         );
 
         $setting->update([
@@ -394,7 +402,15 @@ class AppointmentService
                 }
             }
 
-            return $booking->fresh(['service', 'staff', 'customer', 'resources']);
+            $fresh = $booking->fresh(['service', 'staff', 'customer', 'resources']);
+            $this->appointmentReminderService->scheduleForBooking($fresh);
+            $this->domainNotificationService->notifyAppointmentBookingStatusChanged(
+                $fresh,
+                'تم إنشاء حجز جديد',
+                'تم إنشاء حجز جديد بنجاح ضمن نظام المواعيد.'
+            );
+
+            return $fresh;
         });
     }
 
@@ -403,9 +419,15 @@ class AppointmentService
      */
     public function updateBookingStatus(AppointmentBooking $booking, array $payload): AppointmentBooking
     {
+        $booking->loadMissing('service');
         $requestedStatus = (string) ($payload['status'] ?? $payload['appointment_status'] ?? '');
         if (! in_array($requestedStatus, self::APPOINTMENT_STATUSES, true)) {
             throw new RuntimeException('حالة الموعد غير صالحة.');
+        }
+        $this->assertStatusTransition($booking->appointment_status ?? 'scheduled', $requestedStatus);
+
+        if ($requestedStatus === 'cancelled') {
+            $this->assertPolicyWindow($booking, 'cancellation');
         }
 
         $legacyStatus = in_array($requestedStatus, ['scheduled', 'confirmed', 'completed', 'cancelled', 'no_show'], true)
@@ -415,7 +437,9 @@ class AppointmentService
         $booking->update([
             'status' => $legacyStatus,
             'appointment_status' => $requestedStatus,
-            'cancel_reason' => trim((string) ($payload['cancel_reason'] ?? '')) ?: null,
+            'cancel_reason' => $requestedStatus === 'cancelled'
+                ? (trim((string) ($payload['cancel_reason'] ?? '')) ?: $booking->cancel_reason)
+                : $booking->cancel_reason,
             'confirmed_at' => $requestedStatus === 'confirmed' ? now() : $booking->confirmed_at,
             'checked_in_at' => $requestedStatus === 'checked_in' ? now() : $booking->checked_in_at,
             'in_progress_at' => $requestedStatus === 'in_progress' ? now() : $booking->in_progress_at,
@@ -423,11 +447,31 @@ class AppointmentService
             'cancelled_at' => $requestedStatus === 'cancelled' ? now() : $booking->cancelled_at,
         ]);
 
-        return $booking->refresh();
+        $fresh = $booking->refresh();
+        if (in_array($requestedStatus, ['cancelled', 'completed', 'no_show'], true)) {
+            $this->appointmentReminderService->cancelPendingReminders($fresh, 'appointment_closed');
+        }
+        $titles = [
+            'confirmed' => 'تم تأكيد الموعد',
+            'checked_in' => 'تم تسجيل حضور العميل',
+            'in_progress' => 'الموعد قيد التنفيذ',
+            'completed' => 'تم إكمال الموعد',
+            'cancelled' => 'تم إلغاء الموعد',
+            'no_show' => 'تم تسجيل عدم الحضور',
+            'scheduled' => 'تم تحديث الموعد',
+        ];
+        $this->domainNotificationService->notifyAppointmentBookingStatusChanged(
+            $fresh,
+            $titles[$requestedStatus] ?? 'تم تحديث الموعد',
+            'تم تحديث حالة الموعد بنجاح.'
+        );
+
+        return $fresh;
     }
 
     public function cancelBooking(AppointmentBooking $booking, ?string $reason = null): AppointmentBooking
     {
+        $this->assertPolicyWindow($booking, 'cancellation');
         $booking->update([
             'status' => 'cancelled',
             'appointment_status' => 'cancelled',
@@ -435,7 +479,147 @@ class AppointmentService
             'cancelled_at' => now(),
         ]);
 
-        return $booking->refresh();
+        $fresh = $booking->refresh();
+        $this->appointmentReminderService->cancelPendingReminders($fresh, 'booking_cancelled');
+        $this->domainNotificationService->notifyAppointmentBookingStatusChanged(
+            $fresh,
+            'تم إلغاء الموعد',
+            'تم إلغاء الموعد وتحديث السجل المرتبط به.'
+        );
+
+        return $fresh;
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     */
+    public function rescheduleBooking(AppointmentBooking $booking, array $payload, ?int $actorUserId = null): AppointmentBooking
+    {
+        $booking->loadMissing(['service', 'staff', 'resources']);
+        if (! $booking->service) {
+            throw new RuntimeException('الخدمة غير متاحة لإعادة الجدولة.');
+        }
+        if (in_array($booking->appointment_status, ['completed', 'cancelled', 'no_show'], true)) {
+            throw new RuntimeException('لا يمكن إعادة جدولة موعد مغلق.');
+        }
+
+        $this->assertPolicyWindow($booking, 'reschedule');
+
+        $setting = AppointmentSetting::query()->first();
+        $timezone = $this->workspaceTimezone($booking->workspace_id, $setting);
+        $rules = $this->bookingRules($setting);
+
+        $service = $booking->service;
+        $newStaffId = isset($payload['staff_id']) && (int) $payload['staff_id'] > 0
+            ? (int) $payload['staff_id']
+            : $booking->staff_id;
+        $newStaff = $newStaffId ? AppointmentStaff::query()->whereKey($newStaffId)->first() : null;
+        if (
+            $newStaff &&
+            $service->staffMembers()->exists() &&
+            ! $service->staffMembers()->whereKey($newStaff->id)->exists()
+        ) {
+            throw new RuntimeException('الموظف الجديد غير مرتبط بالخدمة.');
+        }
+
+        $startsAtLocal = $this->parseWorkspaceDateTime($payload['starts_at'] ?? null, $timezone);
+        $allowCustomDuration = (bool) ($payload['allow_custom_duration'] ?? false);
+        if ($allowCustomDuration && ! empty($payload['ends_at'])) {
+            $endsAtLocal = $this->parseWorkspaceDateTime($payload['ends_at'], $timezone);
+        } else {
+            $endsAtLocal = $startsAtLocal->copy()->addMinutes(max(5, (int) $service->duration_minutes));
+        }
+        if ($endsAtLocal->lte($startsAtLocal)) {
+            throw new RuntimeException('وقت نهاية الموعد يجب أن يكون بعد البداية.');
+        }
+
+        $resourceIds = collect($payload['resource_ids'] ?? $booking->resources->pluck('id')->all())
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->values()
+            ->all();
+
+        $startsAtUtc = $startsAtLocal->copy()->utc();
+        $endsAtUtc = $endsAtLocal->copy()->utc();
+        $this->assertBookingRules($booking->workspace_id, $startsAtLocal, $endsAtLocal, $rules, $timezone, $booking->id);
+        $this->assertWithinBusinessHours($startsAtLocal, $endsAtLocal, $setting);
+        $this->assertStaffAvailability($newStaff, $startsAtLocal, $endsAtLocal, $timezone);
+        $this->ensureNoOverlap(
+            workspaceId: $booking->workspace_id,
+            startsAt: $startsAtUtc,
+            endsAt: $endsAtUtc,
+            staffId: $newStaff?->id,
+            resourceIds: $resourceIds,
+            bufferMinutes: (int) ($rules['buffer_minutes'] ?? 0),
+            ignoreBookingId: $booking->id,
+        );
+
+        $this->ensureNoDuplicateBooking(
+            workspaceId: $booking->workspace_id,
+            startsAt: $startsAtUtc,
+            serviceId: (int) $booking->service_id,
+            customerName: (string) $booking->customer_name,
+            customerPhone: $booking->customer_phone,
+            staffId: $newStaff?->id,
+            ignoreBookingId: $booking->id,
+        );
+
+        return DB::transaction(function () use (
+            $booking,
+            $startsAtUtc,
+            $endsAtUtc,
+            $startsAtLocal,
+            $endsAtLocal,
+            $newStaff,
+            $resourceIds,
+            $timezone,
+            $payload,
+            $actorUserId
+        ): AppointmentBooking {
+            $metadata = is_array($booking->metadata) ? $booking->metadata : [];
+            $rescheduleCount = max(0, (int) ($metadata['reschedule_count'] ?? 0)) + 1;
+            $metadata['last_rescheduled_at'] = now()->toDateTimeString();
+            $metadata['last_rescheduled_by'] = $actorUserId;
+            $metadata['reschedule_count'] = $rescheduleCount;
+            $metadata['workspace_timezone'] = $timezone;
+            $metadata['start_local'] = $startsAtLocal->format('Y-m-d H:i:s');
+            $metadata['end_local'] = $endsAtLocal->format('Y-m-d H:i:s');
+            $metadata['reschedule_reason'] = trim((string) ($payload['reason'] ?? '')) ?: null;
+
+            $booking->update([
+                'staff_id' => $newStaff?->id,
+                'starts_at' => $startsAtUtc,
+                'ends_at' => $endsAtUtc,
+                'status' => in_array($booking->appointment_status, ['checked_in', 'in_progress'], true) ? 'confirmed' : $booking->status,
+                'appointment_status' => in_array($booking->appointment_status, ['checked_in', 'in_progress'], true)
+                    ? $booking->appointment_status
+                    : 'scheduled',
+                'notes' => trim((string) ($booking->notes ?? '')).(filled($payload['reason'] ?? null) ? "\nسبب إعادة الجدولة: ".trim((string) $payload['reason']) : ''),
+                'metadata' => $metadata,
+            ]);
+
+            if ($resourceIds !== []) {
+                $resources = AppointmentResource::query()
+                    ->whereIn('id', $resourceIds)
+                    ->where('is_active', true)
+                    ->pluck('id')
+                    ->all();
+                $booking->resources()->sync(collect($resources)->mapWithKeys(
+                    fn (int $id): array => [$id => ['workspace_id' => $booking->workspace_id]]
+                )->all());
+            }
+
+            $fresh = $booking->fresh(['service', 'staff', 'customer', 'resources']);
+            $this->appointmentReminderService->cancelPendingReminders($fresh, 'rescheduled');
+            $this->appointmentReminderService->scheduleForBooking($fresh);
+            $this->domainNotificationService->notifyAppointmentBookingStatusChanged(
+                $fresh,
+                'تمت إعادة جدولة الموعد',
+                'تم تعديل وقت الموعد بعد فحص التوفر والقواعد.'
+            );
+
+            return $fresh;
+        });
     }
 
     /**
@@ -445,6 +629,8 @@ class AppointmentService
     {
         $timezone = (string) ($filters['timezone'] ?? $this->workspaceTimezone());
         $date = trim((string) ($filters['date'] ?? ''));
+        $fromDate = trim((string) ($filters['from_date'] ?? ''));
+        $toDate = trim((string) ($filters['to_date'] ?? ''));
         $status = trim((string) ($filters['status'] ?? ''));
         $paymentStatus = trim((string) ($filters['payment_status'] ?? ''));
         $staffId = (int) ($filters['staff_id'] ?? 0);
@@ -455,10 +641,14 @@ class AppointmentService
         $search = trim((string) ($filters['search'] ?? ''));
 
         $dayRange = $date !== '' ? $this->dayRangeInUtc($date, $timezone) : null;
+        $fromRange = $fromDate !== '' ? $this->dayRangeInUtc($fromDate, $timezone) : null;
+        $toRange = $toDate !== '' ? $this->dayRangeInUtc($toDate, $timezone) : null;
 
         return AppointmentBooking::query()
             ->with(['service', 'staff', 'customer', 'booker', 'request', 'invoice', 'resources'])
             ->when($dayRange !== null, fn ($query) => $query->whereBetween('starts_at', [$dayRange['start'], $dayRange['end']]))
+            ->when($fromRange !== null, fn ($query) => $query->where('starts_at', '>=', $fromRange['start']))
+            ->when($toRange !== null, fn ($query) => $query->where('starts_at', '<=', $toRange['end']))
             ->when($status !== '', fn ($query) => $query->where('appointment_status', $status))
             ->when($paymentStatus !== '', fn ($query) => $query->where('payment_status', $paymentStatus))
             ->when($staffId > 0, fn ($query) => $query->where('staff_id', $staffId))
@@ -519,6 +709,7 @@ class AppointmentService
                     'title' => sprintf('%s - %s', (string) $booking->customer_name, (string) ($booking->service?->name ?? 'خدمة')),
                     'customer' => $booking->customer_name,
                     'service' => $booking->service?->name,
+                    'staff_id' => $booking->staff_id,
                     'staff' => $booking->staff?->name,
                     'date_key' => $startLocal?->format('Y-m-d'),
                     'start_ts' => $startLocal?->timestamp,
@@ -655,6 +846,7 @@ class AppointmentService
             'business_hours' => $this->normalizeBusinessHoursInput([]),
             'booking_rules' => $this->normalizeBookingRulesInput([]),
             'cancellation_rules' => $this->normalizeCancellationRulesInput([]),
+            'reminder_channels' => $this->normalizeReminderChannelsInput(['in_app']),
         ];
     }
 
@@ -692,7 +884,14 @@ class AppointmentService
     /**
      * @param  array<string, mixed>  rules
      */
-    private function assertBookingRules(int $workspaceId, Carbon $startsAtLocal, Carbon $endsAtLocal, array $rules, string $timezone): void
+    private function assertBookingRules(
+        int $workspaceId,
+        Carbon $startsAtLocal,
+        Carbon $endsAtLocal,
+        array $rules,
+        string $timezone,
+        ?int $ignoreBookingId = null
+    ): void
     {
         $now = now($timezone);
         $minNotice = max(0, (int) ($rules['min_booking_notice_minutes'] ?? 0));
@@ -718,6 +917,7 @@ class AppointmentService
                 ->where('workspace_id', $workspaceId)
                 ->whereBetween('starts_at', [$dayStartUtc, $dayEndUtc])
                 ->whereIn('appointment_status', self::ACTIVE_BOOKING_STATUSES)
+                ->when($ignoreBookingId !== null, fn ($query) => $query->where('id', '!=', $ignoreBookingId))
                 ->count();
             if ($count >= $maxDaily) {
                 throw new RuntimeException('تم الوصول للحد الأقصى للحجوزات في هذا اليوم.');
@@ -825,13 +1025,15 @@ class AppointmentService
         int $serviceId,
         string $customerName,
         ?string $customerPhone,
-        ?int $staffId
+        ?int $staffId,
+        ?int $ignoreBookingId = null,
     ): void {
         $duplicateExists = AppointmentBooking::withoutGlobalScopes()
             ->where('workspace_id', $workspaceId)
             ->where('service_id', $serviceId)
             ->where('starts_at', $startsAt)
             ->when($staffId !== null, fn ($query) => $query->where('staff_id', $staffId))
+            ->when($ignoreBookingId !== null, fn ($query) => $query->where('id', '!=', $ignoreBookingId))
             ->where(function ($query) use ($customerName, $customerPhone): void {
                 $query->whereRaw('LOWER(customer_name) = ?', [mb_strtolower($customerName)]);
                 if ($customerPhone !== null) {
@@ -877,6 +1079,22 @@ class AppointmentService
             'reschedule_window_hours' => max(0, (int) ($rules['reschedule_window_hours'] ?? 0)),
             'maximum_reschedules' => max(0, (int) ($rules['maximum_reschedules'] ?? 3)),
         ];
+    }
+
+    /**
+     * @param mixed $input
+     * @return array<int, string>
+     */
+    private function normalizeReminderChannelsInput(mixed $input): array
+    {
+        $channels = collect(is_array($input) ? $input : [])
+            ->map(fn ($channel) => trim((string) $channel))
+            ->filter(fn (string $channel): bool => in_array($channel, ['in_app', 'email', 'whatsapp', 'sms'], true))
+            ->unique()
+            ->values()
+            ->all();
+
+        return $channels === [] ? ['in_app'] : $channels;
     }
 
     /**
@@ -930,5 +1148,61 @@ class AppointmentService
             Carbon::FRIDAY => 'fri',
             Carbon::SATURDAY => 'sat',
         };
+    }
+
+    private function assertStatusTransition(string $from, string $to): void
+    {
+        if ($from === '' || $from === $to) {
+            return;
+        }
+
+        $allowed = [
+            'scheduled' => ['confirmed', 'checked_in', 'in_progress', 'completed', 'cancelled', 'no_show', 'scheduled'],
+            'confirmed' => ['checked_in', 'in_progress', 'completed', 'cancelled', 'no_show', 'confirmed'],
+            'checked_in' => ['in_progress', 'completed', 'cancelled', 'checked_in'],
+            'in_progress' => ['completed', 'cancelled', 'in_progress'],
+            'completed' => ['completed'],
+            'cancelled' => ['cancelled'],
+            'no_show' => ['no_show'],
+        ];
+
+        if (! in_array($to, $allowed[$from] ?? [], true)) {
+            throw new RuntimeException("لا يمكن نقل الحالة من {$from} إلى {$to}.");
+        }
+    }
+
+    private function assertPolicyWindow(AppointmentBooking $booking, string $type): void
+    {
+        $setting = AppointmentSetting::withoutGlobalScopes()
+            ->where('workspace_id', $booking->workspace_id)
+            ->first();
+        $rules = $this->cancellationRules($setting);
+        $timezone = $this->workspaceTimezone($booking->workspace_id, $setting);
+        $start = $booking->starts_at?->copy()->timezone($timezone);
+        if (! $start) {
+            return;
+        }
+
+        $hoursBeforeStart = now($timezone)->diffInHours($start, false);
+        $minHours = max(
+            (int) ($rules['minimum_notice_hours'] ?? 0),
+            (int) ($type === 'cancellation'
+                ? ($rules['cancellation_window_hours'] ?? 0)
+                : ($rules['reschedule_window_hours'] ?? 0))
+        );
+
+        if ($minHours > 0 && $hoursBeforeStart < $minHours) {
+            $action = $type === 'cancellation' ? 'إلغاء الموعد' : 'إعادة جدولة الموعد';
+            throw new RuntimeException("لا يمكن {$action} قبل أقل من {$minHours} ساعة.");
+        }
+
+        if ($type === 'reschedule') {
+            $maxReschedules = max(0, (int) ($rules['maximum_reschedules'] ?? 0));
+            $metadata = is_array($booking->metadata) ? $booking->metadata : [];
+            $currentReschedules = max(0, (int) ($metadata['reschedule_count'] ?? 0));
+            if ($maxReschedules > 0 && $currentReschedules >= $maxReschedules) {
+                throw new RuntimeException('تم الوصول إلى الحد الأعلى لإعادة الجدولة لهذا الموعد.');
+            }
+        }
     }
 }

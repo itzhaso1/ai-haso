@@ -31,6 +31,52 @@
 
         <section class="grid gap-4 xl:grid-cols-2">
             <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h2 class="mb-3 text-sm font-bold text-slate-900">Payments Today</h2>
+                <div class="grid gap-2 sm:grid-cols-2">
+                    <div class="rounded-xl bg-emerald-50 p-3">
+                        <p class="text-xs text-emerald-700">Paid</p>
+                        <p class="text-lg font-bold text-emerald-800">{{ number_format((int) $paymentCards['paid']) }}</p>
+                    </div>
+                    <div class="rounded-xl bg-amber-50 p-3">
+                        <p class="text-xs text-amber-700">Pending</p>
+                        <p class="text-lg font-bold text-amber-800">{{ number_format((int) $paymentCards['pending']) }}</p>
+                    </div>
+                    <div class="rounded-xl bg-slate-100 p-3">
+                        <p class="text-xs text-slate-700">Unpaid</p>
+                        <p class="text-lg font-bold text-slate-800">{{ number_format((int) $paymentCards['unpaid']) }}</p>
+                    </div>
+                    <div class="rounded-xl bg-blue-50 p-3">
+                        <p class="text-xs text-blue-700">Revenue</p>
+                        <p class="text-lg font-bold text-blue-800">{{ number_format((float) $paymentCards['revenue'], 2) }}</p>
+                    </div>
+                </div>
+            </article>
+
+            <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h2 class="mb-3 text-sm font-bold text-slate-900">Requests</h2>
+                <div class="grid gap-2 sm:grid-cols-3">
+                    <div class="rounded-xl bg-slate-100 p-3">
+                        <p class="text-xs text-slate-600">New</p>
+                        <p class="text-lg font-bold text-slate-900">{{ number_format((int) $requestCards['new']) }}</p>
+                    </div>
+                    <div class="rounded-xl bg-blue-50 p-3">
+                        <p class="text-xs text-blue-700">Awaiting Customer</p>
+                        <p class="text-lg font-bold text-blue-800">{{ number_format((int) $requestCards['awaiting_customer']) }}</p>
+                    </div>
+                    <div class="rounded-xl bg-amber-50 p-3">
+                        <p class="text-xs text-amber-700">Needs Attention</p>
+                        <p class="text-lg font-bold text-amber-800">{{ number_format((int) $requestCards['needs_attention']) }}</p>
+                    </div>
+                </div>
+                <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                    <a href="{{ route('workspace.appointments.bookings.index') }}" class="rounded-lg border border-slate-300 px-3 py-2 text-center text-xs font-semibold text-slate-700 hover:bg-slate-100">New booking</a>
+                    <a href="{{ route('workspace.appointments.requests.index') }}" class="rounded-lg border border-slate-300 px-3 py-2 text-center text-xs font-semibold text-slate-700 hover:bg-slate-100">New request</a>
+                    <a href="{{ route('workspace.appointments.calendar.index') }}" class="rounded-lg border border-slate-300 px-3 py-2 text-center text-xs font-semibold text-slate-700 hover:bg-slate-100">Calendar</a>
+                    <a href="{{ route('workspace.appointments.customers.index') }}" class="rounded-lg border border-slate-300 px-3 py-2 text-center text-xs font-semibold text-slate-700 hover:bg-slate-100">Customers</a>
+                </div>
+            </article>
+
+            <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div class="mb-3 flex items-center justify-between">
                     <h2 class="text-sm font-bold text-slate-900">حجوزات اليوم</h2>
                     <a href="{{ route('workspace.appointments.bookings.index') }}" class="text-xs font-semibold text-slate-600 hover:text-slate-900">فتح صفحة الحجوزات</a>

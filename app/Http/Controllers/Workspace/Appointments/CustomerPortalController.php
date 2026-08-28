@@ -21,15 +21,20 @@ class CustomerPortalController extends Controller
     public function show(string $token): View
     {
         $booking = AppointmentBooking::withoutGlobalScopes()
-            ->with(['service', 'staff', 'invoice', 'request'])
+            ->with(['service', 'staff', 'invoice.payments', 'request', 'workspace'])
             ->where('public_token', $token)
             ->firstOrFail();
 
         $timezone = $this->appointmentService->workspaceTimezone((int) $booking->workspace_id);
+        $workspaceSettings = is_array($booking->workspace?->settings) ? $booking->workspace->settings : [];
+        $contactPhone = $booking->staff?->phone ?: ($workspaceSettings['phone'] ?? null);
+        $contactWhatsapp = $workspaceSettings['whatsapp'] ?? $contactPhone;
 
         return view('workspace.appointments.portal', [
             'booking' => $booking,
             'timezone' => $timezone,
+            'contactPhone' => $contactPhone,
+            'contactWhatsapp' => $contactWhatsapp,
         ]);
     }
 
