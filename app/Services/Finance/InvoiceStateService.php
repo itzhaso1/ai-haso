@@ -76,15 +76,20 @@ class InvoiceStateService
     public function refreshIssuedStatuses(?int $workspaceId = null): int
     {
         $updatedRows = 0;
+        $supportsSplitStatuses = FinanceInvoice::hasSeparatedStatusColumns();
 
-        $query = FinanceInvoice::query()
-            ->where(function ($builder): void {
+        $query = FinanceInvoice::query();
+        if ($supportsSplitStatuses) {
+            $query->where(function ($builder): void {
                 $builder->where('invoice_status', 'issued')
                     ->orWhere(function ($legacyBuilder): void {
                         $legacyBuilder->whereNull('invoice_status')
                             ->whereIn('status', ['sent', 'unpaid', 'partial', 'paid', 'overdue']);
                     });
             });
+        } else {
+            $query->whereIn('status', ['sent', 'unpaid', 'partial', 'paid', 'overdue']);
+        }
 
         if ($workspaceId) {
             $query->where('workspace_id', $workspaceId);
@@ -92,7 +97,7 @@ class InvoiceStateService
 
         $query->withSum('payments', 'amount')
             ->orderBy('id')
-            ->chunkById(200, function ($invoices) use (&$updatedRows): void {
+            ->chunkById(200, function ($invoices) use (&$updatedRows, $supportsSplitStatuses): void {
                 foreach ($invoices as $invoice) {
                     $actualPaid = round((float) ($invoice->payments_sum_amount ?? 0), 2);
                     $due = $this->resolveAmountDue((float) $invoice->total, $actualPaid);
@@ -115,8 +120,12 @@ class InvoiceStateService
                         $attributes['amount_due'] = $due;
                         $dirty = true;
                     }
-                    if ($invoice->payment_status !== $paymentStatus) {
+                    if ($supportsSplitStatuses && $invoice->payment_status !== $paymentStatus) {
                         $attributes['payment_status'] = $paymentStatus;
+                        $dirty = true;
+                    }
+                    if ($supportsSplitStatuses && empty($invoice->invoice_status)) {
+                        $attributes['invoice_status'] = 'issued';
                         $dirty = true;
                     }
                     if ($invoice->status !== $legacyStatus) {

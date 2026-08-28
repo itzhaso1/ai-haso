@@ -5,6 +5,7 @@ namespace App\Models\Finance;
 use App\Models\Concerns\BelongsToWorkspace;
 use App\Models\WorkspaceScopedModel;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Support\Facades\Schema;
 
 #[Fillable([
     'workspace_id',
@@ -39,6 +40,9 @@ class FinanceSetting extends WorkspaceScopedModel
 {
     use BelongsToWorkspace;
 
+    /** @var array<string,bool> */
+    private static array $schemaFlags = [];
+
     protected function casts(): array
     {
         return [
@@ -48,5 +52,16 @@ class FinanceSetting extends WorkspaceScopedModel
             'invoice_primary_color' => 'string',
             'metadata' => 'array',
         ];
+    }
+
+    public static function hasPdfCustomizationColumns(): bool
+    {
+        if (! array_key_exists('pdf_customization', self::$schemaFlags)) {
+            self::$schemaFlags['pdf_customization'] = Schema::hasColumn('finance_settings', 'website')
+                && Schema::hasColumn('finance_settings', 'invoice_primary_color')
+                && Schema::hasColumn('finance_settings', 'invoice_footer_text');
+        }
+
+        return self::$schemaFlags['pdf_customization'];
     }
 }

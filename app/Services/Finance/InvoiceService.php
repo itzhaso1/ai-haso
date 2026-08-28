@@ -5,8 +5,11 @@ namespace App\Services\Finance;
 use App\Models\Customer;
 use App\Models\Finance\FinanceInvoice;
 use App\Models\Finance\FinanceInvoiceItem;
+use App\Models\Finance\FinanceJournalEntry;
+use App\Models\Finance\FinanceInvoicePayment;
 use App\Models\Finance\FinanceSetting;
 use App\Models\Finance\FinanceSupplier;
+use App\Models\Product;
 use App\Models\Workspace;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -18,6 +21,7 @@ class InvoiceService
         private readonly ChartOfAccountsService $chartOfAccountsService,
         private readonly AccountingService $accountingService,
         private readonly InvoiceStateService $invoiceStateService,
+        private readonly FinancialPeriodGuardService $financialPeriodGuardService,
     ) {}
 
     /**
@@ -44,23 +48,39 @@ class InvoiceService
             }
 
             if ($customerId) {
-                $exists = Customer::query()->whereKey($customerId)->exists();
+                $exists = Customer::withoutGlobalScopes()
+                    ->where('workspace_id', $workspace->id)
+                    ->whereKey($customerId)
+                    ->exists();
                 if (! $exists) {
                     throw new RuntimeException('العميل المحدد غير صالح ضمن مساحة العمل الحالية.');
                 }
             }
 
             if ($supplierId) {
-                $exists = FinanceSupplier::query()->whereKey($supplierId)->exists();
+                $exists = FinanceSupplier::withoutGlobalScopes()
+                    ->where('workspace_id', $workspace->id)
+                    ->whereKey($supplierId)
+                    ->exists();
                 if (! $exists) {
                     throw new RuntimeException('المورد المحدد غير صالح ضمن مساحة العمل الحالية.');
                 }
             }
 
-            $customer = $customerId ? Customer::query()->whereKey($customerId)->first() : null;
-            $supplier = $supplierId ? FinanceSupplier::query()->whereKey($supplierId)->first() : null;
+            $customer = $customerId
+                ? Customer::withoutGlobalScopes()
+                    ->where('workspace_id', $workspace->id)
+                    ->whereKey($customerId)
+                    ->first()
+                : null;
+            $supplier = $supplierId
+                ? FinanceSupplier::withoutGlobalScopes()
+                    ->where('workspace_id', $workspace->id)
+                    ->whereKey($supplierId)
+                    ->first()
+                : null;
 
-            $items = $this->normalizeItems($payload['items'] ?? [], $profile['type'], $profile['rate']);
+            $items = $this->normalizeItems($payload['items'] ?? [], $workspace->id, $profile['type'], $profile['rate']);
             if ($items === []) {
                 throw new RuntimeException('يجب أن تحتوي الفاتورة على بند واحد على الأقل.');
             }
@@ -76,6 +96,16 @@ class InvoiceService
                 invoiceStatus: $invoiceStatus,
             );
             $legacyStatus = $this->invoiceStateService->toLegacyStatus($invoiceStatus, $paymentStatus);
+            $supportsSplitStatuses = FinanceInvoice::hasSeparatedStatusColumns();
+            $supportsSnapshots = FinanceInvoice::hasSnapshotColumns();
+
+            if ($invoiceStatus === 'issued') {
+                $this->financialPeriodGuardService->assertDateIsOpen(
+                    workspaceId: $workspace->id,
+                    date: (string) $payload['issue_date'],
+                    context: 'إصدار الفاتورة'
+                );
+            }
 
             $settings = FinanceSetting::query()->first();
             $companySnapshot = $this->buildCompanySnapshot($settings);
@@ -83,7 +113,7 @@ class InvoiceService
             $pdfSnapshot = $this->buildPdfSnapshot($settings, $companySnapshot);
             $issuedAt = $invoiceStatus === 'issued' ? now() : null;
 
-            $invoice = FinanceInvoice::withoutGlobalScopes()->create([
+            $attributes = [
                 'workspace_id' => $workspace->id,
                 'customer_id' => $customerId,
                 'customer_name' => $type === 'sales' && $customerName !== '' ? $customerName : null,
@@ -91,9 +121,6 @@ class InvoiceService
                 'invoice_number' => ($payload['invoice_number'] ?? null) ?: $this->nextInvoiceNumber($workspace->id),
                 'type' => $type,
                 'status' => $legacyStatus,
-                'invoice_status' => $invoiceStatus,
-                'payment_status' => $paymentStatus,
-                'issued_at' => $issuedAt,
                 'issue_date' => (string) $payload['issue_date'],
                 'due_date' => ($payload['due_date'] ?? null) ?: null,
                 'currency' => (string) ($payload['currency'] ?? 'SAR'),
@@ -108,11 +135,22 @@ class InvoiceService
                 'tax_rate' => $this->money($profile['rate']),
                 'payment_terms' => ($payload['payment_terms'] ?? null) ?: null,
                 'notes' => ($payload['notes'] ?? null) ?: null,
-                'company_snapshot' => $companySnapshot,
-                'recipient_snapshot' => $recipientSnapshot,
-                'pdf_snapshot' => $pdfSnapshot,
                 'created_by' => $actorUserId,
-            ]);
+            ];
+
+            if ($supportsSplitStatuses) {
+                $attributes['invoice_status'] = $invoiceStatus;
+                $attributes['payment_status'] = $paymentStatus;
+                $attributes['issued_at'] = $issuedAt;
+            }
+
+            if ($supportsSnapshots) {
+                $attributes['company_snapshot'] = $companySnapshot;
+                $attributes['recipient_snapshot'] = $recipientSnapshot;
+                $attributes['pdf_snapshot'] = $pdfSnapshot;
+            }
+
+            $invoice = FinanceInvoice::withoutGlobalScopes()->create($attributes);
 
             foreach ($items as $item) {
                 FinanceInvoiceItem::withoutGlobalScopes()->create([
@@ -160,12 +198,16 @@ class InvoiceService
             invoiceStatus: 'cancelled',
         );
 
-        $invoice->update([
-            'invoice_status' => 'cancelled',
-            'payment_status' => $paymentStatus,
+        $attributes = [
             'status' => 'cancelled',
             'cancelled_at' => now(),
-        ]);
+        ];
+        if (FinanceInvoice::hasSeparatedStatusColumns()) {
+            $attributes['invoice_status'] = 'cancelled';
+            $attributes['payment_status'] = $paymentStatus;
+        }
+
+        $invoice->update($attributes);
 
         return $invoice->fresh(['items', 'customer', 'supplier']);
     }
@@ -174,7 +216,7 @@ class InvoiceService
      * @param  array<int, mixed>  $rawItems
      * @return array<int, array<string, mixed>>
      */
-    private function normalizeItems(array $rawItems, string $taxType, float $defaultTaxRate): array
+    private function normalizeItems(array $rawItems, int $workspaceId, string $taxType, float $defaultTaxRate): array
     {
         $items = [];
 
@@ -189,8 +231,19 @@ class InvoiceService
 
             $lineCalc = $this->taxService->calculateLine($quantity, $unitPrice, $discount, $lineTaxType, $lineTaxRate);
 
+            $productId = isset($rawItem['product_id']) ? (int) $rawItem['product_id'] : null;
+            if ($productId) {
+                $validProduct = Product::withoutGlobalScopes()
+                    ->where('workspace_id', $workspaceId)
+                    ->whereKey($productId)
+                    ->exists();
+                if (! $validProduct) {
+                    throw new RuntimeException('أحد المنتجات المحددة غير صالح ضمن مساحة العمل الحالية.');
+                }
+            }
+
             $items[] = [
-                'product_id' => isset($rawItem['product_id']) ? (int) $rawItem['product_id'] : null,
+                'product_id' => $productId,
                 'product_name' => (string) ($rawItem['product_name'] ?? ''),
                 'description' => $rawItem['description'] ?? null,
                 'quantity' => $quantity,
@@ -253,7 +306,10 @@ class InvoiceService
             return $invoice;
         }
 
-        $paid = round((float) $invoice->payments()->sum('amount'), 2);
+        $paid = round((float) FinanceInvoicePayment::withoutGlobalScopes()
+            ->where('workspace_id', $invoice->workspace_id)
+            ->where('invoice_id', $invoice->id)
+            ->sum('amount'), 2);
         $due = $this->invoiceStateService->resolveAmountDue((float) $invoice->total, $paid);
         $paymentStatus = $this->invoiceStateService->resolvePaymentStatus(
             total: (float) $invoice->total,
@@ -264,19 +320,26 @@ class InvoiceService
         $legacyStatus = $this->invoiceStateService->toLegacyStatus($invoiceStatus, $paymentStatus);
 
         $attributes = [
-            'invoice_status' => $invoiceStatus,
             'amount_paid' => $paid,
             'amount_due' => $due,
-            'payment_status' => $paymentStatus,
             'status' => $legacyStatus,
         ];
+        if (FinanceInvoice::hasSeparatedStatusColumns()) {
+            $attributes['invoice_status'] = $invoiceStatus;
+            $attributes['payment_status'] = $paymentStatus;
+        }
 
         if (
             (float) $invoice->amount_paid !== $paid
             || (float) $invoice->amount_due !== $due
-            || $invoice->payment_status !== $paymentStatus
             || $invoice->status !== $legacyStatus
-            || $invoice->invoice_status !== $invoiceStatus
+            || (
+                FinanceInvoice::hasSeparatedStatusColumns()
+                && (
+                    $invoice->payment_status !== $paymentStatus
+                    || $invoice->invoice_status !== $invoiceStatus
+                )
+            )
         ) {
             $invoice->update($attributes);
 
@@ -304,6 +367,17 @@ class InvoiceService
 
     private function postInvoiceEntry(FinanceInvoice $invoice, int $actorUserId): void
     {
+        $entryType = $invoice->type === 'sales' ? 'sales_invoice' : 'purchase_invoice';
+        $alreadyPosted = FinanceJournalEntry::withoutGlobalScopes()
+            ->where('workspace_id', $invoice->workspace_id)
+            ->where('type', $entryType)
+            ->where('reference_type', FinanceInvoice::class)
+            ->where('reference_id', $invoice->id)
+            ->exists();
+        if ($alreadyPosted) {
+            return;
+        }
+
         $ar = $this->chartOfAccountsService->byCode('1200');
         $ap = $this->chartOfAccountsService->byCode('2000');
         $sales = $this->chartOfAccountsService->byCode('4000');
@@ -381,7 +455,7 @@ class InvoiceService
         $this->accountingService->createEntry(
             workspaceId: (int) $invoice->workspace_id,
             entryDate: $invoice->issue_date?->toDateString() ?? now()->toDateString(),
-            type: $invoice->type === 'sales' ? 'sales_invoice' : 'purchase_invoice',
+            type: $entryType,
             lines: $lines,
             description: 'Invoice '.$invoice->invoice_number,
             referenceType: FinanceInvoice::class,

@@ -4,6 +4,7 @@ namespace App\Services\Finance;
 
 use App\Models\Finance\FinancePayrollAdjustment;
 use App\Models\Finance\FinancePayrollRun;
+use App\Models\WorkspaceUser;
 use App\Models\Workspace;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -13,6 +14,7 @@ class PayrollAdjustmentService
     public function __construct(
         private readonly AccountingService $accountingService,
         private readonly ChartOfAccountsService $chartOfAccountsService,
+        private readonly FinancialPeriodGuardService $financialPeriodGuardService,
     ) {}
 
     /**
@@ -23,6 +25,15 @@ class PayrollAdjustmentService
         $amount = round((float) ($payload['amount'] ?? 0), 2);
         if ($amount <= 0) {
             throw new RuntimeException('قيمة الحركة يجب أن تكون أكبر من صفر.');
+        }
+
+        $workspaceUserExists = WorkspaceUser::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('user_id', (int) $payload['user_id'])
+            ->where('status', 'active')
+            ->exists();
+        if (! $workspaceUserExists) {
+            throw new RuntimeException('الموظف المحدد غير مرتبط بمساحة العمل الحالية.');
         }
 
         return FinancePayrollAdjustment::withoutGlobalScopes()->create([
@@ -76,12 +87,23 @@ class PayrollAdjustmentService
         }
 
         return DB::transaction(function () use ($adjustment, $actorUserId, $payrollRun, $salaryExpense, $payrollPayable): FinancePayrollAdjustment {
+            if ($adjustment->posted_journal_entry_id) {
+                return $adjustment->refresh();
+            }
+
             $amount = round((float) $adjustment->amount, 2);
             $isPositiveExpense = in_array($adjustment->type, ['allowance', 'bonus'], true);
+            $effectiveDate = $adjustment->effective_date?->toDateString() ?? now()->toDateString();
+
+            $this->financialPeriodGuardService->assertDateIsOpen(
+                workspaceId: (int) $adjustment->workspace_id,
+                date: $effectiveDate,
+                context: 'ترحيل حركة رواتب'
+            );
 
             $entry = $this->accountingService->createEntry(
                 workspaceId: (int) $adjustment->workspace_id,
-                entryDate: $adjustment->effective_date?->toDateString() ?? now()->toDateString(),
+                entryDate: $effectiveDate,
                 type: 'payroll',
                 lines: $isPositiveExpense
                     ? [

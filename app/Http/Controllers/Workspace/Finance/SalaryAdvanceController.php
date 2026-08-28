@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Workspace\Finance;
 use App\Models\Finance\FinanceSalaryAdvance;
 use App\Models\Finance\FinanceTreasuryAccount;
 use App\Models\WorkspaceUser;
+use App\Services\Finance\FinanceBootstrapService;
 use App\Services\Finance\SalaryAdvanceService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class SalaryAdvanceController extends FinanceBaseController
@@ -73,12 +75,24 @@ class SalaryAdvanceController extends FinanceBaseController
         $this->financeBootstrapService->ensureWorkspaceFinanceSetup($workspace);
 
         $validated = $request->validate([
-            'user_id' => ['required', 'integer'],
+            'user_id' => [
+                'required',
+                'integer',
+                Rule::exists('workspace_users', 'user_id')->where(
+                    fn ($query) => $query->where('workspace_id', $workspace->id)->where('status', 'active')
+                ),
+            ],
             'amount' => ['required', 'numeric', 'gt:0'],
             'issued_at' => ['required', 'date'],
             'type' => ['required', 'in:salary_advance,employee_loan'],
             'payment_method' => ['nullable', 'string', 'max:32'],
-            'treasury_account_id' => ['nullable', 'integer'],
+            'treasury_account_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('finance_treasury_accounts', 'id')->where(
+                    fn ($query) => $query->where('workspace_id', $workspace->id)
+                ),
+            ],
             'notes' => ['nullable', 'string'],
         ]);
 
@@ -94,12 +108,19 @@ class SalaryAdvanceController extends FinanceBaseController
     public function repay(Request $request, FinanceSalaryAdvance $advance): RedirectResponse
     {
         $this->authorizeFinance($request, 'finance.salary_advances.manage');
-        $this->financeBootstrapService->ensureWorkspaceFinanceSetup($this->currentWorkspace());
+        $workspace = $this->currentWorkspace();
+        $this->financeBootstrapService->ensureWorkspaceFinanceSetup($workspace);
         $validated = $request->validate([
             'payment_date' => ['required', 'date'],
             'amount' => ['required', 'numeric', 'gt:0'],
             'method' => ['required', 'in:cash,bank_transfer,card,other,payroll_deduction'],
-            'treasury_account_id' => ['nullable', 'integer'],
+            'treasury_account_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('finance_treasury_accounts', 'id')->where(
+                    fn ($query) => $query->where('workspace_id', $workspace->id)
+                ),
+            ],
             'notes' => ['nullable', 'string'],
         ]);
 

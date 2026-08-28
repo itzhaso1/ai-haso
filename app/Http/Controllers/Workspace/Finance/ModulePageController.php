@@ -201,8 +201,8 @@ class ModulePageController extends FinanceBaseController
                         ->orWhereHas('supplier', fn ($supplierQuery) => $supplierQuery->where('name', 'like', '%'.$filters['search'].'%'));
                 });
             })
-            ->when($filters['invoice_status'] !== '', fn ($builder) => $builder->where('invoice_status', $filters['invoice_status']))
-            ->when($filters['payment_status'] !== '', fn ($builder) => $builder->where('payment_status', $filters['payment_status']))
+            ->when($filters['invoice_status'] !== '', fn ($builder) => $builder->whereInvoiceStatus($filters['invoice_status']))
+            ->when($filters['payment_status'] !== '', fn ($builder) => $builder->wherePaymentStatus($filters['payment_status']))
             ->when($filters['supplier_id'], fn ($builder) => $builder->where('supplier_id', $filters['supplier_id']))
             ->when($filters['from'] !== '', fn ($builder) => $builder->whereDate('issue_date', '>=', $filters['from']))
             ->when($filters['to'] !== '', fn ($builder) => $builder->whereDate('issue_date', '<=', $filters['to']));
@@ -219,12 +219,20 @@ class ModulePageController extends FinanceBaseController
             'total_due' => round((float) (clone $query)->sum('amount_due'), 2),
             'total_paid' => round((float) (clone $query)->sum('amount_paid'), 2),
             'overdue_count' => (clone $query)
-                ->where('invoice_status', 'issued')
-                ->where('payment_status', 'overdue')
+                ->whereIssued()
+                ->wherePaymentStatus('overdue')
                 ->count(),
             'unpaid_count' => (clone $query)
-                ->where('invoice_status', 'issued')
-                ->whereIn('payment_status', ['unpaid', 'partial', 'overdue'])
+                ->whereIssued()
+                ->where(function ($builder): void {
+                    $builder->where(function ($stateQuery): void {
+                        $stateQuery->wherePaymentStatus('unpaid');
+                    })->orWhere(function ($stateQuery): void {
+                        $stateQuery->wherePaymentStatus('partial');
+                    })->orWhere(function ($stateQuery): void {
+                        $stateQuery->wherePaymentStatus('overdue');
+                    });
+                })
                 ->count(),
         ];
 

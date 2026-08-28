@@ -4,6 +4,7 @@ namespace App\Services\Finance;
 
 use App\Models\Finance\FinanceInvoice;
 use App\Models\Finance\FinanceInvoicePayment;
+use App\Models\Finance\FinanceJournalEntry;
 use App\Models\Finance\FinanceTreasuryAccount;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -14,6 +15,7 @@ class InvoicePaymentService
         private readonly AccountingService $accountingService,
         private readonly ChartOfAccountsService $chartOfAccountsService,
         private readonly InvoiceStateService $invoiceStateService,
+        private readonly FinancialPeriodGuardService $financialPeriodGuardService,
     ) {}
 
     /**
@@ -43,7 +45,21 @@ class InvoicePaymentService
                 throw new RuntimeException('Payments are allowed only for issued invoices.');
             }
 
-            $existingPaid = round((float) FinanceInvoicePayment::query()
+            $reference = trim((string) ($payload['reference'] ?? ''));
+            if ($reference !== '') {
+                $existingPayment = FinanceInvoicePayment::withoutGlobalScopes()
+                    ->where('workspace_id', $lockedInvoice->workspace_id)
+                    ->where('invoice_id', $lockedInvoice->id)
+                    ->where('reference', $reference)
+                    ->first();
+
+                if ($existingPayment) {
+                    return $existingPayment;
+                }
+            }
+
+            $existingPaid = round((float) FinanceInvoicePayment::withoutGlobalScopes()
+                ->where('workspace_id', $lockedInvoice->workspace_id)
                 ->where('invoice_id', $lockedInvoice->id)
                 ->sum('amount'), 2);
 
@@ -56,19 +72,29 @@ class InvoicePaymentService
                 throw new RuntimeException('Payment amount cannot exceed invoice due amount.');
             }
 
+            $paymentDate = (string) ($payload['payment_date'] ?? now()->toDateString());
+            $this->financialPeriodGuardService->assertDateIsOpen(
+                workspaceId: (int) $lockedInvoice->workspace_id,
+                date: $paymentDate,
+                context: 'تسجيل دفعة فاتورة'
+            );
+
             $treasuryAccount = null;
             if (! empty($payload['treasury_account_id'])) {
-                $treasuryAccount = FinanceTreasuryAccount::query()
+                $treasuryAccount = FinanceTreasuryAccount::withoutGlobalScopes()
+                    ->where('workspace_id', $lockedInvoice->workspace_id)
                     ->whereKey((int) $payload['treasury_account_id'])
                     ->first();
             }
 
             if (! $treasuryAccount) {
-                $treasuryAccount = FinanceTreasuryAccount::query()
+                $treasuryAccount = FinanceTreasuryAccount::withoutGlobalScopes()
+                    ->where('workspace_id', $lockedInvoice->workspace_id)
                     ->where('type', 'bank')
                     ->orderBy('id')
                     ->first()
-                    ?? FinanceTreasuryAccount::query()
+                    ?? FinanceTreasuryAccount::withoutGlobalScopes()
+                        ->where('workspace_id', $lockedInvoice->workspace_id)
                         ->where('type', 'cash')
                         ->orderBy('id')
                         ->first();
@@ -78,15 +104,16 @@ class InvoicePaymentService
                 'workspace_id' => $lockedInvoice->workspace_id,
                 'invoice_id' => $lockedInvoice->id,
                 'treasury_account_id' => $treasuryAccount?->id,
-                'payment_date' => $payload['payment_date'] ?? now()->toDateString(),
+                'payment_date' => $paymentDate,
                 'method' => $payload['method'] ?? 'cash',
-                'reference' => $payload['reference'] ?? null,
+                'reference' => $reference !== '' ? $reference : null,
                 'amount' => $amount,
                 'notes' => $payload['notes'] ?? null,
                 'created_by' => $actorUserId,
             ]);
 
-            $paid = round((float) FinanceInvoicePayment::query()
+            $paid = round((float) FinanceInvoicePayment::withoutGlobalScopes()
+                ->where('workspace_id', $lockedInvoice->workspace_id)
                 ->where('invoice_id', $lockedInvoice->id)
                 ->sum('amount'), 2);
             $due = $this->invoiceStateService->resolveAmountDue((float) $lockedInvoice->total, $paid);
@@ -99,12 +126,13 @@ class InvoicePaymentService
             $legacyStatus = $this->invoiceStateService->toLegacyStatus($invoiceStatus, $paymentStatus);
 
             $lockedInvoice->update([
-                'invoice_status' => $invoiceStatus,
                 'amount_paid' => $paid,
                 'amount_due' => $due,
-                'payment_status' => $paymentStatus,
                 'status' => $legacyStatus,
-            ]);
+            ] + (FinanceInvoice::hasSeparatedStatusColumns() ? [
+                'invoice_status' => $invoiceStatus,
+                'payment_status' => $paymentStatus,
+            ] : []));
 
             $this->postPaymentEntry($lockedInvoice, $payment, $treasuryAccount?->id, $actorUserId);
 
@@ -120,6 +148,16 @@ class InvoicePaymentService
 
     private function postPaymentEntry(FinanceInvoice $invoice, FinanceInvoicePayment $payment, ?int $treasuryAccountId, int $actorUserId): void
     {
+        $alreadyPosted = FinanceJournalEntry::withoutGlobalScopes()
+            ->where('workspace_id', $invoice->workspace_id)
+            ->where('type', 'invoice_payment')
+            ->where('reference_type', FinanceInvoicePayment::class)
+            ->where('reference_id', $payment->id)
+            ->exists();
+        if ($alreadyPosted) {
+            return;
+        }
+
         $ar = $this->chartOfAccountsService->byCode('1200');
         $ap = $this->chartOfAccountsService->byCode('2000');
         $cash = $this->chartOfAccountsService->byCode('1000');
@@ -131,7 +169,10 @@ class InvoicePaymentService
 
         $targetDrOrCr = $cash;
         if ($treasuryAccountId) {
-            $treasury = FinanceTreasuryAccount::query()->whereKey($treasuryAccountId)->first();
+            $treasury = FinanceTreasuryAccount::withoutGlobalScopes()
+                ->where('workspace_id', $invoice->workspace_id)
+                ->whereKey($treasuryAccountId)
+                ->first();
             if ($treasury?->linked_finance_account_id) {
                 $linked = $treasury->linkedAccount;
                 if ($linked) {

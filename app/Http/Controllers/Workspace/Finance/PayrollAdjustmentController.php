@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Workspace\Finance;
 use App\Models\Finance\FinancePayrollAdjustment;
 use App\Models\Finance\FinancePayrollRun;
 use App\Models\WorkspaceUser;
+use App\Services\Finance\FinanceBootstrapService;
 use App\Services\Finance\PayrollAdjustmentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class PayrollAdjustmentController extends FinanceBaseController
@@ -40,7 +42,13 @@ class PayrollAdjustmentController extends FinanceBaseController
 
         $validated = $request->validate([
             'type' => ['required', 'in:allowance,bonus,deduction'],
-            'user_id' => ['required', 'integer'],
+            'user_id' => [
+                'required',
+                'integer',
+                Rule::exists('workspace_users', 'user_id')->where(
+                    fn ($query) => $query->where('workspace_id', $workspace->id)->where('status', 'active')
+                ),
+            ],
             'title' => ['required', 'string', 'max:255'],
             'amount' => ['required', 'numeric', 'gt:0'],
             'effective_date' => ['required', 'date'],
@@ -74,7 +82,13 @@ class PayrollAdjustmentController extends FinanceBaseController
         $this->authorizeFinance($request, 'finance.adjustments.manage');
         $this->financeBootstrapService->ensureWorkspaceFinanceSetup($this->currentWorkspace());
         $request->validate([
-            'payroll_run_id' => ['nullable', 'integer'],
+            'payroll_run_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('finance_payroll_runs', 'id')->where(
+                    fn ($query) => $query->where('workspace_id', $this->currentWorkspace()->id)
+                ),
+            ],
         ]);
 
         $payrollRun = null;

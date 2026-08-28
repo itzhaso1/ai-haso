@@ -37,6 +37,7 @@ class InvoiceController extends FinanceBaseController
         $invoiceStatus = $request->string('invoice_status')->toString();
         $paymentStatus = $request->string('payment_status')->toString();
         $legacyStatus = $request->string('status')->toString();
+        $hasSplitStatusColumns = FinanceInvoice::hasSeparatedStatusColumns();
 
         if ($legacyStatus !== '' && $invoiceStatus === '' && $paymentStatus === '') {
             if (in_array($legacyStatus, ['draft', 'cancelled'], true)) {
@@ -50,18 +51,21 @@ class InvoiceController extends FinanceBaseController
 
         $invoices = FinanceInvoice::query()
             ->with(['customer', 'supplier'])
-            ->when($request->string('search')->toString(), function ($query, $search): void {
-                $query->where(function ($inner) use ($search): void {
+            ->when($request->string('search')->toString(), function ($query, $search) use ($hasSplitStatusColumns): void {
+                $query->where(function ($inner) use ($search, $hasSplitStatusColumns): void {
                     $inner->where('invoice_number', 'like', '%'.$search.'%')
                         ->orWhere('customer_name', 'like', '%'.$search.'%')
-                        ->orWhere('status', 'like', '%'.$search.'%')
-                        ->orWhere('invoice_status', 'like', '%'.$search.'%')
-                        ->orWhere('payment_status', 'like', '%'.$search.'%');
+                        ->orWhere('status', 'like', '%'.$search.'%');
+
+                    if ($hasSplitStatusColumns) {
+                        $inner->orWhere('invoice_status', 'like', '%'.$search.'%')
+                            ->orWhere('payment_status', 'like', '%'.$search.'%');
+                    }
                 });
             })
             ->when($request->filled('type'), fn ($query) => $query->where('type', $request->string('type')->toString()))
-            ->when($invoiceStatus !== '', fn ($query) => $query->where('invoice_status', $invoiceStatus))
-            ->when($paymentStatus !== '', fn ($query) => $query->where('payment_status', $paymentStatus))
+            ->when($invoiceStatus !== '', fn ($query) => $query->whereInvoiceStatus($invoiceStatus))
+            ->when($paymentStatus !== '', fn ($query) => $query->wherePaymentStatus($paymentStatus))
             ->latest('id')
             ->paginate(15)
             ->withQueryString();
@@ -148,7 +152,11 @@ class InvoiceController extends FinanceBaseController
         }
         $payload['items'] = $items;
 
-        $invoice = $this->invoiceService->create($workspace, $payload, (int) $request->user()?->id);
+        try {
+            $invoice = $this->invoiceService->create($workspace, $payload, (int) $request->user()?->id);
+        } catch (RuntimeException $exception) {
+            return back()->withInput()->with('error', $exception->getMessage());
+        }
 
         return redirect()->route('workspace.finance.invoices.show', $invoice)->with('success', 'تم إنشاء الفاتورة بنجاح.');
     }
@@ -195,7 +203,11 @@ class InvoiceController extends FinanceBaseController
             ],
         ]);
 
-        $this->invoicePaymentService->recordPayment($invoice, $validated, (int) $request->user()?->id);
+        try {
+            $this->invoicePaymentService->recordPayment($invoice, $validated, (int) $request->user()?->id);
+        } catch (RuntimeException $exception) {
+            return back()->withInput()->with('error', $exception->getMessage());
+        }
 
         return redirect()->route('workspace.finance.invoices.show', $invoice)->with('success', 'تم تسجيل الدفعة وتحديث الفاتورة.');
     }

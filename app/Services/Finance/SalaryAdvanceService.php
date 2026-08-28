@@ -4,7 +4,9 @@ namespace App\Services\Finance;
 
 use App\Models\Finance\FinanceSalaryAdvance;
 use App\Models\Finance\FinanceSalaryAdvanceRepayment;
+use App\Models\Finance\FinanceJournalEntry;
 use App\Models\Finance\FinanceTreasuryAccount;
+use App\Models\WorkspaceUser;
 use App\Models\Workspace;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -14,6 +16,7 @@ class SalaryAdvanceService
     public function __construct(
         private readonly AccountingService $accountingService,
         private readonly ChartOfAccountsService $chartOfAccountsService,
+        private readonly FinancialPeriodGuardService $financialPeriodGuardService,
     ) {}
 
     /**
@@ -26,7 +29,19 @@ class SalaryAdvanceService
             throw new RuntimeException('قيمة السلفة يجب أن تكون أكبر من صفر.');
         }
 
-        [$treasuryAccount, $treasuryFinanceAccount] = $this->resolveTreasuryAccount((int) ($payload['treasury_account_id'] ?? 0));
+        $workspaceUserExists = WorkspaceUser::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('user_id', (int) $payload['user_id'])
+            ->where('status', 'active')
+            ->exists();
+        if (! $workspaceUserExists) {
+            throw new RuntimeException('الموظف المحدد غير مرتبط بمساحة العمل الحالية.');
+        }
+
+        [$treasuryAccount, $treasuryFinanceAccount] = $this->resolveTreasuryAccount(
+            treasuryAccountId: (int) ($payload['treasury_account_id'] ?? 0),
+            workspaceId: $workspace->id
+        );
         $employeeAdvances = $this->chartOfAccountsService->byCode('1210');
         if (! $employeeAdvances || ! $treasuryFinanceAccount) {
             throw new RuntimeException('حسابات السلف غير مكتملة في دليل الحسابات.');
@@ -45,33 +60,49 @@ class SalaryAdvanceService
                 'notes' => $payload['notes'] ?? null,
             ]);
 
-            $entry = $this->accountingService->createEntry(
+            $issuedDate = $advance->issued_at?->toDateString() ?? now()->toDateString();
+            $this->financialPeriodGuardService->assertDateIsOpen(
                 workspaceId: $workspace->id,
-                entryDate: $advance->issued_at?->toDateString() ?? now()->toDateString(),
-                type: 'payroll',
-                lines: [
-                    [
-                        'account_id' => $employeeAdvances->id,
-                        'debit' => $amount,
-                        'credit' => 0,
-                        'description' => 'Employee advance issued',
-                        'entity_type' => FinanceSalaryAdvance::class,
-                        'entity_id' => $advance->id,
-                    ],
-                    [
-                        'account_id' => $treasuryFinanceAccount->id,
-                        'debit' => 0,
-                        'credit' => $amount,
-                        'description' => 'Cash/Bank advance payout',
-                        'entity_type' => FinanceSalaryAdvance::class,
-                        'entity_id' => $advance->id,
-                    ],
-                ],
-                description: 'Salary advance issued',
-                referenceType: FinanceSalaryAdvance::class,
-                referenceId: $advance->id,
-                postedBy: $actorUserId
+                date: $issuedDate,
+                context: 'إصدار سلفة موظف'
             );
+
+            $entry = FinanceJournalEntry::withoutGlobalScopes()
+                ->where('workspace_id', $workspace->id)
+                ->where('type', 'payroll')
+                ->where('reference_type', FinanceSalaryAdvance::class)
+                ->where('reference_id', $advance->id)
+                ->first();
+
+            if (! $entry) {
+                $entry = $this->accountingService->createEntry(
+                    workspaceId: $workspace->id,
+                    entryDate: $issuedDate,
+                    type: 'payroll',
+                    lines: [
+                        [
+                            'account_id' => $employeeAdvances->id,
+                            'debit' => $amount,
+                            'credit' => 0,
+                            'description' => 'Employee advance issued',
+                            'entity_type' => FinanceSalaryAdvance::class,
+                            'entity_id' => $advance->id,
+                        ],
+                        [
+                            'account_id' => $treasuryFinanceAccount->id,
+                            'debit' => 0,
+                            'credit' => $amount,
+                            'description' => 'Cash/Bank advance payout',
+                            'entity_type' => FinanceSalaryAdvance::class,
+                            'entity_id' => $advance->id,
+                        ],
+                    ],
+                    description: 'Salary advance issued',
+                    referenceType: FinanceSalaryAdvance::class,
+                    referenceId: $advance->id,
+                    postedBy: $actorUserId
+                );
+            }
 
             $advance->update([
                 'notes' => trim((string) ($advance->notes ?: '')).($entry->id ? "\nJE#{$entry->entry_number}" : ''),
@@ -113,7 +144,10 @@ class SalaryAdvanceService
 
         [$treasuryAccount, $treasuryFinanceAccount] = $method === 'payroll_deduction'
             ? [null, null]
-            : $this->resolveTreasuryAccount((int) ($payload['treasury_account_id'] ?? 0));
+            : $this->resolveTreasuryAccount(
+                treasuryAccountId: (int) ($payload['treasury_account_id'] ?? 0),
+                workspaceId: (int) $advance->workspace_id
+            );
 
         return DB::transaction(function () use (
             $advance,
@@ -126,6 +160,26 @@ class SalaryAdvanceService
             $treasuryAccount,
             $treasuryFinanceAccount
         ): FinanceSalaryAdvanceRepayment {
+            $paymentDate = (string) ($payload['payment_date'] ?? now()->toDateString());
+            $this->financialPeriodGuardService->assertDateIsOpen(
+                workspaceId: (int) $advance->workspace_id,
+                date: $paymentDate,
+                context: 'تسجيل سداد سلفة'
+            );
+
+            $repayment = FinanceSalaryAdvanceRepayment::withoutGlobalScopes()->create([
+                'workspace_id' => $advance->workspace_id,
+                'salary_advance_id' => $advance->id,
+                'treasury_account_id' => $treasuryAccount?->id,
+                'payment_date' => $paymentDate,
+                'amount' => $amount,
+                'method' => $method,
+                'status' => 'draft',
+                'notes' => $payload['notes'] ?? null,
+                'posted_journal_entry_id' => null,
+                'created_by' => $actorUserId,
+            ]);
+
             $entryLines = [];
             if ($method === 'payroll_deduction') {
                 if (! $payrollPayable) {
@@ -138,6 +192,7 @@ class SalaryAdvanceService
                         'credit' => 0,
                         'description' => 'Advance repayment through payroll deduction',
                         'entity_type' => FinanceSalaryAdvanceRepayment::class,
+                        'entity_id' => $repayment->id,
                     ],
                     [
                         'account_id' => $employeeAdvances->id,
@@ -145,6 +200,7 @@ class SalaryAdvanceService
                         'credit' => $amount,
                         'description' => 'Reduce employee advances receivable',
                         'entity_type' => FinanceSalaryAdvanceRepayment::class,
+                        'entity_id' => $repayment->id,
                     ],
                 ];
             } else {
@@ -158,6 +214,7 @@ class SalaryAdvanceService
                         'credit' => 0,
                         'description' => 'Cash/Bank received against advance',
                         'entity_type' => FinanceSalaryAdvanceRepayment::class,
+                        'entity_id' => $repayment->id,
                     ],
                     [
                         'account_id' => $employeeAdvances->id,
@@ -165,32 +222,25 @@ class SalaryAdvanceService
                         'credit' => $amount,
                         'description' => 'Reduce employee advances receivable',
                         'entity_type' => FinanceSalaryAdvanceRepayment::class,
+                        'entity_id' => $repayment->id,
                     ],
                 ];
             }
 
             $entry = $this->accountingService->createEntry(
                 workspaceId: (int) $advance->workspace_id,
-                entryDate: $payload['payment_date'] ?? now()->toDateString(),
+                entryDate: $paymentDate,
                 type: 'payroll',
                 lines: $entryLines,
                 description: 'Repayment for employee advance #'.$advance->id,
                 referenceType: FinanceSalaryAdvanceRepayment::class,
-                referenceId: null,
+                referenceId: $repayment->id,
                 postedBy: $actorUserId
             );
 
-            $repayment = FinanceSalaryAdvanceRepayment::withoutGlobalScopes()->create([
-                'workspace_id' => $advance->workspace_id,
-                'salary_advance_id' => $advance->id,
-                'treasury_account_id' => $treasuryAccount?->id,
-                'payment_date' => $payload['payment_date'] ?? now()->toDateString(),
-                'amount' => $amount,
-                'method' => $method,
+            $repayment->update([
                 'status' => 'posted',
-                'notes' => $payload['notes'] ?? null,
                 'posted_journal_entry_id' => $entry->id,
-                'created_by' => $actorUserId,
             ]);
 
             $remaining = round((float) $advance->remaining_amount - $amount, 2);
@@ -212,15 +262,19 @@ class SalaryAdvanceService
     /**
      * @return array{0:FinanceTreasuryAccount,1:\App\Models\Finance\FinanceAccount}
      */
-    private function resolveTreasuryAccount(int $treasuryAccountId): array
+    private function resolveTreasuryAccount(int $treasuryAccountId, int $workspaceId): array
     {
         $treasury = null;
         if ($treasuryAccountId > 0) {
-            $treasury = FinanceTreasuryAccount::query()->whereKey($treasuryAccountId)->first();
+            $treasury = FinanceTreasuryAccount::withoutGlobalScopes()
+                ->where('workspace_id', $workspaceId)
+                ->whereKey($treasuryAccountId)
+                ->first();
         }
 
         if (! $treasury) {
-            $treasury = FinanceTreasuryAccount::query()
+            $treasury = FinanceTreasuryAccount::withoutGlobalScopes()
+                ->where('workspace_id', $workspaceId)
                 ->where('is_active', true)
                 ->orderByRaw("CASE WHEN type = 'cash' THEN 0 ELSE 1 END")
                 ->orderBy('id')

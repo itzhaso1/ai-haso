@@ -11,6 +11,7 @@ use App\Services\Finance\ExpenseService;
 use App\Services\Finance\FinanceBootstrapService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class ExpenseController extends FinanceBaseController
@@ -52,11 +53,30 @@ class ExpenseController extends FinanceBaseController
     {
         $this->authorizeFinance($request, 'expenses.create');
         $workspace = $this->currentWorkspace();
+        $this->financeBootstrapService->ensureWorkspaceFinanceSetup($workspace);
 
         $payload = $request->validate([
-            'supplier_id' => ['nullable', 'integer'],
-            'category_id' => ['nullable', 'integer'],
-            'treasury_account_id' => ['nullable', 'integer'],
+            'supplier_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('finance_suppliers', 'id')->where(
+                    fn ($query) => $query->where('workspace_id', $workspace->id)
+                ),
+            ],
+            'category_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('finance_expense_categories', 'id')->where(
+                    fn ($query) => $query->where('workspace_id', $workspace->id)
+                ),
+            ],
+            'treasury_account_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('finance_treasury_accounts', 'id')->where(
+                    fn ($query) => $query->where('workspace_id', $workspace->id)
+                ),
+            ],
             'expense_number' => ['nullable', 'string', 'max:255'],
             'expense_date' => ['required', 'date'],
             'description' => ['nullable', 'string'],
@@ -72,7 +92,11 @@ class ExpenseController extends FinanceBaseController
             'attachment_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:4096'],
         ]);
 
-        $this->expenseService->create($workspace, $payload, (int) $request->user()?->id);
+        try {
+            $this->expenseService->create($workspace, $payload, (int) $request->user()?->id);
+        } catch (\RuntimeException $exception) {
+            return back()->withInput()->with('error', $exception->getMessage());
+        }
 
         return redirect()->route('workspace.finance.expenses.index')->with('success', 'تم إنشاء المصروف وربطه محاسبيًا.');
     }

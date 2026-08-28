@@ -37,12 +37,20 @@ class DashboardService
         $receivables = (float) (clone $salesInvoices)->sum('amount_due');
         $payables = (float) (clone $purchaseInvoices)->sum('amount_due');
         $unpaidInvoices = (int) (clone $salesInvoices)
-            ->where('invoice_status', 'issued')
-            ->whereIn('payment_status', ['unpaid', 'partial', 'overdue'])
+            ->whereIssued()
+            ->where(function ($builder): void {
+                $builder->where(function ($stateQuery): void {
+                    $stateQuery->wherePaymentStatus('unpaid');
+                })->orWhere(function ($stateQuery): void {
+                    $stateQuery->wherePaymentStatus('partial');
+                })->orWhere(function ($stateQuery): void {
+                    $stateQuery->wherePaymentStatus('overdue');
+                });
+            })
             ->count();
         $overdueInvoices = (int) (clone $salesInvoices)
-            ->where('invoice_status', 'issued')
-            ->where('payment_status', 'overdue')
+            ->whereIssued()
+            ->wherePaymentStatus('overdue')
             ->count();
 
         $cashBalance = (float) FinanceTreasuryAccount::query()->where('type', 'cash')->sum('current_balance');
@@ -84,8 +92,8 @@ class DashboardService
                 'overdue_invoices' => FinanceInvoice::query()
                     ->with('customer')
                     ->where('type', 'sales')
-                    ->where('invoice_status', 'issued')
-                    ->where('payment_status', 'overdue')
+                    ->whereIssued()
+                    ->wherePaymentStatus('overdue')
                     ->latest('due_date')
                     ->limit(10)
                     ->get(),

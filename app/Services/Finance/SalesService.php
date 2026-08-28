@@ -36,12 +36,20 @@ class SalesService
         $totalDue = (float) (clone $query)->sum('amount_due');
         $totalPaid = (float) (clone $query)->sum('amount_paid');
         $overdueCount = (clone $query)
-            ->where('invoice_status', 'issued')
-            ->where('payment_status', 'overdue')
+            ->whereIssued()
+            ->wherePaymentStatus('overdue')
             ->count();
         $unpaidCount = (clone $query)
-            ->where('invoice_status', 'issued')
-            ->whereIn('payment_status', ['unpaid', 'partial', 'overdue'])
+            ->whereIssued()
+            ->where(function (Builder $builder): void {
+                $builder->where(function (Builder $stateQuery): void {
+                    $stateQuery->wherePaymentStatus('unpaid');
+                })->orWhere(function (Builder $stateQuery): void {
+                    $stateQuery->wherePaymentStatus('partial');
+                })->orWhere(function (Builder $stateQuery): void {
+                    $stateQuery->wherePaymentStatus('overdue');
+                });
+            })
             ->count();
 
         return [
@@ -98,8 +106,8 @@ class SalesService
                         ->orWhereHas('customer', fn (Builder $customerQuery) => $customerQuery->where('name', 'like', '%'.$search.'%'));
                 });
             })
-            ->when($invoiceStatus !== '', fn (Builder $query) => $query->where('invoice_status', $invoiceStatus))
-            ->when($paymentStatus !== '', fn (Builder $query) => $query->where('payment_status', $paymentStatus))
+            ->when($invoiceStatus !== '', fn (Builder $query) => $query->whereInvoiceStatus($invoiceStatus))
+            ->when($paymentStatus !== '', fn (Builder $query) => $query->wherePaymentStatus($paymentStatus))
             ->when($customerId > 0, fn (Builder $query) => $query->where('customer_id', $customerId))
             ->when($from, fn (Builder $query) => $query->whereDate('issue_date', '>=', $from->toDateString()))
             ->when($to, fn (Builder $query) => $query->whereDate('issue_date', '<=', $to->toDateString()));

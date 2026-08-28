@@ -26,15 +26,20 @@ class PdfInvoiceService
         $pdfSnapshot = is_array($invoice->pdf_snapshot) ? $invoice->pdf_snapshot : [];
         $logoPath = $companySnapshot['logo_path'] ?? $setting?->logo_path;
 
-        /** @var \Barryvdh\DomPDF\PDF $pdf */
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('workspace.finance.invoices.pdf', [
+        $viewData = [
             'invoice' => $invoice,
             'setting' => $setting,
             'companySnapshot' => $companySnapshot,
             'recipientSnapshot' => $recipientSnapshot,
             'pdfSnapshot' => $pdfSnapshot,
             'logoDataUri' => $this->resolveLogoDataUri(is_string($logoPath) ? $logoPath : null),
-        ])->setPaper('a4');
+        ];
+
+        $html = view('workspace.finance.invoices.pdf', $viewData)->render();
+        $html = $this->shapeArabicForDompdf($html);
+
+        /** @var \Barryvdh\DomPDF\PDF $pdf */
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)->setPaper('a4');
 
         return $pdf->download($fileName);
     }
@@ -61,5 +66,43 @@ class PdfInvoiceService
         $mimeType = is_string($mimeType) && $mimeType !== '' ? $mimeType : 'image/png';
 
         return 'data:'.$mimeType.';base64,'.base64_encode($binary);
+    }
+
+    private function shapeArabicForDompdf(string $html): string
+    {
+        if (! class_exists(\ArPHP\I18N\Arabic::class)) {
+            return $html;
+        }
+
+        try {
+            /** @var object $arabic */
+            $arabic = new \ArPHP\I18N\Arabic();
+            if (! method_exists($arabic, 'arIdentify') || ! method_exists($arabic, 'utf8Glyphs')) {
+                return $html;
+            }
+
+            /** @var array<int,int> $positions */
+            $positions = $arabic->arIdentify($html);
+            if (! is_array($positions) || $positions === []) {
+                return $html;
+            }
+
+            for ($i = count($positions) - 1; $i >= 1; $i -= 2) {
+                $start = $positions[$i - 1];
+                $end = $positions[$i];
+                $segment = substr($html, $start, $end - $start);
+                if (! is_string($segment) || $segment === '') {
+                    continue;
+                }
+
+                /** @var string $glyphSegment */
+                $glyphSegment = $arabic->utf8Glyphs($segment);
+                $html = substr_replace($html, $glyphSegment, $start, $end - $start);
+            }
+        } catch (\Throwable) {
+            return $html;
+        }
+
+        return $html;
     }
 }

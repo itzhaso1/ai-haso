@@ -92,6 +92,7 @@ class SettingsController extends FinanceBaseController
             }
         }
 
+        $this->stripUnknownSettingColumns($validated);
         unset($validated['logo'], $validated['remove_logo']);
         $setting->update($validated);
 
@@ -104,12 +105,41 @@ class SettingsController extends FinanceBaseController
             return true;
         }
 
-        $isReferencedByHistoricalInvoice = FinanceInvoice::withoutGlobalScopes()
-            ->whereIn('invoice_status', ['issued', 'cancelled'])
-            ->where('company_snapshot->logo_path', $logoPath)
-            ->exists();
+        $query = FinanceInvoice::withoutGlobalScopes()
+            ->where('company_snapshot->logo_path', $logoPath);
+
+        if (FinanceInvoice::hasSeparatedStatusColumns()) {
+            $query->where(function ($builder): void {
+                $builder->whereInvoiceStatus('issued')
+                    ->orWhere(function ($cancelledQuery): void {
+                        $cancelledQuery->whereInvoiceStatus('cancelled');
+                    });
+            });
+        } else {
+            $query->whereIn('status', ['sent', 'unpaid', 'partial', 'paid', 'overdue', 'cancelled']);
+        }
+
+        $isReferencedByHistoricalInvoice = $query->exists();
 
         return ! $isReferencedByHistoricalInvoice;
+    }
+
+    /**
+     * @param  array<string,mixed>  $payload
+     */
+    private function stripUnknownSettingColumns(array &$payload): void
+    {
+        $optionalColumns = [
+            'website',
+            'invoice_primary_color',
+            'invoice_footer_text',
+        ];
+
+        foreach ($optionalColumns as $column) {
+            if (! Schema::hasColumn('finance_settings', $column)) {
+                unset($payload[$column]);
+            }
+        }
     }
 
     public function storeTaxRate(Request $request): RedirectResponse

@@ -66,6 +66,8 @@
             color: #0f172a;
             font-size: 12px;
             line-height: 1.5;
+            direction: rtl;
+            unicode-bidi: embed;
         }
 
         .document {
@@ -168,6 +170,8 @@
             font-size: 11px;
             vertical-align: top;
             word-break: break-word;
+            direction: rtl;
+            unicode-bidi: embed;
         }
 
         .items tbody tr {
@@ -351,10 +355,10 @@
             <table class="footer-table">
                 <tr>
                     <td style="text-align: right;">
-                        {{ $invoiceFooter ?: 'تم إصدار هذه الفاتورة إلكترونيًا عبر النظام المالي.' }}
+                        {!! nl2br(e($invoiceFooter ?: 'تم إصدار هذه الفاتورة إلكترونيًا عبر النظام المالي.')) !!}
                     </td>
                     <td style="text-align: left;">
-                        صفحة <span class="page-num"></span> من <span class="page-count"></span>
+                        رقم الصفحة يظهر تلقائيًا
                     </td>
                 </tr>
             </table>

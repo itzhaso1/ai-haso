@@ -4,6 +4,7 @@ namespace Tests\Feature\Feature\Finance;
 
 use App\Models\Customer;
 use App\Models\Finance\FinanceExpense;
+use App\Models\Finance\FinanceAccountingPeriod;
 use App\Models\Finance\FinanceFiscalYear;
 use App\Models\Finance\FinanceInvoice;
 use App\Models\Finance\FinanceJournalEntry;
@@ -659,6 +660,150 @@ class FinancialCoreTest extends TestCase
 
         $response->assertOk();
         $this->assertStringContainsString('application/pdf', (string) $response->headers->get('content-type'));
+    }
+
+    public function test_repeated_payment_reference_is_idempotent_and_prevents_duplicate_entries(): void
+    {
+        [$user, $workspace] = $this->createWorkspaceOwner('company');
+        $customer = Customer::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Ref Customer',
+            'phone' => '0506007000',
+        ]);
+
+        $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.finance.invoices.store'), [
+                'type' => 'sales',
+                'customer_id' => $customer->id,
+                'issue_date' => now()->toDateString(),
+                'currency' => 'SAR',
+                'invoice_status' => 'issued',
+                'tax_profile_type' => 'standard',
+                'tax_rate' => 15,
+                'items_json' => json_encode([
+                    [
+                        'product_name' => 'Idempotent Payment Service',
+                        'quantity' => 1,
+                        'unit_price' => 200,
+                        'discount' => 0,
+                        'tax_rate' => 15,
+                        'tax_type' => 'standard',
+                    ],
+                ]),
+            ])
+            ->assertRedirect();
+
+        $invoice = FinanceInvoice::withoutGlobalScopes()->firstOrFail();
+
+        $payload = [
+            'payment_date' => now()->toDateString(),
+            'amount' => 100,
+            'method' => 'cash',
+            'reference' => 'TXN-REF-123',
+        ];
+
+        $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.finance.invoices.payments.store', $invoice), $payload)
+            ->assertRedirect();
+
+        $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.finance.invoices.payments.store', $invoice), $payload)
+            ->assertRedirect();
+
+        $invoice->refresh();
+        $payments = $invoice->payments()->withoutGlobalScopes()->where('reference', 'TXN-REF-123')->get();
+        $this->assertCount(1, $payments);
+        $this->assertSame('100.00', (string) $invoice->amount_paid);
+
+        $paymentEntryCount = FinanceJournalEntry::withoutGlobalScopes()
+            ->where('workspace_id', $workspace->id)
+            ->where('type', 'invoice_payment')
+            ->where('reference_type', \App\Models\Finance\FinanceInvoicePayment::class)
+            ->where('reference_id', $payments->first()->id)
+            ->count();
+        $this->assertSame(1, $paymentEntryCount);
+    }
+
+    public function test_closed_period_blocks_issued_invoice_but_allows_draft(): void
+    {
+        [$user, $workspace] = $this->createWorkspaceOwner('company');
+        $today = now()->toDateString();
+
+        $year = FinanceFiscalYear::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'FY-CLOSED-TEST',
+            'start_date' => now()->startOfYear()->toDateString(),
+            'end_date' => now()->endOfYear()->toDateString(),
+            'status' => 'open',
+        ]);
+
+        FinanceAccountingPeriod::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'fiscal_year_id' => $year->id,
+            'name' => now()->format('Y-m'),
+            'start_date' => now()->startOfMonth()->toDateString(),
+            'end_date' => now()->endOfMonth()->toDateString(),
+            'status' => 'closed',
+        ]);
+
+        $issuedResponse = $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.finance.invoices.store'), [
+                'type' => 'sales',
+                'customer_name' => 'Closed Period Issued',
+                'issue_date' => $today,
+                'currency' => 'SAR',
+                'invoice_status' => 'issued',
+                'tax_profile_type' => 'standard',
+                'tax_rate' => 15,
+                'items_json' => json_encode([
+                    [
+                        'product_name' => 'Issued in Closed Period',
+                        'quantity' => 1,
+                        'unit_price' => 100,
+                        'discount' => 0,
+                        'tax_rate' => 15,
+                        'tax_type' => 'standard',
+                    ],
+                ]),
+            ]);
+
+        $issuedResponse->assertRedirect();
+        $issuedResponse->assertSessionHas('error');
+
+        $draftResponse = $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.finance.invoices.store'), [
+                'type' => 'sales',
+                'customer_name' => 'Closed Period Draft',
+                'issue_date' => $today,
+                'currency' => 'SAR',
+                'invoice_status' => 'draft',
+                'tax_profile_type' => 'standard',
+                'tax_rate' => 15,
+                'items_json' => json_encode([
+                    [
+                        'product_name' => 'Draft in Closed Period',
+                        'quantity' => 1,
+                        'unit_price' => 100,
+                        'discount' => 0,
+                        'tax_rate' => 15,
+                        'tax_type' => 'standard',
+                    ],
+                ]),
+            ]);
+
+        $draftResponse->assertRedirect();
+        $draftInvoice = FinanceInvoice::withoutGlobalScopes()
+            ->where('workspace_id', $workspace->id)
+            ->where('customer_name', 'Closed Period Draft')
+            ->first();
+
+        $this->assertNotNull($draftInvoice);
+        $this->assertSame('draft', $draftInvoice->invoice_status);
     }
 
     public function test_price_lists_module_allows_create_and_add_items_and_isolated_by_workspace(): void

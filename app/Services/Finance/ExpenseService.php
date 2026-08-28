@@ -4,6 +4,7 @@ namespace App\Services\Finance;
 
 use App\Models\Finance\FinanceExpense;
 use App\Models\Finance\FinanceExpenseCategory;
+use App\Models\Finance\FinanceJournalEntry;
 use App\Models\Finance\FinanceSupplier;
 use App\Models\Finance\FinanceTreasuryAccount;
 use App\Models\Workspace;
@@ -18,6 +19,7 @@ class ExpenseService
         private readonly TaxService $taxService,
         private readonly AccountingService $accountingService,
         private readonly ChartOfAccountsService $chartOfAccountsService,
+        private readonly FinancialPeriodGuardService $financialPeriodGuardService,
     ) {}
 
     /**
@@ -30,7 +32,10 @@ class ExpenseService
         return DB::transaction(function () use ($workspace, $payload, $actorUserId): FinanceExpense {
             $supplier = null;
             if (! empty($payload['supplier_id'])) {
-                $supplier = FinanceSupplier::query()->whereKey((int) $payload['supplier_id'])->first();
+                $supplier = FinanceSupplier::withoutGlobalScopes()
+                    ->where('workspace_id', $workspace->id)
+                    ->whereKey((int) $payload['supplier_id'])
+                    ->first();
                 if (! $supplier) {
                     throw new RuntimeException('Supplier is invalid for this workspace.');
                 }
@@ -38,7 +43,10 @@ class ExpenseService
 
             $category = null;
             if (! empty($payload['category_id'])) {
-                $category = FinanceExpenseCategory::query()->whereKey((int) $payload['category_id'])->first();
+                $category = FinanceExpenseCategory::withoutGlobalScopes()
+                    ->where('workspace_id', $workspace->id)
+                    ->whereKey((int) $payload['category_id'])
+                    ->first();
                 if (! $category) {
                     throw new RuntimeException('Expense category is invalid for this workspace.');
                 }
@@ -46,7 +54,10 @@ class ExpenseService
 
             $treasury = null;
             if (! empty($payload['treasury_account_id'])) {
-                $treasury = FinanceTreasuryAccount::query()->whereKey((int) $payload['treasury_account_id'])->first();
+                $treasury = FinanceTreasuryAccount::withoutGlobalScopes()
+                    ->where('workspace_id', $workspace->id)
+                    ->whereKey((int) $payload['treasury_account_id'])
+                    ->first();
                 if (! $treasury) {
                     throw new RuntimeException('Treasury account is invalid for this workspace.');
                 }
@@ -61,6 +72,7 @@ class ExpenseService
             $taxRate = (float) ($payload['tax_rate'] ?? 0);
             $calc = $this->taxService->calculateAmount($amount, $taxType, $taxRate);
             $status = (string) ($payload['status'] ?? 'approved');
+            $expenseDate = (string) ($payload['expense_date'] ?? now()->toDateString());
 
             $attachmentPath = null;
             if (($payload['attachment_file'] ?? null) instanceof UploadedFile) {
@@ -74,15 +86,15 @@ class ExpenseService
                 'supplier_id' => $supplier?->id,
                 'category_id' => $category?->id,
                 'treasury_account_id' => $treasury?->id,
-                'expense_number' => $payload['expense_number'] ?: $this->nextExpenseNumber($workspace->id),
-                'expense_date' => $payload['expense_date'] ?? now()->toDateString(),
+                'expense_number' => ($payload['expense_number'] ?? null) ?: $this->nextExpenseNumber($workspace->id),
+                'expense_date' => $expenseDate,
                 'description' => $payload['description'] ?? null,
                 'amount' => $amount,
                 'tax_rate' => $taxRate,
                 'tax_amount' => $calc['tax_amount'],
                 'total' => $calc['total'],
-                'currency' => $payload['currency'] ?? 'SAR',
-                'payment_method' => $payload['payment_method'] ?? 'cash',
+                'currency' => (string) ($payload['currency'] ?? 'SAR'),
+                'payment_method' => (string) ($payload['payment_method'] ?? 'cash'),
                 'status' => $status,
                 'is_recurring' => (bool) ($payload['is_recurring'] ?? false),
                 'recurring_frequency' => $payload['recurring_frequency'] ?? null,
@@ -93,6 +105,11 @@ class ExpenseService
             ]);
 
             if (! in_array($status, ['draft', 'cancelled'], true)) {
+                $this->financialPeriodGuardService->assertDateIsOpen(
+                    workspaceId: $workspace->id,
+                    date: $expenseDate,
+                    context: 'ترحيل مصروف'
+                );
                 $this->postExpenseEntry($expense, $category, $treasury, $actorUserId);
             }
 
@@ -115,6 +132,16 @@ class ExpenseService
         ?FinanceTreasuryAccount $treasury,
         int $actorUserId
     ): void {
+        $alreadyPosted = FinanceJournalEntry::withoutGlobalScopes()
+            ->where('workspace_id', $expense->workspace_id)
+            ->where('type', 'expense')
+            ->where('reference_type', FinanceExpense::class)
+            ->where('reference_id', $expense->id)
+            ->exists();
+        if ($alreadyPosted) {
+            return;
+        }
+
         $expenseAccount = $category?->linkedAccount ?? $this->chartOfAccountsService->byCode('5900');
         $inputVat = $this->chartOfAccountsService->byCode('1400');
         $ap = $this->chartOfAccountsService->byCode('2000');

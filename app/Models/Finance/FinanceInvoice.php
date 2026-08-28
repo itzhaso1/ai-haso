@@ -7,9 +7,11 @@ use App\Models\Customer;
 use App\Models\User;
 use App\Models\WorkspaceScopedModel;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Schema;
 
 #[Fillable([
     'workspace_id',
@@ -48,6 +50,12 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class FinanceInvoice extends WorkspaceScopedModel
 {
     use BelongsToWorkspace, SoftDeletes;
+
+    /** @var array<string,bool> */
+    private static array $schemaFlags = [];
+
+    /** @var array<int,string> */
+    private const LEGACY_ISSUED_STATUSES = ['sent', 'unpaid', 'partial', 'paid', 'overdue'];
 
     protected function casts(): array
     {
@@ -93,5 +101,91 @@ class FinanceInvoice extends WorkspaceScopedModel
     public function payments(): HasMany
     {
         return $this->hasMany(FinanceInvoicePayment::class, 'invoice_id');
+    }
+
+    public function getInvoiceStatusAttribute(?string $value): string
+    {
+        if (is_string($value) && $value !== '') {
+            return $value;
+        }
+
+        $legacy = (string) ($this->attributes['status'] ?? 'draft');
+        if ($legacy === 'cancelled') {
+            return 'cancelled';
+        }
+
+        if ($legacy === 'draft') {
+            return 'draft';
+        }
+
+        return 'issued';
+    }
+
+    public function getPaymentStatusAttribute(?string $value): string
+    {
+        if (is_string($value) && $value !== '') {
+            return $value;
+        }
+
+        $legacy = (string) ($this->attributes['status'] ?? 'unpaid');
+
+        return in_array($legacy, ['unpaid', 'partial', 'paid', 'overdue'], true)
+            ? $legacy
+            : 'unpaid';
+    }
+
+    public function scopeWhereInvoiceStatus(Builder $query, string $invoiceStatus): Builder
+    {
+        if (self::hasSeparatedStatusColumns()) {
+            return $query->where('invoice_status', $invoiceStatus);
+        }
+
+        return match ($invoiceStatus) {
+            'draft' => $query->where('status', 'draft'),
+            'cancelled' => $query->where('status', 'cancelled'),
+            'issued' => $query->whereIn('status', self::LEGACY_ISSUED_STATUSES),
+            default => $query,
+        };
+    }
+
+    public function scopeWherePaymentStatus(Builder $query, string $paymentStatus): Builder
+    {
+        if (self::hasSeparatedStatusColumns()) {
+            return $query->where('payment_status', $paymentStatus);
+        }
+
+        return in_array($paymentStatus, ['unpaid', 'partial', 'paid', 'overdue'], true)
+            ? $query->where('status', $paymentStatus)
+            : $query;
+    }
+
+    public function scopeWhereIssued(Builder $query): Builder
+    {
+        if (self::hasSeparatedStatusColumns()) {
+            return $query->where('invoice_status', 'issued');
+        }
+
+        return $query->whereIn('status', self::LEGACY_ISSUED_STATUSES);
+    }
+
+    public static function hasSeparatedStatusColumns(): bool
+    {
+        if (! array_key_exists('split_statuses', self::$schemaFlags)) {
+            self::$schemaFlags['split_statuses'] = Schema::hasColumn('finance_invoices', 'invoice_status')
+                && Schema::hasColumn('finance_invoices', 'payment_status');
+        }
+
+        return self::$schemaFlags['split_statuses'];
+    }
+
+    public static function hasSnapshotColumns(): bool
+    {
+        if (! array_key_exists('snapshots', self::$schemaFlags)) {
+            self::$schemaFlags['snapshots'] = Schema::hasColumn('finance_invoices', 'company_snapshot')
+                && Schema::hasColumn('finance_invoices', 'recipient_snapshot')
+                && Schema::hasColumn('finance_invoices', 'pdf_snapshot');
+        }
+
+        return self::$schemaFlags['snapshots'];
     }
 }
