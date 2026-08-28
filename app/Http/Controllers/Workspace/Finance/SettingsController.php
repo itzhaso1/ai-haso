@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Workspace\Finance;
 
 use App\Models\Finance\FinanceAccount;
+use App\Models\Finance\FinanceInvoice;
 use App\Models\Finance\FinanceSetting;
 use App\Models\Finance\FinanceTaxRate;
 use App\Models\Finance\FinanceTreasuryAccount;
 use App\Services\Finance\FinanceBootstrapService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 
@@ -51,8 +53,11 @@ class SettingsController extends FinanceBaseController
             'country_code' => ['nullable', 'string', 'size:2'],
             'phone' => ['nullable', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255'],
+            'website' => ['nullable', 'string', 'max:255'],
             'currency' => ['nullable', 'string', 'size:3'],
             'invoice_prefix' => ['nullable', 'string', 'max:20'],
+            'invoice_primary_color' => ['nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'invoice_footer_text' => ['nullable', 'string', 'max:2000'],
             'default_payment_terms' => ['nullable', 'string', 'max:255'],
             'default_vat_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'logo' => ['nullable', 'image', 'max:4096'],
@@ -72,21 +77,39 @@ class SettingsController extends FinanceBaseController
         );
 
         if ($request->boolean('remove_logo') && $setting->logo_path) {
-            Storage::disk('public')->delete($setting->logo_path);
+            if ($this->shouldDeleteLogoFile($setting->logo_path)) {
+                Storage::disk('public')->delete($setting->logo_path);
+            }
             $validated['logo_path'] = null;
         }
 
         if ($request->hasFile('logo')) {
-            if ($setting->logo_path) {
-                Storage::disk('public')->delete($setting->logo_path);
-            }
+            $previousLogoPath = $setting->logo_path;
             $validated['logo_path'] = $request->file('logo')->store('workspaces/'.$workspace->id.'/finance/company', 'public');
+
+            if ($previousLogoPath && $this->shouldDeleteLogoFile($previousLogoPath)) {
+                Storage::disk('public')->delete($previousLogoPath);
+            }
         }
 
         unset($validated['logo'], $validated['remove_logo']);
         $setting->update($validated);
 
         return redirect()->route('workspace.finance.settings.index')->with('success', 'تم تحديث إعدادات المنشأة.');
+    }
+
+    private function shouldDeleteLogoFile(string $logoPath): bool
+    {
+        if (! Schema::hasColumn('finance_invoices', 'company_snapshot')) {
+            return true;
+        }
+
+        $isReferencedByHistoricalInvoice = FinanceInvoice::withoutGlobalScopes()
+            ->whereIn('invoice_status', ['issued', 'cancelled'])
+            ->where('company_snapshot->logo_path', $logoPath)
+            ->exists();
+
+        return ! $isReferencedByHistoricalInvoice;
     }
 
     public function storeTaxRate(Request $request): RedirectResponse

@@ -14,6 +14,7 @@ class ReportService
     {
         $salesSummary = FinanceInvoice::query()
             ->where('type', 'sales')
+            ->where('invoice_status', 'issued')
             ->whereBetween('issue_date', [$from, $to])
             ->selectRaw('COUNT(*) as invoices_count')
             ->selectRaw('COALESCE(SUM(total), 0) as total_sales')
@@ -23,6 +24,7 @@ class ReportService
 
         $purchaseSummary = FinanceInvoice::query()
             ->where('type', 'purchase')
+            ->where('invoice_status', 'issued')
             ->whereBetween('issue_date', [$from, $to])
             ->selectRaw('COUNT(*) as invoices_count')
             ->selectRaw('COALESCE(SUM(total), 0) as total_purchases')
@@ -38,6 +40,7 @@ class ReportService
 
         $salesByCustomer = FinanceInvoice::query()
             ->where('type', 'sales')
+            ->where('invoice_status', 'issued')
             ->whereBetween('issue_date', [$from, $to])
             ->leftJoin('customers', function ($join): void {
                 $join->on('customers.id', '=', 'finance_invoices.customer_id')
@@ -65,10 +68,12 @@ class ReportService
 
         $outputVat = (float) FinanceInvoice::query()
             ->where('type', 'sales')
+            ->where('invoice_status', 'issued')
             ->whereBetween('issue_date', [$from, $to])
             ->sum('tax_amount');
         $inputVatPurchase = (float) FinanceInvoice::query()
             ->where('type', 'purchase')
+            ->where('invoice_status', 'issued')
             ->whereBetween('issue_date', [$from, $to])
             ->sum('tax_amount');
         $inputVatExpense = (float) FinanceExpense::query()

@@ -2,15 +2,21 @@
 
 @section('content')
     @php
-        $statusLabels = [
+        $invoiceStatusLabels = [
             'draft' => 'مسودة',
-            'sent' => 'مرسلة',
+            'issued' => 'معتمدة',
+            'cancelled' => 'ملغاة',
+        ];
+        $paymentStatusLabels = [
             'unpaid' => 'غير مدفوعة',
             'partial' => 'مدفوعة جزئيًا',
             'paid' => 'مدفوعة',
             'overdue' => 'متأخرة',
-            'cancelled' => 'ملغاة',
         ];
+        $invoiceState = $invoice->invoice_status
+            ?? (in_array($invoice->status, ['draft', 'cancelled'], true) ? $invoice->status : 'issued');
+        $paymentState = $invoice->payment_status
+            ?? (in_array($invoice->status, ['unpaid', 'partial', 'paid', 'overdue'], true) ? $invoice->status : 'unpaid');
 
         $paymentMethodLabels = [
             'cash' => 'نقدًا',
@@ -23,12 +29,16 @@
         <div class="flex flex-wrap items-center justify-between gap-2">
             <div>
                 <h2 class="text-xl font-bold text-slate-900">{{ $invoice->invoice_number }}</h2>
-                <p class="text-sm text-slate-500">{{ $invoice->type === 'sales' ? 'فاتورة مبيعات' : 'فاتورة شراء' }} — {{ $statusLabels[$invoice->status] ?? $invoice->status }}</p>
+                <p class="text-sm text-slate-500">{{ $invoice->type === 'sales' ? 'فاتورة مبيعات' : 'فاتورة شراء' }}</p>
+                <div class="mt-1 flex flex-wrap gap-2">
+                    <span class="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">حالة الفاتورة: {{ $invoiceStatusLabels[$invoiceState] ?? $invoiceState }}</span>
+                    <span class="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">حالة الدفع: {{ $paymentStatusLabels[$paymentState] ?? $paymentState }}</span>
+                </div>
             </div>
             <div class="flex items-center gap-2">
                 <a href="{{ route('workspace.finance.invoices.index') }}" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">رجوع</a>
                 <a href="{{ route('workspace.finance.invoices.pdf', $invoice) }}" target="_blank" class="rounded-lg border border-[#06C2A4] px-4 py-2 text-sm font-semibold text-[#06C2A4] hover:bg-[#E8FAF6]">طباعة PDF</a>
-                @if(!in_array($invoice->status, ['cancelled', 'paid'], true))
+                @if($invoiceState !== 'cancelled' && $paymentState !== 'paid')
                     <form method="POST" action="{{ route('workspace.finance.invoices.cancel', $invoice) }}" onsubmit="return confirm('تأكيد إلغاء الفاتورة؟');">
                         @csrf
                         <button class="rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50">إلغاء الفاتورة</button>
@@ -93,7 +103,7 @@
         <div class="grid gap-4 xl:grid-cols-2">
             <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <h3 class="mb-3 text-sm font-bold">تسجيل دفعة</h3>
-                @if(in_array($invoice->status, ['unpaid', 'partial', 'overdue', 'sent'], true))
+                @if($invoiceState === 'issued' && in_array($paymentState, ['unpaid', 'partial', 'overdue'], true))
                     <form method="POST" action="{{ route('workspace.finance.invoices.payments.store', $invoice) }}" class="grid gap-2 sm:grid-cols-2">
                         @csrf
                         <div>

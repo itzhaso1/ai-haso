@@ -23,6 +23,8 @@ class SalesController extends FinanceBaseController
 
         $filters = [
             'search' => $request->string('search')->toString(),
+            'invoice_status' => $request->string('invoice_status')->toString(),
+            'payment_status' => $request->string('payment_status')->toString(),
             'status' => $request->string('status')->toString(),
             'customer_id' => $request->integer('customer_id') ?: null,
             'from' => $request->string('from')->toString(),

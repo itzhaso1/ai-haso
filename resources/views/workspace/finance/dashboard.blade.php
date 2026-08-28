@@ -75,7 +75,7 @@
                     @forelse(($latest['invoices'] ?? []) as $invoice)
                         <div class="rounded-xl border border-slate-200 p-3 text-sm">
                             <p class="font-semibold">{{ $invoice->invoice_number }} — {{ $invoice->type }}</p>
-                            <p class="text-xs text-slate-500">{{ $invoice->status }} | {{ number_format((float) $invoice->total, 2) }} {{ $invoice->currency }}</p>
+                            <p class="text-xs text-slate-500">فاتورة: {{ $invoice->invoice_status ?? $invoice->status }} | دفع: {{ $invoice->payment_status ?? $invoice->status }} | {{ number_format((float) $invoice->total, 2) }} {{ $invoice->currency }}</p>
                         </div>
                     @empty
                         <p class="text-sm text-slate-500">لا توجد فواتير.</p>

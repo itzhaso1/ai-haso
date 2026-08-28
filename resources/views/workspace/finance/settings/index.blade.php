@@ -2,7 +2,7 @@
 
 @section('content')
     <div x-data="{ logoFileName: '' }" class="space-y-4">
-        <h2 class="text-xl font-bold text-slate-900">إعدادات HASem Financial</h2>
+        <h2 class="text-xl font-bold text-slate-900">الإعدادات المالية للمنشأة</h2>
 
         <div class="grid gap-4 xl:grid-cols-2">
             <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -16,6 +16,7 @@
                     <input name="commercial_registration" value="{{ $setting?->commercial_registration }}" class="rounded-lg border-slate-300 text-sm" placeholder="السجل التجاري">
                     <input name="phone" value="{{ $setting?->phone }}" class="rounded-lg border-slate-300 text-sm" placeholder="الهاتف">
                     <input name="email" type="email" value="{{ $setting?->email }}" class="rounded-lg border-slate-300 text-sm" placeholder="البريد الإلكتروني">
+                    <input name="website" value="{{ $setting?->website }}" class="rounded-lg border-slate-300 text-sm" placeholder="الموقع الإلكتروني">
                     <input name="address_line" value="{{ $setting?->address_line }}" class="rounded-lg border-slate-300 text-sm" placeholder="العنوان">
                     <input name="building_number" value="{{ $setting?->building_number }}" class="rounded-lg border-slate-300 text-sm" placeholder="رقم المبنى">
                     <input name="street" value="{{ $setting?->street }}" class="rounded-lg border-slate-300 text-sm" placeholder="الشارع">
@@ -25,8 +26,10 @@
                     <input name="country_code" value="{{ $setting?->country_code ?? 'SA' }}" class="rounded-lg border-slate-300 text-sm" placeholder="الدولة (SA)">
                     <input name="currency" value="{{ $setting?->currency ?? 'SAR' }}" class="rounded-lg border-slate-300 text-sm" placeholder="العملة">
                     <input name="invoice_prefix" value="{{ $setting?->invoice_prefix ?? 'INV' }}" class="rounded-lg border-slate-300 text-sm" placeholder="بادئة الفاتورة">
+                    <input name="invoice_primary_color" value="{{ $setting?->invoice_primary_color ?? '#06C2A4' }}" class="rounded-lg border-slate-300 text-sm" placeholder="لون PDF الرئيسي (#06C2A4)">
                     <input name="default_vat_rate" value="{{ $setting?->default_vat_rate ?? 15 }}" type="number" step="0.01" class="rounded-lg border-slate-300 text-sm" placeholder="VAT الافتراضي">
                     <input name="default_payment_terms" value="{{ $setting?->default_payment_terms }}" class="rounded-lg border-slate-300 text-sm sm:col-span-2" placeholder="شروط الدفع الافتراضية">
+                    <textarea name="invoice_footer_text" rows="2" class="rounded-lg border-slate-300 text-sm sm:col-span-2" placeholder="نص تذييل PDF (اختياري)">{{ $setting?->invoice_footer_text }}</textarea>
                     <div class="sm:col-span-2">
                         <label class="mb-1 block text-xs font-semibold text-slate-600">شعار المنشأة</label>
                         <input

@@ -77,7 +77,7 @@ class AppointmentBillingService
                     'issue_date' => now()->toDateString(),
                     'due_date' => $booking->starts_at?->toDateString(),
                     'currency' => 'SAR',
-                    'status' => 'unpaid',
+                    'invoice_status' => 'issued',
                     'notes' => 'فاتورة مرتبطة بموعد رقم '.$booking->booking_number,
                     'items' => [[
                         'product_name' => (string) ($booking->service?->name ?? 'خدمة موعد'),

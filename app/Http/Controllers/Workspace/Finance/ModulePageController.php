@@ -7,6 +7,7 @@ use App\Models\Finance\FinanceEmployeeProfile;
 use App\Models\Finance\FinanceExpense;
 use App\Models\Finance\FinanceInvoice;
 use App\Models\Finance\FinanceInvoiceItem;
+use App\Models\Finance\FinanceSupplier;
 use App\Models\Finance\FinancePayrollRun;
 use App\Models\Finance\FinanceTaxRate;
 use App\Models\Finance\FinanceTreasuryAccount;
@@ -169,7 +170,70 @@ class ModulePageController extends FinanceBaseController
 
     public function purchases(Request $request): View
     {
-        return $this->placeholder($request, 'purchases');
+        $this->authorizeFinance($request, 'finance.view');
+
+        $filters = [
+            'search' => trim((string) $request->string('search')),
+            'invoice_status' => trim((string) $request->string('invoice_status')),
+            'payment_status' => trim((string) $request->string('payment_status')),
+            'status' => trim((string) $request->string('status')),
+            'supplier_id' => $request->integer('supplier_id') ?: null,
+            'from' => trim((string) $request->string('from')),
+            'to' => trim((string) $request->string('to')),
+        ];
+
+        if ($filters['status'] !== '' && $filters['invoice_status'] === '' && $filters['payment_status'] === '') {
+            if (in_array($filters['status'], ['draft', 'cancelled'], true)) {
+                $filters['invoice_status'] = $filters['status'];
+            } elseif ($filters['status'] === 'sent') {
+                $filters['invoice_status'] = 'issued';
+            } elseif (in_array($filters['status'], ['unpaid', 'partial', 'paid', 'overdue'], true)) {
+                $filters['payment_status'] = $filters['status'];
+            }
+        }
+
+        $query = FinanceInvoice::query()
+            ->where('type', 'purchase')
+            ->with('supplier')
+            ->when($filters['search'] !== '', function ($builder) use ($filters): void {
+                $builder->where(function ($inner) use ($filters): void {
+                    $inner->where('invoice_number', 'like', '%'.$filters['search'].'%')
+                        ->orWhereHas('supplier', fn ($supplierQuery) => $supplierQuery->where('name', 'like', '%'.$filters['search'].'%'));
+                });
+            })
+            ->when($filters['invoice_status'] !== '', fn ($builder) => $builder->where('invoice_status', $filters['invoice_status']))
+            ->when($filters['payment_status'] !== '', fn ($builder) => $builder->where('payment_status', $filters['payment_status']))
+            ->when($filters['supplier_id'], fn ($builder) => $builder->where('supplier_id', $filters['supplier_id']))
+            ->when($filters['from'] !== '', fn ($builder) => $builder->whereDate('issue_date', '>=', $filters['from']))
+            ->when($filters['to'] !== '', fn ($builder) => $builder->whereDate('issue_date', '<=', $filters['to']));
+
+        $invoices = (clone $query)
+            ->latest('issue_date')
+            ->latest('id')
+            ->paginate(20)
+            ->withQueryString();
+
+        $summary = [
+            'invoice_count' => (clone $query)->count(),
+            'total_purchases' => round((float) (clone $query)->sum('total'), 2),
+            'total_due' => round((float) (clone $query)->sum('amount_due'), 2),
+            'total_paid' => round((float) (clone $query)->sum('amount_paid'), 2),
+            'overdue_count' => (clone $query)
+                ->where('invoice_status', 'issued')
+                ->where('payment_status', 'overdue')
+                ->count(),
+            'unpaid_count' => (clone $query)
+                ->where('invoice_status', 'issued')
+                ->whereIn('payment_status', ['unpaid', 'partial', 'overdue'])
+                ->count(),
+        ];
+
+        return view('workspace.finance.modules.purchases', [
+            'invoices' => $invoices,
+            'summary' => $summary,
+            'suppliers' => FinanceSupplier::query()->orderBy('name')->get(['id', 'name']),
+            'filters' => $filters,
+        ]);
     }
 
     public function cashbox(Request $request): View

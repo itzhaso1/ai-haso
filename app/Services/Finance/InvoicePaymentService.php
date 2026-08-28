@@ -13,6 +13,7 @@ class InvoicePaymentService
     public function __construct(
         private readonly AccountingService $accountingService,
         private readonly ChartOfAccountsService $chartOfAccountsService,
+        private readonly InvoiceStateService $invoiceStateService,
     ) {}
 
     /**
@@ -20,20 +21,41 @@ class InvoicePaymentService
      */
     public function recordPayment(FinanceInvoice $invoice, array $payload, int $actorUserId): FinanceInvoicePayment
     {
-        if (! in_array($invoice->status, ['unpaid', 'partial', 'overdue', 'sent'], true)) {
-            throw new RuntimeException('Payment cannot be recorded for the current invoice status.');
-        }
-
         $amount = round((float) ($payload['amount'] ?? 0), 2);
         if ($amount <= 0) {
             throw new RuntimeException('Payment amount must be greater than zero.');
         }
 
-        if ($amount > (float) $invoice->amount_due) {
-            throw new RuntimeException('Payment amount cannot exceed invoice due amount.');
-        }
-
         return DB::transaction(function () use ($invoice, $payload, $amount, $actorUserId): FinanceInvoicePayment {
+            $lockedInvoice = FinanceInvoice::withoutGlobalScopes()
+                ->whereKey($invoice->id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $lockedInvoice) {
+                throw new RuntimeException('Invoice not found.');
+            }
+
+            $invoiceStatus = $lockedInvoice->invoice_status
+                ?? $this->invoiceStateService->resolveInvoiceStatus($lockedInvoice->status);
+
+            if ($invoiceStatus !== 'issued') {
+                throw new RuntimeException('Payments are allowed only for issued invoices.');
+            }
+
+            $existingPaid = round((float) FinanceInvoicePayment::query()
+                ->where('invoice_id', $lockedInvoice->id)
+                ->sum('amount'), 2);
+
+            $remaining = $this->invoiceStateService->resolveAmountDue((float) $lockedInvoice->total, $existingPaid);
+            if ($remaining <= InvoiceStateService::PAYMENT_TOLERANCE) {
+                throw new RuntimeException('Invoice is already paid.');
+            }
+
+            if ($amount - $remaining > InvoiceStateService::PAYMENT_TOLERANCE) {
+                throw new RuntimeException('Payment amount cannot exceed invoice due amount.');
+            }
+
             $treasuryAccount = null;
             if (! empty($payload['treasury_account_id'])) {
                 $treasuryAccount = FinanceTreasuryAccount::query()
@@ -53,8 +75,8 @@ class InvoicePaymentService
             }
 
             $payment = FinanceInvoicePayment::withoutGlobalScopes()->create([
-                'workspace_id' => $invoice->workspace_id,
-                'invoice_id' => $invoice->id,
+                'workspace_id' => $lockedInvoice->workspace_id,
+                'invoice_id' => $lockedInvoice->id,
                 'treasury_account_id' => $treasuryAccount?->id,
                 'payment_date' => $payload['payment_date'] ?? now()->toDateString(),
                 'method' => $payload['method'] ?? 'cash',
@@ -64,17 +86,27 @@ class InvoicePaymentService
                 'created_by' => $actorUserId,
             ]);
 
-            $paid = round((float) $invoice->amount_paid + $amount, 2);
-            $due = max(0, round((float) $invoice->total - $paid, 2));
-            $status = $due <= 0.009 ? 'paid' : 'partial';
+            $paid = round((float) FinanceInvoicePayment::query()
+                ->where('invoice_id', $lockedInvoice->id)
+                ->sum('amount'), 2);
+            $due = $this->invoiceStateService->resolveAmountDue((float) $lockedInvoice->total, $paid);
+            $paymentStatus = $this->invoiceStateService->resolvePaymentStatus(
+                total: (float) $lockedInvoice->total,
+                amountPaid: $paid,
+                dueDate: $lockedInvoice->due_date?->toDateString(),
+                invoiceStatus: $invoiceStatus,
+            );
+            $legacyStatus = $this->invoiceStateService->toLegacyStatus($invoiceStatus, $paymentStatus);
 
-            $invoice->update([
+            $lockedInvoice->update([
+                'invoice_status' => $invoiceStatus,
                 'amount_paid' => $paid,
                 'amount_due' => $due,
-                'status' => $status,
+                'payment_status' => $paymentStatus,
+                'status' => $legacyStatus,
             ]);
 
-            $this->postPaymentEntry($invoice, $payment, $treasuryAccount?->id, $actorUserId);
+            $this->postPaymentEntry($lockedInvoice, $payment, $treasuryAccount?->id, $actorUserId);
 
             if ($treasuryAccount) {
                 $treasuryAccount->update([

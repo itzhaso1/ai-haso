@@ -2,13 +2,16 @@
 
 @section('content')
     @php
-        $statusLabels = [
+        $invoiceStatusLabels = [
             'draft' => 'مسودة',
-            'sent' => 'مرسلة',
-            'unpaid' => 'غير مدفوعة',
+            'issued' => 'معتمدة',
         ];
+        $rawType = old('type', request('type', 'sales'));
+        $defaultType = in_array($rawType, ['sales', 'purchase'], true) ? $rawType : 'sales';
+        $rawInvoiceStatus = old('invoice_status', old('status', 'issued'));
+        $defaultInvoiceStatus = in_array($rawInvoiceStatus, ['draft', 'issued'], true) ? $rawInvoiceStatus : 'issued';
     @endphp
-    <div x-data="financeInvoiceBuilder()" class="space-y-4">
+    <div x-data="financeInvoiceBuilder('{{ $defaultType }}')" class="space-y-4">
         <div class="flex items-center justify-between">
             <h2 class="text-xl font-bold text-slate-900">منشئ الفواتير</h2>
             <a href="{{ route('workspace.finance.invoices.index') }}" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">رجوع</a>
@@ -30,12 +33,13 @@
                     <input type="text" name="invoice_number" value="{{ old('invoice_number') }}" class="w-full rounded-lg border-slate-300 text-sm" placeholder="INV-000001">
                 </div>
                 <div>
-                    <label class="mb-1 block text-xs font-semibold text-slate-600">الحالة المبدئية</label>
-                    <select name="status" class="w-full rounded-lg border-slate-300 text-sm">
-                        @foreach(['draft', 'sent', 'unpaid'] as $status)
-                            <option value="{{ $status }}" @selected(old('status', 'unpaid') === $status)>{{ $statusLabels[$status] }}</option>
+                    <label class="mb-1 block text-xs font-semibold text-slate-600">حالة الفاتورة</label>
+                    <select name="invoice_status" class="w-full rounded-lg border-slate-300 text-sm">
+                        @foreach(['draft', 'issued'] as $invoiceStatus)
+                            <option value="{{ $invoiceStatus }}" @selected($defaultInvoiceStatus === $invoiceStatus)>{{ $invoiceStatusLabels[$invoiceStatus] }}</option>
                         @endforeach
                     </select>
+                    <p class="mt-1 text-[11px] text-slate-500">حالة الدفع تُحسب تلقائيًا في الخادم بناءً على المبالغ وتاريخ الاستحقاق.</p>
                 </div>
                 <div x-show="form.type === 'sales'">
                     <label class="mb-1 block text-xs font-semibold text-slate-600">العميل المسجل (اختياري)</label>
@@ -45,6 +49,9 @@
                             <option value="{{ $customer->id }}" @selected(old('customer_id') == $customer->id)>{{ $customer->name }} ({{ $customer->phone }})</option>
                         @endforeach
                     </select>
+                    @error('customer_id')
+                        <p class="mt-1 text-xs font-semibold text-red-600">{{ $message }}</p>
+                    @enderror
                 </div>
                 <div x-show="form.type === 'sales'">
                     <label class="mb-1 block text-xs font-semibold text-slate-600">اسم عميل نقدي/عابر (اختياري)</label>
@@ -67,6 +74,9 @@
                             <option value="{{ $supplier->id }}" @selected(old('supplier_id') == $supplier->id)>{{ $supplier->name }}</option>
                         @endforeach
                     </select>
+                    @error('supplier_id')
+                        <p class="mt-1 text-xs font-semibold text-red-600">{{ $message }}</p>
+                    @enderror
                 </div>
                 <div>
                     <label class="mb-1 block text-xs font-semibold text-slate-600">تاريخ الإصدار</label>
@@ -199,10 +209,10 @@
     </div>
 
     <script>
-        function financeInvoiceBuilder() {
+        function financeInvoiceBuilder(defaultType) {
             return {
                 form: {
-                    type: 'sales',
+                    type: defaultType || 'sales',
                     tax_profile_type: 'standard',
                     tax_rate: 15,
                 },

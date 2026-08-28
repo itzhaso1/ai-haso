@@ -19,6 +19,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'invoice_number',
     'type',
     'status',
+    'invoice_status',
+    'payment_status',
+    'issued_at',
     'issue_date',
     'due_date',
     'currency',
@@ -33,6 +36,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'tax_rate',
     'payment_terms',
     'notes',
+    'company_snapshot',
+    'recipient_snapshot',
+    'pdf_snapshot',
     'zatca_uuid',
     'zatca_qr_code',
     'zatca_xml_hash',
@@ -48,6 +54,7 @@ class FinanceInvoice extends WorkspaceScopedModel
         return [
             'issue_date' => 'date',
             'due_date' => 'date',
+            'issued_at' => 'datetime',
             'subtotal' => 'decimal:2',
             'discount' => 'decimal:2',
             'taxable_amount' => 'decimal:2',
@@ -56,6 +63,9 @@ class FinanceInvoice extends WorkspaceScopedModel
             'amount_paid' => 'decimal:2',
             'amount_due' => 'decimal:2',
             'tax_rate' => 'decimal:2',
+            'company_snapshot' => 'array',
+            'recipient_snapshot' => 'array',
+            'pdf_snapshot' => 'array',
             'cancelled_at' => 'datetime',
         ];
     }

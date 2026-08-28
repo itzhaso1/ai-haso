@@ -1,6 +1,19 @@
 @extends('layouts.financial', ['pageTitle' => 'المبيعات'])
 
 @section('content')
+    @php
+        $invoiceStatusLabels = [
+            'draft' => 'مسودة',
+            'issued' => 'معتمدة',
+            'cancelled' => 'ملغاة',
+        ];
+        $paymentStatusLabels = [
+            'unpaid' => 'غير مدفوعة',
+            'partial' => 'مدفوعة جزئيًا',
+            'paid' => 'مدفوعة بالكامل',
+            'overdue' => 'متأخرة',
+        ];
+    @endphp
     <div class="space-y-4">
         <div class="flex flex-wrap items-center justify-between gap-2">
             <h2 class="text-xl font-bold text-slate-900">وحدة المبيعات</h2>
@@ -38,18 +51,27 @@
         </div>
 
         <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <form method="GET" action="{{ route('workspace.finance.sales.index') }}" class="grid gap-3 md:grid-cols-5">
+            <form method="GET" action="{{ route('workspace.finance.sales.index') }}" class="grid gap-3 md:grid-cols-6">
                 <div class="md:col-span-2">
                     <label class="mb-1 block text-xs font-semibold text-slate-600">بحث</label>
                     <input type="text" name="search" value="{{ $filters['search'] }}" placeholder="رقم الفاتورة / العميل"
                            class="w-full rounded-lg border-slate-300 text-sm">
                 </div>
                 <div>
-                    <label class="mb-1 block text-xs font-semibold text-slate-600">الحالة</label>
-                    <select name="status" class="w-full rounded-lg border-slate-300 text-sm">
+                    <label class="mb-1 block text-xs font-semibold text-slate-600">حالة الفاتورة</label>
+                    <select name="invoice_status" class="w-full rounded-lg border-slate-300 text-sm">
                         <option value="">الكل</option>
-                        @foreach(['draft','sent','unpaid','partial','paid','overdue','cancelled'] as $status)
-                            <option value="{{ $status }}" @selected($filters['status'] === $status)>{{ $status }}</option>
+                        @foreach(['draft','issued','cancelled'] as $status)
+                            <option value="{{ $status }}" @selected(($filters['invoice_status'] ?? '') === $status)>{{ $invoiceStatusLabels[$status] }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-semibold text-slate-600">حالة الدفع</label>
+                    <select name="payment_status" class="w-full rounded-lg border-slate-300 text-sm">
+                        <option value="">الكل</option>
+                        @foreach(['unpaid','partial','paid','overdue'] as $status)
+                            <option value="{{ $status }}" @selected(($filters['payment_status'] ?? '') === $status)>{{ $paymentStatusLabels[$status] }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -72,7 +94,7 @@
                         <input type="date" name="to" value="{{ $filters['to'] }}" class="w-full rounded-lg border-slate-300 text-sm">
                     </div>
                 </div>
-                <div class="md:col-span-5 flex items-center gap-2">
+                <div class="md:col-span-6 flex items-center gap-2">
                     <button class="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white">تطبيق الفلترة</button>
                     <a href="{{ route('workspace.finance.sales.index') }}" class="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">إعادة ضبط</a>
                 </div>
@@ -88,7 +110,8 @@
                             <tr>
                                 <th class="px-2 py-2 text-right">رقم الفاتورة</th>
                                 <th class="px-2 py-2 text-right">العميل</th>
-                                <th class="px-2 py-2 text-right">الحالة</th>
+                                <th class="px-2 py-2 text-right">حالة الفاتورة</th>
+                                <th class="px-2 py-2 text-right">حالة الدفع</th>
                                 <th class="px-2 py-2 text-right">الإجمالي</th>
                                 <th class="px-2 py-2 text-right">المتبقي</th>
                                 <th class="px-2 py-2 text-right">التاريخ</th>
@@ -97,10 +120,17 @@
                         </thead>
                         <tbody class="divide-y divide-slate-100">
                             @forelse($invoices as $invoice)
+                                @php
+                                    $invoiceState = $invoice->invoice_status
+                                        ?? (in_array($invoice->status, ['draft', 'cancelled'], true) ? $invoice->status : 'issued');
+                                    $paymentState = $invoice->payment_status
+                                        ?? (in_array($invoice->status, ['unpaid', 'partial', 'paid', 'overdue'], true) ? $invoice->status : 'unpaid');
+                                @endphp
                                 <tr>
                                     <td class="px-2 py-2 font-semibold">{{ $invoice->invoice_number }}</td>
                                     <td class="px-2 py-2">{{ $invoice->customer?->name ?: $invoice->customer_name ?: 'عميل نقدي' }}</td>
-                                    <td class="px-2 py-2">{{ $invoice->status }}</td>
+                                    <td class="px-2 py-2">{{ $invoiceStatusLabels[$invoiceState] ?? $invoiceState }}</td>
+                                    <td class="px-2 py-2">{{ $paymentStatusLabels[$paymentState] ?? $paymentState }}</td>
                                     <td class="px-2 py-2">{{ number_format((float) $invoice->total, 2) }}</td>
                                     <td class="px-2 py-2">{{ number_format((float) $invoice->amount_due, 2) }}</td>
                                     <td class="px-2 py-2">{{ $invoice->issue_date?->format('Y-m-d') }}</td>
@@ -109,7 +139,7 @@
                                     </td>
                                 </tr>
                             @empty
-                                <tr><td colspan="7" class="px-2 py-8 text-center text-slate-500">لا توجد فواتير مبيعات مطابقة.</td></tr>
+                                <tr><td colspan="8" class="px-2 py-8 text-center text-slate-500">لا توجد فواتير مبيعات مطابقة.</td></tr>
                             @endforelse
                         </tbody>
                     </table>

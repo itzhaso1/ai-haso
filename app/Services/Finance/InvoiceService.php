@@ -8,7 +8,6 @@ use App\Models\Finance\FinanceInvoiceItem;
 use App\Models\Finance\FinanceSetting;
 use App\Models\Finance\FinanceSupplier;
 use App\Models\Workspace;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -18,6 +17,7 @@ class InvoiceService
         private readonly TaxService $taxService,
         private readonly ChartOfAccountsService $chartOfAccountsService,
         private readonly AccountingService $accountingService,
+        private readonly InvoiceStateService $invoiceStateService,
     ) {}
 
     /**
@@ -33,6 +33,7 @@ class InvoiceService
             $customerName = trim((string) ($payload['customer_name'] ?? ''));
             $supplierId = isset($payload['supplier_id']) ? (int) $payload['supplier_id'] : null;
             $type = (string) $payload['type'];
+            $requestedStatus = (string) ($payload['invoice_status'] ?? $payload['status'] ?? 'issued');
 
             if ($type === 'sales' && ! $customerId && $customerName === '') {
                 throw new RuntimeException('فاتورة المبيعات تتطلب عميلًا مسجلًا أو اسم عميل نقدي.');
@@ -56,6 +57,9 @@ class InvoiceService
                 }
             }
 
+            $customer = $customerId ? Customer::query()->whereKey($customerId)->first() : null;
+            $supplier = $supplierId ? FinanceSupplier::query()->whereKey($supplierId)->first() : null;
+
             $items = $this->normalizeItems($payload['items'] ?? [], $profile['type'], $profile['rate']);
             if ($items === []) {
                 throw new RuntimeException('يجب أن تحتوي الفاتورة على بند واحد على الأقل.');
@@ -63,19 +67,35 @@ class InvoiceService
 
             $totals = $this->totals($items);
             $amountPaid = max(0, (float) ($payload['amount_paid'] ?? 0));
-            $amountDue = max(0, $this->money($totals['total'] - $amountPaid));
-            $status = $this->resolveStatus((string) ($payload['status'] ?? 'draft'), $amountDue, (string) ($payload['due_date'] ?? ''));
+            $amountDue = $this->invoiceStateService->resolveAmountDue($totals['total'], $amountPaid);
+            $invoiceStatus = $this->invoiceStateService->resolveInvoiceStatus($requestedStatus);
+            $paymentStatus = $this->invoiceStateService->resolvePaymentStatus(
+                total: $totals['total'],
+                amountPaid: $amountPaid,
+                dueDate: ! empty($payload['due_date']) ? (string) $payload['due_date'] : null,
+                invoiceStatus: $invoiceStatus,
+            );
+            $legacyStatus = $this->invoiceStateService->toLegacyStatus($invoiceStatus, $paymentStatus);
+
+            $settings = FinanceSetting::query()->first();
+            $companySnapshot = $this->buildCompanySnapshot($settings);
+            $recipientSnapshot = $this->buildRecipientSnapshot($type, $customer, $supplier, $customerName);
+            $pdfSnapshot = $this->buildPdfSnapshot($settings, $companySnapshot);
+            $issuedAt = $invoiceStatus === 'issued' ? now() : null;
 
             $invoice = FinanceInvoice::withoutGlobalScopes()->create([
                 'workspace_id' => $workspace->id,
                 'customer_id' => $customerId,
                 'customer_name' => $type === 'sales' && $customerName !== '' ? $customerName : null,
                 'supplier_id' => $supplierId,
-                'invoice_number' => $payload['invoice_number'] ?: $this->nextInvoiceNumber($workspace->id),
+                'invoice_number' => ($payload['invoice_number'] ?? null) ?: $this->nextInvoiceNumber($workspace->id),
                 'type' => $type,
-                'status' => $status,
+                'status' => $legacyStatus,
+                'invoice_status' => $invoiceStatus,
+                'payment_status' => $paymentStatus,
+                'issued_at' => $issuedAt,
                 'issue_date' => (string) $payload['issue_date'],
-                'due_date' => $payload['due_date'] ?: null,
+                'due_date' => ($payload['due_date'] ?? null) ?: null,
                 'currency' => (string) ($payload['currency'] ?? 'SAR'),
                 'subtotal' => $totals['subtotal'],
                 'discount' => $totals['discount'],
@@ -86,8 +106,11 @@ class InvoiceService
                 'amount_due' => $amountDue,
                 'tax_profile_type' => $profile['type'],
                 'tax_rate' => $this->money($profile['rate']),
-                'payment_terms' => $payload['payment_terms'] ?: null,
-                'notes' => $payload['notes'] ?: null,
+                'payment_terms' => ($payload['payment_terms'] ?? null) ?: null,
+                'notes' => ($payload['notes'] ?? null) ?: null,
+                'company_snapshot' => $companySnapshot,
+                'recipient_snapshot' => $recipientSnapshot,
+                'pdf_snapshot' => $pdfSnapshot,
                 'created_by' => $actorUserId,
             ]);
 
@@ -109,7 +132,7 @@ class InvoiceService
                 ]);
             }
 
-            if (! in_array($invoice->status, ['draft', 'cancelled'], true)) {
+            if ($invoice->invoice_status === 'issued') {
                 $this->postInvoiceEntry($invoice, $actorUserId);
             }
 
@@ -119,7 +142,10 @@ class InvoiceService
 
     public function cancel(FinanceInvoice $invoice): FinanceInvoice
     {
-        if ($invoice->status === 'cancelled') {
+        $currentInvoiceStatus = $invoice->invoice_status
+            ?? $this->invoiceStateService->resolveInvoiceStatus($invoice->status);
+
+        if ($currentInvoiceStatus === 'cancelled') {
             return $invoice;
         }
 
@@ -127,7 +153,16 @@ class InvoiceService
             throw new RuntimeException('لا يمكن إلغاء فاتورة مدفوعة أو مدفوعة جزئيًا بشكل مباشر.');
         }
 
+        $paymentStatus = $this->invoiceStateService->resolvePaymentStatus(
+            total: (float) $invoice->total,
+            amountPaid: (float) $invoice->amount_paid,
+            dueDate: null,
+            invoiceStatus: 'cancelled',
+        );
+
         $invoice->update([
+            'invoice_status' => 'cancelled',
+            'payment_status' => $paymentStatus,
             'status' => 'cancelled',
             'cancelled_at' => now(),
         ]);
@@ -204,29 +239,51 @@ class InvoiceService
         ];
     }
 
-    private function resolveStatus(string $requestedStatus, float $amountDue, string $dueDate): string
+    public function refreshIssuedPaymentStatuses(?int $workspaceId = null): int
     {
-        if ($requestedStatus === 'cancelled') {
-            return 'cancelled';
+        return $this->invoiceStateService->refreshIssuedStatuses($workspaceId);
+    }
+
+    public function syncPaymentStatus(FinanceInvoice $invoice): FinanceInvoice
+    {
+        $invoiceStatus = $invoice->invoice_status
+            ?? $this->invoiceStateService->resolveInvoiceStatus($invoice->status);
+
+        if ($invoiceStatus !== 'issued') {
+            return $invoice;
         }
 
-        if ($requestedStatus === 'draft') {
-            return 'draft';
+        $paid = round((float) $invoice->payments()->sum('amount'), 2);
+        $due = $this->invoiceStateService->resolveAmountDue((float) $invoice->total, $paid);
+        $paymentStatus = $this->invoiceStateService->resolvePaymentStatus(
+            total: (float) $invoice->total,
+            amountPaid: $paid,
+            dueDate: $invoice->due_date?->toDateString(),
+            invoiceStatus: $invoiceStatus,
+        );
+        $legacyStatus = $this->invoiceStateService->toLegacyStatus($invoiceStatus, $paymentStatus);
+
+        $attributes = [
+            'invoice_status' => $invoiceStatus,
+            'amount_paid' => $paid,
+            'amount_due' => $due,
+            'payment_status' => $paymentStatus,
+            'status' => $legacyStatus,
+        ];
+
+        if (
+            (float) $invoice->amount_paid !== $paid
+            || (float) $invoice->amount_due !== $due
+            || $invoice->payment_status !== $paymentStatus
+            || $invoice->status !== $legacyStatus
+            || $invoice->invoice_status !== $invoiceStatus
+        ) {
+            $invoice->update($attributes);
+
+            return $invoice->fresh();
         }
 
-        if ($amountDue <= 0.009) {
-            return 'paid';
-        }
-
-        if ($amountDue > 0 && in_array($requestedStatus, ['partial', 'paid'], true)) {
-            return 'partial';
-        }
-
-        if ($dueDate !== '' && Carbon::parse($dueDate)->isPast()) {
-            return 'overdue';
-        }
-
-        return 'unpaid';
+        return $invoice;
     }
 
     /**
@@ -363,5 +420,80 @@ class InvoiceService
     private function money(float $value): float
     {
         return round($value, 2);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildCompanySnapshot(?FinanceSetting $setting): array
+    {
+        return [
+            'company_name' => $setting?->company_name,
+            'company_name_ar' => $setting?->company_name_ar,
+            'vat_number' => $setting?->vat_number,
+            'commercial_registration' => $setting?->commercial_registration,
+            'address_line' => $setting?->address_line,
+            'building_number' => $setting?->building_number,
+            'street' => $setting?->street,
+            'district' => $setting?->district,
+            'city' => $setting?->city,
+            'postal_code' => $setting?->postal_code,
+            'country_code' => $setting?->country_code,
+            'phone' => $setting?->phone,
+            'email' => $setting?->email,
+            'website' => $setting?->website,
+            'currency' => $setting?->currency,
+            'invoice_prefix' => $setting?->invoice_prefix,
+            'default_payment_terms' => $setting?->default_payment_terms,
+            // Store path only to avoid binary snapshot bloat.
+            'logo_path' => $setting?->logo_path,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildRecipientSnapshot(
+        string $type,
+        ?Customer $customer,
+        ?FinanceSupplier $supplier,
+        string $cashCustomerName
+    ): array {
+        if ($type === 'purchase') {
+            return [
+                'kind' => 'supplier',
+                'name' => $supplier?->name,
+                'name_ar' => $supplier?->arabic_name,
+                'vat_number' => $supplier?->vat_number,
+                'commercial_registration' => $supplier?->commercial_registration,
+                'address' => $supplier?->address,
+                'phone' => $supplier?->phone,
+                'email' => $supplier?->email,
+            ];
+        }
+
+        return [
+            'kind' => 'customer',
+            'name' => $customer?->name ?: $cashCustomerName,
+            'vat_number' => $customer?->vat_number,
+            'commercial_registration' => $customer?->commercial_registration,
+            'address' => $customer?->address,
+            'phone' => $customer?->phone,
+            'email' => $customer?->email,
+            'payment_terms' => $customer?->payment_terms,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $companySnapshot
+     * @return array<string, mixed>
+     */
+    private function buildPdfSnapshot(?FinanceSetting $setting, array $companySnapshot): array
+    {
+        return [
+            'primary_color' => $setting?->invoice_primary_color ?: '#06C2A4',
+            'footer_text' => $setting?->invoice_footer_text ?: null,
+            'company' => $companySnapshot,
+        ];
     }
 }

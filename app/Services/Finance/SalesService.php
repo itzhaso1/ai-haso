@@ -35,8 +35,14 @@ class SalesService
         $totalSales = (float) (clone $query)->sum('total');
         $totalDue = (float) (clone $query)->sum('amount_due');
         $totalPaid = (float) (clone $query)->sum('amount_paid');
-        $overdueCount = (clone $query)->where('status', 'overdue')->count();
-        $unpaidCount = (clone $query)->whereIn('status', ['unpaid', 'partial', 'overdue'])->count();
+        $overdueCount = (clone $query)
+            ->where('invoice_status', 'issued')
+            ->where('payment_status', 'overdue')
+            ->count();
+        $unpaidCount = (clone $query)
+            ->where('invoice_status', 'issued')
+            ->whereIn('payment_status', ['unpaid', 'partial', 'overdue'])
+            ->count();
 
         return [
             'invoice_count' => $invoiceCount,
@@ -65,10 +71,22 @@ class SalesService
     private function salesInvoicesQuery(array $filters): Builder
     {
         $search = trim((string) ($filters['search'] ?? ''));
-        $status = (string) ($filters['status'] ?? '');
+        $invoiceStatus = (string) ($filters['invoice_status'] ?? '');
+        $paymentStatus = (string) ($filters['payment_status'] ?? '');
+        $legacyStatus = (string) ($filters['status'] ?? '');
         $customerId = (int) ($filters['customer_id'] ?? 0);
         $from = $this->resolveDate($filters['from'] ?? null);
         $to = $this->resolveDate($filters['to'] ?? null);
+
+        if ($legacyStatus !== '' && $invoiceStatus === '' && $paymentStatus === '') {
+            if (in_array($legacyStatus, ['draft', 'cancelled'], true)) {
+                $invoiceStatus = $legacyStatus;
+            } elseif ($legacyStatus === 'sent') {
+                $invoiceStatus = 'issued';
+            } elseif (in_array($legacyStatus, ['unpaid', 'partial', 'paid', 'overdue'], true)) {
+                $paymentStatus = $legacyStatus;
+            }
+        }
 
         return FinanceInvoice::query()
             ->where('type', 'sales')
@@ -80,7 +98,8 @@ class SalesService
                         ->orWhereHas('customer', fn (Builder $customerQuery) => $customerQuery->where('name', 'like', '%'.$search.'%'));
                 });
             })
-            ->when($status !== '', fn (Builder $query) => $query->where('status', $status))
+            ->when($invoiceStatus !== '', fn (Builder $query) => $query->where('invoice_status', $invoiceStatus))
+            ->when($paymentStatus !== '', fn (Builder $query) => $query->where('payment_status', $paymentStatus))
             ->when($customerId > 0, fn (Builder $query) => $query->where('customer_id', $customerId))
             ->when($from, fn (Builder $query) => $query->whereDate('issue_date', '>=', $from->toDateString()))
             ->when($to, fn (Builder $query) => $query->whereDate('issue_date', '<=', $to->toDateString()));

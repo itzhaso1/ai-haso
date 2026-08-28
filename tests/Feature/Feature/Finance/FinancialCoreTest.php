@@ -11,11 +11,13 @@ use App\Models\Finance\FinancePayrollAdjustment;
 use App\Models\Finance\FinancePriceList;
 use App\Models\Finance\FinanceSalaryAdvance;
 use App\Models\Finance\FinanceSalaryAdvanceRepayment;
+use App\Models\Finance\FinanceSetting;
 use App\Models\Finance\FinanceSupplier;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Finance\AccountingService;
 use App\Services\Finance\ChartOfAccountsService;
+use App\Services\Finance\InvoiceService;
 use App\Services\Finance\PayrollService;
 use App\Services\Finance\TaxService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -44,7 +46,7 @@ class FinancialCoreTest extends TestCase
                 'issue_date' => now()->toDateString(),
                 'due_date' => now()->addDays(10)->toDateString(),
                 'currency' => 'SAR',
-                'status' => 'unpaid',
+                'invoice_status' => 'issued',
                 'tax_profile_type' => 'standard',
                 'tax_rate' => 15,
                 'items_json' => json_encode([
@@ -64,6 +66,8 @@ class FinancialCoreTest extends TestCase
 
         $invoice = FinanceInvoice::withoutGlobalScopes()->firstOrFail();
         $this->assertSame('sales', $invoice->type);
+        $this->assertSame('issued', $invoice->invoice_status);
+        $this->assertSame('unpaid', $invoice->payment_status);
         $this->assertSame('unpaid', $invoice->status);
         $this->assertSame('200.00', (string) $invoice->subtotal);
         $this->assertSame('200.00', (string) $invoice->taxable_amount);
@@ -98,7 +102,7 @@ class FinancialCoreTest extends TestCase
                 'customer_id' => $customer->id,
                 'issue_date' => now()->toDateString(),
                 'currency' => 'SAR',
-                'status' => 'unpaid',
+                'invoice_status' => 'issued',
                 'tax_profile_type' => 'standard',
                 'tax_rate' => 15,
                 'items_json' => json_encode([
@@ -127,6 +131,8 @@ class FinancialCoreTest extends TestCase
             ->assertRedirect();
 
         $invoice->refresh();
+        $this->assertSame('issued', $invoice->invoice_status);
+        $this->assertSame('partial', $invoice->payment_status);
         $this->assertSame('partial', $invoice->status);
         $this->assertSame('100.00', (string) $invoice->amount_paid);
         $this->assertSame('130.00', (string) $invoice->amount_due);
@@ -141,6 +147,8 @@ class FinancialCoreTest extends TestCase
             ->assertRedirect();
 
         $invoice->refresh();
+        $this->assertSame('issued', $invoice->invoice_status);
+        $this->assertSame('paid', $invoice->payment_status);
         $this->assertSame('paid', $invoice->status);
         $this->assertSame('230.00', (string) $invoice->amount_paid);
         $this->assertSame('0.00', (string) $invoice->amount_due);
@@ -162,7 +170,7 @@ class FinancialCoreTest extends TestCase
                 'supplier_id' => $supplier->id,
                 'issue_date' => now()->toDateString(),
                 'currency' => 'SAR',
-                'status' => 'unpaid',
+                'invoice_status' => 'issued',
                 'tax_profile_type' => 'standard',
                 'tax_rate' => 15,
                 'items_json' => json_encode([
@@ -201,7 +209,7 @@ class FinancialCoreTest extends TestCase
                 'customer_name' => 'عميل نقدي',
                 'issue_date' => now()->toDateString(),
                 'currency' => 'SAR',
-                'status' => 'unpaid',
+                'invoice_status' => 'issued',
                 'tax_profile_type' => 'standard',
                 'tax_rate' => 15,
                 'items_json' => json_encode([
@@ -233,6 +241,8 @@ class FinancialCoreTest extends TestCase
             'invoice_number' => 'INV-B-000001',
             'type' => 'sales',
             'status' => 'unpaid',
+            'invoice_status' => 'issued',
+            'payment_status' => 'unpaid',
             'issue_date' => now()->toDateString(),
             'currency' => 'SAR',
             'subtotal' => 100,
@@ -395,7 +405,7 @@ class FinancialCoreTest extends TestCase
                 'customer_id' => $customer->id,
                 'issue_date' => now()->toDateString(),
                 'currency' => 'SAR',
-                'status' => 'unpaid',
+                'invoice_status' => 'issued',
                 'tax_profile_type' => 'standard',
                 'tax_rate' => 15,
                 'items_json' => json_encode([
@@ -413,9 +423,242 @@ class FinancialCoreTest extends TestCase
 
         $this->actingAs($user)
             ->withSession(['current_workspace_id' => $workspace->id])
-            ->get(route('workspace.finance.sales.index', ['status' => 'unpaid', 'customer_id' => $customer->id]))
+            ->get(route('workspace.finance.sales.index', ['payment_status' => 'unpaid', 'customer_id' => $customer->id]))
             ->assertOk()
             ->assertSee('وحدة المبيعات');
+    }
+
+    public function test_draft_invoice_keeps_invoice_status_separate_from_payment_status(): void
+    {
+        [$user, $workspace] = $this->createWorkspaceOwner('company');
+
+        $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.finance.invoices.store'), [
+                'type' => 'sales',
+                'customer_name' => 'Draft Customer',
+                'issue_date' => now()->toDateString(),
+                'currency' => 'SAR',
+                'invoice_status' => 'draft',
+                'tax_profile_type' => 'standard',
+                'tax_rate' => 15,
+                'items_json' => json_encode([
+                    [
+                        'product_name' => 'تصميم موقع',
+                        'quantity' => 1,
+                        'unit_price' => 1000,
+                        'discount' => 0,
+                        'tax_rate' => 15,
+                        'tax_type' => 'standard',
+                    ],
+                ]),
+            ])
+            ->assertRedirect();
+
+        $invoice = FinanceInvoice::withoutGlobalScopes()->firstOrFail();
+        $this->assertSame('draft', $invoice->invoice_status);
+        $this->assertSame('unpaid', $invoice->payment_status);
+        $this->assertSame('draft', $invoice->status);
+    }
+
+    public function test_overdue_status_is_recalculated_for_issued_unpaid_invoices(): void
+    {
+        [$user, $workspace] = $this->createWorkspaceOwner('company');
+
+        $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.finance.invoices.store'), [
+                'type' => 'sales',
+                'customer_name' => 'Overdue Customer',
+                'issue_date' => now()->subDays(20)->toDateString(),
+                'due_date' => now()->subDays(5)->toDateString(),
+                'currency' => 'SAR',
+                'invoice_status' => 'issued',
+                'tax_profile_type' => 'standard',
+                'tax_rate' => 15,
+                'items_json' => json_encode([
+                    [
+                        'product_name' => 'خدمة استشارية',
+                        'quantity' => 1,
+                        'unit_price' => 200,
+                        'discount' => 0,
+                        'tax_rate' => 15,
+                        'tax_type' => 'standard',
+                    ],
+                ]),
+            ])
+            ->assertRedirect();
+
+        /** @var InvoiceService $invoiceService */
+        $invoiceService = app(InvoiceService::class);
+        $invoiceService->refreshIssuedPaymentStatuses($workspace->id);
+
+        $invoice = FinanceInvoice::withoutGlobalScopes()->firstOrFail();
+        $this->assertSame('issued', $invoice->invoice_status);
+        $this->assertSame('overdue', $invoice->payment_status);
+        $this->assertSame('overdue', $invoice->status);
+    }
+
+    public function test_company_snapshot_is_preserved_after_settings_change(): void
+    {
+        [$user, $workspace] = $this->createWorkspaceOwner('company');
+
+        FinanceSetting::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'company_name' => 'Old Name LLC',
+            'currency' => 'SAR',
+            'country_code' => 'SA',
+            'invoice_prefix' => 'INV',
+            'next_invoice_sequence' => 1,
+            'default_vat_rate' => 15,
+        ]);
+
+        $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.finance.invoices.store'), [
+                'type' => 'sales',
+                'customer_name' => 'Historical Customer',
+                'issue_date' => now()->toDateString(),
+                'currency' => 'SAR',
+                'invoice_status' => 'issued',
+                'tax_profile_type' => 'standard',
+                'tax_rate' => 15,
+                'items_json' => json_encode([
+                    [
+                        'product_name' => 'Historical Service',
+                        'quantity' => 1,
+                        'unit_price' => 150,
+                        'discount' => 0,
+                        'tax_rate' => 15,
+                        'tax_type' => 'standard',
+                    ],
+                ]),
+            ])
+            ->assertRedirect();
+
+        $invoice = FinanceInvoice::withoutGlobalScopes()->firstOrFail();
+        $this->assertSame('Old Name LLC', data_get($invoice->company_snapshot, 'company_name'));
+
+        FinanceSetting::withoutGlobalScopes()
+            ->where('workspace_id', $workspace->id)
+            ->update(['company_name' => 'New Name LLC']);
+
+        $invoice->refresh();
+        $this->assertSame('Old Name LLC', data_get($invoice->company_snapshot, 'company_name'));
+    }
+
+    public function test_customer_validation_rejects_cross_workspace_customer_ids(): void
+    {
+        [$userA, $workspaceA] = $this->createWorkspaceOwner('company');
+        [, $workspaceB] = $this->createWorkspaceOwner('company');
+
+        $foreignCustomer = Customer::withoutGlobalScopes()->create([
+            'workspace_id' => $workspaceB->id,
+            'name' => 'Foreign Customer',
+            'phone' => '0503334444',
+        ]);
+
+        $response = $this->actingAs($userA)
+            ->withSession(['current_workspace_id' => $workspaceA->id])
+            ->post(route('workspace.finance.invoices.store'), [
+                'type' => 'sales',
+                'customer_id' => $foreignCustomer->id,
+                'issue_date' => now()->toDateString(),
+                'currency' => 'SAR',
+                'invoice_status' => 'issued',
+                'tax_profile_type' => 'standard',
+                'tax_rate' => 15,
+                'items_json' => json_encode([
+                    [
+                        'product_name' => 'Isolation Check',
+                        'quantity' => 1,
+                        'unit_price' => 100,
+                        'discount' => 0,
+                        'tax_rate' => 15,
+                        'tax_type' => 'standard',
+                    ],
+                ]),
+            ]);
+
+        $response->assertSessionHasErrors('customer_id');
+    }
+
+    public function test_supplier_validation_rejects_cross_workspace_supplier_ids(): void
+    {
+        [$userA, $workspaceA] = $this->createWorkspaceOwner('company');
+        [, $workspaceB] = $this->createWorkspaceOwner('company');
+
+        $foreignSupplier = FinanceSupplier::withoutGlobalScopes()->create([
+            'workspace_id' => $workspaceB->id,
+            'name' => 'Foreign Supplier',
+            'status' => 'active',
+        ]);
+
+        $response = $this->actingAs($userA)
+            ->withSession(['current_workspace_id' => $workspaceA->id])
+            ->post(route('workspace.finance.invoices.store'), [
+                'type' => 'purchase',
+                'supplier_id' => $foreignSupplier->id,
+                'issue_date' => now()->toDateString(),
+                'currency' => 'SAR',
+                'invoice_status' => 'issued',
+                'tax_profile_type' => 'standard',
+                'tax_rate' => 15,
+                'items_json' => json_encode([
+                    [
+                        'product_name' => 'Supplier Isolation',
+                        'quantity' => 1,
+                        'unit_price' => 100,
+                        'discount' => 0,
+                        'tax_rate' => 15,
+                        'tax_type' => 'standard',
+                    ],
+                ]),
+            ]);
+
+        $response->assertSessionHasErrors('supplier_id');
+    }
+
+    public function test_pdf_endpoint_returns_pdf_binary_when_dependency_is_available(): void
+    {
+        if (! class_exists(\Barryvdh\DomPDF\Facade\Pdf::class)) {
+            $this->markTestSkipped('DomPDF package is not available in current test runtime.');
+        }
+
+        [$user, $workspace] = $this->createWorkspaceOwner('company');
+
+        $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.finance.invoices.store'), [
+                'type' => 'sales',
+                'customer_name' => 'PDF Customer',
+                'issue_date' => now()->toDateString(),
+                'currency' => 'SAR',
+                'invoice_status' => 'issued',
+                'tax_profile_type' => 'standard',
+                'tax_rate' => 15,
+                'items_json' => json_encode([
+                    [
+                        'product_name' => 'عقد صيانة',
+                        'description' => str_repeat('وصف طويل ', 10),
+                        'quantity' => 1,
+                        'unit_price' => 500,
+                        'discount' => 0,
+                        'tax_rate' => 15,
+                        'tax_type' => 'standard',
+                    ],
+                ]),
+            ])
+            ->assertRedirect();
+
+        $invoice = FinanceInvoice::withoutGlobalScopes()->firstOrFail();
+
+        $response = $this->actingAs($user)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->get(route('workspace.finance.invoices.pdf', $invoice));
+
+        $response->assertOk();
+        $this->assertStringContainsString('application/pdf', (string) $response->headers->get('content-type'));
     }
 
     public function test_price_lists_module_allows_create_and_add_items_and_isolated_by_workspace(): void
