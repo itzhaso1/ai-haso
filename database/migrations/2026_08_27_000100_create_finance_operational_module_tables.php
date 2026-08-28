@@ -91,7 +91,7 @@ return new class extends Migration
                 $table->text('notes')->nullable();
                 $table->foreignId('posted_journal_entry_id')
                     ->nullable()
-                    ->constrained('finance_journal_entries', indexName: 'fin_sal_adv_rep_posted_je_fk')
+                    ->constrained('finance_journal_entries', 'id', 'fin_sal_adv_rep_posted_je_fk')
                     ->nullOnDelete();
                 $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
                 $table->timestamps();
