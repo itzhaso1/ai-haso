@@ -5,6 +5,7 @@ namespace Tests\Feature\Feature\Appointments;
 use App\Models\Appointment\AppointmentBooking;
 use App\Models\Appointment\AppointmentRequest;
 use App\Models\Appointment\AppointmentService;
+use App\Models\Appointment\AppointmentSetting;
 use App\Models\Appointment\AppointmentStaff;
 use App\Models\Payment;
 use App\Models\User;
@@ -12,6 +13,7 @@ use App\Models\Workspace;
 use App\Services\Appointments\AppointmentAiActionService;
 use App\Services\Appointments\AppointmentBillingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 class AppointmentModuleTest extends TestCase
@@ -26,7 +28,7 @@ class AppointmentModuleTest extends TestCase
             ->withSession(['current_workspace_id' => $workspace->id])
             ->get(route('workspace.appointments.dashboard'))
             ->assertOk()
-            ->assertSee('إدارة المواعيد');
+            ->assertSee('Overview');
     }
 
     public function test_create_booking_and_prevent_time_overlap_for_same_staff(): void
@@ -61,8 +63,8 @@ class AppointmentModuleTest extends TestCase
 
         $staff = AppointmentStaff::query()->firstOrFail();
 
-        $starts = now()->addDay()->setTime(10, 0, 0);
-        $ends = now()->addDay()->setTime(10, 30, 0);
+        $starts = Carbon::now()->next(Carbon::MONDAY)->setTime(10, 0, 0);
+        $ends = $starts->copy()->addMinutes(30);
 
         $this->actingAs($owner)
             ->withSession(['current_workspace_id' => $workspace->id])
@@ -149,7 +151,7 @@ class AppointmentModuleTest extends TestCase
                 'customer_name' => 'عميل اختبار',
                 'customer_phone' => '0551111222',
                 'requested_service_id' => $service->id,
-                'requested_date' => now()->addDay()->toDateString(),
+                'requested_date' => Carbon::now()->next(Carbon::MONDAY)->toDateString(),
                 'requested_time' => '11:00',
                 'source' => 'dashboard',
             ])
@@ -157,12 +159,13 @@ class AppointmentModuleTest extends TestCase
 
         $appointmentRequest = AppointmentRequest::query()->firstOrFail();
 
+        $approvedDate = Carbon::now()->next(Carbon::MONDAY)->setTime(11, 0);
         $this->actingAs($owner)
             ->withSession(['current_workspace_id' => $workspace->id])
             ->post(route('workspace.appointments.requests.approve', $appointmentRequest), [
                 'service_id' => $service->id,
-                'starts_at' => now()->addDay()->setTime(11, 0)->toDateTimeString(),
-                'ends_at' => now()->addDay()->setTime(11, 45)->toDateTimeString(),
+                'starts_at' => $approvedDate->toDateTimeString(),
+                'ends_at' => $approvedDate->copy()->addMinutes(45)->toDateTimeString(),
             ])
             ->assertRedirect();
 
@@ -187,14 +190,15 @@ class AppointmentModuleTest extends TestCase
             'payment_mode' => 'full',
         ]);
 
+        $bookingDate = Carbon::now()->next(Carbon::TUESDAY)->setTime(16, 0);
         $this->actingAs($owner)
             ->withSession(['current_workspace_id' => $workspace->id])
             ->post(route('workspace.appointments.bookings.store'), [
                 'service_id' => $service->id,
                 'customer_name' => 'عميل دفع',
                 'customer_phone' => '0553333444',
-                'starts_at' => now()->addDays(2)->setTime(16, 0)->toDateTimeString(),
-                'ends_at' => now()->addDays(2)->setTime(16, 30)->toDateTimeString(),
+                'starts_at' => $bookingDate->toDateTimeString(),
+                'ends_at' => $bookingDate->copy()->addMinutes(30)->toDateTimeString(),
                 'status' => 'scheduled',
                 'source' => 'dashboard',
             ])
@@ -243,6 +247,115 @@ class AppointmentModuleTest extends TestCase
 
         $this->assertSame(1, AppointmentRequest::withoutGlobalScopes()->where('workspace_id', $workspaceA->id)->count());
         $this->assertSame(0, AppointmentRequest::withoutGlobalScopes()->where('workspace_id', $workspaceB->id)->count());
+    }
+
+    public function test_booking_end_time_is_calculated_from_service_duration_using_workspace_timezone(): void
+    {
+        [$owner, $workspace] = $this->createWorkspaceOwner('company');
+
+        AppointmentSetting::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'business_type' => 'general',
+            'business_label' => 'Test Workspace',
+            'timezone' => 'Asia/Riyadh',
+            'slot_interval_minutes' => 30,
+            'start_hour' => '08:00:00',
+            'end_hour' => '22:00:00',
+            'allow_walk_in' => true,
+            'automation_mode' => 'APPROVAL',
+            'auto_confirm_after_payment' => true,
+            'reminder_offsets' => [1440, 120],
+            'metadata' => [
+                'business_hours' => [
+                    'sun' => ['closed' => false, 'ranges' => [['start' => '09:00', 'end' => '20:00']]],
+                    'mon' => ['closed' => false, 'ranges' => [['start' => '09:00', 'end' => '20:00']]],
+                    'tue' => ['closed' => false, 'ranges' => [['start' => '09:00', 'end' => '20:00']]],
+                    'wed' => ['closed' => false, 'ranges' => [['start' => '09:00', 'end' => '20:00']]],
+                    'thu' => ['closed' => false, 'ranges' => [['start' => '09:00', 'end' => '20:00']]],
+                    'fri' => ['closed' => false, 'ranges' => [['start' => '09:00', 'end' => '20:00']]],
+                    'sat' => ['closed' => false, 'ranges' => [['start' => '09:00', 'end' => '20:00']]],
+                ],
+                'booking_rules' => [
+                    'min_booking_notice_minutes' => 0,
+                    'max_advance_booking_days' => 365,
+                    'slot_interval_minutes' => 30,
+                    'buffer_minutes' => 0,
+                    'max_bookings_per_day' => 0,
+                ],
+                'cancellation_rules' => [
+                    'minimum_notice_hours' => 0,
+                    'cancellation_window_hours' => 0,
+                    'reschedule_window_hours' => 0,
+                    'maximum_reschedules' => 3,
+                ],
+            ],
+        ]);
+
+        $service = AppointmentService::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'خدمة 30 دقيقة',
+            'duration_minutes' => 30,
+            'price' => 100,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.appointments.bookings.store'), [
+                'service_id' => $service->id,
+                'customer_name' => 'عميل التوقيت',
+                'customer_phone' => '0500009999',
+                'starts_at' => Carbon::now('Asia/Riyadh')->next(Carbon::MONDAY)->setTime(18, 0)->toDateTimeString(),
+                'status' => 'scheduled',
+                'source' => 'dashboard',
+            ])
+            ->assertRedirect();
+
+        $booking = AppointmentBooking::query()->firstOrFail();
+        $this->assertSame(30, $booking->starts_at->diffInMinutes($booking->ends_at));
+        $this->assertSame('18:00', $booking->starts_at->copy()->timezone('Asia/Riyadh')->format('H:i'));
+        $this->assertSame('18:30', $booking->ends_at->copy()->timezone('Asia/Riyadh')->format('H:i'));
+    }
+
+    public function test_appointments_navigation_pages_are_split_and_accessible(): void
+    {
+        [$owner, $workspace] = $this->createWorkspaceOwner('company');
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->get(route('workspace.appointments.overview'))
+            ->assertOk()
+            ->assertSee('Overview');
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->get(route('workspace.appointments.bookings.index'))
+            ->assertOk()
+            ->assertSee('Bookings');
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->get(route('workspace.appointments.calendar.index'))
+            ->assertOk()
+            ->assertSee('Calendar');
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->get(route('workspace.appointments.requests.index'))
+            ->assertOk()
+            ->assertSee('Appointment Requests');
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->get(route('workspace.appointments.customers.index'))
+            ->assertOk()
+            ->assertSee('Customers');
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->get(route('workspace.appointments.settings.index'))
+            ->assertOk()
+            ->assertSee('Settings');
     }
 
     /**

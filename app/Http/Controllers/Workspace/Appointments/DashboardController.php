@@ -2,87 +2,21 @@
 
 namespace App\Http\Controllers\Workspace\Appointments;
 
-use App\Models\Appointment\AppointmentBooking;
+use App\Models\Appointment\AppointmentResource;
 use App\Models\Appointment\AppointmentService as AppointmentServiceModel;
 use App\Models\Appointment\AppointmentStaff;
-use App\Models\Appointment\AppointmentSetting;
-use App\Models\Customer;
-use App\Models\WorkspaceUser;
 use App\Services\Appointments\AppointmentService;
-use App\Services\Appointments\AppointmentRequestService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
-use Illuminate\View\View;
 
 class DashboardController extends AppointmentsBaseController
 {
-    public function __construct(
-        private readonly AppointmentService $appointmentService,
-        private readonly AppointmentRequestService $appointmentRequestService,
-    ) {}
-
-    public function index(Request $request): View
-    {
-        $this->authorizeAppointments($request, 'appointments.view');
-        $workspace = $this->currentWorkspace();
-        $this->appointmentService->ensureSetup($workspace);
-
-        $filters = [
-            'date' => trim((string) $request->string('date', now()->toDateString())),
-            'status' => trim((string) $request->string('status')),
-            'payment_status' => trim((string) $request->string('payment_status')),
-            'staff_id' => $request->integer('staff_id') ?: null,
-            'search' => trim((string) $request->string('search')),
-        ];
-        $requestFilters = [
-            'date' => trim((string) $request->string('request_date')),
-            'status' => trim((string) $request->string('request_status')),
-            'source' => trim((string) $request->string('request_source')),
-            'search' => trim((string) $request->string('request_search')),
-        ];
-
-        $bookings = $this->appointmentService->listBookings($filters, 20);
-        $appointmentRequests = $this->appointmentRequestService->listRequests($requestFilters, 15);
-
-        $today = now()->toDateString();
-        $todayStats = [
-            'scheduled' => AppointmentBooking::query()->whereDate('starts_at', $today)->where('appointment_status', 'scheduled')->count(),
-            'confirmed' => AppointmentBooking::query()->whereDate('starts_at', $today)->where('appointment_status', 'confirmed')->count(),
-            'completed' => AppointmentBooking::query()->whereDate('starts_at', $today)->where('appointment_status', 'completed')->count(),
-            'cancelled' => AppointmentBooking::query()->whereDate('starts_at', $today)->where('appointment_status', 'cancelled')->count(),
-        ];
-
-        return view('workspace.appointments.index', [
-            'setting' => AppointmentSetting::query()->first(),
-            'services' => AppointmentServiceModel::query()
-                ->with('staffMembers:id,name')
-                ->latest('id')
-                ->paginate(10, ['*'], 'services_page'),
-            'staff' => AppointmentStaff::query()
-                ->with(['user', 'services:id,name'])
-                ->latest('id')
-                ->paginate(10, ['*'], 'staff_page'),
-            'allServices' => AppointmentServiceModel::query()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'duration_minutes']),
-            'allStaff' => AppointmentStaff::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'bookings' => $bookings,
-            'appointmentRequests' => $appointmentRequests,
-            'customers' => Customer::query()->orderBy('name')->limit(200)->get(['id', 'name', 'phone']),
-            'workspaceUsers' => WorkspaceUser::query()
-                ->where('workspace_id', $workspace->id)
-                ->where('status', 'active')
-                ->with('user')
-                ->orderBy('membership_role')
-                ->get(),
-            'filters' => $filters,
-            'requestFilters' => $requestFilters,
-            'todayStats' => $todayStats,
-        ]);
-    }
+    public function __construct(private readonly AppointmentService $appointmentService) {}
 
     public function updateSettings(Request $request): RedirectResponse
     {
-        $this->authorizeAppointments($request, 'appointments.manage');
+        $this->authorizeAppointments($request, 'appointments.settings.manage');
         $workspace = $this->currentWorkspace();
 
         $validated = $request->validate([
@@ -96,6 +30,20 @@ class DashboardController extends AppointmentsBaseController
             'automation_mode' => ['required', Rule::in(['AUTO', 'APPROVAL', 'MANUAL'])],
             'auto_confirm_after_payment' => ['nullable', 'boolean'],
             'reminder_offsets' => ['nullable', 'string', 'max:255'],
+            'business_hours' => ['nullable', 'array'],
+            'business_hours.*.closed' => ['nullable', 'boolean'],
+            'business_hours.*.ranges' => ['nullable', 'array'],
+            'business_hours.*.ranges.*.start' => ['nullable', 'date_format:H:i'],
+            'business_hours.*.ranges.*.end' => ['nullable', 'date_format:H:i'],
+            'booking_rules.min_booking_notice_minutes' => ['nullable', 'integer', 'min:0'],
+            'booking_rules.max_advance_booking_days' => ['nullable', 'integer', 'min:1', 'max:3650'],
+            'booking_rules.slot_interval_minutes' => ['nullable', 'integer', 'min:5', 'max:240'],
+            'booking_rules.buffer_minutes' => ['nullable', 'integer', 'min:0', 'max:180'],
+            'booking_rules.max_bookings_per_day' => ['nullable', 'integer', 'min:0', 'max:5000'],
+            'cancellation_rules.minimum_notice_hours' => ['nullable', 'integer', 'min:0', 'max:720'],
+            'cancellation_rules.cancellation_window_hours' => ['nullable', 'integer', 'min:0', 'max:720'],
+            'cancellation_rules.reschedule_window_hours' => ['nullable', 'integer', 'min:0', 'max:720'],
+            'cancellation_rules.maximum_reschedules' => ['nullable', 'integer', 'min:0', 'max:50'],
         ]);
 
         $reminderOffsets = collect(explode(',', (string) ($validated['reminder_offsets'] ?? '1440,120')))
@@ -108,6 +56,11 @@ class DashboardController extends AppointmentsBaseController
             'allow_walk_in' => $request->boolean('allow_walk_in'),
             'auto_confirm_after_payment' => $request->boolean('auto_confirm_after_payment', true),
             'reminder_offsets' => $reminderOffsets === [] ? [1440, 120] : $reminderOffsets,
+            'metadata' => [
+                'business_hours' => $validated['business_hours'] ?? [],
+                'booking_rules' => $validated['booking_rules'] ?? [],
+                'cancellation_rules' => $validated['cancellation_rules'] ?? [],
+            ],
         ]);
 
         return back()->with('success', 'تم تحديث إعدادات المواعيد.');
@@ -115,7 +68,7 @@ class DashboardController extends AppointmentsBaseController
 
     public function storeService(Request $request): RedirectResponse
     {
-        $this->authorizeAppointments($request, 'appointments.manage');
+        $this->authorizeAppointments($request, 'appointments.settings.manage');
         $workspace = $this->currentWorkspace();
 
         $validated = $request->validate([
@@ -146,7 +99,7 @@ class DashboardController extends AppointmentsBaseController
 
     public function updateService(Request $request, AppointmentServiceModel $service): RedirectResponse
     {
-        $this->authorizeAppointments($request, 'appointments.manage');
+        $this->authorizeAppointments($request, 'appointments.settings.manage');
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
@@ -175,7 +128,7 @@ class DashboardController extends AppointmentsBaseController
 
     public function storeStaff(Request $request): RedirectResponse
     {
-        $this->authorizeAppointments($request, 'appointments.manage');
+        $this->authorizeAppointments($request, 'appointments.settings.manage');
         $workspace = $this->currentWorkspace();
         $validated = $request->validate([
             'user_id' => ['nullable', 'integer'],
@@ -189,12 +142,18 @@ class DashboardController extends AppointmentsBaseController
             'working_hours' => ['nullable', 'array'],
             'vacation_periods' => ['nullable', 'array'],
             'staff_permissions' => ['nullable', 'array'],
+            'working_hours_json' => ['nullable', 'string'],
+            'vacation_periods_json' => ['nullable', 'string'],
+            'staff_permissions_json' => ['nullable', 'string'],
             'service_ids' => ['nullable', 'array'],
             'service_ids.*' => ['integer'],
         ]);
 
         $this->appointmentService->createStaff($workspace, $validated + [
             'is_active' => $request->boolean('is_active', true),
+            'working_hours' => $validated['working_hours'] ?? $this->parseJsonField($request, 'working_hours_json'),
+            'vacation_periods' => $validated['vacation_periods'] ?? $this->parseJsonField($request, 'vacation_periods_json'),
+            'staff_permissions' => $validated['staff_permissions'] ?? $this->parseJsonField($request, 'staff_permissions_json'),
         ]);
 
         return back()->with('success', 'تمت إضافة عضو الطاقم.');
@@ -202,7 +161,7 @@ class DashboardController extends AppointmentsBaseController
 
     public function updateStaff(Request $request, AppointmentStaff $staff): RedirectResponse
     {
-        $this->authorizeAppointments($request, 'appointments.manage');
+        $this->authorizeAppointments($request, 'appointments.settings.manage');
         $validated = $request->validate([
             'user_id' => ['nullable', 'integer'],
             'name' => ['required', 'string', 'max:255'],
@@ -215,12 +174,18 @@ class DashboardController extends AppointmentsBaseController
             'working_hours' => ['nullable', 'array'],
             'vacation_periods' => ['nullable', 'array'],
             'staff_permissions' => ['nullable', 'array'],
+            'working_hours_json' => ['nullable', 'string'],
+            'vacation_periods_json' => ['nullable', 'string'],
+            'staff_permissions_json' => ['nullable', 'string'],
             'service_ids' => ['nullable', 'array'],
             'service_ids.*' => ['integer'],
         ]);
 
         $this->appointmentService->updateStaff($staff, $validated + [
             'is_active' => $request->boolean('is_active', true),
+            'working_hours' => $validated['working_hours'] ?? $this->parseJsonField($request, 'working_hours_json'),
+            'vacation_periods' => $validated['vacation_periods'] ?? $this->parseJsonField($request, 'vacation_periods_json'),
+            'staff_permissions' => $validated['staff_permissions'] ?? $this->parseJsonField($request, 'staff_permissions_json'),
         ]);
 
         return back()->with('success', 'تم تحديث بيانات الطاقم.');
@@ -239,7 +204,8 @@ class DashboardController extends AppointmentsBaseController
             'customer_email' => ['nullable', 'email', 'max:255'],
             'customer_age' => ['nullable', 'integer', 'min:1', 'max:120'],
             'starts_at' => ['required', 'date'],
-            'ends_at' => ['required', 'date'],
+            'ends_at' => ['nullable', 'date'],
+            'allow_custom_duration' => ['nullable', 'boolean'],
             'status' => ['nullable', Rule::in(['scheduled', 'confirmed', 'checked_in', 'in_progress', 'completed', 'cancelled', 'no_show'])],
             'payment_status' => ['nullable', Rule::in(['unpaid', 'pending', 'paid', 'failed', 'refunded', 'partially_paid'])],
             'source' => ['nullable', Rule::in(['dashboard', 'phone', 'walk_in', 'website', 'whatsapp', 'ai_chat', 'email', 'api'])],
@@ -253,6 +219,7 @@ class DashboardController extends AppointmentsBaseController
                 ...$validated,
                 'source_channel' => $validated['source'] ?? 'dashboard',
                 'appointment_status' => $validated['status'] ?? 'scheduled',
+                'allow_custom_duration' => $request->boolean('allow_custom_duration'),
             ], (int) $request->user()?->id);
         } catch (\RuntimeException $exception) {
             return back()->withInput()->with('error', $exception->getMessage());
@@ -275,5 +242,43 @@ class DashboardController extends AppointmentsBaseController
         ]);
 
         return back()->with('success', 'تم تحديث حالة الموعد.');
+    }
+
+    public function storeResource(Request $request): RedirectResponse
+    {
+        $this->authorizeAppointments($request, 'appointments.settings.manage');
+        $workspace = $this->currentWorkspace();
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'resource_type' => ['required', Rule::in(['room', 'chair', 'equipment', 'meeting_room', 'other'])],
+            'is_active' => ['nullable', 'boolean'],
+        ]);
+
+        AppointmentResource::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => trim((string) $validated['name']),
+            'resource_type' => $validated['resource_type'],
+            'is_active' => $request->boolean('is_active', true),
+        ]);
+
+        return back()->with('success', 'تمت إضافة المورد بنجاح.');
+    }
+
+    public function updateResource(Request $request, AppointmentResource $resource): RedirectResponse
+    {
+        $this->authorizeAppointments($request, 'appointments.settings.manage');
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'resource_type' => ['required', Rule::in(['room', 'chair', 'equipment', 'meeting_room', 'other'])],
+            'is_active' => ['nullable', 'boolean'],
+        ]);
+
+        $resource->update([
+            'name' => trim((string) $validated['name']),
+            'resource_type' => $validated['resource_type'],
+            'is_active' => $request->boolean('is_active', true),
+        ]);
+
+        return back()->with('success', 'تم تحديث المورد.');
     }
 }

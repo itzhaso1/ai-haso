@@ -3,6 +3,9 @@
 namespace App\Models;
 
 use App\Models\Appointment\AppointmentBooking;
+use App\Models\Appointment\AppointmentReminder;
+use App\Models\Appointment\AppointmentRequestSlot;
+use App\Models\Appointment\AppointmentResource;
 use App\Models\Appointment\AppointmentRequest;
 use App\Models\Appointment\AppointmentService;
 use App\Models\Appointment\AppointmentStaff;
@@ -197,8 +200,23 @@ class Workspace extends Model
         return $this->hasMany(AppointmentRequest::class);
     }
 
+    public function appointmentRequestSlots(): HasMany
+    {
+        return $this->hasMany(AppointmentRequestSlot::class, 'workspace_id');
+    }
+
     public function appointmentBookings(): HasMany
     {
         return $this->hasMany(AppointmentBooking::class);
+    }
+
+    public function appointmentResources(): HasMany
+    {
+        return $this->hasMany(AppointmentResource::class, 'workspace_id');
+    }
+
+    public function appointmentReminders(): HasMany
+    {
+        return $this->hasMany(AppointmentReminder::class, 'workspace_id');
     }
 }

@@ -44,6 +44,8 @@ class AppointmentRequestService
             throw new RuntimeException('اسم العميل مطلوب لإنشاء طلب الموعد.');
         }
 
+        $this->assertRequestPolicy($workspace, $setting, $payload);
+
         $source = (string) ($payload['source'] ?? 'dashboard');
         if (! in_array($source, AppointmentService::BOOKING_SOURCES, true)) {
             $source = 'dashboard';
@@ -112,70 +114,80 @@ class AppointmentRequestService
      */
     public function approveRequest(AppointmentRequest $request, array $payload, ?int $actorUserId): AppointmentBooking
     {
-        if (in_array($request->status, ['approved', 'rejected', 'cancelled', 'expired'], true)) {
-            throw new RuntimeException('لا يمكن اعتماد طلب موعد مغلق.');
-        }
+        $booking = DB::transaction(function () use ($request, $payload, $actorUserId): AppointmentBooking {
+            $lockedRequest = AppointmentRequest::withoutGlobalScopes()
+                ->whereKey($request->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        $serviceId = (int) ($payload['service_id'] ?? $request->requested_service_id ?? 0);
-        if ($serviceId <= 0) {
-            throw new RuntimeException('الخدمة مطلوبة لاعتماد الطلب.');
-        }
+            if (in_array($lockedRequest->status, ['approved', 'rejected', 'cancelled', 'expired'], true)) {
+                throw new RuntimeException('لا يمكن اعتماد طلب موعد مغلق.');
+            }
 
-        $service = AppointmentServiceModel::query()->whereKey($serviceId)->firstOrFail();
-        $staffId = isset($payload['staff_id'])
-            ? (int) $payload['staff_id']
-            : (isset($request->requested_staff_id) ? (int) $request->requested_staff_id : null);
+            $serviceId = (int) ($payload['service_id'] ?? $lockedRequest->requested_service_id ?? 0);
+            if ($serviceId <= 0) {
+                throw new RuntimeException('الخدمة مطلوبة لاعتماد الطلب.');
+            }
 
-        if ($staffId !== null && $staffId > 0) {
-            AppointmentStaff::query()->whereKey($staffId)->firstOrFail();
-        }
+            $service = AppointmentServiceModel::query()->whereKey($serviceId)->firstOrFail();
+            $staffId = isset($payload['staff_id'])
+                ? (int) $payload['staff_id']
+                : (isset($lockedRequest->requested_staff_id) ? (int) $lockedRequest->requested_staff_id : null);
 
-        [$startsAt, $endsAt] = $this->resolveBookingWindow($request, $service, $payload);
-        $appointmentStatus = (string) ($payload['appointment_status'] ?? 'scheduled');
-        if (! in_array($appointmentStatus, AppointmentService::APPOINTMENT_STATUSES, true)) {
-            $appointmentStatus = 'scheduled';
-        }
+            if ($staffId !== null && $staffId > 0) {
+                AppointmentStaff::query()->whereKey($staffId)->firstOrFail();
+            }
 
-        $booking = $this->appointmentService->createBooking($request->workspace, [
-            'request_id' => $request->id,
-            'service_id' => $service->id,
-            'staff_id' => $staffId,
-            'customer_id' => $request->customer_id,
-            'customer_name' => $request->customer_name,
-            'customer_phone' => $request->customer_phone,
-            'customer_email' => $request->customer_email,
-            'customer_age' => $request->customer_age,
-            'starts_at' => $startsAt->toDateTimeString(),
-            'ends_at' => $endsAt->toDateTimeString(),
-            'appointment_status' => $appointmentStatus,
-            'status' => $appointmentStatus,
-            'payment_status' => $service->requires_payment ? 'unpaid' : 'paid',
-            'source_channel' => $payload['source_channel'] ?? $request->source,
-            'notes' => $payload['notes'] ?? $request->notes,
-            'resource_ids' => $payload['resource_ids'] ?? [],
-            'metadata' => [
-                'approved_from_request_id' => $request->id,
-                'request_type' => $request->request_type,
-            ],
-        ], $actorUserId);
+            [$startsAt, $endsAt] = $this->resolveBookingWindow($lockedRequest, $service, $payload);
+            $appointmentStatus = (string) ($payload['appointment_status'] ?? 'scheduled');
+            if (! in_array($appointmentStatus, AppointmentService::APPOINTMENT_STATUSES, true)) {
+                $appointmentStatus = 'scheduled';
+            }
 
-        $request->update([
-            'requested_service_id' => $service->id,
-            'requested_staff_id' => $staffId,
-            'status' => 'approved',
-            'appointment_status' => $booking->appointment_status,
-            'payment_status' => $booking->payment_status,
-            'approved_by' => $actorUserId,
-            'approved_at' => now(),
-            'rejected_by' => null,
-            'rejected_at' => null,
-            'cancelled_at' => null,
-        ]);
+            $booking = $this->appointmentService->createBooking($lockedRequest->workspace, [
+                'request_id' => $lockedRequest->id,
+                'service_id' => $service->id,
+                'staff_id' => $staffId,
+                'customer_id' => $lockedRequest->customer_id,
+                'customer_name' => $lockedRequest->customer_name,
+                'customer_phone' => $lockedRequest->customer_phone,
+                'customer_email' => $lockedRequest->customer_email,
+                'customer_age' => $lockedRequest->customer_age,
+                'starts_at' => $startsAt->toDateTimeString(),
+                'ends_at' => $endsAt->toDateTimeString(),
+                'allow_custom_duration' => true,
+                'appointment_status' => $appointmentStatus,
+                'status' => $appointmentStatus,
+                'payment_status' => $service->requires_payment ? 'unpaid' : 'paid',
+                'source_channel' => $payload['source_channel'] ?? $lockedRequest->source,
+                'notes' => $payload['notes'] ?? $lockedRequest->notes,
+                'resource_ids' => $payload['resource_ids'] ?? [],
+                'metadata' => [
+                    'approved_from_request_id' => $lockedRequest->id,
+                    'request_type' => $lockedRequest->request_type,
+                ],
+            ], $actorUserId);
 
-        if ($service->requires_payment && (float) $service->price > 0) {
-            $booking = $this->appointmentBillingService->createInvoiceAndPaymentLink($booking, $actorUserId);
-            $request->update(['payment_status' => $booking->payment_status]);
-        }
+            $lockedRequest->update([
+                'requested_service_id' => $service->id,
+                'requested_staff_id' => $staffId,
+                'status' => 'approved',
+                'appointment_status' => $booking->appointment_status,
+                'payment_status' => $booking->payment_status,
+                'approved_by' => $actorUserId,
+                'approved_at' => now(),
+                'rejected_by' => null,
+                'rejected_at' => null,
+                'cancelled_at' => null,
+            ]);
+
+            if ($service->requires_payment && (float) $service->price > 0) {
+                $booking = $this->appointmentBillingService->createInvoiceAndPaymentLink($booking, $actorUserId);
+                $lockedRequest->update(['payment_status' => $booking->payment_status]);
+            }
+
+            return $booking;
+        });
 
         $this->domainNotificationService->notifyAppointmentBookingStatusChanged(
             $booking,
@@ -198,10 +210,11 @@ class AppointmentRequestService
 
         $created = [];
 
-        DB::transaction(function () use ($request, $slots, $actorUserId, &$created): void {
+        $timezone = $this->appointmentService->workspaceTimezone($request->workspace_id);
+        DB::transaction(function () use ($request, $slots, $actorUserId, &$created, $timezone): void {
             foreach ($slots as $slotPayload) {
-                $startsAt = Carbon::parse((string) ($slotPayload['starts_at'] ?? ''));
-                $endsAt = Carbon::parse((string) ($slotPayload['ends_at'] ?? ''));
+                $startsAt = Carbon::parse((string) ($slotPayload['starts_at'] ?? ''), $timezone)->utc();
+                $endsAt = Carbon::parse((string) ($slotPayload['ends_at'] ?? ''), $timezone)->utc();
                 if ($endsAt->lte($startsAt)) {
                     throw new RuntimeException('نطاق وقت الموعد المقترح غير صحيح.');
                 }
@@ -215,7 +228,7 @@ class AppointmentRequestService
                     'ends_at' => $endsAt,
                     'status' => 'proposed',
                     'proposed_by' => $actorUserId,
-                    'expires_at' => ! empty($slotPayload['expires_at']) ? Carbon::parse((string) $slotPayload['expires_at']) : null,
+                    'expires_at' => ! empty($slotPayload['expires_at']) ? Carbon::parse((string) $slotPayload['expires_at'], $timezone)->utc() : null,
                     'metadata' => is_array($slotPayload['metadata'] ?? null) ? $slotPayload['metadata'] : null,
                 ]);
             }
@@ -301,6 +314,14 @@ class AppointmentRequestService
         $status = trim((string) ($filters['status'] ?? ''));
         $source = trim((string) ($filters['source'] ?? ''));
         $date = trim((string) ($filters['date'] ?? ''));
+        $staffUserId = (int) ($filters['staff_user_id'] ?? 0);
+        $timezone = (string) ($filters['timezone'] ?? $this->appointmentService->workspaceTimezone());
+        $range = $date !== ''
+            ? [
+                Carbon::parse($date, $timezone)->startOfDay()->utc(),
+                Carbon::parse($date, $timezone)->endOfDay()->utc(),
+            ]
+            : null;
 
         return AppointmentRequest::query()
             ->with(['service', 'staff', 'customer', 'slots', 'booking'])
@@ -314,7 +335,8 @@ class AppointmentRequestService
             })
             ->when($status !== '', fn ($query) => $query->where('status', $status))
             ->when($source !== '', fn ($query) => $query->where('source', $source))
-            ->when($date !== '', fn ($query) => $query->whereDate('created_at', Carbon::parse($date)->toDateString()))
+            ->when($staffUserId > 0, fn ($query) => $query->whereHas('staff', fn ($staffQuery) => $staffQuery->where('user_id', $staffUserId)))
+            ->when($range !== null, fn ($query) => $query->whereBetween('created_at', $range))
             ->latest('id')
             ->paginate($perPage)
             ->withQueryString();
@@ -326,6 +348,8 @@ class AppointmentRequestService
      */
     private function resolveBookingWindow(AppointmentRequest $request, AppointmentServiceModel $service, array $payload): array
     {
+        $timezone = $this->appointmentService->workspaceTimezone($request->workspace_id);
+
         if (! empty($payload['slot_id'])) {
             $slot = AppointmentRequestSlot::query()
                 ->where('request_id', $request->id)
@@ -333,24 +357,24 @@ class AppointmentRequestService
                 ->firstOrFail();
 
             return [
-                Carbon::parse($slot->starts_at),
-                Carbon::parse($slot->ends_at),
+                Carbon::parse($slot->starts_at)->timezone($timezone),
+                Carbon::parse($slot->ends_at)->timezone($timezone),
             ];
         }
 
         if (! empty($payload['starts_at'])) {
-            $startsAt = Carbon::parse((string) $payload['starts_at']);
+            $startsAt = Carbon::parse((string) $payload['starts_at'], $timezone);
             if (! empty($payload['ends_at'])) {
-                return [$startsAt, Carbon::parse((string) $payload['ends_at'])];
+                return [$startsAt, Carbon::parse((string) $payload['ends_at'], $timezone)];
             }
 
             return [$startsAt, $startsAt->copy()->addMinutes((int) $service->duration_minutes)];
         }
 
         if ($request->requested_date && $request->requested_time) {
-            $startsAt = Carbon::parse($request->requested_date->toDateString().' '.$request->requested_time);
+            $startsAt = Carbon::parse($request->requested_date->toDateString().' '.$request->requested_time, $timezone);
             $endsAt = $request->requested_time_end
-                ? Carbon::parse($request->requested_date->toDateString().' '.$request->requested_time_end)
+                ? Carbon::parse($request->requested_date->toDateString().' '.$request->requested_time_end, $timezone)
                 : $startsAt->copy()->addMinutes((int) $service->duration_minutes);
 
             return [$startsAt, $endsAt];
@@ -384,5 +408,60 @@ class AppointmentRequestService
         }
 
         return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  payload
+     */
+    private function assertRequestPolicy(Workspace $workspace, ?AppointmentSetting $setting, array $payload): void
+    {
+        $requestType = (string) ($payload['request_type'] ?? 'new');
+        if (! in_array($requestType, ['reschedule', 'cancellation'], true)) {
+            return;
+        }
+
+        $targetBookingId = (int) ($payload['target_booking_id'] ?? 0);
+        if ($targetBookingId <= 0) {
+            throw new RuntimeException('يجب تحديد الموعد المراد تعديله أو إلغاؤه.');
+        }
+
+        $targetBooking = AppointmentBooking::query()->whereKey($targetBookingId)->firstOrFail();
+        if ((int) $targetBooking->workspace_id !== (int) $workspace->id) {
+            throw new RuntimeException('لا يمكن الوصول إلى هذا الموعد.');
+        }
+
+        $rules = $this->appointmentService->cancellationRules($setting);
+        $timezone = $this->appointmentService->workspaceTimezone($workspace->id, $setting);
+        $targetStart = $targetBooking->starts_at?->copy()->timezone($timezone);
+        if (! $targetStart) {
+            throw new RuntimeException('هذا الموعد لا يحتوي على وقت صالح.');
+        }
+        $hoursBeforeStart = now($timezone)->diffInHours($targetStart, false);
+
+        $minimumNoticeHours = max(
+            (int) ($rules['minimum_notice_hours'] ?? 0),
+            (int) ($requestType === 'cancellation'
+                ? ($rules['cancellation_window_hours'] ?? 0)
+                : ($rules['reschedule_window_hours'] ?? 0))
+        );
+        if ($minimumNoticeHours > 0 && $hoursBeforeStart < $minimumNoticeHours) {
+            $actionLabel = $requestType === 'cancellation' ? 'إلغاء الموعد' : 'إعادة الجدولة';
+            throw new RuntimeException("لا يمكن {$actionLabel} قبل أقل من {$minimumNoticeHours} ساعة من الموعد.");
+        }
+
+        if ($requestType === 'reschedule') {
+            $maxReschedules = max(0, (int) ($rules['maximum_reschedules'] ?? 0));
+            if ($maxReschedules > 0) {
+                $rescheduleCount = AppointmentRequest::query()
+                    ->where('target_booking_id', $targetBookingId)
+                    ->where('request_type', 'reschedule')
+                    ->whereIn('status', ['approved', 'new', 'reviewing', 'awaiting_customer'])
+                    ->count();
+
+                if ($rescheduleCount >= $maxReschedules) {
+                    throw new RuntimeException('تم الوصول للحد الأقصى لإعادة جدولة هذا الموعد.');
+                }
+            }
+        }
     }
 }

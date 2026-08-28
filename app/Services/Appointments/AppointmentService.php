@@ -9,6 +9,7 @@ use App\Models\Appointment\AppointmentSetting;
 use App\Models\Appointment\AppointmentStaff;
 use App\Models\Customer;
 use App\Models\Workspace;
+use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +24,12 @@ class AppointmentService
     public const PAYMENT_STATUSES = ['unpaid', 'pending', 'paid', 'failed', 'refunded', 'partially_paid'];
     /** @var array<int, string> */
     public const BOOKING_SOURCES = ['dashboard', 'phone', 'walk_in', 'website', 'whatsapp', 'ai_chat', 'email', 'api'];
+    /** @var array<int, string> */
+    private const ACTIVE_BOOKING_STATUSES = ['scheduled', 'confirmed', 'checked_in', 'in_progress'];
+    /** @var array<int, string> */
+    private const WEEK_DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+    public function __construct(private readonly WorkspaceContext $workspaceContext) {}
 
     public function ensureSetup(Workspace $workspace): void
     {
@@ -40,6 +47,7 @@ class AppointmentService
                 'automation_mode' => 'APPROVAL',
                 'auto_confirm_after_payment' => true,
                 'reminder_offsets' => [1440, 120],
+                'metadata' => $this->defaultSettingMetadata(),
             ]
         );
     }
@@ -51,6 +59,20 @@ class AppointmentService
     {
         $this->ensureSetup($workspace);
         $setting = AppointmentSetting::query()->firstOrFail();
+
+        $metadata = is_array($setting->metadata) ? $setting->metadata : [];
+        $incomingMetadata = is_array($payload['metadata'] ?? null) ? $payload['metadata'] : [];
+
+        $metadata['business_hours'] = $this->normalizeBusinessHoursInput(
+            $incomingMetadata['business_hours'] ?? ($metadata['business_hours'] ?? [])
+        );
+        $metadata['booking_rules'] = $this->normalizeBookingRulesInput(
+            $incomingMetadata['booking_rules'] ?? ($metadata['booking_rules'] ?? [])
+        );
+        $metadata['cancellation_rules'] = $this->normalizeCancellationRulesInput(
+            $incomingMetadata['cancellation_rules'] ?? ($metadata['cancellation_rules'] ?? [])
+        );
+
         $setting->update([
             'business_type' => $payload['business_type'],
             'business_label' => trim((string) ($payload['business_label'] ?? '')) ?: null,
@@ -62,6 +84,7 @@ class AppointmentService
             'automation_mode' => (string) ($payload['automation_mode'] ?? $setting->automation_mode ?? 'APPROVAL'),
             'auto_confirm_after_payment' => (bool) ($payload['auto_confirm_after_payment'] ?? true),
             'reminder_offsets' => $payload['reminder_offsets'] ?? [1440, 120],
+            'metadata' => $metadata,
         ]);
 
         return $setting->refresh();
@@ -190,17 +213,44 @@ class AppointmentService
      */
     public function createBooking(Workspace $workspace, array $payload, ?int $actorUserId): AppointmentBooking
     {
+        $this->ensureSetup($workspace);
+
         $service = AppointmentServiceModel::query()->whereKey((int) $payload['service_id'])->firstOrFail();
         $staff = null;
         if (! empty($payload['staff_id'])) {
             $staff = AppointmentStaff::query()->whereKey((int) $payload['staff_id'])->firstOrFail();
         }
+        if (
+            $staff &&
+            $service->staffMembers()->exists() &&
+            ! $service->staffMembers()->whereKey($staff->id)->exists()
+        ) {
+            throw new RuntimeException('الموظف المحدد غير مرتبط بهذه الخدمة.');
+        }
 
-        $startsAt = Carbon::parse((string) $payload['starts_at']);
-        $endsAt = Carbon::parse((string) $payload['ends_at']);
-        if ($endsAt->lte($startsAt)) {
+        $setting = AppointmentSetting::query()->first();
+        $timezone = $this->workspaceTimezone($workspace->id, $setting);
+
+        $startsAtLocal = $this->parseWorkspaceDateTime($payload['starts_at'] ?? null, $timezone);
+        $allowCustomDuration = (bool) ($payload['allow_custom_duration'] ?? false);
+        if ($allowCustomDuration && ! empty($payload['ends_at'])) {
+            $endsAtLocal = $this->parseWorkspaceDateTime($payload['ends_at'], $timezone);
+        } else {
+            // Use service duration by default to avoid incorrect UI-provided ranges.
+            $endsAtLocal = $startsAtLocal->copy()->addMinutes(max(5, (int) $service->duration_minutes));
+        }
+
+        if ($endsAtLocal->lte($startsAtLocal)) {
             throw new RuntimeException('وقت نهاية الموعد يجب أن يكون بعد وقت البداية.');
         }
+
+        $rules = $this->bookingRules($setting);
+        $this->assertBookingRules($workspace->id, $startsAtLocal, $endsAtLocal, $rules, $timezone);
+        $this->assertWithinBusinessHours($startsAtLocal, $endsAtLocal, $setting);
+        $this->assertStaffAvailability($staff, $startsAtLocal, $endsAtLocal, $timezone);
+
+        $startsAt = $startsAtLocal->copy()->utc();
+        $endsAt = $endsAtLocal->copy()->utc();
 
         $resourceIds = collect($payload['resource_ids'] ?? [])
             ->map(fn ($id) => (int) $id)
@@ -208,7 +258,14 @@ class AppointmentService
             ->values()
             ->all();
 
-        $this->ensureNoOverlap($workspace->id, $startsAt, $endsAt, $staff?->id, $resourceIds);
+        $this->ensureNoOverlap(
+            workspaceId: $workspace->id,
+            startsAt: $startsAt,
+            endsAt: $endsAt,
+            staffId: $staff?->id,
+            resourceIds: $resourceIds,
+            bufferMinutes: (int) ($rules['buffer_minutes'] ?? 0),
+        );
 
         $customerName = trim((string) ($payload['customer_name'] ?? ''));
         $customerPhone = trim((string) ($payload['customer_phone'] ?? '')) ?: null;
@@ -232,6 +289,15 @@ class AppointmentService
         if ($customerName === '') {
             throw new RuntimeException('اسم العميل مطلوب لإنشاء الحجز.');
         }
+
+        $this->ensureNoDuplicateBooking(
+            workspaceId: $workspace->id,
+            startsAt: $startsAt,
+            serviceId: $service->id,
+            customerName: $customerName,
+            customerPhone: $customerPhone,
+            staffId: $staff?->id
+        );
 
         $sourceChannel = trim((string) ($payload['source_channel'] ?? $payload['source'] ?? 'dashboard'));
         if (! in_array($sourceChannel, self::BOOKING_SOURCES, true)) {
@@ -268,7 +334,10 @@ class AppointmentService
             $legacyStatus,
             $appointmentStatus,
             $paymentStatus,
-            $resourceIds
+            $resourceIds,
+            $timezone,
+            $startsAtLocal,
+            $endsAtLocal
         ): AppointmentBooking {
             $bookingNumber = $this->nextBookingNumber($workspace->id, $startsAt);
 
@@ -302,7 +371,14 @@ class AppointmentService
                 'completed_at' => $appointmentStatus === 'completed' ? now() : null,
                 'cancelled_at' => $appointmentStatus === 'cancelled' ? now() : null,
                 'booked_by' => $actorUserId,
-                'metadata' => is_array($payload['metadata'] ?? null) ? $payload['metadata'] : null,
+                'metadata' => array_merge(
+                    is_array($payload['metadata'] ?? null) ? $payload['metadata'] : [],
+                    [
+                        'workspace_timezone' => $timezone,
+                        'start_local' => $startsAtLocal->format('Y-m-d H:i:s'),
+                        'end_local' => $endsAtLocal->format('Y-m-d H:i:s'),
+                    ]
+                ),
             ]);
 
             if ($resourceIds !== []) {
@@ -367,18 +443,29 @@ class AppointmentService
      */
     public function listBookings(array $filters, int $perPage = 20): LengthAwarePaginator
     {
+        $timezone = (string) ($filters['timezone'] ?? $this->workspaceTimezone());
         $date = trim((string) ($filters['date'] ?? ''));
         $status = trim((string) ($filters['status'] ?? ''));
         $paymentStatus = trim((string) ($filters['payment_status'] ?? ''));
         $staffId = (int) ($filters['staff_id'] ?? 0);
+        $staffUserId = (int) ($filters['staff_user_id'] ?? 0);
+        $serviceId = (int) ($filters['service_id'] ?? 0);
+        $customerId = (int) ($filters['customer_id'] ?? 0);
+        $source = trim((string) ($filters['source'] ?? ''));
         $search = trim((string) ($filters['search'] ?? ''));
 
+        $dayRange = $date !== '' ? $this->dayRangeInUtc($date, $timezone) : null;
+
         return AppointmentBooking::query()
-            ->with(['service', 'staff', 'customer', 'booker', 'request', 'invoice'])
-            ->when($date !== '', fn ($query) => $query->whereDate('starts_at', Carbon::parse($date)->toDateString()))
+            ->with(['service', 'staff', 'customer', 'booker', 'request', 'invoice', 'resources'])
+            ->when($dayRange !== null, fn ($query) => $query->whereBetween('starts_at', [$dayRange['start'], $dayRange['end']]))
             ->when($status !== '', fn ($query) => $query->where('appointment_status', $status))
             ->when($paymentStatus !== '', fn ($query) => $query->where('payment_status', $paymentStatus))
             ->when($staffId > 0, fn ($query) => $query->where('staff_id', $staffId))
+            ->when($staffUserId > 0, fn ($query) => $query->whereHas('staff', fn ($staffQuery) => $staffQuery->where('user_id', $staffUserId)))
+            ->when($serviceId > 0, fn ($query) => $query->where('service_id', $serviceId))
+            ->when($customerId > 0, fn ($query) => $query->where('customer_id', $customerId))
+            ->when($source !== '', fn ($query) => $query->where('source_channel', $source))
             ->when($search !== '', function ($query) use ($search): void {
                 $query->where(function ($inner) use ($search): void {
                     $inner->where('booking_number', 'like', '%'.$search.'%')
@@ -393,16 +480,126 @@ class AppointmentService
     }
 
     /**
+     * @param  array<string, mixed>  $filters
+     * @return array<int, array<string, mixed>>
+     */
+    public function calendarEvents(array $filters): array
+    {
+        $timezone = (string) ($filters['timezone'] ?? $this->workspaceTimezone());
+        $view = (string) ($filters['view'] ?? 'week');
+        $staffId = (int) ($filters['staff_id'] ?? 0);
+        $staffUserId = (int) ($filters['staff_user_id'] ?? 0);
+        $date = isset($filters['date'])
+            ? Carbon::parse((string) $filters['date'], $timezone)
+            : now($timezone);
+        $rangeStartLocal = $view === 'month'
+            ? $date->copy()->startOfMonth()->startOfDay()
+            : ($view === 'day' ? $date->copy()->startOfDay() : $date->copy()->startOfWeek()->startOfDay());
+        $rangeEndLocal = $view === 'month'
+            ? $date->copy()->endOfMonth()->endOfDay()
+            : ($view === 'day' ? $date->copy()->endOfDay() : $date->copy()->endOfWeek()->endOfDay());
+        $rangeStartUtc = $rangeStartLocal->copy()->utc();
+        $rangeEndUtc = $rangeEndLocal->copy()->utc();
+
+        return AppointmentBooking::query()
+            ->with(['service:id,name,duration_minutes', 'staff:id,name'])
+            ->where('starts_at', '>=', $rangeStartUtc)
+            ->where('starts_at', '<=', $rangeEndUtc)
+            ->when($staffId > 0, fn ($query) => $query->where('staff_id', $staffId))
+            ->when($staffUserId > 0, fn ($query) => $query->whereHas('staff', fn ($staffQuery) => $staffQuery->where('user_id', $staffUserId)))
+            ->orderBy('starts_at')
+            ->get()
+            ->map(function (AppointmentBooking $booking) use ($timezone): array {
+                $startLocal = $booking->starts_at?->copy()->timezone($timezone);
+                $endLocal = $booking->ends_at?->copy()->timezone($timezone);
+
+                return [
+                    'id' => $booking->id,
+                    'booking_number' => $booking->booking_number,
+                    'title' => sprintf('%s - %s', (string) $booking->customer_name, (string) ($booking->service?->name ?? 'خدمة')),
+                    'customer' => $booking->customer_name,
+                    'service' => $booking->service?->name,
+                    'staff' => $booking->staff?->name,
+                    'date_key' => $startLocal?->format('Y-m-d'),
+                    'start_ts' => $startLocal?->timestamp,
+                    'end_ts' => $endLocal?->timestamp,
+                    'start_local' => $startLocal?->locale('ar')->translatedFormat('Y-m-d H:i'),
+                    'end_local' => $endLocal?->locale('ar')->translatedFormat('Y-m-d H:i'),
+                    'date_label' => $startLocal?->locale('ar')->translatedFormat('l، j F'),
+                    'time_label' => $startLocal && $endLocal
+                        ? $startLocal->locale('ar')->translatedFormat('g:i A').' - '.$endLocal->locale('ar')->translatedFormat('g:i A')
+                        : null,
+                    'duration_minutes' => $startLocal && $endLocal ? max(1, $startLocal->diffInMinutes($endLocal)) : null,
+                    'appointment_status' => $booking->appointment_status,
+                    'payment_status' => $booking->payment_status,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    public function workspaceTimezone(?int $workspaceId = null, ?AppointmentSetting $setting = null): string
+    {
+        if ($setting && filled($setting->timezone)) {
+            return (string) $setting->timezone;
+        }
+
+        $workspaceId = $workspaceId ?? (int) $this->workspaceContext->workspaceId();
+        if ($workspaceId > 0) {
+            $setting = AppointmentSetting::withoutGlobalScopes()
+                ->where('workspace_id', $workspaceId)
+                ->first();
+            if ($setting && filled($setting->timezone)) {
+                return (string) $setting->timezone;
+            }
+        }
+
+        return (string) config('app.timezone', 'UTC');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function bookingRules(?AppointmentSetting $setting): array
+    {
+        $metadata = is_array($setting?->metadata) ? $setting->metadata : [];
+
+        return $this->normalizeBookingRulesInput($metadata['booking_rules'] ?? []);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function cancellationRules(?AppointmentSetting $setting): array
+    {
+        $metadata = is_array($setting?->metadata) ? $setting->metadata : [];
+
+        return $this->normalizeCancellationRulesInput($metadata['cancellation_rules'] ?? []);
+    }
+
+    /**
      * @param  array<int, int>  $resourceIds
      */
-    private function ensureNoOverlap(int $workspaceId, Carbon $startsAt, Carbon $endsAt, ?int $staffId = null, array $resourceIds = []): void
-    {
+    private function ensureNoOverlap(
+        int $workspaceId,
+        Carbon $startsAt,
+        Carbon $endsAt,
+        ?int $staffId = null,
+        array $resourceIds = [],
+        int $bufferMinutes = 0,
+        ?int $ignoreBookingId = null
+    ): void {
+        $buffer = max(0, $bufferMinutes);
+        $windowStart = $startsAt->copy()->subMinutes($buffer);
+        $windowEnd = $endsAt->copy()->addMinutes($buffer);
+
         $baseQuery = AppointmentBooking::withoutGlobalScopes()
             ->where('workspace_id', $workspaceId)
-            ->whereIn('appointment_status', ['scheduled', 'confirmed', 'checked_in', 'in_progress'])
-            ->where(function ($query) use ($startsAt, $endsAt): void {
-                $query->where('starts_at', '<', $endsAt)
-                    ->where('ends_at', '>', $startsAt);
+            ->whereIn('appointment_status', self::ACTIVE_BOOKING_STATUSES)
+            ->when($ignoreBookingId !== null, fn ($query) => $query->where('id', '!=', $ignoreBookingId))
+            ->where(function ($query) use ($windowStart, $windowEnd): void {
+                $query->where('starts_at', '<', $windowEnd)
+                    ->where('ends_at', '>', $windowStart);
             });
 
         $staffOverlap = $staffId !== null
@@ -441,48 +638,297 @@ class AppointmentService
         return $prefix.str_pad((string) ($seq + 1), 4, '0', STR_PAD_LEFT);
     }
 
-    /**
-     * @param  array<string, mixed>  $filters
-     * @return array<int, array<string, mixed>>
-     */
-    public function calendarEvents(array $filters): array
-    {
-        $view = (string) ($filters['view'] ?? 'week');
-        $date = isset($filters['date']) ? Carbon::parse((string) $filters['date']) : now();
-        $rangeStart = $view === 'month'
-            ? $date->copy()->startOfMonth()->startOfDay()
-            : ($view === 'day' ? $date->copy()->startOfDay() : $date->copy()->startOfWeek()->startOfDay());
-        $rangeEnd = $view === 'month'
-            ? $date->copy()->endOfMonth()->endOfDay()
-            : ($view === 'day' ? $date->copy()->endOfDay() : $date->copy()->endOfWeek()->endOfDay());
-
-        return AppointmentBooking::query()
-            ->with(['service:id,name', 'staff:id,name'])
-            ->where('starts_at', '>=', $rangeStart)
-            ->where('starts_at', '<=', $rangeEnd)
-            ->orderBy('starts_at')
-            ->get()
-            ->map(fn (AppointmentBooking $booking): array => [
-                'id' => $booking->id,
-                'booking_number' => $booking->booking_number,
-                'title' => sprintf('%s - %s', (string) $booking->customer_name, (string) ($booking->service?->name ?? 'خدمة')),
-                'customer' => $booking->customer_name,
-                'service' => $booking->service?->name,
-                'staff' => $booking->staff?->name,
-                'start' => $booking->starts_at?->toIso8601String(),
-                'end' => $booking->ends_at?->toIso8601String(),
-                'appointment_status' => $booking->appointment_status,
-                'payment_status' => $booking->payment_status,
-            ])
-            ->values()
-            ->all();
-    }
-
     private function resolveLegacySource(string $sourceChannel): string
     {
         return match ($sourceChannel) {
             'ai_chat', 'email', 'api' => 'dashboard',
             default => $sourceChannel,
+        };
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function defaultSettingMetadata(): array
+    {
+        return [
+            'business_hours' => $this->normalizeBusinessHoursInput([]),
+            'booking_rules' => $this->normalizeBookingRulesInput([]),
+            'cancellation_rules' => $this->normalizeCancellationRulesInput([]),
+        ];
+    }
+
+    /**
+     * @param  mixed  value
+     */
+    private function parseWorkspaceDateTime(mixed $value, string $timezone): Carbon
+    {
+        if ($value instanceof Carbon) {
+            return $value->copy()->timezone($timezone);
+        }
+
+        $raw = trim((string) $value);
+        if ($raw === '') {
+            throw new RuntimeException('تاريخ الموعد غير صالح.');
+        }
+
+        return Carbon::parse($raw, $timezone);
+    }
+
+    /**
+     * @return array{start: Carbon, end: Carbon}
+     */
+    private function dayRangeInUtc(string $date, string $timezone): array
+    {
+        $startLocal = Carbon::parse($date, $timezone)->startOfDay();
+        $endLocal = $startLocal->copy()->endOfDay();
+
+        return [
+            'start' => $startLocal->copy()->utc(),
+            'end' => $endLocal->copy()->utc(),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  rules
+     */
+    private function assertBookingRules(int $workspaceId, Carbon $startsAtLocal, Carbon $endsAtLocal, array $rules, string $timezone): void
+    {
+        $now = now($timezone);
+        $minNotice = max(0, (int) ($rules['min_booking_notice_minutes'] ?? 0));
+        if ($minNotice > 0 && $startsAtLocal->lt($now->copy()->addMinutes($minNotice))) {
+            throw new RuntimeException("يجب أن يكون الموعد قبل {$minNotice} دقيقة على الأقل.");
+        }
+
+        $maxAdvanceDays = max(1, (int) ($rules['max_advance_booking_days'] ?? 365));
+        if ($startsAtLocal->gt($now->copy()->addDays($maxAdvanceDays))) {
+            throw new RuntimeException("لا يمكن الحجز لأكثر من {$maxAdvanceDays} يوم مقدمًا.");
+        }
+
+        $slotInterval = max(1, (int) ($rules['slot_interval_minutes'] ?? 30));
+        if (($startsAtLocal->hour * 60 + $startsAtLocal->minute) % $slotInterval !== 0) {
+            throw new RuntimeException("بداية الموعد يجب أن تتبع فواصل كل {$slotInterval} دقيقة.");
+        }
+
+        $maxDaily = max(0, (int) ($rules['max_bookings_per_day'] ?? 0));
+        if ($maxDaily > 0) {
+            $dayStartUtc = $startsAtLocal->copy()->startOfDay()->utc();
+            $dayEndUtc = $startsAtLocal->copy()->endOfDay()->utc();
+            $count = AppointmentBooking::withoutGlobalScopes()
+                ->where('workspace_id', $workspaceId)
+                ->whereBetween('starts_at', [$dayStartUtc, $dayEndUtc])
+                ->whereIn('appointment_status', self::ACTIVE_BOOKING_STATUSES)
+                ->count();
+            if ($count >= $maxDaily) {
+                throw new RuntimeException('تم الوصول للحد الأقصى للحجوزات في هذا اليوم.');
+            }
+        }
+
+        if ($endsAtLocal->diffInMinutes($startsAtLocal) > 1440) {
+            throw new RuntimeException('مدة الموعد غير منطقية.');
+        }
+    }
+
+    private function assertWithinBusinessHours(Carbon $startsAtLocal, Carbon $endsAtLocal, ?AppointmentSetting $setting): void
+    {
+        $businessHours = $this->normalizeBusinessHoursInput(
+            is_array($setting?->metadata) ? ($setting->metadata['business_hours'] ?? []) : []
+        );
+
+        $dayKey = $this->dayKey($startsAtLocal);
+        $dayConfig = $businessHours[$dayKey] ?? ['closed' => false, 'ranges' => []];
+        if (($dayConfig['closed'] ?? false) === true) {
+            throw new RuntimeException('لا يمكن إنشاء موعد في يوم مغلق.');
+        }
+
+        $ranges = is_array($dayConfig['ranges'] ?? null) ? $dayConfig['ranges'] : [];
+        if ($ranges === []) {
+            return;
+        }
+
+        $fits = false;
+        foreach ($ranges as $range) {
+            $startTime = trim((string) ($range['start'] ?? ''));
+            $endTime = trim((string) ($range['end'] ?? ''));
+            if ($startTime === '' || $endTime === '') {
+                continue;
+            }
+            $rangeStart = Carbon::parse($startsAtLocal->toDateString().' '.$startTime, $startsAtLocal->getTimezone());
+            $rangeEnd = Carbon::parse($startsAtLocal->toDateString().' '.$endTime, $startsAtLocal->getTimezone());
+            if ($startsAtLocal->gte($rangeStart) && $endsAtLocal->lte($rangeEnd)) {
+                $fits = true;
+                break;
+            }
+        }
+
+        if (! $fits) {
+            throw new RuntimeException('الموعد خارج ساعات عمل النشاط.');
+        }
+    }
+
+    private function assertStaffAvailability(?AppointmentStaff $staff, Carbon $startsAtLocal, Carbon $endsAtLocal, string $timezone): void
+    {
+        if (! $staff) {
+            return;
+        }
+
+        if (! $staff->is_active) {
+            throw new RuntimeException('الموظف غير نشط ولا يمكن الحجز عليه.');
+        }
+
+        $dayKey = $this->dayKey($startsAtLocal);
+        $workingDays = is_array($staff->working_days) ? $staff->working_days : [];
+        if ($workingDays !== [] && ! in_array($dayKey, $workingDays, true)) {
+            throw new RuntimeException('لا يمكن الحجز للموظف في هذا اليوم.');
+        }
+
+        $workingHours = is_array($staff->working_hours) ? $staff->working_hours : [];
+        if (isset($workingHours[$dayKey]) && is_array($workingHours[$dayKey]) && $workingHours[$dayKey] !== []) {
+            $fits = false;
+            foreach ($workingHours[$dayKey] as $range) {
+                $rangeStart = trim((string) ($range['start'] ?? ''));
+                $rangeEnd = trim((string) ($range['end'] ?? ''));
+                if ($rangeStart === '' || $rangeEnd === '') {
+                    continue;
+                }
+                $start = Carbon::parse($startsAtLocal->toDateString().' '.$rangeStart, $timezone);
+                $end = Carbon::parse($startsAtLocal->toDateString().' '.$rangeEnd, $timezone);
+                if ($startsAtLocal->gte($start) && $endsAtLocal->lte($end)) {
+                    $fits = true;
+                    break;
+                }
+            }
+
+            if (! $fits) {
+                throw new RuntimeException('الموعد خارج ساعات عمل الموظف.');
+            }
+        }
+
+        $vacations = is_array($staff->vacation_periods) ? $staff->vacation_periods : [];
+        foreach ($vacations as $vacation) {
+            $from = trim((string) ($vacation['from'] ?? ''));
+            $to = trim((string) ($vacation['to'] ?? ''));
+            if ($from === '' || $to === '') {
+                continue;
+            }
+            $vacationStart = Carbon::parse($from, $timezone)->startOfDay();
+            $vacationEnd = Carbon::parse($to, $timezone)->endOfDay();
+            if ($startsAtLocal->betweenIncluded($vacationStart, $vacationEnd)) {
+                throw new RuntimeException('لا يمكن الحجز في فترة إجازة الموظف.');
+            }
+        }
+    }
+
+    private function ensureNoDuplicateBooking(
+        int $workspaceId,
+        Carbon $startsAt,
+        int $serviceId,
+        string $customerName,
+        ?string $customerPhone,
+        ?int $staffId
+    ): void {
+        $duplicateExists = AppointmentBooking::withoutGlobalScopes()
+            ->where('workspace_id', $workspaceId)
+            ->where('service_id', $serviceId)
+            ->where('starts_at', $startsAt)
+            ->when($staffId !== null, fn ($query) => $query->where('staff_id', $staffId))
+            ->where(function ($query) use ($customerName, $customerPhone): void {
+                $query->whereRaw('LOWER(customer_name) = ?', [mb_strtolower($customerName)]);
+                if ($customerPhone !== null) {
+                    $query->orWhere('customer_phone', $customerPhone);
+                }
+            })
+            ->whereIn('appointment_status', self::ACTIVE_BOOKING_STATUSES)
+            ->exists();
+
+        if ($duplicateExists) {
+            throw new RuntimeException('يوجد حجز مكرر بنفس بيانات العميل والوقت.');
+        }
+    }
+
+    /**
+     * @param  mixed  input
+     * @return array<string, mixed>
+     */
+    private function normalizeBookingRulesInput(mixed $input): array
+    {
+        $rules = is_array($input) ? $input : [];
+
+        return [
+            'min_booking_notice_minutes' => max(0, (int) ($rules['min_booking_notice_minutes'] ?? 0)),
+            'max_advance_booking_days' => max(1, (int) ($rules['max_advance_booking_days'] ?? 180)),
+            'slot_interval_minutes' => max(5, (int) ($rules['slot_interval_minutes'] ?? 30)),
+            'buffer_minutes' => max(0, (int) ($rules['buffer_minutes'] ?? 0)),
+            'max_bookings_per_day' => max(0, (int) ($rules['max_bookings_per_day'] ?? 0)),
+        ];
+    }
+
+    /**
+     * @param  mixed  input
+     * @return array<string, mixed>
+     */
+    private function normalizeCancellationRulesInput(mixed $input): array
+    {
+        $rules = is_array($input) ? $input : [];
+
+        return [
+            'minimum_notice_hours' => max(0, (int) ($rules['minimum_notice_hours'] ?? 0)),
+            'cancellation_window_hours' => max(0, (int) ($rules['cancellation_window_hours'] ?? 0)),
+            'reschedule_window_hours' => max(0, (int) ($rules['reschedule_window_hours'] ?? 0)),
+            'maximum_reschedules' => max(0, (int) ($rules['maximum_reschedules'] ?? 3)),
+        ];
+    }
+
+    /**
+     * @param  mixed  input
+     * @return array<string, array{closed: bool, ranges: array<int, array{start: string, end: string}>}>
+     */
+    private function normalizeBusinessHoursInput(mixed $input): array
+    {
+        $source = is_array($input) ? $input : [];
+        $normalized = [];
+
+        foreach (self::WEEK_DAYS as $day) {
+            $dayData = is_array($source[$day] ?? null) ? $source[$day] : [];
+            $closedDefault = $day === 'fri';
+            $closed = array_key_exists('closed', $dayData) ? (bool) $dayData['closed'] : $closedDefault;
+            $rawRanges = is_array($dayData['ranges'] ?? null) ? $dayData['ranges'] : [];
+            $ranges = [];
+            foreach ($rawRanges as $range) {
+                $start = trim((string) ($range['start'] ?? ''));
+                $end = trim((string) ($range['end'] ?? ''));
+                if (
+                    $start !== '' &&
+                    $end !== '' &&
+                    preg_match('/^\d{2}:\d{2}$/', $start) &&
+                    preg_match('/^\d{2}:\d{2}$/', $end)
+                ) {
+                    $ranges[] = ['start' => $start, 'end' => $end];
+                }
+            }
+            if ($ranges === [] && $day !== 'fri') {
+                $ranges = [['start' => '09:00', 'end' => '17:00']];
+            }
+
+            $normalized[$day] = [
+                'closed' => $closed,
+                'ranges' => $ranges,
+            ];
+        }
+
+        return $normalized;
+    }
+
+    private function dayKey(Carbon $date): string
+    {
+        return match ($date->dayOfWeek) {
+            Carbon::SUNDAY => 'sun',
+            Carbon::MONDAY => 'mon',
+            Carbon::TUESDAY => 'tue',
+            Carbon::WEDNESDAY => 'wed',
+            Carbon::THURSDAY => 'thu',
+            Carbon::FRIDAY => 'fri',
+            Carbon::SATURDAY => 'sat',
         };
     }
 }

@@ -50,6 +50,21 @@ class AppointmentBillingService
         }
 
         return DB::transaction(function () use ($booking, $actorUserId, $payableAmount, $basePrice): AppointmentBooking {
+            $booking = AppointmentBooking::withoutGlobalScopes()
+                ->whereKey($booking->id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $booking) {
+                throw new RuntimeException('تعذر العثور على الموعد لإنشاء رابط الدفع.');
+            }
+
+            if ($booking->payment_link) {
+                return $booking->fresh(['invoice', 'latestPayment']);
+            }
+
+            $booking->loadMissing(['service', 'workspace']);
+
             $invoice = $booking->finance_invoice_id
                 ? FinanceInvoice::withoutGlobalScopes()->whereKey($booking->finance_invoice_id)->lockForUpdate()->first()
                 : null;

@@ -8,6 +8,7 @@ use App\Services\Appointments\AppointmentRequestService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use RuntimeException;
 
 class RequestController extends AppointmentsBaseController
 {
@@ -17,7 +18,7 @@ class RequestController extends AppointmentsBaseController
 
     public function store(Request $request): RedirectResponse
     {
-        $this->authorizeAppointments($request, 'appointments.manage');
+        $this->authorizeAppointments($request, 'appointments.requests.manage');
         $workspace = $this->currentWorkspace();
         $validated = $request->validate([
             'request_type' => ['nullable', Rule::in(['new', 'reschedule', 'cancellation', 'information'])],
@@ -36,19 +37,23 @@ class RequestController extends AppointmentsBaseController
             'notes' => ['nullable', 'string'],
         ]);
 
-        $this->appointmentRequestService->createRequest(
-            $workspace,
-            $validated,
-            (int) $request->user()?->id,
-            false
-        );
+        try {
+            $this->appointmentRequestService->createRequest(
+                $workspace,
+                $validated,
+                (int) $request->user()?->id,
+                false
+            );
+        } catch (RuntimeException $exception) {
+            return back()->withInput()->with('error', $exception->getMessage());
+        }
 
         return back()->with('success', 'تم تسجيل طلب الموعد بنجاح.');
     }
 
     public function approve(Request $request, AppointmentRequest $appointmentRequest): RedirectResponse
     {
-        $this->authorizeAppointments($request, 'appointments.manage');
+        $this->authorizeAppointments($request, 'appointments.requests.manage');
         $validated = $request->validate([
             'service_id' => ['nullable', 'integer'],
             'staff_id' => ['nullable', 'integer'],
@@ -59,81 +64,110 @@ class RequestController extends AppointmentsBaseController
             'notes' => ['nullable', 'string'],
         ]);
 
-        $this->appointmentRequestService->approveRequest(
-            $appointmentRequest,
-            $validated,
-            (int) $request->user()?->id
-        );
+        try {
+            $this->appointmentRequestService->approveRequest(
+                $appointmentRequest,
+                $validated,
+                (int) $request->user()?->id
+            );
+        } catch (RuntimeException $exception) {
+            return back()->withInput()->with('error', $exception->getMessage());
+        }
 
         return back()->with('success', 'تم اعتماد الطلب وإنشاء الموعد.');
     }
 
     public function reject(Request $request, AppointmentRequest $appointmentRequest): RedirectResponse
     {
-        $this->authorizeAppointments($request, 'appointments.manage');
+        $this->authorizeAppointments($request, 'appointments.requests.manage');
         $validated = $request->validate([
             'reason' => ['nullable', 'string', 'max:1000'],
         ]);
-        $this->appointmentRequestService->rejectRequest(
-            $appointmentRequest,
-            (int) $request->user()?->id,
-            $validated['reason'] ?? null
-        );
+        try {
+            $this->appointmentRequestService->rejectRequest(
+                $appointmentRequest,
+                (int) $request->user()?->id,
+                $validated['reason'] ?? null
+            );
+        } catch (RuntimeException $exception) {
+            return back()->withInput()->with('error', $exception->getMessage());
+        }
 
         return back()->with('success', 'تم رفض طلب الموعد.');
     }
 
     public function markAwaitingCustomer(Request $request, AppointmentRequest $appointmentRequest): RedirectResponse
     {
-        $this->authorizeAppointments($request, 'appointments.manage');
+        $this->authorizeAppointments($request, 'appointments.requests.manage');
         $validated = $request->validate([
             'message' => ['required', 'string', 'max:1000'],
         ]);
-        $this->appointmentRequestService->markAwaitingCustomer($appointmentRequest, $validated['message']);
+        try {
+            $this->appointmentRequestService->markAwaitingCustomer($appointmentRequest, $validated['message']);
+        } catch (RuntimeException $exception) {
+            return back()->withInput()->with('error', $exception->getMessage());
+        }
 
         return back()->with('success', 'تم تحويل الطلب إلى بانتظار رد العميل.');
     }
 
     public function cancel(Request $request, AppointmentRequest $appointmentRequest): RedirectResponse
     {
-        $this->authorizeAppointments($request, 'appointments.manage');
+        $this->authorizeAppointments($request, 'appointments.requests.manage');
         $validated = $request->validate([
             'reason' => ['nullable', 'string', 'max:1000'],
         ]);
-        $this->appointmentRequestService->cancelRequest($appointmentRequest, $validated['reason'] ?? null);
+        try {
+            $this->appointmentRequestService->cancelRequest($appointmentRequest, $validated['reason'] ?? null);
+        } catch (RuntimeException $exception) {
+            return back()->withInput()->with('error', $exception->getMessage());
+        }
 
         return back()->with('success', 'تم إلغاء طلب الموعد.');
     }
 
     public function proposeSlots(Request $request, AppointmentRequest $appointmentRequest): RedirectResponse
     {
-        $this->authorizeAppointments($request, 'appointments.manage');
-        $validated = $request->validate([
+        $this->authorizeAppointments($request, 'appointments.requests.manage');
+        $slots = collect($request->input('slots', []))
+            ->filter(fn ($slot) => filled($slot['starts_at'] ?? null) && filled($slot['ends_at'] ?? null))
+            ->values()
+            ->all();
+
+        $validated = validator(['slots' => $slots], [
             'slots' => ['required', 'array', 'min:1'],
             'slots.*.service_id' => ['nullable', 'integer'],
             'slots.*.staff_id' => ['nullable', 'integer'],
             'slots.*.starts_at' => ['required', 'date'],
             'slots.*.ends_at' => ['required', 'date'],
             'slots.*.expires_at' => ['nullable', 'date'],
-        ]);
+        ])->validate();
 
-        $this->appointmentRequestService->proposeSlots(
-            $appointmentRequest,
-            $validated['slots'],
-            (int) $request->user()?->id
-        );
+        try {
+            $this->appointmentRequestService->proposeSlots(
+                $appointmentRequest,
+                $validated['slots'],
+                (int) $request->user()?->id
+            );
+        } catch (RuntimeException $exception) {
+            return back()->withInput()->with('error', $exception->getMessage());
+        }
 
         return back()->with('success', 'تم اقتراح مواعيد بديلة للعميل.');
     }
 
     public function selectSlot(Request $request, AppointmentRequest $appointmentRequest, AppointmentRequestSlot $slot): RedirectResponse
     {
-        $this->authorizeAppointments($request, 'appointments.manage');
-        $this->appointmentRequestService->selectSlot(
-            $appointmentRequest,
-            $slot,
-            (int) $request->user()?->id
-        );
+        $this->authorizeAppointments($request, 'appointments.requests.manage');
+        try {
+            $this->appointmentRequestService->selectSlot(
+                $appointmentRequest,
+                $slot,
+                (int) $request->user()?->id
+            );
+        } catch (RuntimeException $exception) {
+            return back()->withInput()->with('error', $exception->getMessage());
+        }
 
         return back()->with('success', 'تم اختيار الموعد المقترح واعتماده.');
     }

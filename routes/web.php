@@ -11,6 +11,7 @@ use App\Http\Controllers\Workspace\Appointments\BookingController as Appointment
 use App\Http\Controllers\Workspace\Appointments\CustomerProfileController as AppointmentsCustomerProfileController;
 use App\Http\Controllers\Workspace\Appointments\CustomerPortalController as AppointmentsCustomerPortalController;
 use App\Http\Controllers\Workspace\Appointments\DashboardController as AppointmentsDashboardController;
+use App\Http\Controllers\Workspace\Appointments\ModulePageController as AppointmentsModulePageController;
 use App\Http\Controllers\Workspace\Appointments\RequestController as AppointmentsRequestController;
 use App\Http\Controllers\Workspace\CategoryController;
 use App\Http\Controllers\Workspace\ConversationController;
@@ -225,7 +226,15 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
         });
 
         Route::prefix('appointments')->as('appointments.')->group(function (): void {
-            Route::get('/', [AppointmentsDashboardController::class, 'index'])->name('dashboard');
+            Route::get('/', [AppointmentsModulePageController::class, 'overview'])->name('dashboard');
+            Route::get('overview', [AppointmentsModulePageController::class, 'overview'])->name('overview');
+            Route::get('bookings', [AppointmentsModulePageController::class, 'bookings'])->name('bookings.index');
+            Route::get('bookings/{booking}', [AppointmentsModulePageController::class, 'bookingDetails'])->name('bookings.show');
+            Route::get('calendar', [AppointmentsModulePageController::class, 'calendar'])->name('calendar.index');
+            Route::get('requests', [AppointmentsModulePageController::class, 'requests'])->name('requests.index');
+            Route::get('requests/{appointmentRequest}', [AppointmentsModulePageController::class, 'requestDetails'])->name('requests.show');
+            Route::get('customers', [AppointmentsModulePageController::class, 'customers'])->name('customers.index');
+            Route::get('settings', [AppointmentsModulePageController::class, 'settings'])->name('settings.index');
             Route::post('settings', [AppointmentsDashboardController::class, 'updateSettings'])->name('settings.update');
 
             Route::post('services', [AppointmentsDashboardController::class, 'storeService'])->name('services.store');
@@ -234,9 +243,13 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::post('staff', [AppointmentsDashboardController::class, 'storeStaff'])->name('staff.store');
             Route::put('staff/{staff}', [AppointmentsDashboardController::class, 'updateStaff'])->name('staff.update');
 
+            Route::post('resources', [AppointmentsDashboardController::class, 'storeResource'])->name('resources.store');
+            Route::put('resources/{resource}', [AppointmentsDashboardController::class, 'updateResource'])->name('resources.update');
+
             Route::post('bookings', [AppointmentsDashboardController::class, 'storeBooking'])->name('bookings.store');
             Route::post('bookings/{booking}/status', [AppointmentsDashboardController::class, 'updateBookingStatus'])->name('bookings.status');
             Route::post('bookings/{booking}/payment-link', [AppointmentsBookingController::class, 'createPaymentLink'])->name('bookings.payment-link');
+            Route::post('bookings/{booking}/send-reminder', [AppointmentsBookingController::class, 'sendReminder'])->name('bookings.send-reminder');
             Route::get('calendar/events', [AppointmentsBookingController::class, 'calendarEvents'])->name('calendar.events');
             Route::get('customers/{customer}/profile', [AppointmentsCustomerProfileController::class, 'show'])->name('customers.profile');
 

@@ -7,6 +7,25 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="min-h-screen bg-slate-50 text-slate-900">
+    @php
+        $statusLabels = [
+            'scheduled' => 'مجدول',
+            'confirmed' => 'مؤكد',
+            'checked_in' => 'تم تسجيل الحضور',
+            'in_progress' => 'قيد التنفيذ',
+            'completed' => 'مكتمل',
+            'cancelled' => 'ملغي',
+            'no_show' => 'لم يحضر',
+        ];
+        $paymentLabels = [
+            'unpaid' => 'غير مدفوع',
+            'pending' => 'قيد الانتظار',
+            'paid' => 'مدفوع',
+            'failed' => 'فشل الدفع',
+            'refunded' => 'مسترجع',
+            'partially_paid' => 'مدفوع جزئيًا',
+        ];
+    @endphp
     <main class="mx-auto max-w-3xl px-4 py-8">
         @include('partials.flash')
         <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -26,13 +45,13 @@
                 </div>
                 <div class="rounded-xl bg-slate-50 p-3">
                     <p class="text-xs text-slate-500">موعد الحجز</p>
-                    <p class="font-semibold">{{ $booking->starts_at?->format('Y-m-d H:i') }}</p>
-                    <p>حتى {{ $booking->ends_at?->format('H:i') }}</p>
+                    <p class="font-semibold">{{ $booking->starts_at?->timezone($timezone)->locale('ar')->translatedFormat('l، j F - g:i A') }}</p>
+                    <p>حتى {{ $booking->ends_at?->timezone($timezone)->locale('ar')->translatedFormat('g:i A') }}</p>
                 </div>
                 <div class="rounded-xl bg-slate-50 p-3">
                     <p class="text-xs text-slate-500">الحالة</p>
-                    <p class="font-semibold">الموعد: {{ $booking->appointment_status }}</p>
-                    <p class="font-semibold">الدفع: {{ $booking->payment_status }}</p>
+                    <p class="font-semibold">الموعد: {{ $statusLabels[$booking->appointment_status] ?? $booking->appointment_status }}</p>
+                    <p class="font-semibold">الدفع: {{ $paymentLabels[$booking->payment_status] ?? $booking->payment_status }}</p>
                 </div>
             </div>
 

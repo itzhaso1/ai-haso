@@ -1,6 +1,26 @@
 @extends('layouts.appointments', ['pageTitle' => 'ملف العميل'])
 
 @section('content')
+    @php
+        $statusLabels = [
+            'scheduled' => 'مجدول',
+            'confirmed' => 'مؤكد',
+            'checked_in' => 'تم تسجيل الحضور',
+            'in_progress' => 'قيد التنفيذ',
+            'completed' => 'مكتمل',
+            'cancelled' => 'ملغي',
+            'no_show' => 'لم يحضر',
+        ];
+        $requestLabels = [
+            'new' => 'جديد',
+            'reviewing' => 'قيد المراجعة',
+            'awaiting_customer' => 'بانتظار العميل',
+            'approved' => 'تمت الموافقة',
+            'rejected' => 'مرفوض',
+            'expired' => 'منتهي',
+            'cancelled' => 'ملغي',
+        ];
+    @endphp
     <div class="space-y-4">
         <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h1 class="text-lg font-bold">{{ $customer->name }}</h1>
@@ -16,8 +36,8 @@
                 <div class="space-y-2 text-sm">
                     @forelse($upcomingBookings as $booking)
                         <div class="rounded-lg border border-slate-200 p-3">
-                            <p class="font-semibold">{{ $booking->booking_number }} — {{ $booking->appointment_status }}</p>
-                            <p class="text-xs text-slate-500">{{ $booking->starts_at?->format('Y-m-d H:i') }}</p>
+                            <p class="font-semibold">{{ $booking->booking_number }} — {{ $statusLabels[$booking->appointment_status] ?? $booking->appointment_status }}</p>
+                            <p class="text-xs text-slate-500">{{ $booking->starts_at?->timezone($timezone)->locale('ar')->translatedFormat('l، j F - g:i A') }}</p>
                         </div>
                     @empty
                         <p class="text-sm text-slate-500">لا توجد مواعيد قادمة.</p>
@@ -30,8 +50,8 @@
                 <div class="space-y-2 text-sm">
                     @forelse($pastBookings as $booking)
                         <div class="rounded-lg border border-slate-200 p-3">
-                            <p class="font-semibold">{{ $booking->booking_number }} — {{ $booking->appointment_status }}</p>
-                            <p class="text-xs text-slate-500">{{ $booking->starts_at?->format('Y-m-d H:i') }}</p>
+                            <p class="font-semibold">{{ $booking->booking_number }} — {{ $statusLabels[$booking->appointment_status] ?? $booking->appointment_status }}</p>
+                            <p class="text-xs text-slate-500">{{ $booking->starts_at?->timezone($timezone)->locale('ar')->translatedFormat('l، j F - g:i A') }}</p>
                         </div>
                     @empty
                         <p class="text-sm text-slate-500">لا يوجد سجل سابق.</p>
@@ -41,6 +61,20 @@
         </div>
 
         <div class="grid gap-4 xl:grid-cols-2">
+            <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h2 class="mb-3 text-sm font-bold">طلبات المواعيد</h2>
+                <div class="space-y-2 text-sm">
+                    @forelse($appointmentRequests as $request)
+                        <div class="rounded-lg border border-slate-200 p-3">
+                            <p class="font-semibold">طلب #{{ $request->id }} — {{ $requestLabels[$request->status] ?? $request->status }}</p>
+                            <p class="text-xs text-slate-500">{{ $request->created_at?->timezone($timezone)->locale('ar')->translatedFormat('l، j F - g:i A') }}</p>
+                        </div>
+                    @empty
+                        <p class="text-sm text-slate-500">لا توجد طلبات مواعيد.</p>
+                    @endforelse
+                </div>
+            </section>
+
             <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <h2 class="mb-3 text-sm font-bold">الفواتير</h2>
                 <div class="space-y-2 text-sm">
