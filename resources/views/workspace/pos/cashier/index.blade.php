@@ -4,7 +4,7 @@
     <div
         x-data="cashierPos({
             items: @js($items),
-            types: @js($types),
+            categories: @js($categories),
         })"
         class="grid gap-4 xl:grid-cols-12"
     >
@@ -20,10 +20,10 @@
                 </div>
                 <div class="flex gap-2">
                     <input x-model="search" type="search" placeholder="ابحث عن صنف..." class="rounded-lg border-slate-300 text-sm" />
-                    <select x-model="selectedType" class="rounded-lg border-slate-300 text-sm">
-                        <option value="">كل الأنواع</option>
-                        <template x-for="type in types" :key="type">
-                            <option :value="type" x-text="type"></option>
+                    <select x-model.number="selectedCategoryId" class="rounded-lg border-slate-300 text-sm">
+                        <option value="">كل التصنيفات</option>
+                        <template x-for="category in categories" :key="category.id">
+                            <option :value="category.id" x-text="category.name"></option>
                         </template>
                     </select>
                 </div>
@@ -36,7 +36,8 @@
                             <img :src="`/storage/${item.image_path}`" alt="" class="mb-2 h-28 w-full rounded-lg object-cover" />
                         </template>
                         <p class="text-sm font-semibold text-slate-900" x-text="item.name"></p>
-                        <p class="mt-1 text-[11px] text-slate-500" x-text="item.item_type || 'عام'"></p>
+                        <p class="mt-1 text-[11px] text-slate-500" x-text="item.category?.name || item.item_type || 'عام'"></p>
+                        <p class="text-[11px] text-slate-500" x-text="item.size_label || ''"></p>
                         <p class="mt-2 text-sm font-bold text-slate-900">
                             <span x-text="money(item.price)"></span>
                             <span x-text="item.currency"></span>
@@ -126,22 +127,22 @@
     </div>
 
     <script>
-        function cashierPos({ items, types }) {
+        function cashierPos({ items, categories }) {
             return {
                 items,
-                types,
+                categories,
                 search: '',
-                selectedType: '',
+                selectedCategoryId: '',
                 cart: [],
                 discount: 0,
                 get filteredItems() {
                     return this.items.filter((item) => {
-                        const matchesType = !this.selectedType || item.item_type === this.selectedType;
+                        const matchesCategory = !this.selectedCategoryId || item.pos_item_category_id === this.selectedCategoryId;
                         const term = this.search.trim().toLowerCase();
                         const matchesSearch = term === ''
                             || (item.name || '').toLowerCase().includes(term)
                             || (item.item_type || '').toLowerCase().includes(term);
-                        return matchesType && matchesSearch;
+                        return matchesCategory && matchesSearch;
                     });
                 },
                 addItem(item) {

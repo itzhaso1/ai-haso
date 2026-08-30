@@ -5,7 +5,7 @@ namespace App\Http\Requests\Pos;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
-class UpdatePosOrderStatusRequest extends FormRequest
+class UpdatePosItemCategoryRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -18,7 +18,9 @@ class UpdatePosOrderStatusRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'pos_status' => ['required', 'in:new,accepted,preparing,ready,delivered,completed,cancelled'],
+            'name' => ['required', 'string', 'max:255'],
+            'is_active' => ['nullable', 'boolean'],
+            'sort_order' => ['nullable', 'integer', 'min:0'],
         ];
     }
 }

@@ -40,7 +40,9 @@ use App\Http\Controllers\Workspace\OrderController;
 use App\Http\Controllers\Workspace\PaymentController;
 use App\Http\Controllers\Workspace\PaymentGatewayController;
 use App\Http\Controllers\Workspace\Pos\CashierController as PosCashierController;
+use App\Http\Controllers\Workspace\Pos\PosCashierInvoiceController as PosCashierInvoiceController;
 use App\Http\Controllers\Workspace\Pos\CustomerMenuController as PosCustomerMenuController;
+use App\Http\Controllers\Workspace\Pos\PosItemCategoryController as PosItemCategoryController;
 use App\Http\Controllers\Workspace\Pos\PosMenuItemController as PosMenuItemController;
 use App\Http\Controllers\Workspace\Pos\PosMenuPageController as PosMenuPageController;
 use App\Http\Controllers\Workspace\Pos\PosOrderController as PosOrderController;
@@ -83,8 +85,10 @@ Route::middleware('throttle:30,1')->group(function (): void {
 
     Route::get('/menu/{workspace:slug}', [PosCustomerMenuController::class, 'generalMenu'])->name('menu.general');
     Route::post('/menu/{workspace:slug}/order', [PosCustomerMenuController::class, 'placeGeneralOrder'])->name('menu.general.order');
+    Route::post('/menu/{workspace:slug}/ai-chat', [PosCustomerMenuController::class, 'askAi'])->name('menu.general.ai');
     Route::get('/menu/{workspace:slug}/table/{token}', [PosCustomerMenuController::class, 'tableMenu'])->name('menu.table');
     Route::post('/menu/{workspace:slug}/table/{token}/order', [PosCustomerMenuController::class, 'placeTableOrder'])->name('menu.table.order');
+    Route::post('/menu/{workspace:slug}/table/{token}/ai-chat', [PosCustomerMenuController::class, 'askAi'])->name('menu.table.ai');
 });
 
 Route::middleware(['guest'])->group(function (): void {
@@ -323,10 +327,13 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::get('orders/running', [PosOrderController::class, 'running'])->name('orders.running');
             Route::post('orders/{order}/status', [PosOrderController::class, 'updateStatus'])->name('orders.status');
             Route::post('orders/{order}/invoice', [PosOrderController::class, 'createInvoice'])->name('orders.invoice');
+            Route::post('orders/{order}/payment-link', [PosOrderController::class, 'createPaymentLink'])->name('orders.payment-link');
             Route::post('orders/{order}/items', [PosOrderController::class, 'updateItems'])->name('orders.update-items');
-            Route::get('orders/{order}/print', [PosOrderController::class, 'printInvoice'])->name('orders.print');
+            Route::get('orders/{order}/print', [PosOrderController::class, 'printOrder'])->name('orders.print');
 
-            Route::get('invoices', [PosOrderController::class, 'invoices'])->name('invoices.index');
+            Route::get('invoices', [PosCashierInvoiceController::class, 'index'])->name('invoices.index');
+            Route::get('invoices/{invoice}', [PosCashierInvoiceController::class, 'show'])->name('invoices.show');
+            Route::get('invoices/{invoice}/print', [PosCashierInvoiceController::class, 'print'])->name('invoices.print');
             Route::get('reports/daily', [PosReportController::class, 'daily'])->name('reports.daily');
 
             Route::get('tables', [PosTableController::class, 'index'])->name('tables.index');
@@ -334,6 +341,7 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::get('tables/{table}', [PosTableController::class, 'show'])->name('tables.show');
             Route::put('tables/{table}', [PosTableController::class, 'update'])->name('tables.update');
             Route::post('tables/{table}/open-session', [PosTableController::class, 'openSession'])->name('tables.sessions.open');
+            Route::post('tables/{table}/orders', [PosTableController::class, 'addOrder'])->name('tables.orders.store');
             Route::post('tables/{table}/sessions/{session}/close', [PosTableController::class, 'closeSession'])->name('tables.sessions.close');
             Route::post('tables/{table}/qr/regenerate', [PosTableController::class, 'regenerateQr'])->name('tables.qr.regenerate');
 
@@ -341,6 +349,9 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::post('items', [PosMenuItemController::class, 'store'])->name('items.store');
             Route::put('items/{item}', [PosMenuItemController::class, 'update'])->name('items.update');
             Route::delete('items/{item}', [PosMenuItemController::class, 'destroy'])->name('items.destroy');
+            Route::post('categories', [PosItemCategoryController::class, 'store'])->name('categories.store');
+            Route::put('categories/{category}', [PosItemCategoryController::class, 'update'])->name('categories.update');
+            Route::delete('categories/{category}', [PosItemCategoryController::class, 'destroy'])->name('categories.destroy');
         });
 
         Route::get('employees', [EmployeeInvitationController::class, 'index'])->name('employees.index');

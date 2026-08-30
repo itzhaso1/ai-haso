@@ -38,6 +38,7 @@ class PaymentService
 
         return DB::transaction(function () use ($order, $gateway, $result, $idempotencyKey): Payment {
             $payment = Payment::query()->create([
+                'workspace_id' => $order->workspace_id,
                 'order_id' => $order->id,
                 'payment_gateway_id' => $gateway?->id,
                 'provider' => $gateway?->provider ?? config('payment.default_provider', 'local'),

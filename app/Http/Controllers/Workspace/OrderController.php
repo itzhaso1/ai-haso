@@ -91,7 +91,7 @@ class OrderController extends Controller
         $this->authorize('update', $order);
 
         return view('workspace.orders.edit', [
-            'order' => $order->load(['customer', 'items.product', 'items.variant', 'table', 'tableSession', 'financeInvoice']),
+            'order' => $order->load(['customer', 'items.product', 'items.variant', 'table', 'tableSession', 'financeInvoice', 'posCashierInvoice']),
         ]);
     }
 

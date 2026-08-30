@@ -38,4 +38,9 @@ class TableSession extends WorkspaceScopedModel
     {
         return $this->hasMany(Order::class, 'table_session_id');
     }
+
+    public function cashierInvoices(): HasMany
+    {
+        return $this->hasMany(PosCashierInvoice::class, 'table_session_id');
+    }
 }

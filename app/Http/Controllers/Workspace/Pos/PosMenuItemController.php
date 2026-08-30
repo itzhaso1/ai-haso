@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Workspace\Pos;
 
 use App\Http\Requests\Pos\StorePosMenuItemRequest;
 use App\Http\Requests\Pos\UpdatePosMenuItemRequest;
+use App\Models\PosItemCategory;
 use App\Models\PosMenuItem;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,12 +17,14 @@ class PosMenuItemController extends PosBaseController
         $this->authorizePos($request, 'menu.manage');
 
         $items = PosMenuItem::query()
+            ->with('category:id,name')
             ->when($request->string('search')->toString(), function ($query, $search): void {
                 $query->where(function ($inner) use ($search): void {
                     $inner->where('name', 'like', '%'.$search.'%')
                         ->orWhere('item_type', 'like', '%'.$search.'%');
                 });
             })
+            ->when($request->integer('category_id'), fn ($query, $categoryId) => $query->where('pos_item_category_id', $categoryId))
             ->orderBy('sort_order')
             ->orderBy('name')
             ->paginate(30)
@@ -38,6 +41,7 @@ class PosMenuItemController extends PosBaseController
         return view('workspace.pos.items.index', [
             'items' => $items,
             'types' => $types,
+            'categories' => PosItemCategory::query()->orderBy('sort_order')->orderBy('name')->get(['id', 'name', 'is_active', 'sort_order']),
         ]);
     }
 
@@ -54,7 +58,10 @@ class PosMenuItemController extends PosBaseController
 
         PosMenuItem::query()->create([
             'name' => $validated['name'],
+            'pos_item_category_id' => $validated['pos_item_category_id'] ?? null,
             'item_type' => $validated['item_type'] ?? 'عام',
+            'size_label' => $validated['size_label'] ?? null,
+            'description' => $validated['description'] ?? null,
             'price' => $validated['price'],
             'currency' => $validated['currency'] ?? 'USD',
             'is_active' => (bool) ($validated['is_active'] ?? true),
@@ -82,7 +89,10 @@ class PosMenuItemController extends PosBaseController
 
         $item->update([
             'name' => $validated['name'],
+            'pos_item_category_id' => $validated['pos_item_category_id'] ?? null,
             'item_type' => $validated['item_type'] ?? 'عام',
+            'size_label' => $validated['size_label'] ?? null,
+            'description' => $validated['description'] ?? null,
             'price' => $validated['price'],
             'currency' => $validated['currency'] ?? $item->currency,
             'is_active' => (bool) ($validated['is_active'] ?? false),

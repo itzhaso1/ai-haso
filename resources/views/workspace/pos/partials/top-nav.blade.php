@@ -1,7 +1,8 @@
 @php($workspace = request()->attributes->get('workspace'))
 @php
     $links = [
-        ['label' => 'الكاشير / الطاولات', 'route' => 'workspace.pos.cashier.index', 'active' => ['workspace.pos.cashier.*', 'workspace.pos.dashboard', 'workspace.pos.tables.*']],
+        ['label' => 'الكاشير', 'route' => 'workspace.pos.cashier.index', 'active' => ['workspace.pos.cashier.*']],
+        ['label' => 'الطاولات', 'route' => 'workspace.pos.tables.index', 'active' => ['workspace.pos.dashboard', 'workspace.pos.tables.*']],
         ['label' => 'Menu', 'route' => 'workspace.pos.menu.index', 'active' => 'workspace.pos.menu.*'],
         ['label' => 'إدارة الأصناف', 'route' => 'workspace.pos.items.index', 'active' => 'workspace.pos.items.*'],
         ['label' => 'الطلبات الجارية', 'route' => 'workspace.pos.orders.running', 'active' => 'workspace.pos.orders.*'],

@@ -21,6 +21,7 @@ class StorePublicMenuOrderRequest extends FormRequest
             'customer_name' => ['nullable', 'string', 'max:255'],
             'customer_phone' => ['nullable', 'string', 'max:64'],
             'notes' => ['nullable', 'string', 'max:1000'],
+            'pay_now' => ['nullable', 'boolean'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.pos_menu_item_id' => ['required', 'integer'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],

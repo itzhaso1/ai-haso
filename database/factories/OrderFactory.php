@@ -25,6 +25,7 @@ class OrderFactory extends Factory
             'dining_table_id' => null,
             'table_session_id' => null,
             'finance_invoice_id' => null,
+            'pos_cashier_invoice_id' => null,
             'order_number' => 'ORD-'.fake()->unique()->numerify('########'),
             'source' => 'manual',
             'status' => 'confirmed',

@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'dining_table_id',
     'table_session_id',
     'finance_invoice_id',
+    'pos_cashier_invoice_id',
     'order_number',
     'source',
     'status',
@@ -70,6 +71,11 @@ class Order extends WorkspaceScopedModel
     public function financeInvoice(): BelongsTo
     {
         return $this->belongsTo(FinanceInvoice::class, 'finance_invoice_id');
+    }
+
+    public function posCashierInvoice(): BelongsTo
+    {
+        return $this->belongsTo(PosCashierInvoice::class, 'pos_cashier_invoice_id');
     }
 
     public function items(): HasMany

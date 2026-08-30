@@ -28,4 +28,9 @@ class DiningTable extends WorkspaceScopedModel
     {
         return $this->hasMany(Order::class, 'dining_table_id');
     }
+
+    public function cashierInvoices(): HasMany
+    {
+        return $this->hasMany(PosCashierInvoice::class, 'dining_table_id');
+    }
 }

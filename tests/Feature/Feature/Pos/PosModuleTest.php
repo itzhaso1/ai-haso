@@ -5,6 +5,7 @@ namespace Tests\Feature\Feature\Pos;
 use App\Models\DiningTable;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\PosCashierInvoice;
 use App\Models\PosMenuItem;
 use App\Models\User;
 use App\Models\Workspace;
@@ -74,7 +75,7 @@ class PosModuleTest extends TestCase
         $this->assertSame(4.0, (float) $orderItem->fresh()->unit_price);
     }
 
-    public function test_pos_cashier_order_can_update_status_and_generate_finance_invoice(): void
+    public function test_pos_cashier_order_can_update_status_and_generate_cashier_invoice(): void
     {
         $this->seed(FoundationSeeder::class);
         [$owner, $workspace] = $this->createWorkspaceOwner('store');
@@ -135,7 +136,13 @@ class PosModuleTest extends TestCase
             ->post(route('workspace.pos.orders.invoice', $order))
             ->assertRedirect();
 
-        $this->assertNotNull($order->fresh()->finance_invoice_id);
+        $cashierInvoiceId = $order->fresh()->pos_cashier_invoice_id;
+        $this->assertNotNull($cashierInvoiceId);
+        $this->assertDatabaseHas('pos_cashier_invoices', [
+            'id' => $cashierInvoiceId,
+            'workspace_id' => $workspace->id,
+            'dining_table_id' => $table->id,
+        ]);
     }
 
     public function test_workspace_isolation_blocks_cross_workspace_pos_access(): void
@@ -264,7 +271,7 @@ class PosModuleTest extends TestCase
         $this->actingAs($owner)
             ->withSession(['current_workspace_id' => $workspace->id])
             ->post(route('workspace.pos.orders.status', $order), [
-                'pos_status' => 'completed',
+                'pos_status' => 'delivered',
             ])
             ->assertRedirect();
 
@@ -273,6 +280,55 @@ class PosModuleTest extends TestCase
             ->post(route('workspace.pos.tables.sessions.close', ['table' => $table, 'session' => $sessionId]))
             ->assertRedirect()
             ->assertSessionHas('success');
+
+        $invoice = PosCashierInvoice::query()->latest('id')->first();
+        $this->assertNotNull($invoice);
+        $this->assertDatabaseHas('orders', [
+            'id' => $order->id,
+            'pos_cashier_invoice_id' => $invoice?->id,
+            'pos_status' => 'completed',
+        ]);
+    }
+
+    public function test_table_view_can_add_new_order_from_table_menu_form(): void
+    {
+        [$owner, $workspace] = $this->createWorkspaceOwner('store');
+
+        $table = DiningTable::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Table 8',
+            'status' => 'occupied',
+            'qr_token' => 'table_8_token_for_test',
+        ]);
+
+        PosMenuItem::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Americano',
+            'item_type' => 'مشروبات',
+            'price' => 4.00,
+            'currency' => 'USD',
+            'is_active' => true,
+        ]);
+
+        $menuItem = PosMenuItem::withoutGlobalScopes()
+            ->where('workspace_id', $workspace->id)
+            ->where('name', 'Americano')
+            ->firstOrFail();
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.pos.tables.orders.store', $table), [
+                'items' => [
+                    ['pos_menu_item_id' => $menuItem->id, 'quantity' => 2],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('orders', [
+            'workspace_id' => $workspace->id,
+            'dining_table_id' => $table->id,
+            'source' => 'pos',
+        ]);
     }
 
     /**

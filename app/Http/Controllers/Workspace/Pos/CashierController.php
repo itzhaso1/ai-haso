@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Workspace\Pos;
 use App\Http\Requests\Pos\StorePosOrderRequest;
 use App\Models\Customer;
 use App\Models\DiningTable;
+use App\Models\PosItemCategory;
 use App\Models\PosMenuItem;
 use App\Services\Pos\PosOrderService;
 use Illuminate\Http\RedirectResponse;
@@ -23,22 +24,25 @@ class CashierController extends PosBaseController
         $this->authorizePos($request, 'orders.manage');
 
         $items = PosMenuItem::query()
+            ->with('category:id,name')
             ->where('is_active', true)
-            ->when($request->string('type')->toString(), fn ($query, $type) => $query->where('item_type', $type))
+            ->when($request->integer('category_id'), fn ($query, $categoryId) => $query->where('pos_item_category_id', $categoryId))
             ->orderBy('sort_order')
             ->orderBy('name')
             ->get([
                 'id',
+                'pos_item_category_id',
                 'name',
                 'price',
                 'currency',
                 'item_type',
+                'size_label',
                 'image_path',
             ]);
 
         return view('workspace.pos.cashier.index', [
             'items' => $items,
-            'types' => PosMenuItem::query()->select('item_type')->distinct()->orderBy('item_type')->pluck('item_type')->filter()->values(),
+            'categories' => PosItemCategory::query()->where('is_active', true)->orderBy('sort_order')->orderBy('name')->get(['id', 'name']),
             'customers' => Customer::query()->orderBy('name')->limit(200)->get(['id', 'name', 'phone']),
             'tables' => DiningTable::query()->orderBy('name')->get(['id', 'name', 'status']),
         ]);

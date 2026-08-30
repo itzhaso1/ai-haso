@@ -40,7 +40,7 @@ class StoreOrderRequest extends FormRequest
             'notes' => ['nullable', 'string'],
             'status' => ['nullable', 'in:draft,confirmed,cancelled,completed'],
             'source' => ['nullable', 'in:manual,pos,qr_menu,api'],
-            'pos_status' => ['nullable', 'in:new,accepted,preparing,ready,completed,cancelled'],
+            'pos_status' => ['nullable', 'in:new,accepted,preparing,ready,delivered,completed,cancelled'],
             'metadata' => ['nullable', 'array'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'integer', ...$workspaceRule('products')],

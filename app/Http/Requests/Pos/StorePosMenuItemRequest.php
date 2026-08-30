@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests\Pos;
 
+use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StorePosMenuItemRequest extends FormRequest
 {
@@ -17,9 +19,18 @@ class StorePosMenuItemRequest extends FormRequest
      */
     public function rules(): array
     {
+        $workspaceId = app(WorkspaceContext::class)->workspaceId();
+
         return [
             'name' => ['required', 'string', 'max:255'],
             'item_type' => ['nullable', 'string', 'max:100'],
+            'pos_item_category_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('pos_item_categories', 'id')->where(fn ($query) => $query->where('workspace_id', $workspaceId)),
+            ],
+            'size_label' => ['nullable', 'string', 'max:100'],
+            'description' => ['nullable', 'string', 'max:2000'],
             'price' => ['required', 'numeric', 'min:0'],
             'currency' => ['nullable', 'string', 'size:3'],
             'is_active' => ['nullable', 'boolean'],

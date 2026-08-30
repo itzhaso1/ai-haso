@@ -4,16 +4,16 @@ namespace App\Services\Pos;
 
 use App\Models\Customer;
 use App\Models\DiningTable;
-use App\Models\Finance\FinanceInvoice;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\Payment;
+use App\Models\PosCashierInvoice;
 use App\Models\PosMenuItem;
 use App\Models\TableSession;
 use App\Models\User;
 use App\Models\Workspace;
-use App\Services\Finance\FinanceBootstrapService;
-use App\Services\Finance\InvoiceService;
 use App\Services\Order\OrderService;
+use App\Services\Payment\PaymentService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -22,8 +22,7 @@ class PosOrderService
 {
     public function __construct(
         private readonly OrderService $orderService,
-        private readonly InvoiceService $invoiceService,
-        private readonly FinanceBootstrapService $financeBootstrapService,
+        private readonly PaymentService $paymentService,
     ) {}
 
     /**
@@ -53,7 +52,7 @@ class PosOrderService
                     'created_by_user_id' => $actor?->id,
                     'created_by_name' => $actor?->name,
                 ],
-                currency: (string) ($payload['currency'] ?? 'USD'),
+                currency: (string) ($items->first()['currency'] ?? ($payload['currency'] ?? 'USD')),
             );
 
             event(new \App\Events\OrderCreated($order));
@@ -99,6 +98,15 @@ class PosOrderService
         });
     }
 
+    public function createPaymentLinkForOrder(Order $order): Payment
+    {
+        if (! in_array($order->source, ['pos', 'qr_menu'], true)) {
+            throw new RuntimeException('رابط الدفع متاح لطلبات الكاشير فقط.');
+        }
+
+        return $this->paymentService->createPaymentLink($order);
+    }
+
     public function updatePosStatus(Order $order, string $status, ?User $actor): Order
     {
         if ($status === 'cancelled') {
@@ -106,7 +114,7 @@ class PosOrderService
         }
 
         $attributes = ['pos_status' => $status];
-        if (in_array($status, ['accepted', 'preparing', 'ready'], true)) {
+        if (in_array($status, ['accepted', 'preparing', 'ready', 'delivered'], true)) {
             $attributes['fulfillment_status'] = 'processing';
             $attributes['status'] = 'confirmed';
         }
@@ -195,74 +203,111 @@ class PosOrderService
         return $session;
     }
 
-    public function closeSession(TableSession $session): TableSession
+    public function closeSession(TableSession $session, int $actorUserId): ?PosCashierInvoice
     {
         if ($session->status === 'closed') {
-            return $session;
+            return null;
         }
 
-        $hasRunningOrders = Order::query()
-            ->where('table_session_id', $session->id)
-            ->whereIn('pos_status', ['new', 'accepted', 'preparing', 'ready'])
-            ->exists();
+        return DB::transaction(function () use ($session, $actorUserId): ?PosCashierInvoice {
+            $hasRunningOrders = Order::query()
+                ->where('table_session_id', $session->id)
+                ->whereIn('pos_status', ['new', 'accepted', 'preparing', 'ready'])
+                ->exists();
 
-        if ($hasRunningOrders) {
-            throw new RuntimeException('لا يمكن إغلاق الجلسة بوجود طلبات جارية.');
-        }
+            if ($hasRunningOrders) {
+                throw new RuntimeException('لا يمكن إغلاق الجلسة بوجود طلبات جارية.');
+            }
 
-        $session->update([
-            'status' => 'closed',
-            'closed_at' => now(),
-        ]);
+            $orders = Order::query()
+                ->where('table_session_id', $session->id)
+                ->whereIn('source', ['pos', 'qr_menu'])
+                ->where('pos_status', '!=', 'cancelled')
+                ->whereNull('pos_cashier_invoice_id')
+                ->with('items')
+                ->get();
 
-        $table = $session->table;
-        if ($table) {
-            $hasOpenSessions = $table->sessions()->where('status', 'open')->where('id', '!=', $session->id)->exists();
-            $table->update(['status' => $hasOpenSessions ? 'occupied' : 'available']);
-        }
+            $invoice = null;
+            if ($orders->isNotEmpty()) {
+                $invoice = $this->buildCashierInvoiceFromOrders(
+                    orders: $orders,
+                    table: $session->table,
+                    session: $session,
+                    actorUserId: $actorUserId
+                );
 
-        return $session->fresh();
+                Order::query()
+                    ->whereIn('id', $orders->pluck('id')->all())
+                    ->update([
+                        'pos_cashier_invoice_id' => $invoice->id,
+                        'pos_status' => 'completed',
+                        'status' => 'completed',
+                        'fulfillment_status' => 'fulfilled',
+                    ]);
+            }
+
+            $session->update([
+                'status' => 'closed',
+                'closed_at' => now(),
+            ]);
+
+            $table = $session->table;
+            if ($table) {
+                $hasOpenSessions = $table->sessions()->where('status', 'open')->where('id', '!=', $session->id)->exists();
+                $table->update(['status' => $hasOpenSessions ? 'occupied' : 'available']);
+            }
+
+            return $invoice;
+        });
     }
 
-    public function createInvoiceFromOrder(Order $order, int $actorUserId): FinanceInvoice
+    public function createInvoiceFromOrder(Order $order, int $actorUserId): PosCashierInvoice
     {
-        if ($order->finance_invoice_id) {
-            $invoice = FinanceInvoice::withoutGlobalScopes()->whereKey($order->finance_invoice_id)->first();
-            if ($invoice) {
-                return $invoice;
+        if ($order->pos_cashier_invoice_id) {
+            $existing = PosCashierInvoice::withoutGlobalScopes()->whereKey($order->pos_cashier_invoice_id)->first();
+            if ($existing) {
+                return $existing;
             }
         }
 
-        $workspace = $order->workspace;
-        $this->financeBootstrapService->ensureWorkspaceFinanceSetup($workspace);
+        if ($order->source !== 'pos' && $order->source !== 'qr_menu') {
+            throw new RuntimeException('هذه العملية متاحة لطلبات الكاشير فقط.');
+        }
 
-        $items = $order->items->map(function ($item): array {
-            return [
-                'product_id' => null,
-                'product_name' => $item->product_name ?: 'Item',
-                'description' => $item->variant_name ? 'Variant: '.$item->variant_name : null,
-                'quantity' => (float) $item->quantity,
-                'unit_price' => (float) $item->unit_price,
-                'discount' => (float) $item->discount_amount,
-                'tax_rate' => 0.0,
-            ];
-        })->values()->all();
+        if ($order->pos_status === 'cancelled') {
+            throw new RuntimeException('لا يمكن إصدار فاتورة لطلب ملغي.');
+        }
 
-        $invoice = $this->invoiceService->create($workspace, [
-            'type' => 'sales',
-            'customer_id' => $order->customer_id,
-            'customer_name' => $order->customer_id ? null : 'Walk-in POS',
-            'issue_date' => now()->toDateString(),
-            'due_date' => now()->toDateString(),
-            'currency' => $order->currency ?: 'USD',
-            'invoice_status' => 'issued',
-            'notes' => 'Invoice generated from POS order '.$order->order_number,
-            'items' => $items,
-        ], $actorUserId);
+        if ($order->table_session_id) {
+            $session = TableSession::query()->whereKey($order->table_session_id)->first();
+            if ($session && $session->status === 'open') {
+                throw new RuntimeException('لطلبات الطاولات: أغلق الجلسة لإصدار فاتورة نهائية واحدة.');
+            }
+        }
 
-        $order->update(['finance_invoice_id' => $invoice->id]);
+        return DB::transaction(function () use ($order, $actorUserId): PosCashierInvoice {
+            $lockedOrder = Order::query()
+                ->with(['items', 'table', 'tableSession'])
+                ->whereKey($order->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        return $invoice;
+            $invoice = $this->buildCashierInvoiceFromOrders(
+                orders: collect([$lockedOrder]),
+                table: $lockedOrder->table,
+                session: $lockedOrder->tableSession,
+                actorUserId: $actorUserId
+            );
+
+            $lockedOrder->update([
+                'pos_cashier_invoice_id' => $invoice->id,
+                'pos_status' => 'completed',
+                'status' => 'completed',
+                'fulfillment_status' => 'fulfilled',
+            ]);
+
+            return $invoice;
+        });
     }
 
     private function ensureOpenSession(DiningTable $table): TableSession
@@ -293,12 +338,13 @@ class PosOrderService
         int $workspaceId,
         array $items,
         bool $requireActive
-    ): Collection
-    {
+    ): Collection {
         $normalized = collect();
+        $orderCurrency = null;
 
         foreach ($items as $item) {
             $menuItem = PosMenuItem::withoutGlobalScopes()
+                ->with('category:id,name')
                 ->where('workspace_id', $workspaceId)
                 ->whereKey((int) ($item['pos_menu_item_id'] ?? 0))
                 ->first();
@@ -311,17 +357,24 @@ class PosOrderService
                 throw new RuntimeException('أحد أصناف الكاشير غير مفعل.');
             }
 
+            $itemCurrency = (string) ($menuItem->currency ?: 'USD');
+            if ($orderCurrency !== null && $orderCurrency !== $itemCurrency) {
+                throw new RuntimeException('لا يمكن دمج أصناف بعملات مختلفة في نفس الطلب.');
+            }
+            $orderCurrency ??= $itemCurrency;
+
             $quantity = max(1, (int) ($item['quantity'] ?? 1));
             $unitPrice = (float) $menuItem->price;
             $lineTotal = round($quantity * $unitPrice, 2);
             $normalized->push([
                 'pos_menu_item_id' => $menuItem->id,
                 'name' => $menuItem->name,
-                'item_type' => $menuItem->item_type ?: 'عام',
+                'item_type' => $menuItem->item_type ?: ($menuItem->category?->name ?? 'عام'),
+                'size_label' => $menuItem->size_label,
                 'quantity' => $quantity,
                 'unit_price' => $unitPrice,
                 'total_amount' => $lineTotal,
-                'currency' => $menuItem->currency ?: 'USD',
+                'currency' => $itemCurrency,
             ]);
         }
 
@@ -406,7 +459,7 @@ class PosOrderService
                 'product_variant_id' => null,
                 'pos_menu_item_id' => $item['pos_menu_item_id'],
                 'product_name' => $item['name'],
-                'variant_name' => null,
+                'variant_name' => $item['size_label'],
                 'item_type' => $item['item_type'],
                 'sku' => null,
                 'quantity' => $item['quantity'],
@@ -433,11 +486,93 @@ class PosOrderService
         return $order;
     }
 
+    /**
+     * @param  Collection<int,Order>  $orders
+     */
+    private function buildCashierInvoiceFromOrders(
+        Collection $orders,
+        ?DiningTable $table,
+        ?TableSession $session,
+        int $actorUserId
+    ): PosCashierInvoice {
+        if ($orders->isEmpty()) {
+            throw new RuntimeException('لا توجد طلبات لإنشاء الفاتورة.');
+        }
+
+        $workspaceId = (int) $orders->first()->workspace_id;
+        $currency = (string) ($orders->first()->currency ?: 'USD');
+        $subtotal = round((float) $orders->sum(fn (Order $order) => (float) $order->subtotal), 2);
+        $discount = round((float) $orders->sum(fn (Order $order) => (float) $order->discount_amount), 2);
+        $total = round((float) $orders->sum(fn (Order $order) => (float) $order->total_amount), 2);
+
+        $invoice = PosCashierInvoice::query()->create([
+            'workspace_id' => $workspaceId,
+            'dining_table_id' => $table?->id,
+            'table_session_id' => $session?->id,
+            'closed_by_user_id' => $actorUserId > 0 ? $actorUserId : null,
+            'invoice_number' => $this->nextCashierInvoiceNumber(),
+            'status' => 'closed',
+            'currency' => $currency,
+            'subtotal' => $subtotal,
+            'discount_amount' => $discount,
+            'total_amount' => $total,
+            'closed_at' => now(),
+            'metadata' => [
+                'orders_count' => $orders->count(),
+                'orders' => $orders->pluck('order_number')->values()->all(),
+            ],
+        ]);
+
+        $itemGroups = OrderItem::query()
+            ->whereIn('order_id', $orders->pluck('id')->all())
+            ->get()
+            ->groupBy(fn (OrderItem $item): string => implode('|', [
+                (string) $item->pos_menu_item_id,
+                (string) $item->product_name,
+                (string) $item->item_type,
+                (string) $item->variant_name,
+                (string) $item->unit_price,
+            ]));
+
+        foreach ($itemGroups as $group) {
+            $first = $group->first();
+            if (! $first) {
+                continue;
+            }
+
+            $quantity = (int) $group->sum('quantity');
+            $discountAmount = round((float) $group->sum('discount_amount'), 2);
+            $lineTotal = round((float) $group->sum('total_amount'), 2);
+
+            $invoice->items()->create([
+                'workspace_id' => $workspaceId,
+                'pos_cashier_invoice_id' => $invoice->id,
+                'pos_menu_item_id' => $first->pos_menu_item_id,
+                'item_name' => $first->product_name,
+                'item_type' => $first->item_type,
+                'size_label' => $first->variant_name,
+                'quantity' => $quantity,
+                'unit_price' => $first->unit_price,
+                'discount_amount' => $discountAmount,
+                'total_amount' => $lineTotal,
+            ]);
+        }
+
+        return $invoice;
+    }
+
     private function nextOrderNumber(): string
     {
         $lastId = (Order::withoutGlobalScopes()->max('id') ?? 0) + 1;
 
         return 'POS-'.str_pad((string) $lastId, 8, '0', STR_PAD_LEFT);
+    }
+
+    private function nextCashierInvoiceNumber(): string
+    {
+        $lastId = (PosCashierInvoice::withoutGlobalScopes()->max('id') ?? 0) + 1;
+
+        return 'CASH-'.str_pad((string) $lastId, 8, '0', STR_PAD_LEFT);
     }
 
     /**

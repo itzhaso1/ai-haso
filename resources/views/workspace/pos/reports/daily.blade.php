@@ -5,8 +5,8 @@
         <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div class="flex flex-wrap items-end justify-between gap-3">
                 <div>
-                    <h2 class="text-base font-bold text-slate-900">ملخص اليوم</h2>
-                    <p class="text-xs text-slate-500">تقرير الكاشير حسب التاريخ المحدد.</p>
+                    <h2 class="text-base font-bold text-slate-900">لوحة تقارير الكاشير اليومية</h2>
+                    <p class="text-xs text-slate-500">المركز الرئيسي لكل بيانات الكاشير: مبيعات، عملاء، طلبات، فواتير، عمليات.</p>
                 </div>
                 <form method="GET" class="flex items-center gap-2">
                     <input type="date" name="date" value="{{ $date }}" class="rounded-lg border-slate-300 text-sm" />
@@ -14,18 +14,30 @@
                 </form>
             </div>
 
-            <div class="mt-4 grid gap-3 sm:grid-cols-3">
+            <div class="mt-4 grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
                 <div class="rounded-xl bg-slate-50 p-3">
-                    <p class="text-xs text-slate-500">إجمالي مبيعات الفواتير</p>
-                    <p class="mt-1 text-xl font-bold">{{ number_format((float) $summary['invoice_sales_total'], 2) }}</p>
+                    <p class="text-xs text-slate-500">إجمالي المبيعات</p>
+                    <p class="mt-1 text-lg font-bold">{{ number_format((float) $summary['invoice_sales_total'], 2) }}</p>
                 </div>
                 <div class="rounded-xl bg-slate-50 p-3">
                     <p class="text-xs text-slate-500">عدد الفواتير</p>
-                    <p class="mt-1 text-xl font-bold">{{ $summary['invoices_count'] }}</p>
+                    <p class="mt-1 text-lg font-bold">{{ $summary['invoices_count'] }}</p>
                 </div>
                 <div class="rounded-xl bg-slate-50 p-3">
-                    <p class="text-xs text-slate-500">إجمالي الكميات</p>
-                    <p class="mt-1 text-xl font-bold">{{ number_format((int) $summary['total_quantity']) }}</p>
+                    <p class="text-xs text-slate-500">عدد الطلبات</p>
+                    <p class="mt-1 text-lg font-bold">{{ $summary['orders_count'] }}</p>
+                </div>
+                <div class="rounded-xl bg-slate-50 p-3">
+                    <p class="text-xs text-slate-500">الكميات المباعة</p>
+                    <p class="mt-1 text-lg font-bold">{{ number_format((int) $summary['total_quantity']) }}</p>
+                </div>
+                <div class="rounded-xl bg-emerald-50 p-3">
+                    <p class="text-xs text-emerald-700">طلبات مدفوعة</p>
+                    <p class="mt-1 text-lg font-bold text-emerald-700">{{ $summary['paid_orders_count'] }}</p>
+                </div>
+                <div class="rounded-xl bg-amber-50 p-3">
+                    <p class="text-xs text-amber-700">طلبات غير مدفوعة</p>
+                    <p class="mt-1 text-lg font-bold text-amber-700">{{ $summary['unpaid_orders_count'] }}</p>
                 </div>
             </div>
         </article>
@@ -104,6 +116,92 @@
             </article>
         </div>
 
+        <div class="grid gap-4 xl:grid-cols-2">
+            <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h3 class="mb-3 text-sm font-bold text-slate-900">العملاء (من عمليات الكاشير)</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead class="text-slate-500">
+                            <tr>
+                                <th class="py-2 text-right">العميل</th>
+                                <th class="py-2 text-right">الهاتف</th>
+                                <th class="py-2 text-right">عدد الطلبات</th>
+                                <th class="py-2 text-right">إجمالي المشتريات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($customerSummary as $customer)
+                                <tr class="border-t border-slate-100">
+                                    <td class="py-2">{{ $customer['customer_name'] }}</td>
+                                    <td class="py-2">{{ $customer['customer_phone'] }}</td>
+                                    <td class="py-2">{{ $customer['orders_count'] }}</td>
+                                    <td class="py-2">{{ number_format((float) $customer['total_sales'], 2) }}</td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="4" class="py-3 text-center text-slate-500">—</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </article>
+
+            <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h3 class="mb-3 text-sm font-bold text-slate-900">المبيعات حسب الساعة</h3>
+                <table class="w-full text-sm">
+                    <thead class="text-slate-500">
+                        <tr>
+                            <th class="py-2 text-right">الساعة</th>
+                            <th class="py-2 text-right">عدد الطلبات</th>
+                            <th class="py-2 text-right">إجمالي المبيعات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($salesByHour as $row)
+                            <tr class="border-t border-slate-100">
+                                <td class="py-2">{{ $row['hour'] }}</td>
+                                <td class="py-2">{{ $row['orders_count'] }}</td>
+                                <td class="py-2">{{ number_format((float) $row['sales_total'], 2) }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="3" class="py-3 text-center text-slate-500">—</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </article>
+        </div>
+
+        <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 class="mb-3 text-sm font-bold text-slate-900">تفاصيل الطلبات اليومية</h3>
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm">
+                    <thead class="text-slate-500">
+                        <tr>
+                            <th class="py-2 text-right">الطلب</th>
+                            <th class="py-2 text-right">الطاولة</th>
+                            <th class="py-2 text-right">العميل</th>
+                            <th class="py-2 text-right">الحالة</th>
+                            <th class="py-2 text-right">الدفع</th>
+                            <th class="py-2 text-right">الإجمالي</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($allOrders as $order)
+                            <tr class="border-t border-slate-100">
+                                <td class="py-2">#{{ $order->order_number }}</td>
+                                <td class="py-2">{{ $order->table?->name ?: '—' }}</td>
+                                <td class="py-2">{{ $order->customer?->name ?: data_get($order->metadata, 'customer_name', 'Walk-in') }}</td>
+                                <td class="py-2">{{ $order->pos_status }}</td>
+                                <td class="py-2">{{ $order->payment_status === 'paid' ? 'مدفوع' : 'غير مدفوع' }}</td>
+                                <td class="py-2">{{ number_format((float) $order->total_amount, 2) }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="6" class="py-3 text-center text-slate-500">—</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </article>
+
         <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <h3 class="mb-3 text-sm font-bold text-slate-900">آخر العمليات</h3>
             <div class="overflow-x-auto">
@@ -144,13 +242,15 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse($closedOrders as $order)
+                        @forelse($cashierInvoices as $invoice)
                             <tr class="border-t border-slate-100">
-                                <td class="py-2">{{ $order->financeInvoice?->invoice_number ?: '—' }}</td>
-                                <td class="py-2">{{ $order->table?->name ?: '—' }}</td>
-                                <td class="py-2">{{ data_get($order->metadata, 'created_by_name', '—') }}</td>
-                                <td class="py-2">{{ $order->updated_at?->format('Y-m-d H:i') }}</td>
-                                <td class="py-2">{{ number_format((float) $order->total_amount, 2) }}</td>
+                                <td class="py-2">
+                                    <a class="font-semibold text-slate-900" href="{{ route('workspace.pos.invoices.show', $invoice) }}">{{ $invoice->invoice_number }}</a>
+                                </td>
+                                <td class="py-2">{{ $invoice->table?->name ?: '—' }}</td>
+                                <td class="py-2">{{ $invoice->closer?->name ?: '—' }}</td>
+                                <td class="py-2">{{ $invoice->closed_at?->format('Y-m-d H:i') }}</td>
+                                <td class="py-2">{{ number_format((float) $invoice->total_amount, 2) }}</td>
                             </tr>
                         @empty
                             <tr><td colspan="5" class="py-3 text-center text-slate-500">—</td></tr>

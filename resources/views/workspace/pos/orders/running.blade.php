@@ -2,6 +2,11 @@
 
 @section('content')
     <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        @if(session('payment_link'))
+            <div class="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                رابط الدفع: <a href="{{ session('payment_link') }}" target="_blank" class="font-bold underline">{{ session('payment_link') }}</a>
+            </div>
+        @endif
         <h2 class="mb-3 text-base font-bold text-slate-900">طلبات POS / QR الجارية</h2>
 
         <div class="space-y-3">
@@ -15,6 +20,7 @@
                                 @if($order->table)
                                     • {{ $order->table->name }}
                                 @endif
+                                • {{ $order->payment_status === 'paid' ? 'مدفوع' : 'غير مدفوع' }}
                             </p>
                         </div>
                         <p class="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{{ $posStatuses[$order->pos_status] ?? $order->pos_status }}</p>
@@ -22,7 +28,7 @@
 
                     <ul class="mt-2 space-y-1 text-xs text-slate-600">
                         @foreach($order->items as $item)
-                            <li>{{ $item->product_name }} × {{ $item->quantity }} = {{ number_format((float) $item->total_amount, 2) }}</li>
+                            <li>{{ $item->product_name }}{{ $item->variant_name ? ' - '.$item->variant_name : '' }} × {{ $item->quantity }} = {{ number_format((float) $item->total_amount, 2) }}</li>
                         @endforeach
                     </ul>
 
@@ -37,13 +43,18 @@
                             <button class="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white">تحديث الحالة</button>
                         </form>
 
-                        @if(!$order->finance_invoice_id)
+                        @if($order->payment_status !== 'paid')
+                            <form method="POST" action="{{ route('workspace.pos.orders.payment-link', $order) }}">
+                                @csrf
+                                <button class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">رابط دفع</button>
+                            </form>
+                        @endif
+
+                        @if(!$order->table_session_id && !$order->pos_cashier_invoice_id && $order->pos_status !== 'cancelled')
                             <form method="POST" action="{{ route('workspace.pos.orders.invoice', $order) }}">
                                 @csrf
-                                <button class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">إنشاء فاتورة</button>
+                                <button class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">إصدار فاتورة كاشير</button>
                             </form>
-                        @else
-                            <a href="{{ route('workspace.finance.invoices.show', $order->finance_invoice_id) }}" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">عرض الفاتورة</a>
                         @endif
 
                         <a href="{{ route('workspace.pos.orders.print', $order) }}" target="_blank" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">طباعة</a>

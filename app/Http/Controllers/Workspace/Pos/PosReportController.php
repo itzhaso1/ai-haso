@@ -4,12 +4,15 @@ namespace App\Http\Controllers\Workspace\Pos;
 
 use App\Models\AuditLog;
 use App\Models\DiningTable;
-use App\Models\Finance\FinanceInvoice;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\PosCashierInvoice;
+use App\Models\PosCashierInvoiceItem;
+use App\Models\PosItemCategory;
 use App\Models\PosMenuItem;
 use App\Models\TableSession;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
@@ -20,26 +23,23 @@ class PosReportController extends PosBaseController
         $this->authorizePos($request, 'reports.view');
         $date = $request->date('date')?->toDateString() ?? now()->toDateString();
 
-        $closedOrders = Order::query()
-            ->with(['table:id,name', 'financeInvoice'])
-            ->whereIn('source', ['pos', 'qr_menu'])
-            ->whereDate('placed_at', $date)
-            ->where('pos_status', 'completed')
-            ->whereNotNull('finance_invoice_id')
+        $cashierInvoices = PosCashierInvoice::query()
+            ->with(['table:id,name', 'closer:id,name', 'items'])
+            ->whereDate('closed_at', $date)
             ->latest('id')
             ->get();
 
-        $invoiceIds = $closedOrders->pluck('finance_invoice_id')->filter()->unique()->values();
-        $invoiceSalesTotal = $invoiceIds->isEmpty()
-            ? 0.0
-            : (float) FinanceInvoice::query()->whereIn('id', $invoiceIds)->sum('total');
+        $orders = Order::query()
+            ->with(['customer:id,name,phone', 'table:id,name', 'items'])
+            ->whereIn('source', ['pos', 'qr_menu'])
+            ->whereDate('placed_at', $date)
+            ->latest('id')
+            ->get();
 
+        $closedOrderIds = $orders->whereNotNull('pos_cashier_invoice_id')->pluck('id')->all();
         $lineBaseQuery = OrderItem::query()
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
-            ->where('orders.workspace_id', $this->currentWorkspace()->id)
-            ->whereIn('orders.source', ['pos', 'qr_menu'])
-            ->whereDate('orders.placed_at', $date)
-            ->where('orders.pos_status', 'completed');
+            ->whereIn('orders.id', $closedOrderIds === [] ? [0] : $closedOrderIds);
 
         $quantityByType = (clone $lineBaseQuery)
             ->selectRaw("COALESCE(order_items.item_type, 'عام') as item_type, SUM(order_items.quantity) as quantity, SUM(order_items.total_amount) as sales")
@@ -51,8 +51,11 @@ class PosReportController extends PosBaseController
             ->selectRaw('order_items.product_name, SUM(order_items.quantity) as quantity, SUM(order_items.total_amount) as sales')
             ->groupBy('order_items.product_name')
             ->orderByDesc('quantity')
-            ->limit(10)
+            ->limit(20)
             ->get();
+
+        $customerSummary = $this->buildCustomerSummary($orders);
+        $salesByHour = $this->buildSalesByHour($orders->whereNotNull('pos_cashier_invoice_id'));
 
         $recentOperations = AuditLog::query()
             ->with('user:id,name')
@@ -63,24 +66,81 @@ class PosReportController extends PosBaseController
                 DiningTable::class,
                 TableSession::class,
                 PosMenuItem::class,
-                FinanceInvoice::class,
+                PosItemCategory::class,
+                PosCashierInvoice::class,
+                PosCashierInvoiceItem::class,
             ])
             ->latest('occurred_at')
-            ->limit(20)
+            ->limit(30)
             ->get();
 
         return view('workspace.pos.reports.daily', [
             'date' => $date,
             'summary' => [
-                'invoice_sales_total' => $invoiceSalesTotal,
-                'invoices_count' => $invoiceIds->count(),
+                'invoice_sales_total' => (float) $cashierInvoices->sum('total_amount'),
+                'invoices_count' => $cashierInvoices->count(),
                 'total_quantity' => (int) $quantityByType->sum('quantity'),
+                'orders_count' => $orders->count(),
+                'paid_orders_count' => $orders->where('payment_status', 'paid')->count(),
+                'unpaid_orders_count' => $orders->where('payment_status', '!=', 'paid')->count(),
             ],
             'quantityByType' => $quantityByType,
             'topTypes' => $quantityByType->take(10),
             'topItems' => $topItems,
+            'salesByHour' => $salesByHour,
+            'customerSummary' => $customerSummary,
             'recentOperations' => $recentOperations,
-            'closedOrders' => $closedOrders,
+            'closedOrders' => $orders->whereNotNull('pos_cashier_invoice_id')->values(),
+            'cashierInvoices' => $cashierInvoices,
+            'allOrders' => $orders,
         ]);
+    }
+
+    /**
+     * @param  Collection<int,Order>  $orders
+     * @return Collection<int,array<string,mixed>>
+     */
+    private function buildCustomerSummary(Collection $orders): Collection
+    {
+        return $orders
+            ->filter(fn (Order $order): bool => $order->pos_cashier_invoice_id !== null)
+            ->groupBy(function (Order $order): string {
+                $name = $order->customer?->name
+                    ?: data_get($order->metadata, 'customer_name')
+                    ?: 'Walk-in';
+                $phone = $order->customer?->phone ?: data_get($order->metadata, 'customer_phone');
+
+                return trim($name.'|'.($phone ?: ''));
+            })
+            ->map(function (Collection $group, string $key): array {
+                [$name, $phone] = array_pad(explode('|', $key, 2), 2, '');
+
+                return [
+                    'customer_name' => $name !== '' ? $name : 'Walk-in',
+                    'customer_phone' => $phone !== '' ? $phone : '—',
+                    'orders_count' => $group->count(),
+                    'total_sales' => (float) $group->sum(fn (Order $order) => (float) $order->total_amount),
+                    'last_order_at' => $group->max('placed_at'),
+                ];
+            })
+            ->sortByDesc('total_sales')
+            ->values();
+    }
+
+    /**
+     * @param  Collection<int,Order>  $orders
+     * @return Collection<int,array<string,mixed>>
+     */
+    private function buildSalesByHour(Collection $orders): Collection
+    {
+        return $orders
+            ->groupBy(fn (Order $order): string => $order->placed_at?->format('H:00') ?: '00:00')
+            ->map(fn (Collection $group, string $hour): array => [
+                'hour' => $hour,
+                'orders_count' => $group->count(),
+                'sales_total' => (float) $group->sum(fn (Order $order) => (float) $order->total_amount),
+            ])
+            ->sortBy('hour')
+            ->values();
     }
 }

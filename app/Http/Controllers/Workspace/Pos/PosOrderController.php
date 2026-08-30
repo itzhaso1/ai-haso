@@ -24,7 +24,14 @@ class PosOrderController extends PosBaseController
         $orders = Order::query()
             ->with(['table:id,name', 'tableSession:id,dining_table_id,opened_at,status', 'items'])
             ->whereIn('source', ['pos', 'qr_menu'])
-            ->whereIn('pos_status', ['new', 'accepted', 'preparing', 'ready'])
+            ->where(function ($query): void {
+                $query->whereIn('pos_status', ['new', 'accepted', 'preparing', 'ready', 'delivered'])
+                    ->orWhere(function ($inner): void {
+                        $inner->whereNull('table_session_id')
+                            ->where('pos_status', 'completed');
+                    });
+            })
+            ->whereNull('pos_cashier_invoice_id')
             ->latest('id')
             ->paginate(20)
             ->withQueryString();
@@ -32,28 +39,6 @@ class PosOrderController extends PosBaseController
         return view('workspace.pos.orders.running', [
             'orders' => $orders,
             'posStatuses' => $this->posStatusLabels(),
-        ]);
-    }
-
-    public function invoices(Request $request): View
-    {
-        $this->authorizePos($request, 'invoices.view');
-
-        $date = $request->date('date')?->toDateString() ?? now()->toDateString();
-
-        $orders = Order::query()
-            ->with(['table:id,name', 'financeInvoice'])
-            ->whereIn('source', ['pos', 'qr_menu'])
-            ->where('pos_status', 'completed')
-            ->whereNotNull('finance_invoice_id')
-            ->whereDate('placed_at', $date)
-            ->latest('id')
-            ->paginate(20)
-            ->withQueryString();
-
-        return view('workspace.pos.invoices.index', [
-            'orders' => $orders,
-            'date' => $date,
         ]);
     }
 
@@ -72,21 +57,6 @@ class PosOrderController extends PosBaseController
         return back()->with('success', 'تم تحديث حالة الطلب.');
     }
 
-    public function createInvoice(Request $request, Order $order): RedirectResponse
-    {
-        $this->authorizePos($request, 'invoices.create');
-        $this->authorize('update', $order);
-        $this->ensurePosOrder($order);
-
-        try {
-            $invoice = $this->posOrderService->createInvoiceFromOrder($order->load(['workspace', 'items']), (int) $request->user()?->id);
-        } catch (RuntimeException $exception) {
-            return back()->with('error', $exception->getMessage());
-        }
-
-        return redirect()->route('workspace.finance.invoices.show', $invoice)->with('success', 'تم إنشاء فاتورة بنجاح.');
-    }
-
     public function updateItems(UpdateTableOrderRequest $request, Order $order): RedirectResponse
     {
         $this->authorizePos($request, 'orders.manage');
@@ -102,14 +72,44 @@ class PosOrderController extends PosBaseController
         return back()->with('success', 'تم تعديل الفاتورة داخل الجلسة.');
     }
 
-    public function printInvoice(Request $request, Order $order): View
+    public function createInvoice(Request $request, Order $order): RedirectResponse
+    {
+        $this->authorizePos($request, 'orders.manage');
+        $this->authorize('update', $order);
+        $this->ensurePosOrder($order);
+
+        try {
+            $invoice = $this->posOrderService->createInvoiceFromOrder($order, (int) $request->user()?->id);
+        } catch (RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return redirect()->route('workspace.pos.invoices.show', $invoice)->with('success', 'تم إنشاء فاتورة كاشير بنجاح.');
+    }
+
+    public function createPaymentLink(Request $request, Order $order): RedirectResponse
+    {
+        $this->authorizePos($request, 'orders.manage');
+        $this->authorize('update', $order);
+        $this->ensurePosOrder($order);
+
+        try {
+            $payment = $this->posOrderService->createPaymentLinkForOrder($order);
+        } catch (RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return back()->with('success', 'تم إنشاء رابط الدفع.')->with('payment_link', $payment->payment_link);
+    }
+
+    public function printOrder(Request $request, Order $order): View
     {
         $this->authorizePos($request, 'orders.manage');
         $this->authorize('view', $order);
         $this->ensurePosOrder($order);
 
-        return view('workspace.pos.orders.print', [
-            'order' => $order->load(['items', 'table', 'tableSession', 'customer', 'financeInvoice']),
+        return view('workspace.pos.orders.print-order', [
+            'order' => $order->load(['items', 'table', 'tableSession', 'customer']),
         ]);
     }
 
@@ -124,12 +124,13 @@ class PosOrderController extends PosBaseController
     private function posStatusLabels(): array
     {
         return [
-            'new' => 'NEW',
-            'accepted' => 'ACCEPTED',
-            'preparing' => 'PREPARING',
-            'ready' => 'READY',
-            'completed' => 'COMPLETED',
-            'cancelled' => 'CANCELLED',
+            'new' => 'جديد',
+            'accepted' => 'مقبول',
+            'preparing' => 'قيد التحضير',
+            'ready' => 'جاهز',
+            'delivered' => 'تم التسليم',
+            'completed' => 'مكتمل',
+            'cancelled' => 'ملغي',
         ];
     }
 }

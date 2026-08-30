@@ -3,8 +3,11 @@
 namespace App\Http\Controllers\Workspace\Pos;
 
 use App\Http\Requests\Pos\StoreDiningTableRequest;
+use App\Http\Requests\Pos\StoreTableSessionOrderRequest;
 use App\Http\Requests\Pos\UpdateDiningTableRequest;
 use App\Models\DiningTable;
+use App\Models\Order;
+use App\Models\PosMenuItem;
 use App\Models\TableSession;
 use App\Services\Pos\PosOrderService;
 use Illuminate\Http\RedirectResponse;
@@ -30,7 +33,7 @@ class TableController extends PosBaseController
                 'orders as orders_count' => fn ($query) => $query->whereIn('source', ['pos', 'qr_menu']),
                 'orders as open_orders_count' => fn ($query) => $query
                     ->whereIn('source', ['pos', 'qr_menu'])
-                    ->whereIn('pos_status', ['new', 'accepted', 'preparing', 'ready']),
+                    ->whereIn('pos_status', ['new', 'accepted', 'preparing', 'ready', 'delivered']),
             ])
             ->orderBy('name')
             ->paginate(30);
@@ -46,20 +49,32 @@ class TableController extends PosBaseController
         $this->authorizePos($request, 'tables.manage');
         $this->authorize('view', $table);
 
-        $table->load([
-            'sessions' => fn ($query) => $query->latest('id')->limit(20),
-            'orders' => fn ($query) => $query
-                ->whereIn('source', ['pos', 'qr_menu'])
-                ->with(['items', 'financeInvoice'])
-                ->latest('id')
-                ->limit(50),
-        ]);
+        $table->load(['sessions' => fn ($query) => $query->latest('id')->limit(20)]);
 
         $currentSession = $table->sessions->firstWhere('status', 'open');
+        $sessionOrders = collect();
+        if ($currentSession) {
+            $sessionOrders = Order::query()
+                ->where('dining_table_id', $table->id)
+                ->where('table_session_id', $currentSession->id)
+                ->whereIn('source', ['pos', 'qr_menu'])
+                ->with(['items', 'posCashierInvoice'])
+                ->latest('id')
+                ->get();
+        }
+
+        $menuItems = PosMenuItem::query()
+            ->with('category:id,name')
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get(['id', 'pos_item_category_id', 'name', 'item_type', 'size_label', 'price', 'currency', 'image_path']);
 
         return view('workspace.pos.tables.show', [
             'table' => $table,
             'currentSession' => $currentSession,
+            'sessionOrders' => $sessionOrders,
+            'menuItems' => $menuItems,
             'posStatuses' => $this->posStatusLabels(),
         ]);
     }
@@ -133,12 +148,32 @@ class TableController extends PosBaseController
         abort_unless((int) $session->dining_table_id === (int) $table->id, 404);
 
         try {
-            $this->posOrderService->closeSession($session);
+            $invoice = $this->posOrderService->closeSession($session, (int) $request->user()?->id);
         } catch (RuntimeException $exception) {
             return back()->with('error', $exception->getMessage());
         }
 
+        if ($invoice) {
+            return redirect()->route('workspace.pos.invoices.show', $invoice)->with('success', 'تم إغلاق الجلسة وإصدار فاتورة كاشير نهائية.');
+        }
+
         return back()->with('success', 'تم إغلاق الجلسة.');
+    }
+
+    public function addOrder(StoreTableSessionOrderRequest $request, DiningTable $table): RedirectResponse
+    {
+        $this->authorizePos($request, 'orders.manage');
+        $this->authorize('view', $table);
+
+        try {
+            $payload = $request->validated();
+            $payload['dining_table_id'] = $table->id;
+            $this->posOrderService->createPosOrder($this->currentWorkspace(), $payload, $request->user());
+        } catch (RuntimeException $exception) {
+            return back()->withInput()->with('error', $exception->getMessage());
+        }
+
+        return back()->with('success', 'تمت إضافة الطلب للطاولة بنجاح.');
     }
 
     public function regenerateQr(Request $request, DiningTable $table): RedirectResponse
@@ -163,6 +198,7 @@ class TableController extends PosBaseController
             'accepted' => 'تم القبول',
             'preparing' => 'قيد التحضير',
             'ready' => 'جاهز',
+            'delivered' => 'تم التسليم',
             'completed' => 'مكتمل',
             'cancelled' => 'ملغي',
         ];

@@ -3,21 +3,19 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>فاتورة {{ $order->order_number }}</title>
+    <title>طلب {{ $order->order_number }}</title>
     @vite(['resources/css/app.css'])
 </head>
 <body class="bg-white p-6 text-slate-900">
     <main class="mx-auto max-w-xl">
         <header class="mb-4 border-b pb-3">
             <h1 class="text-lg font-extrabold">{{ $order->workspace?->name }}</h1>
-            <p class="text-sm">فاتورة طلب: {{ $order->order_number }}</p>
-            @if($order->financeInvoice)
-                <p class="text-xs text-slate-500">Invoice: {{ $order->financeInvoice->invoice_number }}</p>
-            @endif
+            <p class="text-sm">طلب كاشير: {{ $order->order_number }}</p>
             @if($order->table)
                 <p class="text-xs text-slate-500">الطاولة: {{ $order->table->name }}</p>
             @endif
             <p class="text-xs text-slate-500">الوقت: {{ $order->placed_at?->format('Y-m-d H:i') }}</p>
+            <p class="text-xs text-slate-500">حالة الدفع: {{ $order->payment_status === 'paid' ? 'مدفوع' : 'غير مدفوع' }}</p>
         </header>
 
         <table class="w-full text-sm">
@@ -32,7 +30,7 @@
             <tbody>
                 @foreach($order->items as $item)
                     <tr class="border-b border-slate-100">
-                        <td class="py-2">{{ $item->product_name }}</td>
+                        <td class="py-2">{{ $item->product_name }}{{ $item->variant_name ? ' - '.$item->variant_name : '' }}</td>
                         <td class="py-2">{{ $item->quantity }}</td>
                         <td class="py-2">{{ number_format((float) $item->unit_price, 2) }}</td>
                         <td class="py-2">{{ number_format((float) $item->total_amount, 2) }}</td>
