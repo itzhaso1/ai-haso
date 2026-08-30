@@ -145,6 +145,50 @@ class PosModuleTest extends TestCase
         ]);
     }
 
+    public function test_cashier_can_create_single_order_with_mixed_item_currencies(): void
+    {
+        $this->seed(FoundationSeeder::class);
+        [$owner, $workspace] = $this->createWorkspaceOwner('store');
+
+        $usdItem = PosMenuItem::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Espresso',
+            'item_type' => 'مشروبات',
+            'price' => 3.00,
+            'currency' => 'USD',
+            'is_active' => true,
+        ]);
+
+        $eurItem = PosMenuItem::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Cookie',
+            'item_type' => 'حلويات',
+            'price' => 2.50,
+            'currency' => 'EUR',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.pos.orders.store'), [
+                'items' => [
+                    ['pos_menu_item_id' => $usdItem->id, 'quantity' => 1],
+                    ['pos_menu_item_id' => $eurItem->id, 'quantity' => 2],
+                ],
+            ])
+            ->assertRedirect();
+
+        $order = Order::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('source', 'pos')
+            ->latest('id')
+            ->firstOrFail();
+
+        $this->assertSame('MIX', $order->currency);
+        $this->assertSame(8.0, (float) $order->subtotal);
+        $this->assertSame(8.0, (float) $order->total_amount);
+    }
+
     public function test_workspace_isolation_blocks_cross_workspace_pos_access(): void
     {
         [$ownerA, $workspaceA] = $this->createWorkspaceOwner('store');

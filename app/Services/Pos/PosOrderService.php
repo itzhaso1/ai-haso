@@ -52,7 +52,7 @@ class PosOrderService
                     'created_by_user_id' => $actor?->id,
                     'created_by_name' => $actor?->name,
                 ],
-                currency: (string) ($items->first()['currency'] ?? ($payload['currency'] ?? 'USD')),
+                currency: $this->resolveOrderCurrency($items),
             );
 
             event(new \App\Events\OrderCreated($order));
@@ -89,7 +89,7 @@ class PosOrderService
                     'customer_name' => $payload['customer_name'] ?? null,
                     'customer_phone' => $payload['customer_phone'] ?? null,
                 ],
-                currency: (string) ($items->first()['currency'] ?? 'USD'),
+                currency: $this->resolveOrderCurrency($items),
             );
 
             event(new \App\Events\OrderCreated($order));
@@ -340,7 +340,6 @@ class PosOrderService
         bool $requireActive
     ): Collection {
         $normalized = collect();
-        $orderCurrency = null;
 
         foreach ($items as $item) {
             $menuItem = PosMenuItem::withoutGlobalScopes()
@@ -358,11 +357,6 @@ class PosOrderService
             }
 
             $itemCurrency = (string) ($menuItem->currency ?: 'USD');
-            if ($orderCurrency !== null && $orderCurrency !== $itemCurrency) {
-                throw new RuntimeException('لا يمكن دمج أصناف بعملات مختلفة في نفس الطلب.');
-            }
-            $orderCurrency ??= $itemCurrency;
-
             $quantity = max(1, (int) ($item['quantity'] ?? 1));
             $unitPrice = (float) $menuItem->price;
             $lineTotal = round($quantity * $unitPrice, 2);
@@ -500,7 +494,7 @@ class PosOrderService
         }
 
         $workspaceId = (int) $orders->first()->workspace_id;
-        $currency = (string) ($orders->first()->currency ?: 'USD');
+        $currency = $this->resolveCurrencyFromOrders($orders);
         $subtotal = round((float) $orders->sum(fn (Order $order) => (float) $order->subtotal), 2);
         $discount = round((float) $orders->sum(fn (Order $order) => (float) $order->discount_amount), 2);
         $total = round((float) $orders->sum(fn (Order $order) => (float) $order->total_amount), 2);
@@ -606,5 +600,43 @@ class PosOrderService
         ]);
 
         return $customer->id;
+    }
+
+    /**
+     * @param Collection<int,array<string,mixed>> $items
+     */
+    private function resolveOrderCurrency(Collection $items): string
+    {
+        $currencies = $items
+            ->pluck('currency')
+            ->filter(fn ($currency) => is_string($currency) && $currency !== '')
+            ->map(fn ($currency) => strtoupper((string) $currency))
+            ->unique()
+            ->values();
+
+        if ($currencies->count() === 0) {
+            return 'USD';
+        }
+
+        return $currencies->count() === 1 ? (string) $currencies->first() : 'MIX';
+    }
+
+    /**
+     * @param Collection<int,Order> $orders
+     */
+    private function resolveCurrencyFromOrders(Collection $orders): string
+    {
+        $currencies = $orders
+            ->pluck('currency')
+            ->filter(fn ($currency) => is_string($currency) && $currency !== '')
+            ->map(fn ($currency) => strtoupper((string) $currency))
+            ->unique()
+            ->values();
+
+        if ($currencies->count() === 0) {
+            return 'USD';
+        }
+
+        return $currencies->count() === 1 ? (string) $currencies->first() : 'MIX';
     }
 }

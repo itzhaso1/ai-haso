@@ -5,13 +5,15 @@ namespace App\Http\Controllers\Workspace\Pos;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Pos\StorePublicMenuOrderRequest;
 use App\Models\DiningTable;
+use App\Models\Order;
+use App\Models\Payment;
 use App\Models\PosMenuItem;
 use App\Models\Workspace;
 use App\Services\Pos\PosMenuAiService;
 use App\Services\Pos\PosOrderService;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 use RuntimeException;
 
@@ -55,20 +57,20 @@ class CustomerMenuController extends Controller
             return back()->withInput()->with('error', $exception->getMessage());
         }
 
-        if ((bool) ($validated['pay_now'] ?? false)) {
-            try {
-                $payment = $this->posOrderService->createPaymentLinkForOrder($order);
-            } catch (RuntimeException $exception) {
-                return back()->with('success', 'تم إرسال الطلب. رقم الطلب: '.$order->order_number)
-                    ->with('error', $exception->getMessage());
-            }
+        try {
+            $payment = $this->prepareMenuCheckout($order, $validated);
+        } catch (RuntimeException $exception) {
+            return back()->with('success', 'تم إرسال طلبك بنجاح. رقم الطلب: '.$order->order_number)
+                ->with('error', $exception->getMessage());
+        }
 
+        if ($payment) {
             return back()
-                ->with('success', 'تم إرسال طلبك بنجاح. رقم الطلب: '.$order->order_number)
+                ->with('success', 'تم إرسال طلبك بنجاح. رقم الطلب: '.$order->order_number.' (طريقة الدفع: الدفع الآن)')
                 ->with('payment_link', $payment->payment_link);
         }
 
-        return back()->with('success', 'تم إرسال طلبك بنجاح. رقم الطلب: '.$order->order_number);
+        return back()->with('success', 'تم إرسال طلبك بنجاح. رقم الطلب: '.$order->order_number.' (طريقة الدفع: الدفع عند الخروج)');
     }
 
     public function placeTableOrder(StorePublicMenuOrderRequest $request, Workspace $workspace, string $token): RedirectResponse
@@ -85,20 +87,20 @@ class CustomerMenuController extends Controller
             return back()->withInput()->with('error', $exception->getMessage());
         }
 
-        if ((bool) ($validated['pay_now'] ?? false)) {
-            try {
-                $payment = $this->posOrderService->createPaymentLinkForOrder($order);
-            } catch (RuntimeException $exception) {
-                return back()->with('success', 'تم إرسال الطلب. رقم الطلب: '.$order->order_number)
-                    ->with('error', $exception->getMessage());
-            }
+        try {
+            $payment = $this->prepareMenuCheckout($order, $validated);
+        } catch (RuntimeException $exception) {
+            return back()->with('success', 'تم إرسال طلب الطاولة بنجاح. رقم الطلب: '.$order->order_number)
+                ->with('error', $exception->getMessage());
+        }
 
+        if ($payment) {
             return back()
-                ->with('success', 'تم إرسال طلب الطاولة بنجاح. رقم الطلب: '.$order->order_number)
+                ->with('success', 'تم إرسال طلب الطاولة بنجاح. رقم الطلب: '.$order->order_number.' (طريقة الدفع: الدفع الآن)')
                 ->with('payment_link', $payment->payment_link);
         }
 
-        return back()->with('success', 'تم إرسال طلب الطاولة بنجاح. رقم الطلب: '.$order->order_number);
+        return back()->with('success', 'تم إرسال طلب الطاولة بنجاح. رقم الطلب: '.$order->order_number.' (طريقة الدفع: الدفع عند الخروج)');
     }
 
     public function askAi(Request $request, Workspace $workspace): JsonResponse
@@ -143,5 +145,22 @@ class CustomerMenuController extends Controller
                 'description',
                 'image_path',
             ]);
+    }
+
+    /**
+     * @param array<string,mixed> $validated
+     */
+    private function prepareMenuCheckout(Order $order, array $validated): ?Payment
+    {
+        $paymentMethod = (string) ($validated['payment_method'] ?? ((bool) ($validated['pay_now'] ?? false) ? 'pay_now' : 'pay_later'));
+        if ($paymentMethod !== 'pay_now') {
+            return null;
+        }
+
+        try {
+            return $this->posOrderService->createPaymentLinkForOrder($order);
+        } catch (RuntimeException $exception) {
+            throw new RuntimeException('تم إرسال الطلب لكن تعذر تجهيز الدفع الآن: '.$exception->getMessage(), 0, $exception);
+        }
     }
 }

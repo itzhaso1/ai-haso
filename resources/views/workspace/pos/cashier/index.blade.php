@@ -14,13 +14,9 @@
                     <h2 class="text-base font-bold text-slate-900">أصناف الكاشير</h2>
                     <p class="text-xs text-slate-500">مصدر مستقل عن Products / Inventory الخارجية.</p>
                 </div>
-                <div class="flex items-center gap-2">
-                    <a href="{{ route('workspace.pos.tables.index') }}" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">الطاولات</a>
-                    <a href="{{ route('workspace.pos.items.index') }}" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">إدارة الأصناف</a>
-                </div>
                 <div class="flex gap-2">
                     <input x-model="search" type="search" placeholder="ابحث عن صنف..." class="rounded-lg border-slate-300 text-sm" />
-                    <select x-model.number="selectedCategoryId" class="rounded-lg border-slate-300 text-sm">
+                    <select x-model="selectedCategoryId" class="rounded-lg border-slate-300 text-sm">
                         <option value="">كل التصنيفات</option>
                         <template x-for="category in categories" :key="category.id">
                             <option :value="category.id" x-text="category.name"></option>
@@ -31,7 +27,7 @@
 
             <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <template x-for="item in filteredItems" :key="item.id">
-                    <article class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <button type="button" @click="addItem(item)" class="rounded-xl border border-slate-200 bg-slate-50 p-3 text-right transition hover:border-slate-300 hover:bg-slate-100">
                         <template x-if="item.image_path">
                             <img :src="`/storage/${item.image_path}`" alt="" class="mb-2 h-28 w-full rounded-lg object-cover" />
                         </template>
@@ -42,10 +38,8 @@
                             <span x-text="money(item.price)"></span>
                             <span x-text="item.currency"></span>
                         </p>
-                        <button type="button" @click="addItem(item)" class="mt-3 w-full rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white">
-                            إضافة للطلب
-                        </button>
-                    </article>
+                        <p class="mt-2 text-[11px] font-semibold text-emerald-700">اضغط لإضافة الصنف مباشرة</p>
+                    </button>
                 </template>
             </div>
         </section>
@@ -82,11 +76,10 @@
                             <label class="mb-1 block text-xs font-semibold text-slate-600">ملاحظات</label>
                             <textarea name="notes" rows="2" class="w-full rounded-lg border-slate-300 text-sm"></textarea>
                         </div>
-                        <input type="hidden" name="currency" value="USD" />
                     </div>
 
                     <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <h3 class="text-xs font-bold text-slate-700">السلة</h3>
+                        <h3 class="text-xs font-bold text-slate-700">ملخص الطلب</h3>
                         <template x-if="cart.length === 0">
                             <p class="mt-2 text-xs text-slate-500">السلة فارغة.</p>
                         </template>
@@ -103,15 +96,23 @@
                                             <span x-text="line.quantity"></span>
                                             <button type="button" @click="increase(index)" class="rounded border border-slate-300 px-2">+</button>
                                         </div>
-                                        <p class="font-semibold" x-text="money(line.quantity * line.unit_price)"></p>
+                                        <p class="font-semibold">
+                                            <span x-text="money(line.quantity * line.unit_price)"></span>
+                                            <span x-text="line.currency"></span>
+                                        </p>
                                     </div>
                                 </div>
                             </template>
                         </div>
                         <div class="mt-3 border-t border-slate-200 pt-2 text-xs text-slate-700">
+                            <p>عدد الأصناف: <span class="font-semibold" x-text="cart.length"></span></p>
                             <p>Subtotal: <span class="font-semibold" x-text="money(subtotal)"></span></p>
                             <p>Discount: <span class="font-semibold" x-text="money(discount || 0)"></span></p>
-                            <p class="mt-1 text-sm font-bold">Total: <span x-text="money(total)"></span></p>
+                            <p class="mt-1 text-sm font-bold">
+                                إجمالي المبلغ المطلوب دفعه:
+                                <span x-text="money(total)"></span>
+                                <span x-text="orderCurrencyLabel"></span>
+                            </p>
                         </div>
                     </div>
 
@@ -137,7 +138,7 @@
                 discount: 0,
                 get filteredItems() {
                     return this.items.filter((item) => {
-                        const matchesCategory = !this.selectedCategoryId || item.pos_item_category_id === this.selectedCategoryId;
+                        const matchesCategory = !this.selectedCategoryId || Number(item.pos_item_category_id) === Number(this.selectedCategoryId);
                         const term = this.search.trim().toLowerCase();
                         const matchesSearch = term === ''
                             || (item.name || '').toLowerCase().includes(term)
@@ -156,6 +157,7 @@
                         pos_menu_item_id: item.id,
                         name: item.name,
                         unit_price: Number(item.price || 0),
+                        currency: item.currency || '---',
                         quantity: 1,
                     });
                 },
@@ -177,6 +179,18 @@
                 },
                 get total() {
                     return Math.max(0, this.subtotal - Number(this.discount || 0));
+                },
+                get orderCurrencyLabel() {
+                    const currencies = [...new Set(this.cart.map((line) => line.currency).filter(Boolean))];
+                    if (currencies.length === 0) {
+                        return '';
+                    }
+
+                    if (currencies.length === 1) {
+                        return currencies[0];
+                    }
+
+                    return 'MIX';
                 },
                 money(amount) {
                     return Number(amount || 0).toFixed(2);
