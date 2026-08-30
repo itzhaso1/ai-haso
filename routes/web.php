@@ -48,6 +48,7 @@ use App\Http\Controllers\Workspace\Pos\PosMenuItemController as PosMenuItemContr
 use App\Http\Controllers\Workspace\Pos\PosMenuPageController as PosMenuPageController;
 use App\Http\Controllers\Workspace\Pos\PosOrderController as PosOrderController;
 use App\Http\Controllers\Workspace\Pos\PosReportController as PosReportController;
+use App\Http\Controllers\Workspace\Pos\PosSettingsController as PosSettingsController;
 use App\Http\Controllers\Workspace\Pos\TableController as PosTableController;
 use App\Http\Controllers\Workspace\ProductController;
 use App\Http\Controllers\Workspace\SubscriptionController;
@@ -346,6 +347,7 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::post('tables/{table}/orders', [PosTableController::class, 'addOrder'])->name('tables.orders.store');
             Route::post('tables/{table}/sessions/{session}/close', [PosTableController::class, 'closeSession'])->name('tables.sessions.close');
             Route::post('tables/{table}/sessions/{session}/cancel', [PosTableController::class, 'cancelSession'])->name('tables.sessions.cancel');
+            Route::post('tables/{table}/sessions/{session}/discount', [PosTableController::class, 'applyDiscount'])->name('tables.sessions.discount');
             Route::post('tables/{table}/qr/regenerate', [PosTableController::class, 'regenerateQr'])->name('tables.qr.regenerate');
 
             Route::get('items', [PosMenuItemController::class, 'index'])->name('items.index');
@@ -355,6 +357,7 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::post('categories', [PosItemCategoryController::class, 'store'])->name('categories.store');
             Route::put('categories/{category}', [PosItemCategoryController::class, 'update'])->name('categories.update');
             Route::delete('categories/{category}', [PosItemCategoryController::class, 'destroy'])->name('categories.destroy');
+            Route::post('settings/menu-slider', [PosSettingsController::class, 'updateMenuSlider'])->name('settings.menu-slider');
         });
 
         Route::get('employees', [EmployeeInvitationController::class, 'index'])->name('employees.index');

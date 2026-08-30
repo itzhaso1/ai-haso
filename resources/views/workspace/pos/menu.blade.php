@@ -7,11 +7,13 @@
     <title>{{ $workspace->name }} - Menu</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="min-h-screen bg-slate-50 text-slate-900">
+<body class="min-h-screen bg-slate-100 text-slate-900">
     @php
         $groups = $items->groupBy(fn ($item) => $item->category?->name ?: ($item->item_type ?: 'عام'));
         $categoryKeys = $groups->keys()->values()->all();
         $defaultCategory = (string) ($categoryKeys[0] ?? '');
+        $sliderImages = collect($sliderImages ?? [])->filter()->values();
+        $sliderUrls = $sliderImages->map(fn ($path) => asset('storage/'.$path))->values();
         $orderRoute = $table
             ? route('menu.table.order', ['workspace' => $workspace->slug, 'token' => $table->qr_token])
             : route('menu.general.order', ['workspace' => $workspace->slug]);
@@ -21,8 +23,13 @@
     @endphp
 
     <main
-        class="mx-auto max-w-5xl px-3 py-5 sm:px-4"
-        x-data="customerMenu({ items: @js($items), aiRoute: @js($aiRoute), defaultCategory: @js($defaultCategory) })"
+        class="mx-auto max-w-6xl px-3 py-5 sm:px-4"
+        x-data="customerMenu({
+            items: @js($items),
+            aiRoute: @js($aiRoute),
+            defaultCategory: @js($defaultCategory),
+            sliderImages: @js($sliderUrls)
+        })"
     >
         @include('partials.flash')
 
@@ -40,8 +47,39 @@
             @else
                 <p class="mt-1 text-sm text-slate-500">General Menu</p>
             @endif
-            <p class="mt-2 text-xs text-slate-500">اختر القسم، أضف الأصناف إلى السلة، ثم أكمل طريقة الدفع المناسبة.</p>
+            <p class="mt-2 text-xs text-slate-500">منيو سريع وواضح: اختر القسم، أضف للسلة، ثم أكمل الدفع.</p>
         </section>
+
+        @if($sliderUrls->isNotEmpty())
+            <section class="relative mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-xl">
+                <div class="relative h-44 sm:h-56 md:h-64">
+                    <template x-for="(image, index) in sliderImages" :key="`slide-${index}`">
+                        <img
+                            :src="image"
+                            alt="Menu Banner"
+                            class="absolute inset-0 h-full w-full object-cover transition-opacity duration-500"
+                            :class="currentSlide === index ? 'opacity-100' : 'opacity-0'"
+                        />
+                    </template>
+                    <div class="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-900/30 to-transparent"></div>
+                    <div class="absolute bottom-4 right-4 left-4 flex items-end justify-between">
+                        <p class="text-sm font-bold text-white sm:text-base">تجربة منيو فخمة وسريعة</p>
+                        <div class="flex items-center gap-1.5">
+                            <template x-for="(image, index) in sliderImages" :key="`dot-${index}`">
+                                <button
+                                    type="button"
+                                    @click="currentSlide = index"
+                                    class="h-2 w-2 rounded-full transition"
+                                    :class="currentSlide === index ? 'bg-white' : 'bg-white/40'"
+                                ></button>
+                            </template>
+                        </div>
+                    </div>
+                    <button type="button" @click="prevSlide" class="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/20 px-2 py-1 text-xs font-bold text-white hover:bg-white/35">‹</button>
+                    <button type="button" @click="nextSlide" class="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/20 px-2 py-1 text-xs font-bold text-white hover:bg-white/35">›</button>
+                </div>
+            </section>
+        @endif
 
         <section class="mt-4 rounded-2xl border border-indigo-200 bg-indigo-50 p-3">
             <h2 class="text-sm font-bold text-indigo-900">مساعد المنيو (AI)</h2>
@@ -59,7 +97,7 @@
                     <button
                         type="button"
                         @click="selectedCategory = @js($typeName)"
-                        class="whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-semibold transition"
+                        class="whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition"
                         :class="selectedCategory === @js($typeName) ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'"
                     >
                         {{ $typeName }} ({{ $groupItems->count() }})
@@ -76,8 +114,8 @@
                                 @php($imagePath = $item->image_path ? asset('storage/'.$item->image_path) : null)
                                 <button
                                     type="button"
-                                    @click='addItem({ id: {{ $item->id }}, name: @js($item->name), size: @js($item->size_label), price: {{ (float) $item->price }}, currency: @js($item->currency) })'
-                                    class="rounded-xl border border-slate-200 bg-slate-50 p-3 text-right transition hover:border-slate-300 hover:bg-slate-100"
+                                    @click="addItemById({{ $item->id }})"
+                                    class="rounded-xl border border-slate-200 bg-slate-50 p-3 text-right transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:shadow-md"
                                 >
                                     @if($imagePath)
                                         <img src="{{ $imagePath }}" alt="{{ $item->name }}" class="mb-2 h-32 w-full rounded-lg object-cover" />
@@ -86,9 +124,9 @@
                                     @if($item->size_label)
                                         <p class="mt-1 text-xs text-slate-500">{{ $item->size_label }}</p>
                                     @endif
-                                    <p class="mt-1 text-xs text-slate-500">{{ $item->description ?: 'بدون وصف' }}</p>
+                                    <p class="mt-1 line-clamp-2 text-xs text-slate-500">{{ $item->description ?: 'بدون وصف' }}</p>
                                     <p class="mt-2 text-sm font-bold text-slate-900">{{ number_format((float) $item->price, 2) }} {{ $item->currency }}</p>
-                                    <p class="mt-1 text-[11px] font-semibold text-emerald-700">إضافة إلى السلة</p>
+                                    <p class="mt-1 text-[11px] font-semibold text-emerald-700">اضغط للإضافة إلى السلة</p>
                                 </button>
                             @endforeach
                         </div>
@@ -102,13 +140,17 @@
         </section>
 
         <section class="sticky bottom-2 mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-lg">
-            <h2 class="text-sm font-bold text-slate-900">السلة</h2>
+            <div class="flex items-center justify-between">
+                <h2 class="text-sm font-bold text-slate-900">السلة</h2>
+                <span class="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700" x-text="`عدد العناصر: ${cart.length}`"></span>
+            </div>
+
             <template x-if="cart.length === 0">
                 <p class="mt-2 text-xs text-slate-500">السلة فارغة.</p>
             </template>
 
             <div class="mt-2 max-h-52 space-y-2 overflow-y-auto">
-                <template x-for="(line, index) in cart" :key="`${line.pos_menu_item_id}-${line.size || ''}`">
+                <template x-for="(line, index) in cart" :key="line.key">
                     <div class="rounded-lg bg-slate-50 p-2 text-xs">
                         <div class="flex items-center justify-between gap-2">
                             <p class="font-semibold text-slate-800" x-text="line.name"></p>
@@ -131,8 +173,8 @@
             </div>
 
             <div class="mt-3 border-t border-slate-200 pt-2 text-xs">
-                <p>عدد الأصناف: <span class="font-bold" x-text="cart.length"></span></p>
-                <p class="mt-1">الإجمالي: <span class="font-bold" x-text="money(total)"></span> <span x-text="currencyLabel"></span></p>
+                <p>الإجمالي: <span class="font-bold" x-text="money(total)"></span> <span x-text="currencyLabel"></span></p>
+                <p class="mt-1 font-semibold text-slate-700">المبلغ المطلوب: <span x-text="money(total)"></span> <span x-text="currencyLabel"></span></p>
             </div>
 
             <form method="POST" action="{{ $orderRoute }}" @submit="prepareSubmit" class="mt-3 space-y-2">
@@ -161,22 +203,50 @@
     </main>
 
     <script>
-        function customerMenu({ items, aiRoute, defaultCategory }) {
+        function customerMenu({ items, aiRoute, defaultCategory, sliderImages }) {
             return {
                 items,
                 aiRoute,
+                sliderImages: sliderImages || [],
+                currentSlide: 0,
+                slideTimer: null,
                 selectedCategory: defaultCategory || '',
                 aiQuestion: '',
                 aiAnswer: '',
                 cart: [],
+                itemsById: {},
+                init() {
+                    this.itemsById = this.items.reduce((acc, item) => {
+                        acc[String(item.id)] = item;
+                        return acc;
+                    }, {});
+
+                    if (this.sliderImages.length > 1) {
+                        this.slideTimer = setInterval(() => this.nextSlide(), 4500);
+                    }
+                },
+                addItemById(itemId) {
+                    const item = this.itemsById[String(itemId)];
+                    if (!item) return;
+
+                    this.addItem({
+                        id: item.id,
+                        name: item.name,
+                        size: item.size_label,
+                        price: Number(item.price || 0),
+                        currency: item.currency || '',
+                    });
+                },
                 addItem(item) {
-                    const existing = this.cart.find((line) => line.pos_menu_item_id === item.id && line.size === item.size);
+                    const lineKey = `${item.id}:${item.size || ''}:${item.currency || ''}`;
+                    const existing = this.cart.find((line) => line.key === lineKey);
                     if (existing) {
                         existing.quantity += 1;
                         return;
                     }
 
                     this.cart.push({
+                        key: lineKey,
                         pos_menu_item_id: item.id,
                         name: item.name,
                         size: item.size,
@@ -206,6 +276,14 @@
                     if (currencies.length === 0) return '';
                     if (currencies.length === 1) return currencies[0];
                     return 'MIX';
+                },
+                nextSlide() {
+                    if (this.sliderImages.length <= 1) return;
+                    this.currentSlide = (this.currentSlide + 1) % this.sliderImages.length;
+                },
+                prevSlide() {
+                    if (this.sliderImages.length <= 1) return;
+                    this.currentSlide = (this.currentSlide - 1 + this.sliderImages.length) % this.sliderImages.length;
                 },
                 money(amount) {
                     return Number(amount || 0).toFixed(2);

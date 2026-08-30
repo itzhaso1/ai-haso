@@ -15,6 +15,7 @@ class PosMenuItemController extends PosBaseController
     public function index(Request $request): View
     {
         $this->authorizePos($request, 'menu.manage');
+        $workspace = $this->currentWorkspace();
 
         $items = PosMenuItem::query()
             ->with('category:id,name')
@@ -38,10 +39,15 @@ class PosMenuItemController extends PosBaseController
             ->filter()
             ->values();
 
+        $menuSliderImages = collect(data_get((array) ($workspace->settings ?? []), 'pos.menu_slider_images', []))
+            ->filter(fn ($path): bool => is_string($path) && $path !== '')
+            ->values();
+
         return view('workspace.pos.items.index', [
             'items' => $items,
             'types' => $types,
             'categories' => PosItemCategory::query()->orderBy('sort_order')->orderBy('name')->get(['id', 'name', 'is_active', 'sort_order']),
+            'menuSliderImages' => $menuSliderImages,
         ]);
     }
 

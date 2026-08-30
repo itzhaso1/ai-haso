@@ -290,6 +290,52 @@ class PosOrderService
         });
     }
 
+    public function applySessionDiscount(TableSession $session, float $discountAmount): void
+    {
+        if ($session->status !== 'open') {
+            throw new RuntimeException('يمكن تطبيق الخصم على الجلسات المفتوحة فقط.');
+        }
+
+        DB::transaction(function () use ($session, $discountAmount): void {
+            $orders = Order::query()
+                ->where('table_session_id', $session->id)
+                ->whereIn('source', ['pos', 'qr_menu'])
+                ->where('pos_status', '!=', 'cancelled')
+                ->whereNull('pos_cashier_invoice_id')
+                ->orderBy('id')
+                ->get();
+
+            if ($orders->isEmpty()) {
+                return;
+            }
+
+            foreach ($orders as $order) {
+                $subtotal = round((float) $order->items()->sum('total_amount'), 2);
+                $order->update([
+                    'subtotal' => $subtotal,
+                    'discount_amount' => 0,
+                    'total_amount' => $subtotal,
+                ]);
+            }
+
+            $remainingDiscount = max(0, round($discountAmount, 2));
+            foreach ($orders as $order) {
+                if ($remainingDiscount <= 0) {
+                    break;
+                }
+
+                $subtotal = (float) $order->subtotal;
+                $appliedDiscount = min($remainingDiscount, $subtotal);
+                $remainingDiscount = round($remainingDiscount - $appliedDiscount, 2);
+
+                $order->update([
+                    'discount_amount' => $appliedDiscount,
+                    'total_amount' => max(0, round($subtotal - $appliedDiscount, 2)),
+                ]);
+            }
+        });
+    }
+
     public function createInvoiceFromOrder(Order $order, int $actorUserId): PosCashierInvoice
     {
         if ($order->pos_cashier_invoice_id) {

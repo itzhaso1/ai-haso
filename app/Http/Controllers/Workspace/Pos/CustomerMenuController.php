@@ -30,6 +30,7 @@ class CustomerMenuController extends Controller
             'workspace' => $workspace,
             'table' => null,
             'items' => $this->menuItems($workspace->id),
+            'sliderImages' => $this->menuSliderImages($workspace),
         ]);
     }
 
@@ -44,6 +45,7 @@ class CustomerMenuController extends Controller
             'workspace' => $workspace,
             'table' => $table,
             'items' => $this->menuItems($workspace->id),
+            'sliderImages' => $this->menuSliderImages($workspace),
         ]);
     }
 
@@ -145,6 +147,17 @@ class CustomerMenuController extends Controller
                 'description',
                 'image_path',
             ]);
+    }
+
+    /**
+     * @return array<int,string>
+     */
+    private function menuSliderImages(Workspace $workspace): array
+    {
+        return collect(data_get((array) ($workspace->settings ?? []), 'pos.menu_slider_images', []))
+            ->filter(fn ($path): bool => is_string($path) && $path !== '')
+            ->values()
+            ->all();
     }
 
     /**

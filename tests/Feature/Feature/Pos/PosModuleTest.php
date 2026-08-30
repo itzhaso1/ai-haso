@@ -377,6 +377,54 @@ class PosModuleTest extends TestCase
         ]);
     }
 
+    public function test_table_session_discount_can_be_applied_from_table_page(): void
+    {
+        [$owner, $workspace] = $this->createWorkspaceOwner('store');
+
+        $table = DiningTable::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Table 10',
+            'status' => 'available',
+            'qr_token' => 'table_10_token_for_test',
+        ]);
+
+        $item = PosMenuItem::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Pizza',
+            'item_type' => 'وجبات',
+            'price' => 20.00,
+            'currency' => 'USD',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.pos.orders.store'), [
+                'dining_table_id' => $table->id,
+                'items' => [
+                    ['pos_menu_item_id' => $item->id, 'quantity' => 1],
+                ],
+            ])
+            ->assertRedirect();
+
+        $order = Order::query()->where('source', 'pos')->latest('id')->firstOrFail();
+        $sessionId = (int) $order->table_session_id;
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.pos.tables.sessions.discount', ['table' => $table, 'session' => $sessionId]), [
+                'discount_amount' => 5,
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('orders', [
+            'id' => $order->id,
+            'discount_amount' => 5.00,
+            'total_amount' => 15.00,
+        ]);
+    }
+
     public function test_table_view_can_add_new_order_from_table_menu_form(): void
     {
         [$owner, $workspace] = $this->createWorkspaceOwner('store');

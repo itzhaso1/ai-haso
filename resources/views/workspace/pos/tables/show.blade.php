@@ -14,7 +14,7 @@
     @php($sessionPaymentStatus = $billableOrders->isNotEmpty() && $billableOrders->every(fn ($order) => $order->payment_status === 'paid') ? ($onlinePaidCount > 0 ? 'paid_online' : 'paid') : 'unpaid')
 
     <section class="grid gap-4 xl:grid-cols-12">
-        <div class="space-y-4 xl:col-span-7">
+        <div class="space-y-4 xl:col-span-7 xl:order-2">
             <article class="rounded-2xl border border-slate-700 bg-slate-800 p-4 text-slate-100 shadow-xl">
                 <div class="mb-3 flex items-start justify-between gap-3">
                     <div>
@@ -67,6 +67,24 @@
                         <p class="mt-1 text-sm font-bold text-emerald-300">{{ number_format($sessionTotal, 2) }}</p>
                     </div>
                 </div>
+
+                @if($currentSession)
+                    <form method="POST" action="{{ route('workspace.pos.tables.sessions.discount', ['table' => $table, 'session' => $currentSession]) }}" class="mt-3 rounded-lg border border-slate-700 bg-slate-900/70 p-2">
+                        @csrf
+                        <label class="mb-1 block text-[11px] text-slate-300">خصم الطاولة (على كامل الجلسة)</label>
+                        <div class="flex items-center gap-2">
+                            <input
+                                type="number"
+                                name="discount_amount"
+                                step="0.01"
+                                min="0"
+                                value="{{ number_format($sessionDiscount, 2, '.', '') }}"
+                                class="w-full rounded-lg border-slate-600 bg-slate-950 text-sm text-white"
+                            />
+                            <button class="rounded-lg bg-amber-400 px-3 py-2 text-xs font-bold text-amber-950">تطبيق الخصم</button>
+                        </div>
+                    </form>
+                @endif
 
                 <div class="mt-3 flex flex-wrap items-center gap-2">
                     <button type="button" onclick="window.print()" class="rounded-lg border border-slate-500 px-3 py-2 text-xs font-semibold hover:bg-slate-700">
@@ -148,7 +166,7 @@
             </article>
         </div>
 
-        <div class="space-y-4 xl:col-span-5" x-data="tableQuickMenu({ defaultCategory: @js($defaultCategory) })">
+        <div class="space-y-4 xl:col-span-5 xl:order-1" x-data="tableQuickMenu({ defaultCategory: @js($defaultCategory) })">
             <article class="rounded-2xl border border-slate-700 bg-slate-800 p-4 text-slate-100 shadow-xl">
                 <h3 class="text-sm font-extrabold">منيو الطاولة</h3>
                 <p class="mt-1 text-[11px] text-slate-300">اضغط مباشرة على الصنف لإضافته للطلب</p>

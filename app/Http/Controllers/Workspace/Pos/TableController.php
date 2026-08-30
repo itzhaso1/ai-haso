@@ -68,7 +68,7 @@ class TableController extends PosBaseController
             ->where('is_active', true)
             ->orderBy('sort_order')
             ->orderBy('name')
-            ->get(['id', 'pos_item_category_id', 'name', 'item_type', 'size_label', 'price', 'currency', 'image_path']);
+            ->get(['id', 'pos_item_category_id', 'name', 'item_type', 'size_label', 'description', 'price', 'currency', 'image_path']);
 
         return view('workspace.pos.tables.show', [
             'table' => $table,
@@ -174,6 +174,26 @@ class TableController extends PosBaseController
         }
 
         return back()->with('success', 'تم إلغاء الجلسة وإلغاء الطلبات المرتبطة بالطاولة.');
+    }
+
+    public function applyDiscount(Request $request, DiningTable $table, TableSession $session): RedirectResponse
+    {
+        $this->authorizePos($request, 'orders.manage');
+        $this->authorize('update', $table);
+
+        abort_unless((int) $session->dining_table_id === (int) $table->id, 404);
+
+        $validated = $request->validate([
+            'discount_amount' => ['required', 'numeric', 'min:0'],
+        ]);
+
+        try {
+            $this->posOrderService->applySessionDiscount($session, (float) $validated['discount_amount']);
+        } catch (RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return back()->with('success', 'تم تطبيق خصم الجلسة بنجاح.');
     }
 
     public function addOrder(StoreTableSessionOrderRequest $request, DiningTable $table): RedirectResponse

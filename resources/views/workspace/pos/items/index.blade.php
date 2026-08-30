@@ -148,6 +148,36 @@
             </article>
 
             <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h3 class="text-base font-bold text-slate-900">إعدادات الكاشير - سلايدر المنيو</h3>
+                <p class="mt-1 text-xs text-slate-500">يمكنك إضافة صور سلايدر تظهر في بداية صفحة المنيو (حتى 8 صور).</p>
+
+                <form method="POST" action="{{ route('workspace.pos.settings.menu-slider') }}" enctype="multipart/form-data" class="mt-3 space-y-3">
+                    @csrf
+                    @if(($menuSliderImages ?? collect())->isNotEmpty())
+                        <div class="grid grid-cols-2 gap-2">
+                            @foreach($menuSliderImages as $sliderImage)
+                                <label class="rounded-lg border border-slate-200 p-2">
+                                    <img src="{{ asset('storage/'.$sliderImage) }}" alt="Menu Slider" class="h-20 w-full rounded object-cover">
+                                    <span class="mt-2 inline-flex items-center gap-2 text-[11px] text-rose-700">
+                                        <input type="checkbox" name="remove_slider_images[]" value="{{ $sliderImage }}">
+                                        حذف من السلايدر
+                                    </span>
+                                </label>
+                            @endforeach
+                        </div>
+                    @else
+                        <p class="text-xs text-slate-500">لا توجد صور سلايدر مضافة حاليًا.</p>
+                    @endif
+
+                    <div>
+                        <label class="mb-1 block text-xs font-semibold text-slate-600">إضافة صور جديدة</label>
+                        <input type="file" name="slider_images[]" multiple accept="image/*" class="w-full rounded-lg border-slate-300 text-sm" />
+                    </div>
+                    <button class="w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white">حفظ إعدادات السلايدر</button>
+                </form>
+            </article>
+
+            <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <h3 class="text-base font-bold text-slate-900">إدارة التصنيفات</h3>
                 <form method="POST" action="{{ route('workspace.pos.categories.store') }}" class="mt-3 grid grid-cols-12 gap-2">
                     @csrf
