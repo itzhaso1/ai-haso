@@ -53,13 +53,23 @@ class CashierController extends PosBaseController
         $this->authorizePos($request, 'orders.manage');
 
         try {
-            $this->posOrderService->createPosOrder(
+            $order = $this->posOrderService->createPosOrder(
                 workspace: $this->currentWorkspace(),
                 payload: $request->validated(),
                 actor: $request->user()
             );
         } catch (RuntimeException $exception) {
             return back()->withInput()->with('error', $exception->getMessage());
+        }
+
+        if (! $order->dining_table_id) {
+            try {
+                $invoice = $this->posOrderService->createInvoiceFromOrder($order, (int) $request->user()?->id);
+            } catch (RuntimeException $exception) {
+                return back()->with('success', 'تم إنشاء طلب الكاشير.')->with('error', $exception->getMessage());
+            }
+
+            return redirect()->route('workspace.pos.invoices.print', $invoice)->with('success', 'تم إنشاء طلب مباشر بدون طاولة وتجهيز فاتورة الطباعة.');
         }
 
         return back()->with('success', 'تم إنشاء طلب POS بنجاح.');

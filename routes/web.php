@@ -43,6 +43,7 @@ use App\Http\Controllers\Workspace\Pos\CashierController as PosCashierController
 use App\Http\Controllers\Workspace\Pos\PosCashierInvoiceController as PosCashierInvoiceController;
 use App\Http\Controllers\Workspace\Pos\CustomerMenuController as PosCustomerMenuController;
 use App\Http\Controllers\Workspace\Pos\PosItemCategoryController as PosItemCategoryController;
+use App\Http\Controllers\Workspace\Pos\PosKitchenController as PosKitchenController;
 use App\Http\Controllers\Workspace\Pos\PosMenuItemController as PosMenuItemController;
 use App\Http\Controllers\Workspace\Pos\PosMenuPageController as PosMenuPageController;
 use App\Http\Controllers\Workspace\Pos\PosOrderController as PosOrderController;
@@ -325,6 +326,7 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
 
             Route::post('orders', [PosCashierController::class, 'storeOrder'])->name('orders.store');
             Route::get('orders/running', [PosOrderController::class, 'running'])->name('orders.running');
+            Route::get('kitchen', [PosKitchenController::class, 'index'])->name('kitchen.index');
             Route::post('orders/{order}/status', [PosOrderController::class, 'updateStatus'])->name('orders.status');
             Route::post('orders/{order}/invoice', [PosOrderController::class, 'createInvoice'])->name('orders.invoice');
             Route::post('orders/{order}/payment-link', [PosOrderController::class, 'createPaymentLink'])->name('orders.payment-link');
@@ -343,6 +345,7 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::post('tables/{table}/open-session', [PosTableController::class, 'openSession'])->name('tables.sessions.open');
             Route::post('tables/{table}/orders', [PosTableController::class, 'addOrder'])->name('tables.orders.store');
             Route::post('tables/{table}/sessions/{session}/close', [PosTableController::class, 'closeSession'])->name('tables.sessions.close');
+            Route::post('tables/{table}/sessions/{session}/cancel', [PosTableController::class, 'cancelSession'])->name('tables.sessions.cancel');
             Route::post('tables/{table}/qr/regenerate', [PosTableController::class, 'regenerateQr'])->name('tables.qr.regenerate');
 
             Route::get('items', [PosMenuItemController::class, 'index'])->name('items.index');

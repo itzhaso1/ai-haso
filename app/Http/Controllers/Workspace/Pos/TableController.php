@@ -58,7 +58,7 @@ class TableController extends PosBaseController
                 ->where('dining_table_id', $table->id)
                 ->where('table_session_id', $currentSession->id)
                 ->whereIn('source', ['pos', 'qr_menu'])
-                ->with(['items', 'posCashierInvoice'])
+                ->with(['items', 'payments', 'posCashierInvoice'])
                 ->latest('id')
                 ->get();
         }
@@ -158,6 +158,22 @@ class TableController extends PosBaseController
         }
 
         return back()->with('success', 'تم إغلاق الجلسة.');
+    }
+
+    public function cancelSession(Request $request, DiningTable $table, TableSession $session): RedirectResponse
+    {
+        $this->authorizePos($request, 'tables.manage');
+        $this->authorize('update', $table);
+
+        abort_unless((int) $session->dining_table_id === (int) $table->id, 404);
+
+        try {
+            $this->posOrderService->cancelSession($session, $request->user());
+        } catch (RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return back()->with('success', 'تم إلغاء الجلسة وإلغاء الطلبات المرتبطة بالطاولة.');
     }
 
     public function addOrder(StoreTableSessionOrderRequest $request, DiningTable $table): RedirectResponse

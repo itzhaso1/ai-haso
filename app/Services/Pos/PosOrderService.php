@@ -51,6 +51,7 @@ class PosOrderService
                     'channel' => 'cashier',
                     'created_by_user_id' => $actor?->id,
                     'created_by_name' => $actor?->name,
+                    'payment_method' => 'cashier',
                 ],
                 currency: $this->resolveOrderCurrency($items),
             );
@@ -88,6 +89,7 @@ class PosOrderService
                     'channel' => 'qr_menu',
                     'customer_name' => $payload['customer_name'] ?? null,
                     'customer_phone' => $payload['customer_phone'] ?? null,
+                    'payment_method' => $this->normalizePaymentMethod($payload),
                 ],
                 currency: $this->resolveOrderCurrency($items),
             );
@@ -104,7 +106,13 @@ class PosOrderService
             throw new RuntimeException('رابط الدفع متاح لطلبات الكاشير فقط.');
         }
 
-        return $this->paymentService->createPaymentLink($order);
+        $payment = $this->paymentService->createPaymentLink($order);
+
+        $metadata = (array) ($order->metadata ?? []);
+        $metadata['payment_method'] = 'pay_now';
+        $order->update(['metadata' => $metadata]);
+
+        return $payment;
     }
 
     public function updatePosStatus(Order $order, string $status, ?User $actor): Order
@@ -198,27 +206,18 @@ class PosOrderService
     public function openSession(DiningTable $table): TableSession
     {
         $session = $this->ensureOpenSession($table);
-        $table->update(['status' => 'occupied']);
+        $this->refreshTableStatus($table);
 
         return $session;
     }
 
     public function closeSession(TableSession $session, int $actorUserId): ?PosCashierInvoice
     {
-        if ($session->status === 'closed') {
+        if (in_array($session->status, ['closed', 'cancelled'], true)) {
             return null;
         }
 
         return DB::transaction(function () use ($session, $actorUserId): ?PosCashierInvoice {
-            $hasRunningOrders = Order::query()
-                ->where('table_session_id', $session->id)
-                ->whereIn('pos_status', ['new', 'accepted', 'preparing', 'ready'])
-                ->exists();
-
-            if ($hasRunningOrders) {
-                throw new RuntimeException('لا يمكن إغلاق الجلسة بوجود طلبات جارية.');
-            }
-
             $orders = Order::query()
                 ->where('table_session_id', $session->id)
                 ->whereIn('source', ['pos', 'qr_menu'])
@@ -253,11 +252,41 @@ class PosOrderService
 
             $table = $session->table;
             if ($table) {
-                $hasOpenSessions = $table->sessions()->where('status', 'open')->where('id', '!=', $session->id)->exists();
-                $table->update(['status' => $hasOpenSessions ? 'occupied' : 'available']);
+                $this->refreshTableStatus($table, $session->id);
             }
 
             return $invoice;
+        });
+    }
+
+    public function cancelSession(TableSession $session, ?User $actor): void
+    {
+        if (in_array($session->status, ['closed', 'cancelled'], true)) {
+            return;
+        }
+
+        DB::transaction(function () use ($session, $actor): void {
+            $orders = Order::query()
+                ->where('table_session_id', $session->id)
+                ->whereIn('source', ['pos', 'qr_menu'])
+                ->whereNull('pos_cashier_invoice_id')
+                ->where('pos_status', '!=', 'cancelled')
+                ->with('items')
+                ->get();
+
+            foreach ($orders as $order) {
+                $this->orderService->cancel($order, $actor);
+            }
+
+            $session->update([
+                'status' => 'cancelled',
+                'closed_at' => now(),
+            ]);
+
+            $table = $session->table;
+            if ($table) {
+                $this->refreshTableStatus($table, $session->id);
+            }
         });
     }
 
@@ -638,5 +667,25 @@ class PosOrderService
         }
 
         return $currencies->count() === 1 ? (string) $currencies->first() : 'MIX';
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     */
+    private function normalizePaymentMethod(array $payload): string
+    {
+        $method = (string) ($payload['payment_method'] ?? ((bool) ($payload['pay_now'] ?? false) ? 'pay_now' : 'pay_later'));
+
+        return $method === 'pay_now' ? 'pay_now' : 'pay_later';
+    }
+
+    private function refreshTableStatus(DiningTable $table, ?int $ignoredSessionId = null): void
+    {
+        $hasOpenSessions = $table->sessions()
+            ->where('status', 'open')
+            ->when($ignoredSessionId, fn ($query) => $query->where('id', '!=', $ignoredSessionId))
+            ->exists();
+
+        $table->update(['status' => $hasOpenSessions ? 'occupied' : 'available']);
     }
 }

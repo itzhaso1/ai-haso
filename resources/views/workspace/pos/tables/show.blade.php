@@ -1,7 +1,6 @@
 @extends('layouts.pos', ['pageTitle' => $table->name])
 
 @section('content')
-    @php($runningStatuses = ['new', 'accepted', 'preparing', 'ready'])
     @php($menuGroups = $menuItems->groupBy(fn ($item) => $item->category?->name ?: ($item->item_type ?: 'عام')))
     @php($defaultCategory = (string) ($menuGroups->keys()->first() ?? ''))
     @php($hasCurrentSession = (bool) $currentSession)
@@ -11,9 +10,8 @@
     @php($sessionSubtotal = (float) $billableOrders->sum('subtotal'))
     @php($sessionDiscount = (float) $billableOrders->sum('discount_amount'))
     @php($sessionTotal = (float) $billableOrders->sum('total_amount'))
-    @php($runningSessionOrders = $sessionOrders->whereIn('pos_status', ['new', 'accepted', 'preparing', 'ready', 'delivered']))
-    @php($hasRunningOrders = $hasCurrentSession && $sessionOrders->contains(fn ($order) => in_array($order->pos_status, $runningStatuses, true)))
-    @php($sessionPaymentStatus = $billableOrders->isNotEmpty() && $billableOrders->every(fn ($order) => $order->payment_status === 'paid') ? 'paid' : 'unpaid')
+    @php($onlinePaidCount = $billableOrders->filter(fn ($order) => $order->payment_status === 'paid' && ((data_get($order->metadata, 'payment_method') === 'pay_now') || $order->payments->contains(fn ($payment) => $payment->status === 'paid')))->count())
+    @php($sessionPaymentStatus = $billableOrders->isNotEmpty() && $billableOrders->every(fn ($order) => $order->payment_status === 'paid') ? ($onlinePaidCount > 0 ? 'paid_online' : 'paid') : 'unpaid')
 
     <section class="grid gap-4 xl:grid-cols-12">
         <div class="space-y-4 xl:col-span-7">
@@ -43,8 +41,14 @@
                     </div>
                     <div class="rounded-lg border border-slate-600 bg-slate-900/70 p-2 text-center">
                         <p class="text-[11px] text-slate-400">حالة الدفع</p>
-                        <p class="mt-1 text-sm font-bold {{ $sessionPaymentStatus === 'paid' ? 'text-emerald-300' : 'text-amber-300' }}">
-                            {{ $sessionPaymentStatus === 'paid' ? 'مدفوع' : 'غير مدفوع' }}
+                        <p class="mt-1 text-sm font-bold {{ in_array($sessionPaymentStatus, ['paid', 'paid_online'], true) ? 'text-emerald-300' : 'text-amber-300' }}">
+                            @if($sessionPaymentStatus === 'paid_online')
+                                مدفوع عبر الإنترنت
+                            @elseif($sessionPaymentStatus === 'paid')
+                                تم الدفع
+                            @else
+                                غير مدفوع
+                            @endif
                         </p>
                     </div>
                 </div>
@@ -76,12 +80,13 @@
                 @if($currentSession)
                     <form method="POST" action="{{ route('workspace.pos.tables.sessions.close', ['table' => $table, 'session' => $currentSession]) }}" class="mt-3">
                         @csrf
-                        <button class="w-full rounded-lg bg-emerald-500 px-3 py-2 text-sm font-bold text-emerald-950 disabled:cursor-not-allowed disabled:opacity-40" @disabled($hasRunningOrders)>
+                        <button class="w-full rounded-lg bg-emerald-500 px-3 py-2 text-sm font-bold text-emerald-950">
                             إغلاق الجلسة
                         </button>
-                        @if($hasRunningOrders)
-                            <p class="mt-2 text-[11px] text-amber-300">أنهِ الطلبات الجارية أولاً قبل إغلاق الجلسة.</p>
-                        @endif
+                    </form>
+                    <form method="POST" action="{{ route('workspace.pos.tables.sessions.cancel', ['table' => $table, 'session' => $currentSession]) }}" class="mt-2" onsubmit="return confirm('سيتم إلغاء الجلسة وإلغاء الطلبات غير المفوترة. هل أنت متأكد؟')">
+                        @csrf
+                        <button class="w-full rounded-lg bg-rose-500 px-3 py-2 text-sm font-bold text-white">إلغاء الطاولة / الجلسة</button>
                     </form>
                 @else
                     <form method="POST" action="{{ route('workspace.pos.tables.sessions.open', $table) }}" class="mt-3">
@@ -92,16 +97,21 @@
             </article>
 
             <article class="rounded-2xl border border-slate-700 bg-slate-800 p-4 text-slate-100 shadow-xl">
-                <h3 class="mb-3 text-sm font-extrabold">الطلبات الجارية</h3>
+                <h3 class="mb-3 text-sm font-extrabold">تفاصيل طلبات الطاولة</h3>
                 <div class="space-y-3">
-                    @forelse($runningSessionOrders as $order)
+                    @forelse($sessionOrders as $order)
+                        @php($paymentMethodKey = (string) data_get($order->metadata, 'payment_method', 'pay_later'))
+                        @php($isOnlinePaid = $order->payment_status === 'paid' && ((data_get($order->metadata, 'payment_method') === 'pay_now') || $order->payments->contains(fn ($payment) => $payment->status === 'paid')))
+                        @php($paymentStatusLabel = $isOnlinePaid ? 'مدفوع عبر الإنترنت' : ($order->payment_status === 'paid' ? 'تم الدفع' : 'غير مدفوع'))
+                        @php($paymentMethodLabel = $paymentMethodKey === 'pay_now' ? 'دفع إلكتروني' : ($paymentMethodKey === 'cashier' ? 'كاشير مباشر' : 'الدفع عند الخروج'))
                         <article class="rounded-xl border border-slate-700 bg-slate-900/50 p-3">
                             <div class="mb-2 flex items-start justify-between gap-2">
                                 <div>
                                     <p class="text-sm font-semibold text-white">#{{ $order->order_number }}</p>
                                     <p class="text-xs text-slate-300">
-                                        {{ $posStatuses[$order->pos_status] ?? $order->pos_status }} •
-                                        {{ $order->payment_status === 'paid' ? 'مدفوع' : 'غير مدفوع' }}
+                                        الحالة: {{ $posStatuses[$order->pos_status] ?? $order->pos_status }} •
+                                        الدفع: {{ $paymentStatusLabel }} •
+                                        الطريقة: {{ $paymentMethodLabel }}
                                     </p>
                                 </div>
                                 <p class="text-xs text-slate-400">{{ optional($order->created_at)->format('H:i') }}</p>

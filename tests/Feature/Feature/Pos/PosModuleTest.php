@@ -249,7 +249,7 @@ class PosModuleTest extends TestCase
             ->assertSee('Ice Latte');
     }
 
-    public function test_table_order_items_can_be_edited_and_session_closing_requires_no_running_orders(): void
+    public function test_table_order_items_can_be_edited_and_session_can_close_without_running_order_constraint(): void
     {
         [$owner, $workspace] = $this->createWorkspaceOwner('store');
 
@@ -310,19 +310,6 @@ class PosModuleTest extends TestCase
             ->withSession(['current_workspace_id' => $workspace->id])
             ->post(route('workspace.pos.tables.sessions.close', ['table' => $table, 'session' => $sessionId]))
             ->assertRedirect()
-            ->assertSessionHas('error');
-
-        $this->actingAs($owner)
-            ->withSession(['current_workspace_id' => $workspace->id])
-            ->post(route('workspace.pos.orders.status', $order), [
-                'pos_status' => 'delivered',
-            ])
-            ->assertRedirect();
-
-        $this->actingAs($owner)
-            ->withSession(['current_workspace_id' => $workspace->id])
-            ->post(route('workspace.pos.tables.sessions.close', ['table' => $table, 'session' => $sessionId]))
-            ->assertRedirect()
             ->assertSessionHas('success');
 
         $invoice = PosCashierInvoice::query()->latest('id')->first();
@@ -331,6 +318,62 @@ class PosModuleTest extends TestCase
             'id' => $order->id,
             'pos_cashier_invoice_id' => $invoice?->id,
             'pos_status' => 'completed',
+        ]);
+    }
+
+    public function test_table_session_can_be_cancelled_and_related_orders_are_cancelled(): void
+    {
+        [$owner, $workspace] = $this->createWorkspaceOwner('store');
+
+        $table = DiningTable::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Table 9',
+            'status' => 'available',
+            'qr_token' => 'table_9_token_for_test',
+        ]);
+
+        $item = PosMenuItem::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Fries',
+            'item_type' => 'مقبلات',
+            'price' => 3.5,
+            'currency' => 'USD',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.pos.orders.store'), [
+                'dining_table_id' => $table->id,
+                'items' => [
+                    ['pos_menu_item_id' => $item->id, 'quantity' => 2],
+                ],
+            ])
+            ->assertRedirect();
+
+        $order = Order::query()->where('source', 'pos')->latest('id')->firstOrFail();
+        $sessionId = (int) $order->table_session_id;
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.pos.tables.sessions.cancel', ['table' => $table, 'session' => $sessionId]))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('orders', [
+            'id' => $order->id,
+            'pos_status' => 'cancelled',
+            'status' => 'cancelled',
+        ]);
+
+        $this->assertDatabaseHas('table_sessions', [
+            'id' => $sessionId,
+            'status' => 'cancelled',
+        ]);
+
+        $this->assertDatabaseHas('dining_tables', [
+            'id' => $table->id,
+            'status' => 'available',
         ]);
     }
 
@@ -373,6 +416,44 @@ class PosModuleTest extends TestCase
             'dining_table_id' => $table->id,
             'source' => 'pos',
         ]);
+    }
+
+    public function test_kitchen_page_lists_table_orders_for_preparation(): void
+    {
+        [$owner, $workspace] = $this->createWorkspaceOwner('store');
+
+        $table = DiningTable::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Table Kitchen',
+            'status' => 'available',
+            'qr_token' => 'table_kitchen_token_for_test',
+        ]);
+
+        $item = PosMenuItem::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Burger',
+            'item_type' => 'وجبات',
+            'price' => 12.00,
+            'currency' => 'USD',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.pos.orders.store'), [
+                'dining_table_id' => $table->id,
+                'items' => [
+                    ['pos_menu_item_id' => $item->id, 'quantity' => 1],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->get(route('workspace.pos.kitchen.index'))
+            ->assertOk()
+            ->assertSee('Table Kitchen')
+            ->assertSee('Burger');
     }
 
     /**
