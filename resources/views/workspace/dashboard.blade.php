@@ -43,6 +43,15 @@
                         ],
                     ],
                     [
+                        'title' => 'POS / Cashier',
+                        'description' => 'واجهة الكاشير، إدارة الطاولات، وطلبات QR Menu.',
+                        'icon' => 'wallet',
+                        'links' => [
+                            ['label' => 'Table Dashboard', 'route' => 'workspace.pos.tables.index', 'active' => ['workspace.pos.dashboard', 'workspace.pos.tables.*']],
+                            ['label' => 'Cashier', 'route' => 'workspace.pos.cashier.index', 'active' => 'workspace.pos.cashier.*'],
+                        ],
+                    ],
+                    [
                         'title' => 'Communication',
                         'description' => 'المحادثات والبريد الإلكتروني وواتساب.',
                         'icon' => 'chat',

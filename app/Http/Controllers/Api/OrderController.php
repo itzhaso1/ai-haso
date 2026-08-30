@@ -19,7 +19,7 @@ class OrderController extends Controller
     public function index(Request $request): JsonResponse
     {
         $orders = Order::query()
-            ->with(['customer', 'items'])
+            ->with(['customer', 'items', 'table', 'tableSession', 'financeInvoice'])
             ->when($request->string('search')->toString(), function ($query, $search): void {
                 $query->where('order_number', 'like', '%'.$search.'%');
             })
@@ -42,7 +42,7 @@ class OrderController extends Controller
     {
         $this->authorize('view', $order);
 
-        return response()->json(['data' => $order->load(['customer', 'items', 'payments'])]);
+        return response()->json(['data' => $order->load(['customer', 'items', 'payments', 'table', 'tableSession', 'financeInvoice'])]);
     }
 
     public function update(UpdateOrderStatusRequest $request, Order $order): JsonResponse

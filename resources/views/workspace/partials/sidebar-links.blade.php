@@ -31,6 +31,16 @@
             ],
         ],
         [
+            'key' => 'pos-cashier',
+            'title' => 'POS / الكاشير',
+            'description' => 'الكاشير، الطاولات، وطلبات QR.',
+            'icon' => 'wallet',
+            'links' => [
+                ['label' => 'لوحة الطاولات', 'route' => 'workspace.pos.tables.index', 'active' => ['workspace.pos.dashboard', 'workspace.pos.tables.*']],
+                ['label' => 'الكاشير', 'route' => 'workspace.pos.cashier.index', 'active' => 'workspace.pos.cashier.*'],
+            ],
+        ],
+        [
             'key' => 'communication',
             'title' => 'التواصل',
             'description' => 'المحادثات والبريد وواتساب.',

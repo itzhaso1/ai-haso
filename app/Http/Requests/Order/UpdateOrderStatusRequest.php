@@ -24,6 +24,7 @@ class UpdateOrderStatusRequest extends FormRequest
     {
         return [
             'status' => ['nullable', 'in:draft,confirmed,cancelled,completed'],
+            'pos_status' => ['nullable', 'in:new,accepted,preparing,ready,completed,cancelled'],
             'payment_status' => ['nullable', 'in:pending,paid,failed,refunded'],
             'fulfillment_status' => ['nullable', 'in:unfulfilled,processing,fulfilled,cancelled'],
             'shipping_status' => ['nullable', 'in:not_shipped,processing,shipped,delivered,returned'],

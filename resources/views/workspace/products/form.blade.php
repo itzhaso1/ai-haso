@@ -38,6 +38,10 @@
         <input type="number" name="stock" required value="{{ old('stock', $product?->stock ?? 0) }}" class="w-full rounded-lg border-gray-300" />
     </div>
     <div>
+        <label class="mb-1 block text-sm">ترتيب المنتج داخل المنيو</label>
+        <input type="number" name="menu_sort_order" min="0" value="{{ old('menu_sort_order', $product?->menu_sort_order ?? 0) }}" class="w-full rounded-lg border-gray-300" />
+    </div>
+    <div>
         <label class="mb-1 block text-sm">الحالة</label>
         <select name="status" class="w-full rounded-lg border-gray-300">
             @foreach(['draft','active','inactive','archived'] as $status)
@@ -57,6 +61,18 @@
         <label class="mb-1 block text-sm">صور المنتج</label>
         <input type="file" name="image_files[]" multiple class="w-full rounded-lg border-gray-300" />
     </div>
+</div>
+<div class="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2">
+    <label class="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
+        <input type="hidden" name="show_in_menu" value="0">
+        <input type="checkbox" name="show_in_menu" value="1" class="rounded border-slate-300 text-slate-900 focus:ring-slate-500" @checked((int) old('show_in_menu', $product?->show_in_menu ?? 1) === 1)>
+        إظهار المنتج في المنيو الإلكتروني
+    </label>
+    <label class="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
+        <input type="hidden" name="allow_online_ordering" value="0">
+        <input type="checkbox" name="allow_online_ordering" value="1" class="rounded border-slate-300 text-slate-900 focus:ring-slate-500" @checked((int) old('allow_online_ordering', $product?->allow_online_ordering ?? 1) === 1)>
+        السماح بالطلب الأونلاين (QR / Menu)
+    </label>
 </div>
 <div>
     <label class="mb-1 block text-sm">الوصف</label>

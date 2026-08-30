@@ -39,6 +39,9 @@ use App\Http\Controllers\Workspace\InventoryController;
 use App\Http\Controllers\Workspace\OrderController;
 use App\Http\Controllers\Workspace\PaymentController;
 use App\Http\Controllers\Workspace\PaymentGatewayController;
+use App\Http\Controllers\Workspace\Pos\CashierController as PosCashierController;
+use App\Http\Controllers\Workspace\Pos\CustomerMenuController as PosCustomerMenuController;
+use App\Http\Controllers\Workspace\Pos\TableController as PosTableController;
 use App\Http\Controllers\Workspace\ProductController;
 use App\Http\Controllers\Workspace\SubscriptionController;
 use App\Http\Controllers\Workspace\WhatsAppAccountController;
@@ -73,6 +76,11 @@ Route::middleware('throttle:30,1')->group(function (): void {
     Route::post('/appointments/portal/{token}/confirm', [AppointmentsCustomerPortalController::class, 'confirmAttendance'])->name('appointments.portal.confirm');
     Route::post('/appointments/portal/{token}/reschedule', [AppointmentsCustomerPortalController::class, 'requestReschedule'])->name('appointments.portal.reschedule');
     Route::post('/appointments/portal/{token}/cancel', [AppointmentsCustomerPortalController::class, 'requestCancellation'])->name('appointments.portal.cancel');
+
+    Route::get('/menu/{workspace:slug}', [PosCustomerMenuController::class, 'generalMenu'])->name('menu.general');
+    Route::post('/menu/{workspace:slug}/order', [PosCustomerMenuController::class, 'placeGeneralOrder'])->name('menu.general.order');
+    Route::get('/menu/{workspace:slug}/table/{token}', [PosCustomerMenuController::class, 'tableMenu'])->name('menu.table');
+    Route::post('/menu/{workspace:slug}/table/{token}/order', [PosCustomerMenuController::class, 'placeTableOrder'])->name('menu.table.order');
 });
 
 Route::middleware(['guest'])->group(function (): void {
@@ -300,6 +308,23 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::post('requests/{appointmentRequest}/cancel', [AppointmentsRequestController::class, 'cancel'])->name('requests.cancel');
             Route::post('requests/{appointmentRequest}/slots', [AppointmentsRequestController::class, 'proposeSlots'])->name('requests.slots.store');
             Route::post('requests/{appointmentRequest}/slots/{slot}/select', [AppointmentsRequestController::class, 'selectSlot'])->name('requests.slots.select');
+        });
+
+        Route::prefix('pos')->as('pos.')->group(function (): void {
+            Route::get('/', [PosTableController::class, 'index'])->name('dashboard');
+            Route::get('cashier', [PosCashierController::class, 'index'])->name('cashier.index');
+
+            Route::post('orders', [PosCashierController::class, 'storeOrder'])->name('orders.store');
+            Route::post('orders/{order}/status', [PosCashierController::class, 'updateOrderStatus'])->name('orders.status');
+            Route::post('orders/{order}/invoice', [PosCashierController::class, 'createInvoice'])->name('orders.invoice');
+
+            Route::get('tables', [PosTableController::class, 'index'])->name('tables.index');
+            Route::post('tables', [PosTableController::class, 'store'])->name('tables.store');
+            Route::get('tables/{table}', [PosTableController::class, 'show'])->name('tables.show');
+            Route::put('tables/{table}', [PosTableController::class, 'update'])->name('tables.update');
+            Route::post('tables/{table}/open-session', [PosTableController::class, 'openSession'])->name('tables.sessions.open');
+            Route::post('tables/{table}/sessions/{session}/close', [PosTableController::class, 'closeSession'])->name('tables.sessions.close');
+            Route::post('tables/{table}/qr/regenerate', [PosTableController::class, 'regenerateQr'])->name('tables.qr.regenerate');
         });
 
         Route::get('employees', [EmployeeInvitationController::class, 'index'])->name('employees.index');

@@ -3,16 +3,22 @@
 namespace App\Services\Order;
 
 use App\Events\OrderCreated;
+use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
 use App\Services\Inventory\InventoryService;
+use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 class OrderService
 {
-    public function __construct(private readonly InventoryService $inventoryService) {}
+    public function __construct(
+        private readonly InventoryService $inventoryService,
+        private readonly WorkspaceContext $workspaceContext,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $data
@@ -25,10 +31,33 @@ class OrderService
                 throw new \InvalidArgumentException('Order requires at least one item.');
             }
 
+            $workspaceId = (int) ($data['workspace_id'] ?? $this->workspaceContext->workspaceId() ?? 0);
+            if ($workspaceId <= 0) {
+                throw new RuntimeException('Workspace context is required to create orders.');
+            }
+
+            $customerId = isset($data['customer_id']) ? (int) $data['customer_id'] : null;
+            if ($customerId) {
+                $customerExists = Customer::withoutGlobalScopes()
+                    ->where('workspace_id', $workspaceId)
+                    ->whereKey($customerId)
+                    ->exists();
+
+                if (! $customerExists) {
+                    throw new RuntimeException('Customer does not belong to current workspace.');
+                }
+            }
+
             $order = Order::query()->create([
-                'customer_id' => $data['customer_id'] ?? null,
+                'workspace_id' => $workspaceId,
+                'customer_id' => $customerId,
+                'dining_table_id' => $data['dining_table_id'] ?? null,
+                'table_session_id' => $data['table_session_id'] ?? null,
+                'finance_invoice_id' => $data['finance_invoice_id'] ?? null,
                 'order_number' => $this->nextOrderNumber(),
+                'source' => $data['source'] ?? 'manual',
                 'status' => $data['status'] ?? 'confirmed',
+                'pos_status' => $data['pos_status'] ?? 'new',
                 'payment_status' => 'pending',
                 'fulfillment_status' => 'unfulfilled',
                 'shipping_status' => 'not_shipped',
@@ -36,30 +65,46 @@ class OrderService
                 'discount_amount' => $data['discount_amount'] ?? 0,
                 'shipping_amount' => $data['shipping_amount'] ?? 0,
                 'notes' => $data['notes'] ?? null,
+                'metadata' => $data['metadata'] ?? null,
                 'placed_at' => now(),
             ]);
 
             $subtotal = 0.0;
 
             foreach ($items as $item) {
-                $product = Product::query()->whereKey($item['product_id'])->lockForUpdate()->firstOrFail();
+                $product = Product::withoutGlobalScopes()
+                    ->where('workspace_id', $workspaceId)
+                    ->whereKey((int) $item['product_id'])
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                if ($product->status !== 'active') {
+                    throw new RuntimeException('Only active products can be added to orders.');
+                }
+
                 $variant = null;
-                $unitPrice = (float) ($item['unit_price'] ?? ($product->sale_price ?: $product->price));
+                $unitPrice = (float) ($product->sale_price ?: $product->price);
 
                 if (! empty($item['product_variant_id'])) {
-                    $variant = ProductVariant::query()
+                    $variant = ProductVariant::withoutGlobalScopes()
+                        ->where('workspace_id', $workspaceId)
                         ->where('product_id', $product->id)
-                        ->whereKey($item['product_variant_id'])
+                        ->whereKey((int) $item['product_variant_id'])
                         ->lockForUpdate()
                         ->firstOrFail();
-                    $unitPrice = (float) ($item['unit_price'] ?? ($variant->sale_price ?: $variant->price ?: $unitPrice));
+                    $unitPrice = (float) ($variant->sale_price ?: $variant->price ?: $unitPrice);
                 }
 
                 $quantity = (int) $item['quantity'];
-                $lineTotal = max(0, ($unitPrice * $quantity) - (float) ($item['discount_amount'] ?? 0));
+                if ($quantity <= 0) {
+                    throw new RuntimeException('Quantity must be at least 1.');
+                }
+                $lineDiscount = max(0, (float) ($item['discount_amount'] ?? 0));
+                $lineTotal = max(0, ($unitPrice * $quantity) - $lineDiscount);
                 $subtotal += $lineTotal;
 
                 $order->items()->create([
+                    'workspace_id' => $workspaceId,
                     'product_id' => $product->id,
                     'product_variant_id' => $variant?->id,
                     'product_name' => $product->name,
@@ -67,7 +112,7 @@ class OrderService
                     'sku' => $variant?->sku ?? $product->sku,
                     'quantity' => $quantity,
                     'unit_price' => $unitPrice,
-                    'discount_amount' => $item['discount_amount'] ?? 0,
+                    'discount_amount' => $lineDiscount,
                     'total_amount' => $lineTotal,
                 ]);
 
@@ -99,7 +144,7 @@ class OrderService
 
             event(new OrderCreated($order));
 
-            return $order->fresh(['items', 'customer']);
+            return $order->fresh(['items', 'customer', 'table', 'tableSession']);
         });
     }
 
@@ -129,6 +174,7 @@ class OrderService
 
             $order->update([
                 'status' => 'cancelled',
+                'pos_status' => 'cancelled',
                 'fulfillment_status' => 'cancelled',
                 'cancelled_at' => now(),
             ]);

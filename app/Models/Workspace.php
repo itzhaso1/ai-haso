@@ -110,6 +110,16 @@ class Workspace extends Model
         return $this->hasMany(Order::class);
     }
 
+    public function diningTables(): HasMany
+    {
+        return $this->hasMany(DiningTable::class);
+    }
+
+    public function tableSessions(): HasMany
+    {
+        return $this->hasMany(TableSession::class);
+    }
+
     public function conversations(): HasMany
     {
         return $this->hasMany(Conversation::class);

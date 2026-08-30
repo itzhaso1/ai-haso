@@ -22,8 +22,13 @@ class OrderFactory extends Factory
         return [
             'workspace_id' => Workspace::factory(),
             'customer_id' => Customer::factory(),
+            'dining_table_id' => null,
+            'table_session_id' => null,
+            'finance_invoice_id' => null,
             'order_number' => 'ORD-'.fake()->unique()->numerify('########'),
+            'source' => 'manual',
             'status' => 'confirmed',
+            'pos_status' => 'new',
             'payment_status' => 'pending',
             'fulfillment_status' => 'unfulfilled',
             'shipping_status' => 'not_shipped',
@@ -32,6 +37,7 @@ class OrderFactory extends Factory
             'discount_amount' => 0,
             'shipping_amount' => 0,
             'total_amount' => 100,
+            'metadata' => null,
             'placed_at' => now(),
         ];
     }
