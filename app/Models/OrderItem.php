@@ -12,8 +12,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'order_id',
     'product_id',
     'product_variant_id',
+    'pos_menu_item_id',
     'product_name',
     'variant_name',
+    'item_type',
     'sku',
     'quantity',
     'unit_price',
@@ -42,6 +44,11 @@ class OrderItem extends WorkspaceScopedModel
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function posMenuItem(): BelongsTo
+    {
+        return $this->belongsTo(PosMenuItem::class, 'pos_menu_item_id');
     }
 
     public function variant(): BelongsTo

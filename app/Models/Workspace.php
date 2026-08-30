@@ -100,6 +100,11 @@ class Workspace extends Model
         return $this->hasMany(Product::class);
     }
 
+    public function posMenuItems(): HasMany
+    {
+        return $this->hasMany(PosMenuItem::class);
+    }
+
     public function customers(): HasMany
     {
         return $this->hasMany(Customer::class);

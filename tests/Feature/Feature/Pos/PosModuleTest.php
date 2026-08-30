@@ -5,7 +5,7 @@ namespace Tests\Feature\Feature\Pos;
 use App\Models\DiningTable;
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Models\Product;
+use App\Models\PosMenuItem;
 use App\Models\User;
 use App\Models\Workspace;
 use Database\Seeders\FoundationSeeder;
@@ -21,17 +21,13 @@ class PosModuleTest extends TestCase
         $this->seed(FoundationSeeder::class);
         [$owner, $workspace] = $this->createWorkspaceOwner('store');
 
-        $product = Product::withoutGlobalScopes()->create([
+        $item = PosMenuItem::withoutGlobalScopes()->create([
             'workspace_id' => $workspace->id,
             'name' => 'Cappuccino',
-            'slug' => 'cappuccino',
-            'sku' => 'CAP-001',
+            'item_type' => 'مشروبات',
             'price' => 4.00,
             'currency' => 'USD',
-            'stock' => 20,
-            'status' => 'active',
-            'show_in_menu' => true,
-            'allow_online_ordering' => true,
+            'is_active' => true,
         ]);
 
         $this->actingAs($owner)
@@ -45,7 +41,7 @@ class PosModuleTest extends TestCase
         $this->post(route('menu.table.order', ['workspace' => $workspace->slug, 'token' => $table->qr_token]), [
             'customer_name' => 'Walk In',
             'items' => [
-                ['product_id' => $product->id, 'quantity' => 2],
+                ['pos_menu_item_id' => $item->id, 'quantity' => 2],
             ],
         ])->assertRedirect();
 
@@ -74,7 +70,7 @@ class PosModuleTest extends TestCase
             'status' => 'occupied',
         ]);
 
-        $product->update(['price' => 11.00]);
+        $item->update(['price' => 11.00]);
         $this->assertSame(4.0, (float) $orderItem->fresh()->unit_price);
     }
 
@@ -90,17 +86,13 @@ class PosModuleTest extends TestCase
             'qr_token' => 'table_1_token_for_test',
         ]);
 
-        $product = Product::withoutGlobalScopes()->create([
+        $item = PosMenuItem::withoutGlobalScopes()->create([
             'workspace_id' => $workspace->id,
             'name' => 'Latte',
-            'slug' => 'latte',
-            'sku' => 'LAT-001',
+            'item_type' => 'مشروبات',
             'price' => 5.00,
             'currency' => 'USD',
-            'stock' => 30,
-            'status' => 'active',
-            'show_in_menu' => true,
-            'allow_online_ordering' => true,
+            'is_active' => true,
         ]);
 
         $this->actingAs($owner)
@@ -108,7 +100,7 @@ class PosModuleTest extends TestCase
             ->post(route('workspace.pos.orders.store'), [
                 'dining_table_id' => $table->id,
                 'items' => [
-                    ['product_id' => $product->id, 'quantity' => 2],
+                    ['pos_menu_item_id' => $item->id, 'quantity' => 2],
                 ],
             ])->assertRedirect();
 
@@ -158,17 +150,13 @@ class PosModuleTest extends TestCase
             'qr_token' => 'token_b_table',
         ]);
 
-        $productB = Product::withoutGlobalScopes()->create([
+        $itemB = PosMenuItem::withoutGlobalScopes()->create([
             'workspace_id' => $workspaceB->id,
             'name' => 'Hidden Product',
-            'slug' => 'hidden-product',
-            'sku' => 'HID-001',
+            'item_type' => 'عام',
             'price' => 9.00,
             'currency' => 'USD',
-            'stock' => 10,
-            'status' => 'active',
-            'show_in_menu' => true,
-            'allow_online_ordering' => true,
+            'is_active' => true,
         ]);
 
         $this->actingAs($ownerA)
@@ -180,14 +168,111 @@ class PosModuleTest extends TestCase
             ->withSession(['current_workspace_id' => $workspaceA->id])
             ->post(route('workspace.pos.orders.store'), [
                 'items' => [
-                    ['product_id' => $productB->id, 'quantity' => 1],
+                    ['pos_menu_item_id' => $itemB->id, 'quantity' => 1],
                 ],
             ]);
 
         $response->assertRedirect();
-        $response->assertSessionHasErrors('items.0.product_id');
+        $response->assertSessionHasErrors('items.0.pos_menu_item_id');
         $this->assertDatabaseCount('orders', 0);
         $this->assertDatabaseCount('table_sessions', 0);
+    }
+
+    public function test_pos_item_management_reflects_in_public_menu(): void
+    {
+        [$owner, $workspace] = $this->createWorkspaceOwner('store');
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.pos.items.store'), [
+                'name' => 'Ice Latte',
+                'item_type' => 'مشروبات باردة',
+                'price' => 7.5,
+                'currency' => 'USD',
+                'is_active' => 1,
+            ])
+            ->assertRedirect();
+
+        $this->get(route('menu.general', ['workspace' => $workspace->slug]))
+            ->assertOk()
+            ->assertSee('Ice Latte');
+    }
+
+    public function test_table_order_items_can_be_edited_and_session_closing_requires_no_running_orders(): void
+    {
+        [$owner, $workspace] = $this->createWorkspaceOwner('store');
+
+        $table = DiningTable::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Table 7',
+            'status' => 'available',
+            'qr_token' => 'table_7_token_for_test',
+        ]);
+
+        $item = PosMenuItem::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Cheesecake',
+            'item_type' => 'حلويات',
+            'price' => 8.00,
+            'currency' => 'USD',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.pos.orders.store'), [
+                'dining_table_id' => $table->id,
+                'items' => [
+                    ['pos_menu_item_id' => $item->id, 'quantity' => 1],
+                ],
+            ])
+            ->assertRedirect();
+
+        $order = Order::query()->where('source', 'pos')->latest('id')->firstOrFail();
+        $line = $order->items()->firstOrFail();
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.pos.orders.update-items', $order), [
+                'discount_amount' => 1.00,
+                'items' => [
+                    ['id' => $line->id, 'quantity' => 3, 'unit_price' => 8.00],
+                ],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('order_items', [
+            'id' => $line->id,
+            'quantity' => 3,
+            'total_amount' => 24.00,
+        ]);
+
+        $this->assertDatabaseHas('orders', [
+            'id' => $order->id,
+            'subtotal' => 24.00,
+            'discount_amount' => 1.00,
+            'total_amount' => 23.00,
+        ]);
+
+        $sessionId = (int) $order->table_session_id;
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.pos.tables.sessions.close', ['table' => $table, 'session' => $sessionId]))
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.pos.orders.status', $order), [
+                'pos_status' => 'completed',
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.pos.tables.sessions.close', ['table' => $table, 'session' => $sessionId]))
+            ->assertRedirect()
+            ->assertSessionHas('success');
     }
 
     /**

@@ -5,7 +5,7 @@ namespace App\Http\Requests\Pos;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
-class StorePublicMenuOrderRequest extends FormRequest
+class UpdateTableOrderRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -18,12 +18,13 @@ class StorePublicMenuOrderRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'customer_name' => ['nullable', 'string', 'max:255'],
-            'customer_phone' => ['nullable', 'string', 'max:64'],
-            'notes' => ['nullable', 'string', 'max:1000'],
+            'discount_amount' => ['nullable', 'numeric', 'min:0'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.pos_menu_item_id' => ['required', 'integer'],
+            'items.*.id' => ['required', 'integer'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
+            'items.*.unit_price' => ['required', 'numeric', 'min:0'],
+            'items.*.discount_amount' => ['nullable', 'numeric', 'min:0'],
+            'items.*.remove' => ['nullable', 'boolean'],
         ];
     }
 }

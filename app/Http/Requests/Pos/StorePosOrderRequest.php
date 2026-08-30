@@ -36,10 +36,10 @@ class StorePosOrderRequest extends FormRequest
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.product_id' => [
+            'items.*.pos_menu_item_id' => [
                 'required',
                 'integer',
-                Rule::exists('products', 'id')->where(fn ($query) => $query->where('workspace_id', $workspaceId)),
+                Rule::exists('pos_menu_items', 'id')->where(fn ($query) => $query->where('workspace_id', $workspaceId)),
             ],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
         ];

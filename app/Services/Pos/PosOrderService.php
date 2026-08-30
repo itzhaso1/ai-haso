@@ -6,13 +6,15 @@ use App\Models\Customer;
 use App\Models\DiningTable;
 use App\Models\Finance\FinanceInvoice;
 use App\Models\Order;
-use App\Models\Product;
+use App\Models\OrderItem;
+use App\Models\PosMenuItem;
 use App\Models\TableSession;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Finance\FinanceBootstrapService;
 use App\Services\Finance\InvoiceService;
 use App\Services\Order\OrderService;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -29,43 +31,35 @@ class PosOrderService
      */
     public function createPosOrder(Workspace $workspace, array $payload, ?User $actor): Order
     {
-        $table = null;
-        $session = null;
+        return DB::transaction(function () use ($workspace, $payload, $actor): Order {
+            [$table, $session] = $this->resolveTableAndSession($workspace->id, $payload['dining_table_id'] ?? null);
+            $items = $this->normalizePosItems(
+                workspaceId: $workspace->id,
+                items: $payload['items'] ?? [],
+                requireActive: true
+            );
 
-        if (! empty($payload['dining_table_id'])) {
-            $table = DiningTable::query()->whereKey((int) $payload['dining_table_id'])->first();
-            if (! $table) {
-                throw new RuntimeException('الطاولة المحددة غير صالحة.');
-            }
+            $order = $this->createOrderWithSnapshots(
+                workspace: $workspace,
+                customerId: isset($payload['customer_id']) ? (int) $payload['customer_id'] : null,
+                source: 'pos',
+                items: $items,
+                table: $table,
+                session: $session,
+                discountAmount: (float) ($payload['discount_amount'] ?? 0),
+                notes: $payload['notes'] ?? null,
+                metadata: [
+                    'channel' => 'cashier',
+                    'created_by_user_id' => $actor?->id,
+                    'created_by_name' => $actor?->name,
+                ],
+                currency: (string) ($payload['currency'] ?? 'USD'),
+            );
 
-            $session = $this->ensureOpenSession($table);
-            $table->update(['status' => 'occupied']);
-        }
+            event(new \App\Events\OrderCreated($order));
 
-        $items = $this->normalizeItemsForMenu(
-            workspaceId: $workspace->id,
-            items: $payload['items'] ?? [],
-            requireOnlineOrdering: false,
-            requireVisibleInMenu: false
-        );
-
-        return $this->orderService->create([
-            'workspace_id' => $workspace->id,
-            'customer_id' => $payload['customer_id'] ?? null,
-            'dining_table_id' => $table?->id,
-            'table_session_id' => $session?->id,
-            'source' => 'pos',
-            'pos_status' => 'new',
-            'status' => 'confirmed',
-            'currency' => $payload['currency'] ?? 'USD',
-            'discount_amount' => $payload['discount_amount'] ?? 0,
-            'shipping_amount' => 0,
-            'notes' => $payload['notes'] ?? null,
-            'metadata' => [
-                'channel' => 'cashier',
-            ],
-            'items' => $items,
-        ], $actor);
+            return $order->fresh(['items', 'customer', 'table', 'tableSession']);
+        });
     }
 
     /**
@@ -74,39 +68,34 @@ class PosOrderService
     public function createQrMenuOrder(Workspace $workspace, ?DiningTable $table, array $payload): Order
     {
         return DB::transaction(function () use ($workspace, $table, $payload): Order {
-            $session = null;
-            if ($table) {
-                $session = $this->ensureOpenSession($table);
-                $table->update(['status' => 'occupied']);
-            }
-
+            $session = $table ? $this->ensureOpenSession($table) : null;
             $customerId = $this->resolveWalkInCustomerId($workspace, $payload);
-            $items = $this->normalizeItemsForMenu(
+            $items = $this->normalizePosItems(
                 workspaceId: $workspace->id,
                 items: $payload['items'] ?? [],
-                requireOnlineOrdering: true,
-                requireVisibleInMenu: true
+                requireActive: true
             );
 
-            return $this->orderService->create([
-                'workspace_id' => $workspace->id,
-                'customer_id' => $customerId,
-                'dining_table_id' => $table?->id,
-                'table_session_id' => $session?->id,
-                'source' => 'qr_menu',
-                'pos_status' => 'new',
-                'status' => 'confirmed',
-                'currency' => 'USD',
-                'discount_amount' => 0,
-                'shipping_amount' => 0,
-                'notes' => $payload['notes'] ?? null,
-                'metadata' => [
+            $order = $this->createOrderWithSnapshots(
+                workspace: $workspace,
+                customerId: $customerId,
+                source: 'qr_menu',
+                items: $items,
+                table: $table,
+                session: $session,
+                discountAmount: 0,
+                notes: $payload['notes'] ?? null,
+                metadata: [
                     'channel' => 'qr_menu',
                     'customer_name' => $payload['customer_name'] ?? null,
                     'customer_phone' => $payload['customer_phone'] ?? null,
                 ],
-                'items' => $items,
-            ]);
+                currency: (string) ($items->first()['currency'] ?? 'USD'),
+            );
+
+            event(new \App\Events\OrderCreated($order));
+
+            return $order->fresh(['items', 'customer', 'table', 'tableSession']);
         });
     }
 
@@ -132,6 +121,72 @@ class PosOrderService
         return $order->fresh(['items', 'customer', 'table', 'tableSession']);
     }
 
+    /**
+     * @param  array<string,mixed>  $payload
+     */
+    public function updateOrderItems(Order $order, array $payload): Order
+    {
+        if (! in_array($order->source, ['pos', 'qr_menu'], true)) {
+            throw new RuntimeException('يمكن تعديل عناصر فواتير POS فقط.');
+        }
+
+        if (in_array($order->pos_status, ['completed', 'cancelled'], true)) {
+            throw new RuntimeException('لا يمكن تعديل طلب مكتمل أو ملغي.');
+        }
+
+        $incomingItems = collect($payload['items'] ?? []);
+        if ($incomingItems->isEmpty()) {
+            throw new RuntimeException('يجب إرسال عناصر للتعديل.');
+        }
+
+        return DB::transaction(function () use ($order, $incomingItems, $payload): Order {
+            $existingIds = $order->items()->pluck('id')->all();
+
+            foreach ($incomingItems as $line) {
+                $itemId = (int) ($line['id'] ?? 0);
+                if (! in_array($itemId, $existingIds, true)) {
+                    continue;
+                }
+
+                $remove = (bool) ($line['remove'] ?? false);
+                if ($remove) {
+                    OrderItem::query()->where('order_id', $order->id)->whereKey($itemId)->delete();
+                    continue;
+                }
+
+                $quantity = max(1, (int) ($line['quantity'] ?? 1));
+                $unitPrice = max(0, (float) ($line['unit_price'] ?? 0));
+                $lineDiscount = max(0, (float) ($line['discount_amount'] ?? 0));
+                $lineTotal = max(0, ($quantity * $unitPrice) - $lineDiscount);
+
+                OrderItem::query()
+                    ->where('order_id', $order->id)
+                    ->whereKey($itemId)
+                    ->update([
+                        'quantity' => $quantity,
+                        'unit_price' => $unitPrice,
+                        'discount_amount' => $lineDiscount,
+                        'total_amount' => $lineTotal,
+                    ]);
+            }
+
+            $itemCount = OrderItem::query()->where('order_id', $order->id)->count();
+            if ($itemCount === 0) {
+                throw new RuntimeException('لا يمكن حفظ طلب بدون عناصر.');
+            }
+
+            $subtotal = (float) OrderItem::query()->where('order_id', $order->id)->sum('total_amount');
+            $discountAmount = max(0, (float) ($payload['discount_amount'] ?? $order->discount_amount));
+            $order->update([
+                'subtotal' => round($subtotal, 2),
+                'discount_amount' => $discountAmount,
+                'total_amount' => max(0, round($subtotal - $discountAmount, 2)),
+            ]);
+
+            return $order->fresh(['items', 'table', 'tableSession', 'customer']);
+        });
+    }
+
     public function openSession(DiningTable $table): TableSession
     {
         $session = $this->ensureOpenSession($table);
@@ -144,6 +199,15 @@ class PosOrderService
     {
         if ($session->status === 'closed') {
             return $session;
+        }
+
+        $hasRunningOrders = Order::query()
+            ->where('table_session_id', $session->id)
+            ->whereIn('pos_status', ['new', 'accepted', 'preparing', 'ready'])
+            ->exists();
+
+        if ($hasRunningOrders) {
+            throw new RuntimeException('لا يمكن إغلاق الجلسة بوجود طلبات جارية.');
         }
 
         $session->update([
@@ -173,16 +237,14 @@ class PosOrderService
         $this->financeBootstrapService->ensureWorkspaceFinanceSetup($workspace);
 
         $items = $order->items->map(function ($item): array {
-            $product = $item->product;
-
             return [
-                'product_id' => $item->product_id,
-                'product_name' => $item->product_name ?: ($product?->name ?? 'Item'),
+                'product_id' => null,
+                'product_name' => $item->product_name ?: 'Item',
                 'description' => $item->variant_name ? 'Variant: '.$item->variant_name : null,
                 'quantity' => (float) $item->quantity,
                 'unit_price' => (float) $item->unit_price,
                 'discount' => (float) $item->discount_amount,
-                'tax_rate' => (float) ($product?->vat_rate ?? 0),
+                'tax_rate' => 0.0,
             ];
         })->values()->all();
 
@@ -225,46 +287,157 @@ class PosOrderService
 
     /**
      * @param  array<int,mixed>  $items
-     * @return array<int,array<string,mixed>>
+     * @return Collection<int,array<string,mixed>>
      */
-    private function normalizeItemsForMenu(
+    private function normalizePosItems(
         int $workspaceId,
         array $items,
-        bool $requireOnlineOrdering,
-        bool $requireVisibleInMenu
-    ): array
+        bool $requireActive
+    ): Collection
     {
-        $normalized = [];
+        $normalized = collect();
 
         foreach ($items as $item) {
-            $product = Product::withoutGlobalScopes()
+            $menuItem = PosMenuItem::withoutGlobalScopes()
                 ->where('workspace_id', $workspaceId)
-                ->whereKey((int) ($item['product_id'] ?? 0))
+                ->whereKey((int) ($item['pos_menu_item_id'] ?? 0))
                 ->first();
 
-            if (! $product || $product->status !== 'active') {
-                throw new RuntimeException('أحد المنتجات غير متاح في المنيو.');
+            if (! $menuItem) {
+                throw new RuntimeException('أحد أصناف الكاشير غير صالح.');
             }
 
-            if ($requireVisibleInMenu && ! $product->show_in_menu) {
-                throw new RuntimeException('أحد المنتجات مخفي عن المنيو.');
+            if ($requireActive && ! $menuItem->is_active) {
+                throw new RuntimeException('أحد أصناف الكاشير غير مفعل.');
             }
 
-            if ($requireOnlineOrdering && ! $product->allow_online_ordering) {
-                throw new RuntimeException('أحد المنتجات غير متاح للطلب عبر المنيو.');
-            }
-
-            $normalized[] = [
-                'product_id' => $product->id,
-                'quantity' => (int) ($item['quantity'] ?? 1),
-            ];
+            $quantity = max(1, (int) ($item['quantity'] ?? 1));
+            $unitPrice = (float) $menuItem->price;
+            $lineTotal = round($quantity * $unitPrice, 2);
+            $normalized->push([
+                'pos_menu_item_id' => $menuItem->id,
+                'name' => $menuItem->name,
+                'item_type' => $menuItem->item_type ?: 'عام',
+                'quantity' => $quantity,
+                'unit_price' => $unitPrice,
+                'total_amount' => $lineTotal,
+                'currency' => $menuItem->currency ?: 'USD',
+            ]);
         }
 
-        if ($normalized === []) {
+        if ($normalized->isEmpty()) {
             throw new RuntimeException('لا يمكن إنشاء طلب بدون عناصر.');
         }
 
         return $normalized;
+    }
+
+    /**
+     * @param  array<string,mixed>  $payload
+     * @return array{0:DiningTable|null,1:TableSession|null}
+     */
+    private function resolveTableAndSession(int $workspaceId, mixed $diningTableId): array
+    {
+        if (empty($diningTableId)) {
+            return [null, null];
+        }
+
+        $table = DiningTable::withoutGlobalScopes()
+            ->where('workspace_id', $workspaceId)
+            ->whereKey((int) $diningTableId)
+            ->first();
+        if (! $table) {
+            throw new RuntimeException('الطاولة المحددة غير صالحة.');
+        }
+
+        $session = $this->ensureOpenSession($table);
+        $table->update(['status' => 'occupied']);
+
+        return [$table, $session];
+    }
+
+    /**
+     * @param  Collection<int,array<string,mixed>>  $items
+     * @param  array<string,mixed>|null  $metadata
+     */
+    private function createOrderWithSnapshots(
+        Workspace $workspace,
+        ?int $customerId,
+        string $source,
+        Collection $items,
+        ?DiningTable $table,
+        ?TableSession $session,
+        float $discountAmount,
+        ?string $notes,
+        ?array $metadata,
+        string $currency
+    ): Order {
+        $subtotal = round((float) $items->sum('total_amount'), 2);
+        $discountAmount = max(0, round($discountAmount, 2));
+        $total = max(0, round($subtotal - $discountAmount, 2));
+
+        $order = Order::query()->create([
+            'workspace_id' => $workspace->id,
+            'customer_id' => $customerId,
+            'dining_table_id' => $table?->id,
+            'table_session_id' => $session?->id,
+            'order_number' => $this->nextOrderNumber(),
+            'source' => $source,
+            'status' => 'confirmed',
+            'pos_status' => 'new',
+            'payment_status' => 'pending',
+            'fulfillment_status' => 'unfulfilled',
+            'shipping_status' => 'not_shipped',
+            'currency' => $currency,
+            'subtotal' => $subtotal,
+            'discount_amount' => $discountAmount,
+            'shipping_amount' => 0,
+            'total_amount' => $total,
+            'notes' => $notes,
+            'metadata' => $metadata,
+            'placed_at' => now(),
+        ]);
+
+        foreach ($items as $item) {
+            $order->items()->create([
+                'workspace_id' => $workspace->id,
+                'order_id' => $order->id,
+                'product_id' => null,
+                'product_variant_id' => null,
+                'pos_menu_item_id' => $item['pos_menu_item_id'],
+                'product_name' => $item['name'],
+                'variant_name' => null,
+                'item_type' => $item['item_type'],
+                'sku' => null,
+                'quantity' => $item['quantity'],
+                'unit_price' => $item['unit_price'],
+                'discount_amount' => 0,
+                'total_amount' => $item['total_amount'],
+            ]);
+        }
+
+        if ($customerId) {
+            $customer = Customer::withoutGlobalScopes()
+                ->where('workspace_id', $workspace->id)
+                ->whereKey($customerId)
+                ->first();
+            if ($customer) {
+                $customer->update([
+                    'orders_count' => $customer->orders()->count(),
+                    'total_purchases' => $customer->orders()->sum('total_amount'),
+                    'last_order_at' => now(),
+                ]);
+            }
+        }
+
+        return $order;
+    }
+
+    private function nextOrderNumber(): string
+    {
+        $lastId = (Order::withoutGlobalScopes()->max('id') ?? 0) + 1;
+
+        return 'POS-'.str_pad((string) $lastId, 8, '0', STR_PAD_LEFT);
     }
 
     /**

@@ -36,7 +36,7 @@ class AIService
                 ->where('workspace_id', $conversation->workspace_id)
                 ->where('status', 'active')])
             ->limit(20)
-            ->get(['id', 'name', 'description', 'sku', 'price', 'sale_price', 'stock', 'currency', 'brand', 'show_in_menu', 'allow_online_ordering'])
+            ->get(['id', 'name', 'description', 'sku', 'price', 'sale_price', 'stock', 'currency', 'brand'])
             ->map(fn (Product $product): array => [
                 'name' => $product->name,
                 'description' => $product->description,
@@ -45,8 +45,6 @@ class AIService
                 'stock' => $product->stock,
                 'currency' => $product->currency,
                 'brand' => $product->brand,
-                'show_in_menu' => (bool) $product->show_in_menu,
-                'allow_online_ordering' => (bool) $product->allow_online_ordering,
                 'variants' => $product->variants
                     ->map(fn (ProductVariant $variant): array => [
                         'name' => $variant->name,

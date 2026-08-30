@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Workspace\Pos;
 use App\Http\Requests\Pos\StoreDiningTableRequest;
 use App\Http\Requests\Pos\UpdateDiningTableRequest;
 use App\Models\DiningTable;
-use App\Models\Order;
 use App\Models\TableSession;
 use App\Services\Pos\PosOrderService;
 use Illuminate\Http\RedirectResponse;
@@ -13,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use RuntimeException;
 
 class TableController extends PosBaseController
 {
@@ -22,13 +22,14 @@ class TableController extends PosBaseController
 
     public function index(Request $request): View
     {
-        $this->authorizePos($request, 'orders.manage');
+        $this->authorizePos($request, 'tables.manage');
 
         $tables = DiningTable::query()
             ->with(['sessions' => fn ($query) => $query->where('status', 'open')->latest('id')])
             ->withCount([
-                'orders',
+                'orders as orders_count' => fn ($query) => $query->whereIn('source', ['pos', 'qr_menu']),
                 'orders as open_orders_count' => fn ($query) => $query
+                    ->whereIn('source', ['pos', 'qr_menu'])
                     ->whereIn('pos_status', ['new', 'accepted', 'preparing', 'ready']),
             ])
             ->orderBy('name')
@@ -42,12 +43,16 @@ class TableController extends PosBaseController
 
     public function show(Request $request, DiningTable $table): View
     {
-        $this->authorizePos($request, 'orders.manage');
+        $this->authorizePos($request, 'tables.manage');
         $this->authorize('view', $table);
 
         $table->load([
             'sessions' => fn ($query) => $query->latest('id')->limit(20),
-            'orders' => fn ($query) => $query->with('items')->latest('id')->limit(30),
+            'orders' => fn ($query) => $query
+                ->whereIn('source', ['pos', 'qr_menu'])
+                ->with(['items', 'financeInvoice'])
+                ->latest('id')
+                ->limit(50),
         ]);
 
         $currentSession = $table->sessions->firstWhere('status', 'open');
@@ -61,7 +66,7 @@ class TableController extends PosBaseController
 
     public function store(StoreDiningTableRequest $request): RedirectResponse
     {
-        $this->authorizePos($request, 'orders.manage');
+        $this->authorizePos($request, 'tables.manage');
 
         $workspace = $this->currentWorkspace();
         $validated = $request->validated();
@@ -85,7 +90,7 @@ class TableController extends PosBaseController
 
     public function update(UpdateDiningTableRequest $request, DiningTable $table): RedirectResponse
     {
-        $this->authorizePos($request, 'orders.manage');
+        $this->authorizePos($request, 'tables.manage');
         $this->authorize('update', $table);
 
         $workspace = $this->currentWorkspace();
@@ -112,7 +117,7 @@ class TableController extends PosBaseController
 
     public function openSession(Request $request, DiningTable $table): RedirectResponse
     {
-        $this->authorizePos($request, 'orders.manage');
+        $this->authorizePos($request, 'tables.manage');
         $this->authorize('update', $table);
 
         $this->posOrderService->openSession($table);
@@ -122,19 +127,23 @@ class TableController extends PosBaseController
 
     public function closeSession(Request $request, DiningTable $table, TableSession $session): RedirectResponse
     {
-        $this->authorizePos($request, 'orders.manage');
+        $this->authorizePos($request, 'tables.manage');
         $this->authorize('update', $table);
 
         abort_unless((int) $session->dining_table_id === (int) $table->id, 404);
 
-        $this->posOrderService->closeSession($session);
+        try {
+            $this->posOrderService->closeSession($session);
+        } catch (RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
 
         return back()->with('success', 'تم إغلاق الجلسة.');
     }
 
     public function regenerateQr(Request $request, DiningTable $table): RedirectResponse
     {
-        $this->authorizePos($request, 'orders.manage');
+        $this->authorizePos($request, 'tables.manage');
         $this->authorize('update', $table);
 
         $table->update([

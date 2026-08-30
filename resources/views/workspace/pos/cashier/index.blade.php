@@ -3,39 +3,45 @@
 @section('content')
     <div
         x-data="cashierPos({
-            products: @js($products),
-            categories: @js($categories),
+            items: @js($items),
+            types: @js($types),
         })"
-        class="grid gap-4 xl:grid-cols-3"
+        class="grid gap-4 xl:grid-cols-12"
     >
-        <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
+        <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:col-span-8">
             <div class="flex flex-wrap items-end justify-between gap-3">
                 <div>
-                    <h2 class="text-base font-bold text-slate-900">المنتجات</h2>
-                    <p class="text-xs text-slate-500">نفس المنتجات الحالية في النظام، بدون نسخ أو تكرار.</p>
+                    <h2 class="text-base font-bold text-slate-900">أصناف الكاشير</h2>
+                    <p class="text-xs text-slate-500">مصدر مستقل عن Products / Inventory الخارجية.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <a href="{{ route('workspace.pos.tables.index') }}" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">الطاولات</a>
+                    <a href="{{ route('workspace.pos.items.index') }}" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">إدارة الأصناف</a>
                 </div>
                 <div class="flex gap-2">
-                    <input x-model="search" type="search" placeholder="ابحث عن منتج..." class="rounded-lg border-slate-300 text-sm" />
-                    <select x-model.number="selectedCategoryId" class="rounded-lg border-slate-300 text-sm">
-                        <option value="">كل التصنيفات</option>
-                        <template x-for="category in categories" :key="category.id">
-                            <option :value="category.id" x-text="category.name"></option>
+                    <input x-model="search" type="search" placeholder="ابحث عن صنف..." class="rounded-lg border-slate-300 text-sm" />
+                    <select x-model="selectedType" class="rounded-lg border-slate-300 text-sm">
+                        <option value="">كل الأنواع</option>
+                        <template x-for="type in types" :key="type">
+                            <option :value="type" x-text="type"></option>
                         </template>
                     </select>
                 </div>
             </div>
 
-            <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                <template x-for="product in filteredProducts" :key="product.id">
+            <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <template x-for="item in filteredItems" :key="item.id">
                     <article class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <p class="text-sm font-semibold text-slate-900" x-text="product.name"></p>
-                        <p class="mt-1 text-xs text-slate-500 line-clamp-2" x-text="product.description || 'بدون وصف'"></p>
+                        <template x-if="item.image_path">
+                            <img :src="`/storage/${item.image_path}`" alt="" class="mb-2 h-28 w-full rounded-lg object-cover" />
+                        </template>
+                        <p class="text-sm font-semibold text-slate-900" x-text="item.name"></p>
+                        <p class="mt-1 text-[11px] text-slate-500" x-text="item.item_type || 'عام'"></p>
                         <p class="mt-2 text-sm font-bold text-slate-900">
-                            <span x-text="money(resolvePrice(product))"></span>
-                            <span x-text="product.currency"></span>
+                            <span x-text="money(item.price)"></span>
+                            <span x-text="item.currency"></span>
                         </p>
-                        <p class="mt-1 text-[11px] text-slate-500">المخزون: <span x-text="product.stock"></span></p>
-                        <button type="button" @click="addProduct(product)" class="mt-3 w-full rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white">
+                        <button type="button" @click="addItem(item)" class="mt-3 w-full rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white">
                             إضافة للطلب
                         </button>
                     </article>
@@ -43,7 +49,7 @@
             </div>
         </section>
 
-        <aside class="space-y-4">
+        <aside class="space-y-4 xl:col-span-4">
             <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <h2 class="text-base font-bold text-slate-900">طلب جديد</h2>
                 <form method="POST" action="{{ route('workspace.pos.orders.store') }}" @submit="prepareSubmit">
@@ -84,7 +90,7 @@
                             <p class="mt-2 text-xs text-slate-500">السلة فارغة.</p>
                         </template>
                         <div class="mt-2 space-y-2">
-                            <template x-for="(line, index) in cart" :key="line.product_id">
+                            <template x-for="(line, index) in cart" :key="line.pos_menu_item_id">
                                 <div class="rounded-lg bg-white p-2 text-xs">
                                     <div class="flex items-center justify-between gap-2">
                                         <p class="font-semibold text-slate-800" x-text="line.name"></p>
@@ -112,93 +118,43 @@
                         إنشاء Order
                     </button>
                 </form>
+                <a href="{{ route('workspace.pos.orders.running') }}" class="mt-3 block rounded-lg border border-slate-300 px-3 py-2 text-center text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                    عرض الطلبات الجارية
+                </a>
             </article>
         </aside>
     </div>
 
-    <section class="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 class="mb-3 text-base font-bold text-slate-900">طلبات POS و QR</h2>
-        <div class="space-y-3">
-            @foreach($orders as $order)
-                <article class="rounded-xl border border-slate-200 p-3">
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                            <p class="text-sm font-semibold text-slate-900">#{{ $order->order_number }}</p>
-                            <p class="text-xs text-slate-500">
-                                المصدر: {{ strtoupper($order->source) }}
-                                @if($order->table)
-                                    • {{ $order->table->name }}
-                                @endif
-                            </p>
-                        </div>
-                        <p class="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{{ $posStatuses[$order->pos_status] ?? $order->pos_status }}</p>
-                    </div>
-                    <ul class="mt-2 space-y-1 text-xs text-slate-600">
-                        @foreach($order->items as $item)
-                            <li>{{ $item->product_name }} × {{ $item->quantity }} = {{ number_format((float) $item->total_amount, 2) }}</li>
-                        @endforeach
-                    </ul>
-                    <div class="mt-3 flex flex-wrap items-center gap-2">
-                        <form method="POST" action="{{ route('workspace.pos.orders.status', $order) }}" class="flex items-center gap-2">
-                            @csrf
-                            <select name="pos_status" class="rounded-lg border-slate-300 text-xs">
-                                @foreach($posStatuses as $key => $label)
-                                    <option value="{{ $key }}" @selected($order->pos_status === $key)>{{ $label }}</option>
-                                @endforeach
-                            </select>
-                            <button class="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white">تحديث</button>
-                        </form>
-                        @if(!$order->finance_invoice_id)
-                            <form method="POST" action="{{ route('workspace.pos.orders.invoice', $order) }}">
-                                @csrf
-                                <button class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">تحويل لفاتورة</button>
-                            </form>
-                        @else
-                            <a href="{{ route('workspace.finance.invoices.show', $order->finance_invoice_id) }}" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">عرض الفاتورة</a>
-                        @endif
-                        <p class="mr-auto text-sm font-bold text-slate-900">Total: {{ number_format((float) $order->total_amount, 2) }} {{ $order->currency }}</p>
-                    </div>
-                </article>
-            @endforeach
-        </div>
-        <div class="mt-4">
-            {{ $orders->links() }}
-        </div>
-    </section>
-
     <script>
-        function cashierPos({ products, categories }) {
+        function cashierPos({ items, types }) {
             return {
-                products,
-                categories,
+                items,
+                types,
                 search: '',
-                selectedCategoryId: '',
+                selectedType: '',
                 cart: [],
                 discount: 0,
-                get filteredProducts() {
-                    return this.products.filter((product) => {
-                        const matchesCategory = !this.selectedCategoryId || product.category_id === this.selectedCategoryId;
+                get filteredItems() {
+                    return this.items.filter((item) => {
+                        const matchesType = !this.selectedType || item.item_type === this.selectedType;
                         const term = this.search.trim().toLowerCase();
                         const matchesSearch = term === ''
-                            || (product.name || '').toLowerCase().includes(term)
-                            || (product.description || '').toLowerCase().includes(term);
-                        return matchesCategory && matchesSearch;
+                            || (item.name || '').toLowerCase().includes(term)
+                            || (item.item_type || '').toLowerCase().includes(term);
+                        return matchesType && matchesSearch;
                     });
                 },
-                resolvePrice(product) {
-                    return Number(product.sale_price ?? product.price ?? 0);
-                },
-                addProduct(product) {
-                    const existing = this.cart.find((line) => line.product_id === product.id);
+                addItem(item) {
+                    const existing = this.cart.find((line) => line.pos_menu_item_id === item.id);
                     if (existing) {
                         existing.quantity += 1;
                         return;
                     }
 
                     this.cart.push({
-                        product_id: product.id,
-                        name: product.name,
-                        unit_price: this.resolvePrice(product),
+                        pos_menu_item_id: item.id,
+                        name: item.name,
+                        unit_price: Number(item.price || 0),
                         quantity: 1,
                     });
                 },
@@ -227,19 +183,19 @@
                 prepareSubmit(event) {
                     if (this.cart.length === 0) {
                         event.preventDefault();
-                        alert('أضف منتجًا واحدًا على الأقل قبل إنشاء الطلب.');
+                        alert('أضف صنفًا واحدًا على الأقل قبل إنشاء الطلب.');
                         return;
                     }
 
                     event.target.querySelectorAll('[data-cart-input]').forEach((node) => node.remove());
 
                     this.cart.forEach((line, index) => {
-                        const productInput = document.createElement('input');
-                        productInput.type = 'hidden';
-                        productInput.name = `items[${index}][product_id]`;
-                        productInput.value = line.product_id;
-                        productInput.dataset.cartInput = '1';
-                        event.target.appendChild(productInput);
+                        const itemInput = document.createElement('input');
+                        itemInput.type = 'hidden';
+                        itemInput.name = `items[${index}][pos_menu_item_id]`;
+                        itemInput.value = line.pos_menu_item_id;
+                        itemInput.dataset.cartInput = '1';
+                        event.target.appendChild(itemInput);
 
                         const quantityInput = document.createElement('input');
                         quantityInput.type = 'hidden';

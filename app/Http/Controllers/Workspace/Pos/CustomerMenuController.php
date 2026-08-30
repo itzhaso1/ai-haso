@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Workspace\Pos;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Pos\StorePublicMenuOrderRequest;
 use App\Models\DiningTable;
-use App\Models\Product;
+use App\Models\PosMenuItem;
 use App\Models\Workspace;
 use App\Services\Pos\PosOrderService;
 use Illuminate\Http\RedirectResponse;
@@ -23,7 +23,7 @@ class CustomerMenuController extends Controller
         return view('workspace.pos.menu', [
             'workspace' => $workspace,
             'table' => null,
-            'products' => $this->menuProducts($workspace->id),
+            'items' => $this->menuItems($workspace->id),
         ]);
     }
 
@@ -37,7 +37,7 @@ class CustomerMenuController extends Controller
         return view('workspace.pos.menu', [
             'workspace' => $workspace,
             'table' => $table,
-            'products' => $this->menuProducts($workspace->id),
+            'items' => $this->menuItems($workspace->id),
         ]);
     }
 
@@ -68,26 +68,20 @@ class CustomerMenuController extends Controller
         return back()->with('success', 'تم إرسال طلب الطاولة بنجاح. رقم الطلب: '.$order->order_number);
     }
 
-    private function menuProducts(int $workspaceId)
+    private function menuItems(int $workspaceId)
     {
-        return Product::withoutGlobalScopes()
-            ->with('category:id,name')
+        return PosMenuItem::withoutGlobalScopes()
             ->where('workspace_id', $workspaceId)
-            ->where('status', 'active')
-            ->where('show_in_menu', true)
-            ->orderBy('menu_sort_order')
+            ->where('is_active', true)
+            ->orderBy('sort_order')
             ->orderBy('name')
             ->get([
                 'id',
-                'category_id',
                 'name',
-                'description',
-                'images',
                 'price',
-                'sale_price',
                 'currency',
-                'stock',
-                'allow_online_ordering',
+                'item_type',
+                'image_path',
             ]);
     }
 }
