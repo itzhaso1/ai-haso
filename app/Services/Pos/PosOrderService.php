@@ -42,7 +42,12 @@ class PosOrderService
             $table->update(['status' => 'occupied']);
         }
 
-        $items = $this->normalizeItemsForMenu($workspace->id, $payload['items'] ?? [], false);
+        $items = $this->normalizeItemsForMenu(
+            workspaceId: $workspace->id,
+            items: $payload['items'] ?? [],
+            requireOnlineOrdering: false,
+            requireVisibleInMenu: false
+        );
 
         return $this->orderService->create([
             'workspace_id' => $workspace->id,
@@ -76,7 +81,12 @@ class PosOrderService
             }
 
             $customerId = $this->resolveWalkInCustomerId($workspace, $payload);
-            $items = $this->normalizeItemsForMenu($workspace->id, $payload['items'] ?? [], true);
+            $items = $this->normalizeItemsForMenu(
+                workspaceId: $workspace->id,
+                items: $payload['items'] ?? [],
+                requireOnlineOrdering: true,
+                requireVisibleInMenu: true
+            );
 
             return $this->orderService->create([
                 'workspace_id' => $workspace->id,
@@ -217,7 +227,12 @@ class PosOrderService
      * @param  array<int,mixed>  $items
      * @return array<int,array<string,mixed>>
      */
-    private function normalizeItemsForMenu(int $workspaceId, array $items, bool $requireOnlineOrdering): array
+    private function normalizeItemsForMenu(
+        int $workspaceId,
+        array $items,
+        bool $requireOnlineOrdering,
+        bool $requireVisibleInMenu
+    ): array
     {
         $normalized = [];
 
@@ -227,8 +242,12 @@ class PosOrderService
                 ->whereKey((int) ($item['product_id'] ?? 0))
                 ->first();
 
-            if (! $product || $product->status !== 'active' || ! $product->show_in_menu) {
+            if (! $product || $product->status !== 'active') {
                 throw new RuntimeException('أحد المنتجات غير متاح في المنيو.');
+            }
+
+            if ($requireVisibleInMenu && ! $product->show_in_menu) {
+                throw new RuntimeException('أحد المنتجات مخفي عن المنيو.');
             }
 
             if ($requireOnlineOrdering && ! $product->allow_online_ordering) {
