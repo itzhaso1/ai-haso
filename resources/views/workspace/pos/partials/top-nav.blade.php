@@ -1,6 +1,6 @@
-@php($workspace = request()->attributes->get('workspace'))
 @php
-    $links = [
+    $workspace = request()->attributes->get('workspace');
+    $navLinks = [
         ['label' => 'الكاشير', 'route' => 'workspace.pos.cashier.index', 'active' => ['workspace.pos.cashier.*']],
         ['label' => 'الطاولات', 'route' => 'workspace.pos.tables.index', 'active' => ['workspace.pos.dashboard', 'workspace.pos.tables.*']],
         ['label' => 'Menu', 'route' => 'workspace.pos.menu.index', 'active' => 'workspace.pos.menu.*'],
@@ -13,7 +13,7 @@
 
 <nav class="border-b border-slate-200 bg-white px-3 sm:px-6">
     <div class="mx-auto flex max-w-[1500px] items-center gap-2 overflow-x-auto py-3">
-        @foreach($links as $link)
+        @foreach($navLinks as $link)
             @php
                 $patterns = is_array($link['active']) ? $link['active'] : [$link['active']];
                 $isActive = collect($patterns)->contains(fn (string $pattern): bool => request()->routeIs($pattern));

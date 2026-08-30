@@ -34,15 +34,6 @@
                         ],
                     ],
                     [
-                        'title' => 'Customers & Orders',
-                        'description' => 'إدارة العملاء والطلبات دون تكرار بيانات.',
-                        'icon' => 'users',
-                        'links' => [
-                            ['label' => 'العملاء', 'route' => 'workspace.customers.index', 'active' => 'workspace.customers.*'],
-                            ['label' => 'الطلبات', 'route' => 'workspace.orders.index', 'active' => 'workspace.orders.*'],
-                        ],
-                    ],
-                    [
                         'title' => 'POS / Cashier',
                         'description' => 'واجهة الكاشير، إدارة الطاولات، وطلبات QR Menu.',
                         'icon' => 'wallet',

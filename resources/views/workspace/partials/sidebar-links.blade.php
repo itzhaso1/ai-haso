@@ -21,16 +21,6 @@
             ],
         ],
         [
-            'key' => 'customers-orders',
-            'title' => 'العملاء والمبيعات',
-            'description' => 'متابعة العملاء ودورة الطلبات.',
-            'icon' => 'users',
-            'links' => [
-                ['label' => 'العملاء', 'route' => 'workspace.customers.index', 'active' => 'workspace.customers.*'],
-                ['label' => 'الطلبات', 'route' => 'workspace.orders.index', 'active' => 'workspace.orders.*'],
-            ],
-        ],
-        [
             'key' => 'pos-cashier',
             'title' => 'POS / الكاشير',
             'description' => 'الكاشير، الطاولات، وطلبات QR.',
