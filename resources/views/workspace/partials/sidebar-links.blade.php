@@ -36,6 +36,7 @@
             'icon' => 'chat',
             'links' => [
                 ['label' => 'المحادثات', 'route' => 'workspace.conversations.index', 'active' => 'workspace.conversations.*'],
+                ['label' => 'Channels', 'route' => 'workspace.channels.index', 'active' => 'workspace.channels.*'],
                 ['label' => 'البريد الإلكتروني', 'route' => 'workspace.emails.index', 'active' => 'workspace.emails.*'],
                 ['label' => 'واتساب', 'route' => 'workspace.whatsapp-accounts.index', 'active' => 'workspace.whatsapp-accounts.*'],
             ],

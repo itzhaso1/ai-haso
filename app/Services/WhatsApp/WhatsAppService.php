@@ -87,10 +87,14 @@ class WhatsAppService
                 'status' => 'open',
                 'ai_enabled' => true,
                 'last_message_at' => now(),
+                'metadata' => [
+                    'channel_source' => 'whatsapp',
+                    'unread_count' => 0,
+                ],
             ]
         );
 
-        return Message::withoutGlobalScopes()->create([
+        $message = Message::withoutGlobalScopes()->create([
             'workspace_id' => $workspaceId,
             'conversation_id' => $conversation->id,
             'customer_id' => $customer->id,
@@ -100,5 +104,21 @@ class WhatsAppService
             'external_message_id' => $externalMessageId,
             'metadata' => $messageData,
         ]);
+
+        $conversationMetadata = is_array($conversation->metadata) ? $conversation->metadata : [];
+        $conversationMetadata['channel_source'] = 'whatsapp';
+        $conversationMetadata['unread_count'] = (int) ($conversationMetadata['unread_count'] ?? 0) + 1;
+
+        $conversation->update([
+            'customer_id' => $conversation->customer_id ?: $customer->id,
+            'last_message_at' => $message->created_at,
+            'metadata' => $conversationMetadata,
+        ]);
+
+        $customer->update([
+            'last_conversation_at' => $message->created_at,
+        ]);
+
+        return $message;
     }
 }

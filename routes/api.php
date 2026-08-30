@@ -18,7 +18,6 @@ use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Controllers\Api\WhatsAppController;
 use App\Http\Controllers\Api\WorkspaceController;
 use App\Http\Controllers\Webhook\PaymentWebhookController;
-use App\Http\Controllers\Webhook\WhatsAppWebhookController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function (): void {
@@ -73,6 +72,4 @@ Route::middleware(['auth:sanctum', 'workspace.resolve', 'workspace.member'])
         Route::post('/appointments/ai/actions', [AppointmentAiActionController::class, 'execute']);
     });
 
-Route::get('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'verify'])->name('webhooks.whatsapp.verify');
-Route::post('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'handle'])->name('webhooks.whatsapp.handle');
 Route::post('/webhooks/payments/{provider}', [PaymentWebhookController::class, 'handle']);

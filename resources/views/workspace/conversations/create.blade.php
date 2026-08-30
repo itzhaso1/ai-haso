@@ -19,7 +19,7 @@
                     <div>
                         <label class="mb-1 block text-sm">القناة</label>
                         <select name="channel" class="w-full rounded-lg border-gray-300">
-                            @foreach(['whatsapp','web','manual'] as $channel)
+                            @foreach(['whatsapp','instagram','facebook_messenger','email','web','manual'] as $channel)
                                 <option value="{{ $channel }}">{{ $channel }}</option>
                             @endforeach
                         </select>

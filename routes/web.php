@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\PhoneOtpController;
 use App\Http\Controllers\Auth\SocialLoginController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Webhook\ResendWebhookController;
+use App\Http\Controllers\Webhook\WhatsAppWebhookController;
 use App\Http\Controllers\WorkspaceSelectionController;
 use App\Http\Controllers\Workspace\AiSettingController;
 use App\Http\Controllers\Workspace\Appointments\BookingController as AppointmentsBookingController;
@@ -15,6 +16,7 @@ use App\Http\Controllers\Workspace\Appointments\DashboardController as Appointme
 use App\Http\Controllers\Workspace\Appointments\ModulePageController as AppointmentsModulePageController;
 use App\Http\Controllers\Workspace\Appointments\RequestController as AppointmentsRequestController;
 use App\Http\Controllers\Workspace\CategoryController;
+use App\Http\Controllers\Workspace\ChannelController;
 use App\Http\Controllers\Workspace\ConversationController;
 use App\Http\Controllers\Workspace\ContractController as WorkspaceContractController;
 use App\Http\Controllers\Workspace\CustomerController;
@@ -78,6 +80,13 @@ Route::post('/assistant/chat', [AssistantController::class, 'chat'])
 Route::post('/webhooks/resend', [ResendWebhookController::class, 'handle'])
     ->middleware('throttle:120,1')
     ->name('webhooks.resend');
+
+Route::get('/whatsapp-webhook', [WhatsAppWebhookController::class, 'verify'])
+    ->middleware('throttle:120,1')
+    ->name('webhooks.whatsapp.verify');
+Route::post('/whatsapp-webhook', [WhatsAppWebhookController::class, 'handle'])
+    ->middleware('throttle:120,1')
+    ->name('webhooks.whatsapp.handle');
 
 Route::middleware('throttle:30,1')->group(function (): void {
     Route::get('/appointments/portal/{token}', [AppointmentsCustomerPortalController::class, 'show'])->name('appointments.portal.show');
@@ -171,6 +180,8 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
         Route::put('ai-settings', [AiSettingController::class, 'update'])->name('ai-settings.update');
 
         Route::resource('whatsapp-accounts', WhatsAppAccountController::class)->except(['show']);
+        Route::get('channels', [ChannelController::class, 'index'])->name('channels.index');
+        Route::post('channels/whatsapp/connect', [ChannelController::class, 'connectWhatsApp'])->name('channels.whatsapp.connect');
 
         Route::get('emails', [EmailController::class, 'index'])->name('emails.index');
         Route::get('emails/inbox', [EmailController::class, 'inbox'])->name('emails.inbox');

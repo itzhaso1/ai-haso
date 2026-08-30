@@ -25,6 +25,7 @@ class ConversationController extends Controller
         $this->authorize('viewAny', Conversation::class);
 
         $search = $request->string('search')->toString();
+        $channelFilter = $this->normalizeChannelFilter($request->string('channel')->toString());
 
         $conversations = Conversation::query()
             ->with([
@@ -32,6 +33,27 @@ class ConversationController extends Controller
                 'messages' => fn ($query) => $query->latest()->limit(1),
             ])
             ->withCount('messages')
+            ->when($channelFilter, function ($query, $channelFilter): void {
+                if (in_array($channelFilter, ['whatsapp', 'web'], true)) {
+                    $query->where('channel', $channelFilter);
+
+                    return;
+                }
+
+                if ($channelFilter === 'manual') {
+                    $query->where('channel', 'manual')
+                        ->where(function ($manualQuery): void {
+                            $manualQuery
+                                ->whereNull('metadata->channel_source')
+                                ->orWhere('metadata->channel_source', 'manual');
+                        });
+
+                    return;
+                }
+
+                $query->where('channel', 'manual')
+                    ->where('metadata->channel_source', $channelFilter);
+            })
             ->when($search, function ($query, $search): void {
                 $query->where(function ($innerQuery) use ($search): void {
                     $innerQuery
@@ -42,6 +64,19 @@ class ConversationController extends Controller
             ->latest('last_message_at')
             ->paginate(12)
             ->withQueryString();
+
+        $conversations->setCollection(
+            $conversations->getCollection()
+                ->map(function (Conversation $conversation) {
+                    $displayChannel = $this->resolveDisplayChannel($conversation);
+                    $metadata = is_array($conversation->metadata) ? $conversation->metadata : [];
+                    $conversation->setAttribute('display_channel', $displayChannel);
+                    $conversation->setAttribute('unread_count', (int) ($metadata['unread_count'] ?? 0));
+
+                    return $conversation;
+                })
+                ->values()
+        );
 
         $activeConversationId = $request->integer('conversation');
         if (! $activeConversationId && $conversations->count() > 0) {
@@ -58,6 +93,14 @@ class ConversationController extends Controller
                 ->find($activeConversationId);
 
             if ($activeConversation) {
+                $activeConversation->setAttribute('display_channel', $this->resolveDisplayChannel($activeConversation));
+
+                $metadata = is_array($activeConversation->metadata) ? $activeConversation->metadata : [];
+                if ((int) ($metadata['unread_count'] ?? 0) > 0) {
+                    $metadata['unread_count'] = 0;
+                    $activeConversation->update(['metadata' => $metadata]);
+                }
+
                 $activeConversation->setRelation(
                     'messages',
                     $activeConversation->messages->sortBy('created_at')->values()
@@ -65,7 +108,19 @@ class ConversationController extends Controller
             }
         }
 
-        return view('workspace.conversations.index', compact('conversations', 'activeConversation'));
+        return view('workspace.conversations.index', [
+            'conversations' => $conversations,
+            'activeConversation' => $activeConversation,
+            'channelFilter' => $channelFilter,
+            'availableChannels' => [
+                'whatsapp' => 'WhatsApp',
+                'instagram' => 'Instagram',
+                'facebook_messenger' => 'Facebook Messenger',
+                'email' => 'Email',
+                'web' => 'Web',
+                'manual' => 'Manual',
+            ],
+        ]);
     }
 
     public function create(): View
@@ -150,5 +205,33 @@ class ConversationController extends Controller
         return redirect()->route('workspace.conversations.index', [
             'conversation' => $conversation->id,
         ])->with('success', 'تم إرسال الرسالة.');
+    }
+
+    private function normalizeChannelFilter(string $channel): ?string
+    {
+        $normalized = strtolower(trim($channel));
+
+        if ($normalized === '') {
+            return null;
+        }
+
+        return match ($normalized) {
+            'facebook', 'messenger', 'facebook-messenger' => 'facebook_messenger',
+            'ig' => 'instagram',
+            default => $normalized,
+        };
+    }
+
+    private function resolveDisplayChannel(Conversation $conversation): string
+    {
+        $metadata = is_array($conversation->metadata) ? $conversation->metadata : [];
+        $channel = $metadata['channel_source'] ?? $conversation->channel ?? 'manual';
+        $normalized = strtolower(trim((string) $channel));
+
+        return match ($normalized) {
+            'facebook', 'messenger', 'facebook-messenger' => 'facebook_messenger',
+            'ig' => 'instagram',
+            default => $normalized !== '' ? $normalized : 'manual',
+        };
     }
 }

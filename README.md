@@ -73,11 +73,14 @@ npm run dev
 
 ### WhatsApp Webhook (Meta)
 
-- Verification endpoint: `GET /api/webhooks/whatsapp`
-- Incoming messages endpoint: `POST /api/webhooks/whatsapp`
+- Verification endpoint: `GET /whatsapp-webhook`
+- Incoming messages endpoint: `POST /whatsapp-webhook`
 - Configure in `.env`:
   - `WHATSAPP_VERIFY_TOKEN=your_verify_token`
   - `WHATSAPP_APP_SECRET=your_meta_app_secret`
+  - `META_APP_ID=your_meta_app_id`
+  - `META_APP_SECRET=your_meta_app_secret`
+  - `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID=your_embedded_signup_config_id`
 - Controller used:
   - `App\Http\Controllers\Webhook\WhatsAppWebhookController`
 

@@ -1,23 +1,43 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="text-xl font-semibold text-gray-900">المحادثات</h2>
+        <div>
+            <h2 class="text-xl font-semibold text-gray-900">Omnichannel Inbox</h2>
+            <p class="mt-1 text-xs text-slate-500">المحادثات موحّدة عبر WhatsApp وInstagram وMessenger وEmail.</p>
+        </div>
     </x-slot>
+
+    @php
+        $channelUi = [
+            'whatsapp' => ['label' => 'WhatsApp', 'badge' => 'bg-emerald-100 text-emerald-700'],
+            'instagram' => ['label' => 'Instagram', 'badge' => 'bg-pink-100 text-pink-700'],
+            'facebook_messenger' => ['label' => 'Facebook Messenger', 'badge' => 'bg-blue-100 text-blue-700'],
+            'email' => ['label' => 'Email', 'badge' => 'bg-amber-100 text-amber-700'],
+            'web' => ['label' => 'Web', 'badge' => 'bg-slate-100 text-slate-700'],
+            'manual' => ['label' => 'Manual', 'badge' => 'bg-slate-100 text-slate-700'],
+        ];
+    @endphp
 
     @include('partials.flash')
 
-    <div class="mx-auto max-w-[1400px]">
-        <div class="mb-4 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm sm:px-5">
+    <div class="mx-auto max-w-[1450px] space-y-4">
+        <div class="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm sm:px-5">
             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <form method="GET" class="flex flex-1 items-center gap-2">
+                <form method="GET" class="grid w-full flex-1 gap-2 md:grid-cols-3">
                     <input
                         name="search"
                         value="{{ request('search') }}"
                         class="w-full rounded-xl border-gray-300 text-sm focus:border-[#06C2A4] focus:ring-[#06C2A4]"
                         placeholder="بحث باسم العميل أو External ID" />
+                    <select name="channel" class="w-full rounded-xl border-gray-300 text-sm focus:border-[#06C2A4] focus:ring-[#06C2A4]">
+                        <option value="">كل القنوات</option>
+                        @foreach($availableChannels as $channelKey => $channelLabel)
+                            <option value="{{ $channelKey }}" @selected($channelFilter === $channelKey)>{{ $channelLabel }}</option>
+                        @endforeach
+                    </select>
+                    <button class="rounded-xl bg-[#06C2A4] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#04a98e]">بحث</button>
                     @if(request()->filled('conversation'))
                         <input type="hidden" name="conversation" value="{{ request('conversation') }}">
                     @endif
-                    <button class="rounded-xl bg-[#06C2A4] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#04a98e]">بحث</button>
                 </form>
                 <a href="{{ route('workspace.conversations.create') }}" class="inline-flex items-center justify-center rounded-xl border border-[#06C2A4] px-4 py-2 text-sm font-semibold text-[#06C2A4] transition hover:bg-[#E8FAF6]">
                     + محادثة جديدة
@@ -26,19 +46,22 @@
         </div>
 
         <div class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-            <div class="flex min-h-[72vh] flex-col lg:flex-row-reverse">
-                <aside class="w-full border-b border-gray-200 bg-[#FCFFFE] lg:w-[360px] lg:border-b-0 lg:border-l">
+            <div class="flex min-h-[74vh] flex-col lg:flex-row-reverse">
+                <aside class="w-full border-b border-gray-200 bg-[#FCFFFE] lg:w-[390px] lg:border-b-0 lg:border-l">
                     <div class="border-b border-gray-200 px-4 py-4">
                         <h3 class="font-semibold text-gray-900">قائمة المحادثات</h3>
-                        <p class="mt-1 text-xs text-gray-500">جاهز لربط رسائل Meta WhatsApp API لاحقًا.</p>
+                        <p class="mt-1 text-xs text-gray-500">الاسم، آخر رسالة، القناة، الحالة، وعدد غير المقروء.</p>
                     </div>
-                    <div class="max-h-[58vh] overflow-y-auto lg:max-h-[calc(72vh-120px)]">
+                    <div class="max-h-[60vh] overflow-y-auto lg:max-h-[calc(74vh-122px)]">
                         @forelse($conversations as $conversation)
                             @php
                                 $isActive = $activeConversation && $activeConversation->id === $conversation->id;
                                 $preview = $conversation->messages->first();
+                                $displayChannel = $conversation->display_channel ?? $conversation->channel;
+                                $channelChip = $channelUi[$displayChannel] ?? $channelUi['manual'];
+                                $unreadCount = (int) ($conversation->unread_count ?? 0);
                             @endphp
-                            <a href="{{ route('workspace.conversations.index', array_filter(['search' => request('search'), 'conversation' => $conversation->id])) }}"
+                            <a href="{{ route('workspace.conversations.index', array_filter(['search' => request('search'), 'channel' => request('channel'), 'conversation' => $conversation->id])) }}"
                                class="{{ $isActive ? 'bg-[#E8FAF6]' : 'hover:bg-gray-50' }} block border-b border-gray-100 px-4 py-3 transition">
                                 <div class="flex items-start justify-between gap-3">
                                     <div class="min-w-0 flex-1">
@@ -48,11 +71,16 @@
                                         </p>
                                     </div>
                                     <div class="text-left">
-                                        <span class="rounded-full bg-gray-100 px-2 py-1 text-[11px] text-gray-600">{{ $conversation->messages_count }}</span>
+                                        @if($unreadCount > 0)
+                                            <span class="rounded-full bg-rose-100 px-2 py-1 text-[11px] font-semibold text-rose-700">{{ $unreadCount }}</span>
+                                        @endif
                                     </div>
                                 </div>
-                                <div class="mt-2 flex items-center justify-between text-[11px] text-gray-500">
-                                    <span>{{ $conversation->channel }}</span>
+                                <div class="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-gray-500">
+                                    <div class="flex items-center gap-2">
+                                        <span class="{{ $channelChip['badge'] }} rounded-full px-2 py-1 font-semibold">{{ $channelChip['label'] }}</span>
+                                        <span class="rounded-full bg-slate-100 px-2 py-1">{{ $conversation->status }}</span>
+                                    </div>
                                     <span>{{ $conversation->last_message_at?->diffForHumans() ?? 'بدون نشاط' }}</span>
                                 </div>
                             </a>
@@ -67,11 +95,18 @@
 
                 <section class="flex min-h-[56vh] flex-1 flex-col bg-white">
                     @if($activeConversation)
+                        @php
+                            $activeDisplayChannel = $activeConversation->display_channel ?? $activeConversation->channel;
+                            $activeChannelChip = $channelUi[$activeDisplayChannel] ?? $channelUi['manual'];
+                        @endphp
                         <div class="border-b border-gray-200 px-4 py-4">
                             <div class="flex flex-wrap items-center justify-between gap-3">
                                 <div>
                                     <h3 class="text-base font-semibold text-gray-900">{{ $activeConversation->customer?->name ?? 'عميل بدون اسم' }}</h3>
-                                    <p class="mt-1 text-xs text-gray-500">القناة: {{ $activeConversation->channel }} · الحالة: {{ $activeConversation->status }}</p>
+                                    <div class="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                                        <span class="{{ $activeChannelChip['badge'] }} rounded-full px-2 py-1 font-semibold">{{ $activeChannelChip['label'] }}</span>
+                                        <span class="rounded-full bg-slate-100 px-2 py-1">Status: {{ $activeConversation->status }}</span>
+                                    </div>
                                 </div>
                                 <form method="POST" action="{{ route('workspace.conversations.update', $activeConversation) }}" class="flex items-center gap-2">
                                     @csrf
@@ -97,7 +132,7 @@
                                     $outbound = in_array($message->direction, ['outbound', 'internal_note'], true);
                                 @endphp
                                 <div class="flex {{ $outbound ? 'justify-start' : 'justify-end' }}">
-                                    <div class="{{ $outbound ? 'bg-[#DDF6F1] text-gray-900' : 'bg-white text-gray-800 border border-gray-200' }} max-w-[80%] rounded-2xl px-4 py-2 shadow-sm">
+                                    <div class="{{ $outbound ? 'bg-[#DDF6F1] text-gray-900' : 'bg-white text-gray-800 border border-gray-200' }} max-w-[82%] rounded-2xl px-4 py-2 shadow-sm">
                                         <p class="text-sm leading-6">{{ $message->content ?: '—' }}</p>
                                         <div class="mt-1 flex items-center gap-2 text-[11px] text-gray-500">
                                             <span>{{ $message->direction }}</span>
@@ -134,7 +169,7 @@
                                 <textarea name="content" rows="2" class="w-full rounded-xl border-gray-300 text-sm focus:border-[#06C2A4] focus:ring-[#06C2A4]" placeholder="اكتب الرسالة هنا..."></textarea>
                                 <input type="hidden" name="metadata_json" value="{}">
                                 <div class="flex items-center justify-between gap-3">
-                                    <p class="text-xs text-gray-500">يمكنك إرسال outbound، أو تسجيل inbound لمحاكاة الاستقبال من مزود خارجي.</p>
+                                    <p class="text-xs text-gray-500">المصدر الحالي: {{ $activeChannelChip['label'] }} · الإرسال من نفس المحادثة مباشرة.</p>
                                     <button class="rounded-xl bg-[#06C2A4] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#04a98e]">
                                         إرسال الرسالة
                                     </button>
@@ -145,7 +180,7 @@
                         <div class="flex h-full flex-1 items-center justify-center px-6">
                             <div class="max-w-md text-center">
                                 <h3 class="text-lg font-semibold text-gray-900">اختر محادثة للبدء</h3>
-                                <p class="mt-2 text-sm text-gray-500">واجهة المحادثة جاهزة للإرسال والاستقبال وربط تكاملات WhatsApp API مستقبلًا.</p>
+                                <p class="mt-2 text-sm text-gray-500">واجهة Omnichannel Inbox جاهزة لإدارة المحادثات حسب القناة.</p>
                             </div>
                         </div>
                     @endif

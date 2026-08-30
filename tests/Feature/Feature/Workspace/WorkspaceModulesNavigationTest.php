@@ -25,14 +25,14 @@ class WorkspaceModulesNavigationTest extends TestCase
 
         $response->assertOk()
             ->assertSee('Products & Inventory')
-            ->assertSee('Customers & Orders')
+            ->assertSee('POS / Cashier')
             ->assertSee('Communication')
             ->assertSee('Payments & Subscriptions')
             ->assertSee('Finance')
             ->assertSee(route('workspace.categories.index'), false)
             ->assertSee(route('workspace.products.index'), false)
             ->assertSee(route('workspace.inventory.index'), false)
-            ->assertSee(route('workspace.customers.index'), false)
+            ->assertSee(route('workspace.channels.index'), false)
             ->assertSee(route('workspace.finance.dashboard'), false)
             ->assertSee(route('workspace.finance.contracts.index'), false)
             ->assertSee(route('workspace.appointments.dashboard'), false);
