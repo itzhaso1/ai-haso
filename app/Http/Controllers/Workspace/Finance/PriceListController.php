@@ -87,6 +87,7 @@ class PriceListController extends FinanceBaseController
     public function update(Request $request, FinancePriceList $priceList): RedirectResponse
     {
         $this->authorizeFinance($request, 'finance.price_lists.manage');
+        $this->assertSameWorkspace($priceList->workspace_id);
 
         $workspace = $this->currentWorkspace();
         $validated = $request->validate([

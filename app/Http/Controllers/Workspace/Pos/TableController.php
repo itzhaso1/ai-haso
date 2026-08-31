@@ -47,6 +47,7 @@ class TableController extends PosBaseController
     public function show(Request $request, DiningTable $table): View
     {
         $this->authorizePos($request, 'tables.manage');
+        $this->assertSameWorkspace($table->workspace_id);
         $this->authorize('view', $table);
 
         $table->load(['sessions' => fn ($query) => $query->latest('id')->limit(20)]);

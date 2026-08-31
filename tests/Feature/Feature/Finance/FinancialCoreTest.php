@@ -368,6 +368,11 @@ class FinancialCoreTest extends TestCase
             'joined_at' => now(),
         ]);
 
+        \App\Models\WorkspaceFeatureFlag::withoutGlobalScopes()->updateOrCreate(
+            ['workspace_id' => $workspace->id, 'feature_key' => 'finance'],
+            ['workspace_id' => $workspace->id, 'feature_key' => 'finance', 'enabled' => true, 'source' => 'manual']
+        );
+
         $agent = User::factory()->create();
         $workspace->users()->attach($agent->id, [
             'membership_role' => 'agent',
@@ -997,6 +1002,13 @@ class FinancialCoreTest extends TestCase
             'status' => 'active',
             'joined_at' => now(),
         ]);
+
+        foreach (['finance', 'products', 'orders', 'customers'] as $feature) {
+            \App\Models\WorkspaceFeatureFlag::withoutGlobalScopes()->updateOrCreate(
+                ['workspace_id' => $workspace->id, 'feature_key' => $feature],
+                ['workspace_id' => $workspace->id, 'feature_key' => $feature, 'enabled' => true, 'source' => 'manual']
+            );
+        }
 
         $plan = \App\Models\Plan::query()
             ->where('workspace_type', $workspaceType)

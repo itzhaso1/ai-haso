@@ -315,7 +315,7 @@ class AppointmentModuleTest extends TestCase
             ->assertRedirect();
 
         $booking = AppointmentBooking::query()->firstOrFail();
-        $this->assertSame(30, $booking->starts_at->diffInMinutes($booking->ends_at));
+        $this->assertEquals(30, $booking->starts_at->diffInMinutes($booking->ends_at));
         $this->assertSame('18:00', $booking->starts_at->copy()->timezone('Asia/Riyadh')->format('H:i'));
         $this->assertSame('18:30', $booking->ends_at->copy()->timezone('Asia/Riyadh')->format('H:i'));
     }

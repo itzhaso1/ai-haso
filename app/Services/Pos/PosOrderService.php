@@ -68,7 +68,11 @@ class PosOrderService
     public function createQrMenuOrder(Workspace $workspace, ?DiningTable $table, array $payload): Order
     {
         return DB::transaction(function () use ($workspace, $table, $payload): Order {
-            $session = $table ? $this->ensureOpenSession($table) : null;
+            $session = null;
+            if ($table) {
+                $session = $this->ensureOpenSession($table);
+                $table->update(['status' => 'occupied']);
+            }
             $customerId = $this->resolveWalkInCustomerId($workspace, $payload);
             $items = $this->normalizePosItems(
                 workspaceId: $workspace->id,
@@ -669,7 +673,8 @@ class PosOrderService
         $customer = Customer::withoutGlobalScopes()->create([
             'workspace_id' => $workspace->id,
             'name' => $name !== '' ? $name : 'Walk-in Customer',
-            'phone' => $phone !== '' ? $phone : null,
+            // customers.phone is NOT NULL + unique per workspace; synthesize a stable walk-in key.
+            'phone' => $phone !== '' ? $phone : 'walkin-'.strtolower((string) str()->ulid()),
             'orders_count' => 0,
             'total_purchases' => 0,
         ]);

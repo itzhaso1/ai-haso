@@ -16,6 +16,11 @@ trait InteractsWithWorkspace
         return $workspace;
     }
 
+    protected function assertSameWorkspace(int|string|null $workspaceId): void
+    {
+        abort_unless((int) $workspaceId === (int) $this->currentWorkspace()->id, 404);
+    }
+
     protected function parseJsonField(Request $request, string $field, array $fallback = []): array
     {
         $raw = trim((string) $request->input($field, ''));

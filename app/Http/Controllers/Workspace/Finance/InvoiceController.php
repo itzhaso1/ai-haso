@@ -164,6 +164,7 @@ class InvoiceController extends FinanceBaseController
     public function show(Request $request, FinanceInvoice $invoice): View
     {
         $this->authorizeFinance($request, 'invoices.view');
+        $this->assertSameWorkspace($invoice->workspace_id);
         $invoice = $this->invoiceService->syncPaymentStatus($invoice);
 
         return view('workspace.finance.invoices.show', [

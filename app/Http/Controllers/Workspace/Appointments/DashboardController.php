@@ -235,6 +235,7 @@ class DashboardController extends AppointmentsBaseController
     public function updateBookingStatus(Request $request, AppointmentBooking $booking): RedirectResponse
     {
         $this->authorizeAppointments($request, 'appointments.manage');
+        $this->assertSameWorkspace($booking->workspace_id);
         $validated = $request->validate([
             'status' => ['required', Rule::in(['scheduled', 'confirmed', 'checked_in', 'in_progress', 'completed', 'cancelled', 'no_show'])],
             'cancel_reason' => ['nullable', 'string'],

@@ -131,9 +131,12 @@ class PosModuleTest extends TestCase
             'status' => 'completed',
         ]);
 
+        $session = $order->fresh()->tableSession;
+        $this->assertNotNull($session);
+
         $this->actingAs($owner)
             ->withSession(['current_workspace_id' => $workspace->id])
-            ->post(route('workspace.pos.orders.invoice', $order))
+            ->post(route('workspace.pos.tables.sessions.close', [$table, $session]))
             ->assertRedirect();
 
         $cashierInvoiceId = $order->fresh()->pos_cashier_invoice_id;
@@ -520,6 +523,13 @@ class PosModuleTest extends TestCase
             'status' => 'active',
             'joined_at' => now(),
         ]);
+
+        foreach (['pos', 'qr_menu', 'products', 'orders'] as $feature) {
+            \App\Models\WorkspaceFeatureFlag::withoutGlobalScopes()->updateOrCreate(
+                ['workspace_id' => $workspace->id, 'feature_key' => $feature],
+                ['workspace_id' => $workspace->id, 'feature_key' => $feature, 'enabled' => true, 'source' => 'manual']
+            );
+        }
 
         $plan = \App\Models\Plan::query()
             ->where('workspace_type', $workspaceType)
