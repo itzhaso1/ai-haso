@@ -78,6 +78,7 @@
             'icon' => 'calendar',
             'links' => [
                 ['label' => 'حجز المواعيد', 'route' => 'workspace.appointments.dashboard', 'active' => 'workspace.appointments.*'],
+                ['label' => 'Website Builder', 'route' => 'workspace.appointments.website.overview', 'active' => 'workspace.appointments.website.*'],
             ],
         ],
         [

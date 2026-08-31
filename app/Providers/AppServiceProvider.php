@@ -14,6 +14,7 @@ use App\Models\Appointment\AppointmentReminder;
 use App\Models\Appointment\AppointmentService as AppointmentServiceModel;
 use App\Models\Appointment\AppointmentSetting;
 use App\Models\Appointment\AppointmentStaff;
+use App\Models\Appointment\AppointmentHoliday;
 use App\Models\Contract\Contract;
 use App\Models\Contract\ContractAttachment;
 use App\Models\Contract\ContractItem;
@@ -50,6 +51,14 @@ use App\Models\Product;
 use App\Models\Subscription;
 use App\Models\TableSession;
 use App\Models\WhatsAppAccount;
+use App\Models\Website\Website;
+use App\Models\Website\WebsiteAsset;
+use App\Models\Website\WebsiteDomain;
+use App\Models\Website\WebsiteDomainContact;
+use App\Models\Website\WebsiteDomainOperation;
+use App\Models\Website\WebsitePage;
+use App\Models\Website\WebsiteSection;
+use App\Models\Website\WebsiteTemplate;
 use App\Models\Workspace;
 use App\Observers\FinanceInvoicePaymentObserver;
 use App\Observers\WorkspaceAuditObserver;
@@ -65,7 +74,11 @@ use App\Policies\PosCashierInvoicePolicy;
 use App\Policies\PosItemCategoryPolicy;
 use App\Policies\PosMenuItemPolicy;
 use App\Policies\SubscriptionPolicy;
+use App\Policies\WebsiteDomainPolicy;
+use App\Policies\WebsitePolicy;
 use App\Policies\WorkspacePolicy;
+use App\Services\Domain\Contracts\DomainRegistrarInterface;
+use App\Services\Domain\NamecheapRegistrar;
 use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
@@ -79,6 +92,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(WorkspaceContext::class);
+        $this->app->bind(DomainRegistrarInterface::class, NamecheapRegistrar::class);
     }
 
     /**
@@ -100,6 +114,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Conversation::class, ConversationPolicy::class);
         Gate::policy(Payment::class, PaymentPolicy::class);
         Gate::policy(Subscription::class, SubscriptionPolicy::class);
+        Gate::policy(Website::class, WebsitePolicy::class);
+        Gate::policy(WebsiteDomain::class, WebsiteDomainPolicy::class);
 
         Product::observe(WorkspaceAuditObserver::class);
         Category::observe(WorkspaceAuditObserver::class);
@@ -144,11 +160,20 @@ class AppServiceProvider extends ServiceProvider
         AppointmentRequestSlot::observe(WorkspaceAuditObserver::class);
         AppointmentResource::observe(WorkspaceAuditObserver::class);
         AppointmentReminder::observe(WorkspaceAuditObserver::class);
+        AppointmentHoliday::observe(WorkspaceAuditObserver::class);
         Contract::observe(WorkspaceAuditObserver::class);
         ContractItem::observe(WorkspaceAuditObserver::class);
         ContractAttachment::observe(WorkspaceAuditObserver::class);
         Subscription::observe(WorkspaceAuditObserver::class);
         EmployeeInvitation::observe(WorkspaceAuditObserver::class);
         WhatsAppAccount::observe(WorkspaceAuditObserver::class);
+        Website::observe(WorkspaceAuditObserver::class);
+        WebsiteTemplate::observe(WorkspaceAuditObserver::class);
+        WebsitePage::observe(WorkspaceAuditObserver::class);
+        WebsiteSection::observe(WorkspaceAuditObserver::class);
+        WebsiteDomain::observe(WorkspaceAuditObserver::class);
+        WebsiteAsset::observe(WorkspaceAuditObserver::class);
+        WebsiteDomainOperation::observe(WorkspaceAuditObserver::class);
+        WebsiteDomainContact::observe(WorkspaceAuditObserver::class);
     }
 }

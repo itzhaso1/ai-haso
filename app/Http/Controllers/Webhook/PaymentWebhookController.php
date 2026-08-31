@@ -15,6 +15,7 @@ class PaymentWebhookController extends Controller
             provider: $provider,
             headers: collect($request->headers->all())->map(fn ($value) => is_array($value) ? ($value[0] ?? '') : $value)->all(),
             payload: $request->all(),
+            rawBody: $request->getContent(),
         );
 
         return response()->json(['received' => true], 202);

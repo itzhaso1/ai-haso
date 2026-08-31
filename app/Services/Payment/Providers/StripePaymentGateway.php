@@ -5,6 +5,7 @@ namespace App\Services\Payment\Providers;
 use App\Services\Payment\Contracts\PaymentGatewayInterface;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 class StripePaymentGateway implements PaymentGatewayInterface
 {
@@ -35,8 +36,69 @@ class StripePaymentGateway implements PaymentGatewayInterface
         ];
     }
 
-    public function verifyWebhook(array $headers, array $payload): array
+    public function verifyWebhook(array $headers, array $payload, ?string $rawBody = null): array
     {
+        $secret = (string) (config('payment.providers.stripe.webhook_secret') ?: config('services.stripe.webhook_secret'));
+        if ($secret === '') {
+            throw new RuntimeException('Stripe webhook secret is not configured.');
+        }
+
+        $signatureHeader = (string) ($headers['stripe-signature'] ?? '');
+        if ($signatureHeader === '') {
+            return [
+                'verified' => false,
+                'event_id' => (string) ($payload['id'] ?? null),
+                'status' => null,
+                'reference' => null,
+                'payload' => $payload,
+                'reason' => 'Missing Stripe signature header.',
+            ];
+        }
+
+        $rawBody = $rawBody ?? json_encode($payload);
+        if (! is_string($rawBody)) {
+            $rawBody = '';
+        }
+
+        $parts = [];
+        foreach (explode(',', $signatureHeader) as $part) {
+            [$k, $v] = array_pad(explode('=', trim($part), 2), 2, null);
+            if ($k !== null && $v !== null) {
+                $parts[$k][] = $v;
+            }
+        }
+
+        $timestamp = isset($parts['t'][0]) ? (int) $parts['t'][0] : 0;
+        $tolerance = (int) config('payment.providers.stripe.webhook_tolerance_seconds', 300);
+        if ($timestamp <= 0 || abs(time() - $timestamp) > $tolerance) {
+            return [
+                'verified' => false,
+                'event_id' => (string) ($payload['id'] ?? null),
+                'status' => null,
+                'reference' => null,
+                'payload' => $payload,
+                'reason' => 'Webhook timestamp is outside allowed tolerance window.',
+            ];
+        }
+
+        $signedPayload = $timestamp.'.'.$rawBody;
+        $expected = hash_hmac('sha256', $signedPayload, $secret);
+        $providedSignatures = $parts['v1'] ?? [];
+        $matched = collect($providedSignatures)->contains(
+            fn (string $signature): bool => hash_equals($expected, $signature)
+        );
+
+        if (! $matched) {
+            return [
+                'verified' => false,
+                'event_id' => (string) ($payload['id'] ?? null),
+                'status' => null,
+                'reference' => null,
+                'payload' => $payload,
+                'reason' => 'Stripe signature mismatch.',
+            ];
+        }
+
         $eventId = $payload['id'] ?? null;
         $type = $payload['type'] ?? null;
         $reference = $payload['data']['object']['metadata']['reference'] ?? null;

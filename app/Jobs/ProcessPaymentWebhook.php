@@ -21,6 +21,7 @@ class ProcessPaymentWebhook implements ShouldQueue
         public readonly string $provider,
         public readonly array $headers,
         public readonly array $payload,
+        public readonly ?string $rawBody = null,
     ) {}
 
     /**
@@ -31,7 +32,8 @@ class ProcessPaymentWebhook implements ShouldQueue
         $paymentService->processWebhook(
             providerName: $this->provider,
             headers: $this->headers,
-            payload: $this->payload
+            payload: $this->payload,
+            rawBody: $this->rawBody,
         );
     }
 }

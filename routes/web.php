@@ -5,6 +5,8 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Auth\PhoneOtpController;
 use App\Http\Controllers\Auth\SocialLoginController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PublicSite\PublicBookingApiController;
+use App\Http\Controllers\PublicSite\PublicWebsiteController;
 use App\Http\Controllers\Webhook\ResendWebhookController;
 use App\Http\Controllers\Webhook\WhatsAppWebhookController;
 use App\Http\Controllers\WorkspaceSelectionController;
@@ -13,8 +15,10 @@ use App\Http\Controllers\Workspace\Appointments\BookingController as Appointment
 use App\Http\Controllers\Workspace\Appointments\CustomerProfileController as AppointmentsCustomerProfileController;
 use App\Http\Controllers\Workspace\Appointments\CustomerPortalController as AppointmentsCustomerPortalController;
 use App\Http\Controllers\Workspace\Appointments\DashboardController as AppointmentsDashboardController;
+use App\Http\Controllers\Workspace\Appointments\DomainController as AppointmentsDomainController;
 use App\Http\Controllers\Workspace\Appointments\ModulePageController as AppointmentsModulePageController;
 use App\Http\Controllers\Workspace\Appointments\RequestController as AppointmentsRequestController;
+use App\Http\Controllers\Workspace\Appointments\WebsiteController as AppointmentsWebsiteController;
 use App\Http\Controllers\Workspace\CategoryController;
 use App\Http\Controllers\Workspace\ChannelController;
 use App\Http\Controllers\Workspace\ConversationController;
@@ -59,6 +63,13 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 
 Route::get('/', function () {
+    $website = app(\App\Services\Website\WebsiteResolverService::class)
+        ->resolveByHost((string) request()->getHost());
+    if ($website && $website->status === 'published') {
+        return view('public.website.show', app(\App\Services\Website\PublicWebsiteService::class)
+            ->buildWebsiteViewData($website, 'home'));
+    }
+
     $plans = collect();
     if (Schema::hasTable('plans')) {
         $plans = \App\Models\Plan::query()
@@ -71,6 +82,13 @@ Route::get('/', function () {
     return view('landing', [
         'plansByType' => $plans->groupBy('workspace_type'),
     ]);
+});
+
+Route::middleware(['public.website.resolve', 'throttle:60,1'])->group(function (): void {
+    Route::get('/booking', [PublicWebsiteController::class, 'showResolved'])->defaults('page', 'booking')->name('public.website.host.booking');
+    Route::get('/contact', [PublicWebsiteController::class, 'showResolved'])->defaults('page', 'contact')->name('public.website.host.contact');
+    Route::get('/robots.txt', [PublicWebsiteController::class, 'robotsResolved'])->name('public.website.host.robots');
+    Route::get('/sitemap.xml', [PublicWebsiteController::class, 'sitemapResolved'])->name('public.website.host.sitemap');
 });
 
 Route::post('/assistant/chat', [AssistantController::class, 'chat'])
@@ -100,6 +118,34 @@ Route::middleware('throttle:30,1')->group(function (): void {
     Route::get('/menu/{workspace:slug}/table/{token}', [PosCustomerMenuController::class, 'tableMenu'])->name('menu.table');
     Route::post('/menu/{workspace:slug}/table/{token}/order', [PosCustomerMenuController::class, 'placeTableOrder'])->name('menu.table.order');
     Route::post('/menu/{workspace:slug}/table/{token}/ai-chat', [PosCustomerMenuController::class, 'askAi'])->name('menu.table.ai');
+
+    Route::get('/public-preview/{token}/{page?}', [PublicWebsiteController::class, 'preview'])
+        ->where('page', 'home|booking|contact')
+        ->name('public.website.preview');
+});
+
+Route::middleware(['public.website.resolve', 'throttle:60,1'])
+    ->prefix('public/{website}')
+    ->group(function (): void {
+        Route::get('/', [PublicWebsiteController::class, 'showBySlug'])->name('public.website.show');
+        Route::get('/{page}', [PublicWebsiteController::class, 'showBySlug'])
+            ->where('page', 'home|booking|contact')
+            ->name('public.website.page');
+        Route::get('/robots.txt', [PublicWebsiteController::class, 'robotsBySlug'])->name('public.website.robots');
+        Route::get('/sitemap.xml', [PublicWebsiteController::class, 'sitemapBySlug'])->name('public.website.sitemap');
+
+        Route::prefix('api')->group(function (): void {
+            Route::get('/services', [PublicBookingApiController::class, 'services'])->name('public.api.services');
+            Route::get('/services/{service}/staff', [PublicBookingApiController::class, 'staff'])->name('public.api.services.staff');
+            Route::get('/availability', [PublicBookingApiController::class, 'availability'])->name('public.api.availability');
+            Route::post('/booking/validate', [PublicBookingApiController::class, 'validateBooking'])
+                ->middleware('throttle:20,1')
+                ->name('public.api.booking.validate');
+            Route::post('/booking', [PublicBookingApiController::class, 'storeBooking'])
+                ->middleware('throttle:15,1')
+                ->name('public.api.booking.store');
+            Route::get('/booking/{reference}', [PublicBookingApiController::class, 'showBooking'])->name('public.api.booking.show');
+        });
 });
 
 Route::middleware(['guest'])->group(function (): void {
@@ -329,6 +375,34 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::post('requests/{appointmentRequest}/cancel', [AppointmentsRequestController::class, 'cancel'])->name('requests.cancel');
             Route::post('requests/{appointmentRequest}/slots', [AppointmentsRequestController::class, 'proposeSlots'])->name('requests.slots.store');
             Route::post('requests/{appointmentRequest}/slots/{slot}/select', [AppointmentsRequestController::class, 'selectSlot'])->name('requests.slots.select');
+
+            Route::middleware('workspace.feature:website_builder')->group(function (): void {
+                Route::get('website', [AppointmentsWebsiteController::class, 'overview'])->name('website.overview');
+                Route::post('website', [AppointmentsWebsiteController::class, 'create'])->name('website.store');
+                Route::get('website/{website}/templates', [AppointmentsWebsiteController::class, 'templates'])->name('website.templates');
+                Route::post('website/{website}/template', [AppointmentsWebsiteController::class, 'selectTemplate'])->name('website.templates.select');
+                Route::get('website/{website}/customize', [AppointmentsWebsiteController::class, 'customize'])->name('website.customize');
+                Route::post('website/{website}/customize', [AppointmentsWebsiteController::class, 'updateCustomization'])->name('website.customize.update');
+                Route::post('website/{website}/sections', [AppointmentsWebsiteController::class, 'updateSections'])->name('website.sections.update');
+                Route::get('website/{website}/preview', [AppointmentsWebsiteController::class, 'preview'])->name('website.preview');
+                Route::post('website/{website}/publish', [AppointmentsWebsiteController::class, 'publish'])->name('website.publish');
+                Route::post('website/{website}/unpublish', [AppointmentsWebsiteController::class, 'unpublish'])->name('website.unpublish');
+            });
+
+            Route::middleware(['workspace.feature:website_builder', 'workspace.feature:custom_domains'])->group(function (): void {
+                Route::get('website/{website}/domains', [AppointmentsDomainController::class, 'index'])->name('website.domains');
+                Route::post('website/{website}/domains/search', [AppointmentsDomainController::class, 'search'])
+                    ->middleware('throttle:20,1')
+                    ->name('website.domains.search');
+                Route::post('website/{website}/domains/purchase', [AppointmentsDomainController::class, 'purchase'])
+                    ->middleware('throttle:5,1')
+                    ->name('website.domains.purchase');
+                Route::post('website/{website}/domains/{domain}/set-primary', [AppointmentsDomainController::class, 'setPrimary'])->name('website.domains.set-primary');
+                Route::post('website/{website}/domains/{domain}/verify', [AppointmentsDomainController::class, 'verify'])->name('website.domains.verify');
+                Route::post('website/{website}/domains/{domain}/renew', [AppointmentsDomainController::class, 'renew'])->name('website.domains.renew');
+                Route::post('website/{website}/domains/{domain}/sync', [AppointmentsDomainController::class, 'sync'])->name('website.domains.sync');
+                Route::delete('website/{website}/domains/{domain}', [AppointmentsDomainController::class, 'remove'])->name('website.domains.remove');
+            });
         });
 
         Route::prefix('pos')->as('pos.')->group(function (): void {

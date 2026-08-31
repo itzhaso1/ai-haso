@@ -66,4 +66,16 @@ return [
         'token' => env('WHATSAPP_PERMANENT_TOKEN'),
     ],
 
+    'namecheap' => [
+        'env' => env('NAMECHEAP_ENV', 'sandbox'),
+        'api_user' => env('NAMECHEAP_API_USER'),
+        'api_key' => env('NAMECHEAP_API_KEY'),
+        'username' => env('NAMECHEAP_USERNAME'),
+        'client_ip' => env('NAMECHEAP_CLIENT_IP'),
+        'timeout' => (int) env('NAMECHEAP_TIMEOUT', 20),
+        'connect_timeout' => (int) env('NAMECHEAP_CONNECT_TIMEOUT', 8),
+        'base_url_sandbox' => 'https://api.sandbox.namecheap.com/xml.response',
+        'base_url_production' => 'https://api.namecheap.com/xml.response',
+    ],
+
 ];

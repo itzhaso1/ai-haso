@@ -46,6 +46,10 @@ return [
             'subscription',
             'analytics',
             'whatsapp',
+            'appointments',
+            'website_builder',
+            'custom_domains',
+            'public_booking',
         ],
         'store' => [
             'dashboard',
@@ -68,6 +72,10 @@ return [
             'subscription',
             'analytics',
             'whatsapp',
+            'appointments',
+            'website_builder',
+            'custom_domains',
+            'public_booking',
         ],
     ],
 ];

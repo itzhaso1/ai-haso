@@ -3,6 +3,7 @@
 namespace App\Services\Appointments;
 
 use App\Models\Appointment\AppointmentBooking;
+use App\Models\Appointment\AppointmentHoliday;
 use App\Models\Appointment\AppointmentResource;
 use App\Models\Appointment\AppointmentService as AppointmentServiceModel;
 use App\Models\Appointment\AppointmentSetting;
@@ -223,10 +224,16 @@ class AppointmentService
     {
         $this->ensureSetup($workspace);
 
-        $service = AppointmentServiceModel::query()->whereKey((int) $payload['service_id'])->firstOrFail();
+        $service = AppointmentServiceModel::withoutGlobalScopes()
+            ->where('workspace_id', $workspace->id)
+            ->whereKey((int) $payload['service_id'])
+            ->firstOrFail();
         $staff = null;
         if (! empty($payload['staff_id'])) {
-            $staff = AppointmentStaff::query()->whereKey((int) $payload['staff_id'])->firstOrFail();
+            $staff = AppointmentStaff::withoutGlobalScopes()
+                ->where('workspace_id', $workspace->id)
+                ->whereKey((int) $payload['staff_id'])
+                ->firstOrFail();
         }
         if (
             $staff &&
@@ -236,7 +243,9 @@ class AppointmentService
             throw new RuntimeException('الموظف المحدد غير مرتبط بهذه الخدمة.');
         }
 
-        $setting = AppointmentSetting::query()->first();
+        $setting = AppointmentSetting::withoutGlobalScopes()
+            ->where('workspace_id', $workspace->id)
+            ->first();
         $timezone = $this->workspaceTimezone($workspace->id, $setting);
 
         $startsAtLocal = $this->parseWorkspaceDateTime($payload['starts_at'] ?? null, $timezone);
@@ -255,6 +264,7 @@ class AppointmentService
         $rules = $this->bookingRules($setting);
         $this->assertBookingRules($workspace->id, $startsAtLocal, $endsAtLocal, $rules, $timezone);
         $this->assertWithinBusinessHours($startsAtLocal, $endsAtLocal, $setting);
+        $this->assertNotHoliday($workspace->id, $startsAtLocal, $staff?->id);
         $this->assertStaffAvailability($staff, $startsAtLocal, $endsAtLocal, $timezone);
 
         $startsAt = $startsAtLocal->copy()->utc();
@@ -281,7 +291,10 @@ class AppointmentService
         $customerAge = isset($payload['customer_age']) ? max(1, (int) $payload['customer_age']) : null;
         $customerId = null;
         if (! empty($payload['customer_id'])) {
-            $customer = Customer::query()->whereKey((int) $payload['customer_id'])->firstOrFail();
+            $customer = Customer::withoutGlobalScopes()
+                ->where('workspace_id', $workspace->id)
+                ->whereKey((int) $payload['customer_id'])
+                ->firstOrFail();
             $customerId = $customer->id;
             if ($customerName === '') {
                 $customerName = $customer->name;
@@ -343,10 +356,30 @@ class AppointmentService
             $appointmentStatus,
             $paymentStatus,
             $resourceIds,
+            $rules,
             $timezone,
             $startsAtLocal,
             $endsAtLocal
         ): AppointmentBooking {
+            $this->ensureNoOverlap(
+                workspaceId: $workspace->id,
+                startsAt: $startsAt,
+                endsAt: $endsAt,
+                staffId: $staff?->id,
+                resourceIds: $resourceIds,
+                bufferMinutes: (int) ($rules['buffer_minutes'] ?? 0),
+                lockForUpdate: true,
+            );
+
+            $this->ensureNoDuplicateBooking(
+                workspaceId: $workspace->id,
+                startsAt: $startsAt,
+                serviceId: $service->id,
+                customerName: $customerName,
+                customerPhone: $customerPhone,
+                staffId: $staff?->id
+            );
+
             $bookingNumber = $this->nextBookingNumber($workspace->id, $startsAt);
 
             $booking = AppointmentBooking::withoutGlobalScopes()->create([
@@ -391,6 +424,8 @@ class AppointmentService
 
             if ($resourceIds !== []) {
                 $resources = AppointmentResource::query()
+                    ->withoutGlobalScopes()
+                    ->where('workspace_id', $workspace->id)
                     ->whereIn('id', $resourceIds)
                     ->where('is_active', true)
                     ->pluck('id')
@@ -505,7 +540,9 @@ class AppointmentService
 
         $this->assertPolicyWindow($booking, 'reschedule');
 
-        $setting = AppointmentSetting::query()->first();
+        $setting = AppointmentSetting::withoutGlobalScopes()
+            ->where('workspace_id', $booking->workspace_id)
+            ->first();
         $timezone = $this->workspaceTimezone($booking->workspace_id, $setting);
         $rules = $this->bookingRules($setting);
 
@@ -513,7 +550,13 @@ class AppointmentService
         $newStaffId = isset($payload['staff_id']) && (int) $payload['staff_id'] > 0
             ? (int) $payload['staff_id']
             : $booking->staff_id;
-        $newStaff = $newStaffId ? AppointmentStaff::query()->whereKey($newStaffId)->first() : null;
+        $newStaff = null;
+        if ($newStaffId) {
+            $newStaff = AppointmentStaff::withoutGlobalScopes()
+                ->where('workspace_id', $booking->workspace_id)
+                ->whereKey($newStaffId)
+                ->first();
+        }
         if (
             $newStaff &&
             $service->staffMembers()->exists() &&
@@ -543,6 +586,7 @@ class AppointmentService
         $endsAtUtc = $endsAtLocal->copy()->utc();
         $this->assertBookingRules($booking->workspace_id, $startsAtLocal, $endsAtLocal, $rules, $timezone, $booking->id);
         $this->assertWithinBusinessHours($startsAtLocal, $endsAtLocal, $setting);
+        $this->assertNotHoliday($booking->workspace_id, $startsAtLocal, $newStaff?->id);
         $this->assertStaffAvailability($newStaff, $startsAtLocal, $endsAtLocal, $timezone);
         $this->ensureNoOverlap(
             workspaceId: $booking->workspace_id,
@@ -574,8 +618,20 @@ class AppointmentService
             $resourceIds,
             $timezone,
             $payload,
-            $actorUserId
+            $actorUserId,
+            $rules,
         ): AppointmentBooking {
+            $this->ensureNoOverlap(
+                workspaceId: $booking->workspace_id,
+                startsAt: $startsAtUtc,
+                endsAt: $endsAtUtc,
+                staffId: $newStaff?->id,
+                resourceIds: $resourceIds,
+                bufferMinutes: (int) ($rules['buffer_minutes'] ?? 0),
+                ignoreBookingId: $booking->id,
+                lockForUpdate: true,
+            );
+
             $metadata = is_array($booking->metadata) ? $booking->metadata : [];
             $rescheduleCount = max(0, (int) ($metadata['reschedule_count'] ?? 0)) + 1;
             $metadata['last_rescheduled_at'] = now()->toDateTimeString();
@@ -600,6 +656,8 @@ class AppointmentService
 
             if ($resourceIds !== []) {
                 $resources = AppointmentResource::query()
+                    ->withoutGlobalScopes()
+                    ->where('workspace_id', $booking->workspace_id)
                     ->whereIn('id', $resourceIds)
                     ->where('is_active', true)
                     ->pluck('id')
@@ -754,6 +812,121 @@ class AppointmentService
     }
 
     /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function availableSlots(Workspace $workspace, int $serviceId, string $date, ?int $staffId = null): array
+    {
+        $this->ensureSetup($workspace);
+
+        $service = AppointmentServiceModel::withoutGlobalScopes()
+            ->where('workspace_id', $workspace->id)
+            ->whereKey($serviceId)
+            ->where('is_active', true)
+            ->firstOrFail();
+
+        $staff = null;
+        if ($staffId !== null && $staffId > 0) {
+            $staff = AppointmentStaff::withoutGlobalScopes()
+                ->where('workspace_id', $workspace->id)
+                ->whereKey($staffId)
+                ->where('is_active', true)
+                ->firstOrFail();
+
+            if (
+                $service->staffMembers()->withoutGlobalScopes()->exists()
+                && ! $service->staffMembers()->withoutGlobalScopes()->whereKey($staff->id)->exists()
+            ) {
+                throw new RuntimeException('الموظف المحدد غير مرتبط بهذه الخدمة.');
+            }
+        }
+
+        $setting = AppointmentSetting::withoutGlobalScopes()
+            ->where('workspace_id', $workspace->id)
+            ->first();
+        $timezone = $this->workspaceTimezone($workspace->id, $setting);
+        $day = Carbon::parse($date, $timezone)->startOfDay();
+        $today = now($timezone)->startOfDay();
+        if ($day->lt($today)) {
+            return [];
+        }
+
+        $rules = $this->bookingRules($setting);
+        $slotInterval = max(5, (int) ($rules['slot_interval_minutes'] ?? 30));
+        $duration = max(5, (int) $service->duration_minutes);
+        $businessHours = $this->normalizeBusinessHoursInput(
+            is_array($setting?->metadata) ? ($setting->metadata['business_hours'] ?? []) : []
+        );
+
+        $dayKey = $this->dayKey($day);
+        $dayConfig = $businessHours[$dayKey] ?? ['closed' => false, 'ranges' => []];
+        if (($dayConfig['closed'] ?? false) === true) {
+            return [];
+        }
+
+        $ranges = is_array($dayConfig['ranges'] ?? null) ? $dayConfig['ranges'] : [];
+        if ($ranges === []) {
+            $ranges = [[
+                'start' => Carbon::parse((string) ($setting?->start_hour ?? '09:00:00'))->format('H:i'),
+                'end' => Carbon::parse((string) ($setting?->end_hour ?? '17:00:00'))->format('H:i'),
+            ]];
+        }
+
+        $slots = [];
+        foreach ($ranges as $range) {
+            $rangeStart = trim((string) ($range['start'] ?? ''));
+            $rangeEnd = trim((string) ($range['end'] ?? ''));
+            if ($rangeStart === '' || $rangeEnd === '') {
+                continue;
+            }
+
+            $cursor = Carbon::parse($day->toDateString().' '.$rangeStart, $timezone);
+            $endBoundary = Carbon::parse($day->toDateString().' '.$rangeEnd, $timezone);
+
+            while ($cursor->lt($endBoundary)) {
+                $candidateStart = $cursor->copy();
+                $candidateEnd = $candidateStart->copy()->addMinutes($duration);
+                if ($candidateEnd->gt($endBoundary)) {
+                    break;
+                }
+
+                $isPast = $candidateStart->lt(now($timezone));
+                $isOutsideRules = ! $this->isWithinBookingRuleWindow($workspace->id, $candidateStart, $candidateEnd, $rules, $timezone);
+                $isHoliday = $this->isHoliday($workspace->id, $candidateStart, $staff?->id);
+
+                $staffAvailable = true;
+                try {
+                    $this->assertStaffAvailability($staff, $candidateStart, $candidateEnd, $timezone);
+                } catch (RuntimeException) {
+                    $staffAvailable = false;
+                }
+
+                $hasOverlap = $this->hasOverlap(
+                    workspaceId: $workspace->id,
+                    startsAt: $candidateStart->copy()->utc(),
+                    endsAt: $candidateEnd->copy()->utc(),
+                    staffId: $staff?->id,
+                    resourceIds: [],
+                    bufferMinutes: (int) ($rules['buffer_minutes'] ?? 0),
+                );
+
+                if (! $isPast && ! $isOutsideRules && ! $isHoliday && $staffAvailable && ! $hasOverlap) {
+                    $slots[] = [
+                        'starts_at' => $candidateStart->copy()->utc()->toIso8601String(),
+                        'ends_at' => $candidateEnd->copy()->utc()->toIso8601String(),
+                        'start_local' => $candidateStart->format('Y-m-d H:i:s'),
+                        'end_local' => $candidateEnd->format('Y-m-d H:i:s'),
+                        'start_local_time' => $candidateStart->format('H:i'),
+                    ];
+                }
+
+                $cursor->addMinutes($slotInterval);
+            }
+        }
+
+        return $slots;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function bookingRules(?AppointmentSetting $setting): array
@@ -783,7 +956,8 @@ class AppointmentService
         ?int $staffId = null,
         array $resourceIds = [],
         int $bufferMinutes = 0,
-        ?int $ignoreBookingId = null
+        ?int $ignoreBookingId = null,
+        bool $lockForUpdate = false,
     ): void {
         $buffer = max(0, $bufferMinutes);
         $windowStart = $startsAt->copy()->subMinutes($buffer);
@@ -797,6 +971,10 @@ class AppointmentService
                 $query->where('starts_at', '<', $windowEnd)
                     ->where('ends_at', '>', $windowStart);
             });
+
+        if ($lockForUpdate) {
+            $baseQuery->lockForUpdate();
+        }
 
         $staffOverlap = $staffId !== null
             ? (clone $baseQuery)->where('staff_id', $staffId)->exists()
@@ -899,6 +1077,9 @@ class AppointmentService
     ): void
     {
         $now = now($timezone);
+        if ($startsAtLocal->lt($now)) {
+            throw new RuntimeException('لا يمكن إنشاء موعد في وقت ماضٍ.');
+        }
         $minNotice = max(0, (int) ($rules['min_booking_notice_minutes'] ?? 0));
         if ($minNotice > 0 && $startsAtLocal->lt($now->copy()->addMinutes($minNotice))) {
             throw new RuntimeException("يجب أن يكون الموعد قبل {$minNotice} دقيقة على الأقل.");
@@ -969,6 +1150,104 @@ class AppointmentService
         if (! $fits) {
             throw new RuntimeException('الموعد خارج ساعات عمل النشاط.');
         }
+    }
+
+    private function assertNotHoliday(int $workspaceId, Carbon $startsAtLocal, ?int $staffId): void
+    {
+        if ($this->isHoliday($workspaceId, $startsAtLocal, $staffId)) {
+            throw new RuntimeException('لا يمكن الحجز في يوم عطلة.');
+        }
+    }
+
+    private function isHoliday(int $workspaceId, Carbon $startsAtLocal, ?int $staffId): bool
+    {
+        $query = AppointmentHoliday::withoutGlobalScopes()
+            ->where('workspace_id', $workspaceId)
+            ->whereDate('holiday_date', $startsAtLocal->toDateString())
+            ->where(function ($inner) use ($staffId): void {
+                $inner->whereNull('staff_id');
+                if ($staffId !== null) {
+                    $inner->orWhere('staff_id', $staffId);
+                }
+            });
+
+        $holidays = $query->get();
+        if ($holidays->isEmpty()) {
+            return false;
+        }
+
+        foreach ($holidays as $holiday) {
+            if (! $holiday->start_time || ! $holiday->end_time) {
+                return true;
+            }
+
+            $start = Carbon::parse($startsAtLocal->toDateString().' '.$holiday->start_time, $startsAtLocal->getTimezone());
+            $end = Carbon::parse($startsAtLocal->toDateString().' '.$holiday->end_time, $startsAtLocal->getTimezone());
+            if ($startsAtLocal->betweenIncluded($start, $end)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  rules
+     */
+    private function isWithinBookingRuleWindow(
+        int $workspaceId,
+        Carbon $startsAtLocal,
+        Carbon $endsAtLocal,
+        array $rules,
+        string $timezone
+    ): bool {
+        try {
+            $this->assertBookingRules(
+                workspaceId: $workspaceId,
+                startsAtLocal: $startsAtLocal,
+                endsAtLocal: $endsAtLocal,
+                rules: $rules,
+                timezone: $timezone,
+            );
+
+            return true;
+        } catch (RuntimeException) {
+            return false;
+        }
+    }
+
+    /**
+     * @param array<int,int> $resourceIds
+     */
+    private function hasOverlap(
+        int $workspaceId,
+        Carbon $startsAt,
+        Carbon $endsAt,
+        ?int $staffId,
+        array $resourceIds,
+        int $bufferMinutes
+    ): bool {
+        $buffer = max(0, $bufferMinutes);
+        $windowStart = $startsAt->copy()->subMinutes($buffer);
+        $windowEnd = $endsAt->copy()->addMinutes($buffer);
+
+        $baseQuery = AppointmentBooking::withoutGlobalScopes()
+            ->where('workspace_id', $workspaceId)
+            ->whereIn('appointment_status', self::ACTIVE_BOOKING_STATUSES)
+            ->where(function ($query) use ($windowStart, $windowEnd): void {
+                $query->where('starts_at', '<', $windowEnd)
+                    ->where('ends_at', '>', $windowStart);
+            });
+
+        $staffOverlap = $staffId !== null
+            ? (clone $baseQuery)->where('staff_id', $staffId)->exists()
+            : false;
+
+        $resourceOverlap = $resourceIds !== []
+            ? (clone $baseQuery)->whereHas('resources', fn ($query) => $query->whereIn('appointment_resources.id', $resourceIds))->exists()
+            : false;
+
+        return $staffOverlap || $resourceOverlap;
     }
 
     private function assertStaffAvailability(?AppointmentStaff $staff, Carbon $startsAtLocal, Carbon $endsAtLocal, string $timezone): void

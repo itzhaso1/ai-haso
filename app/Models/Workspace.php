@@ -10,6 +10,7 @@ use App\Models\Appointment\AppointmentRequest;
 use App\Models\Appointment\AppointmentService;
 use App\Models\Appointment\AppointmentStaff;
 use App\Models\Appointment\AppointmentSetting;
+use App\Models\Appointment\AppointmentHoliday;
 use App\Models\Finance\FinanceAccount;
 use App\Models\Finance\FinanceExpense;
 use App\Models\Finance\FinanceInvoice;
@@ -19,6 +20,8 @@ use App\Models\Finance\FinanceSetting;
 use App\Models\Finance\FinanceSupplier;
 use App\Models\Finance\FinanceTaxRate;
 use App\Models\Finance\FinanceTreasuryAccount;
+use App\Models\Website\Website;
+use App\Models\Website\WebsiteDomain;
 use Database\Factories\WorkspaceFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -243,5 +246,20 @@ class Workspace extends Model
     public function appointmentReminders(): HasMany
     {
         return $this->hasMany(AppointmentReminder::class, 'workspace_id');
+    }
+
+    public function appointmentHolidays(): HasMany
+    {
+        return $this->hasMany(AppointmentHoliday::class, 'workspace_id');
+    }
+
+    public function websites(): HasMany
+    {
+        return $this->hasMany(Website::class);
+    }
+
+    public function websiteDomains(): HasMany
+    {
+        return $this->hasMany(WebsiteDomain::class);
     }
 }

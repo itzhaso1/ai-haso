@@ -4,6 +4,7 @@ use App\Http\Middleware\EnsureFeatureAccess;
 use App\Http\Middleware\EnsurePlatformAdmin;
 use App\Http\Middleware\EnsureWorkspaceSelected;
 use App\Http\Middleware\EnsureWorkspaceMembership;
+use App\Http\Middleware\ResolvePublicWebsite;
 use App\Http\Middleware\ResolveWorkspaceContext;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -27,6 +28,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: [
             'webhooks/resend',
             'whatsapp-webhook',
+            'public/*/api/booking',
+            'public/*/api/booking/validate',
         ]);
 
         $middleware->alias([
@@ -34,6 +37,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'workspace.member' => EnsureWorkspaceMembership::class,
             'workspace.selected' => EnsureWorkspaceSelected::class,
             'workspace.feature' => EnsureFeatureAccess::class,
+            'public.website.resolve' => ResolvePublicWebsite::class,
             'platform.admin' => EnsurePlatformAdmin::class,
         ]);
     })

@@ -72,4 +72,5 @@ Route::middleware(['auth:sanctum', 'workspace.resolve', 'workspace.member'])
         Route::post('/appointments/ai/actions', [AppointmentAiActionController::class, 'execute']);
     });
 
-Route::post('/webhooks/payments/{provider}', [PaymentWebhookController::class, 'handle']);
+Route::post('/webhooks/payments/{provider}', [PaymentWebhookController::class, 'handle'])
+    ->middleware('throttle:120,1');

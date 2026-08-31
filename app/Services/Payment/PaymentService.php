@@ -61,14 +61,14 @@ class PaymentService
      * @param  array<string, string>  $headers
      * @param  array<string, mixed>  $payload
      */
-    public function processWebhook(string $providerName, array $headers, array $payload): void
+    public function processWebhook(string $providerName, array $headers, array $payload, ?string $rawBody = null): void
     {
         $gateway = PaymentGateway::withoutGlobalScopes()
             ->where('provider', $providerName)
             ->first();
 
         $provider = $this->paymentGatewayManager->resolve($gateway);
-        $verification = $provider->verifyWebhook($headers, $payload);
+        $verification = $provider->verifyWebhook($headers, $payload, $rawBody);
         $eventId = $verification['event_id'] ?? (string) Str::uuid();
 
         $order = Order::withoutGlobalScopes()->where('order_number', $verification['reference'] ?? null)->first();

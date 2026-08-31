@@ -1,6 +1,8 @@
 <?php
 
 use App\Services\Appointments\AppointmentReminderService;
+use App\Models\Website\WebsiteDomain;
+use App\Jobs\SyncDomainStatusJob;
 use App\Services\Finance\InvoiceService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -63,3 +65,19 @@ Artisan::command('finance:invoices:integrity-report', function () {
 Schedule::command('appointments:reminders:prepare')->everyFiveMinutes();
 Schedule::command('appointments:reminders:dispatch')->everyMinute();
 Schedule::command('finance:invoices:refresh-payment-status')->hourly();
+
+Artisan::command('domains:sync-status', function () {
+    $count = 0;
+    WebsiteDomain::withoutGlobalScopes()
+        ->whereIn('status', ['registered', 'dns_pending', 'dns_configured', 'verifying', 'verified', 'ssl_pending', 'active'])
+        ->chunkById(100, function ($domains) use (&$count): void {
+            foreach ($domains as $domain) {
+                SyncDomainStatusJob::dispatch($domain->id);
+                $count++;
+            }
+        });
+
+    $this->info("Queued {$count} domains for status sync.");
+})->purpose('Queue provider status sync for website domains');
+
+Schedule::command('domains:sync-status')->dailyAt('02:10');

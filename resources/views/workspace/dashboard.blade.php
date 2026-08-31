@@ -94,6 +94,7 @@
                         'icon' => 'calendar',
                         'links' => [
                             ['label' => 'Appointments', 'route' => 'workspace.appointments.dashboard', 'active' => 'workspace.appointments.*'],
+                            ['label' => 'Website Builder', 'route' => 'workspace.appointments.website.overview', 'active' => 'workspace.appointments.website.*'],
                         ],
                     ],
                     [

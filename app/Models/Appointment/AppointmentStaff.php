@@ -57,4 +57,9 @@ class AppointmentStaff extends WorkspaceScopedModel
             ->withPivot(['workspace_id', 'is_primary'])
             ->withTimestamps();
     }
+
+    public function holidays(): HasMany
+    {
+        return $this->hasMany(AppointmentHoliday::class, 'staff_id');
+    }
 }
