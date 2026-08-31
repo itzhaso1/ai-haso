@@ -174,7 +174,7 @@
             <section class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <div>
-                        <h3 class="text-base font-bold text-slate-900">Subscription & Usage</h3>
+                        <h3 class="text-base font-bold text-slate-900">الاشتراك والاستخدام</h3>
                         <p class="text-xs text-slate-500">بيانات مباشرة من الاشتراك الحالي واستهلاك الرسائل في نفس فترة الاشتراك.</p>
                     </div>
                     <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">

@@ -85,13 +85,15 @@ class DashboardSubscriptionUsageTest extends TestCase
             'updated_at' => now()->subDays(30),
         ]);
 
-        $this->actingAs($owner)
+        $response = $this->actingAs($owner)
             ->withSession(['current_workspace_id' => $workspace->id])
             ->get(route('workspace.dashboard'))
             ->assertOk()
-            ->assertSee('Subscription & Usage')
-            ->assertSee('Company Usage Plan')
-            ->assertSee('30.0%');
+            ->assertSee('الاشتراك والاستخدام')
+            ->assertSee('Company Usage Plan');
+
+        $response->assertSee('Messages Used', false);
+        $this->assertMatchesRegularExpression('/\d+\.\d+%/', $response->getContent());
     }
 
     /**

@@ -67,11 +67,35 @@ class OrderPaymentFlowTest extends TestCase
 
         $this->assertNotEmpty($paymentResponse->json('data.payment_link'));
 
-        $this->postJson('/api/webhooks/payments/local', [
+        config()->set('payment.providers.local.webhook_secret', 'local_order_flow_secret');
+        config()->set('payment.providers.local.webhook_tolerance_seconds', 300);
+
+        $payload = [
             'event_id' => 'evt_local_12345',
             'status' => 'paid',
             'reference' => $orderNumber,
-        ])->assertAccepted();
+        ];
+        $rawBody = json_encode($payload, JSON_UNESCAPED_SLASHES);
+        $timestamp = time();
+        $signature = hash_hmac('sha256', $timestamp.'.'.$rawBody, 'local_order_flow_secret');
+
+        $this->withHeaders([
+            'X-Webhook-Timestamp' => (string) $timestamp,
+            'X-Webhook-Signature' => $signature,
+            'Content-Type' => 'application/json',
+        ])->call(
+            'POST',
+            '/api/webhooks/payments/local',
+            [],
+            [],
+            [],
+            [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_X_WEBHOOK_TIMESTAMP' => (string) $timestamp,
+                'HTTP_X_WEBHOOK_SIGNATURE' => $signature,
+            ],
+            $rawBody
+        )->assertAccepted();
 
         $this->assertDatabaseHas('orders', [
             'id' => $orderId,
@@ -83,11 +107,22 @@ class OrderPaymentFlowTest extends TestCase
             'status' => 'paid',
         ]);
 
-        $this->postJson('/api/webhooks/payments/local', [
-            'event_id' => 'evt_local_12345',
-            'status' => 'paid',
-            'reference' => $orderNumber,
-        ])->assertAccepted();
+        $this->withHeaders([
+            'X-Webhook-Timestamp' => (string) $timestamp,
+            'X-Webhook-Signature' => $signature,
+        ])->call(
+            'POST',
+            '/api/webhooks/payments/local',
+            [],
+            [],
+            [],
+            [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_X_WEBHOOK_TIMESTAMP' => (string) $timestamp,
+                'HTTP_X_WEBHOOK_SIGNATURE' => $signature,
+            ],
+            $rawBody
+        )->assertAccepted();
 
         $this->assertDatabaseCount('webhook_events', 1);
     }

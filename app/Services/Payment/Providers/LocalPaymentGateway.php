@@ -41,8 +41,8 @@ class LocalPaymentGateway implements PaymentGatewayInterface
             ];
         }
 
-        $timestamp = (int) ($headers['x-webhook-timestamp'] ?? 0);
-        $signature = (string) ($headers['x-webhook-signature'] ?? '');
+        $timestamp = (int) ($headers['x-webhook-timestamp'] ?? $headers['X-Webhook-Timestamp'] ?? 0);
+        $signature = (string) ($headers['x-webhook-signature'] ?? $headers['X-Webhook-Signature'] ?? '');
         $tolerance = (int) config('payment.providers.local.webhook_tolerance_seconds', 300);
 
         if ($timestamp <= 0 || abs(time() - $timestamp) > $tolerance) {

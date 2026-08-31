@@ -244,7 +244,7 @@ class PublicWebsiteModuleTest extends TestCase
 
         $booking = $this->get('/public/'.$website->slug.'/booking');
         $booking->assertOk();
-        $booking->assertSee('Book Appointment', false);
+        $booking->assertSee('تأكيد الحجز', false);
     }
 
     public function test_unpublished_slug_booking_page_returns_not_found(): void

@@ -60,7 +60,7 @@ class WebsiteResolverTest extends TestCase
 
         $this->get('http://'.$website->slug.'.platform.test/booking')
             ->assertOk()
-            ->assertSee('Book Appointment', false);
+            ->assertSee('تأكيد الحجز', false);
     }
 
     private function createPublishedWebsite(Workspace $workspace): Website

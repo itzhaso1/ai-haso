@@ -22,6 +22,9 @@ class WebhookReplayProtectionTest extends TestCase
     {
         Event::fake([PaymentConfirmed::class]);
 
+        config()->set('payment.providers.local.webhook_secret', 'local_replay_secret');
+        config()->set('payment.providers.local.webhook_tolerance_seconds', 300);
+
         [$owner, $workspace] = $this->createWorkspaceOwner('company');
         $gateway = PaymentGateway::withoutGlobalScopes()->create([
             'workspace_id' => $workspace->id,
@@ -66,9 +69,16 @@ class WebhookReplayProtectionTest extends TestCase
             'status' => 'paid',
             'reference' => $order->order_number,
         ];
+        $rawBody = json_encode($payload, JSON_UNESCAPED_SLASHES);
+        $timestamp = time();
+        $signature = hash_hmac('sha256', $timestamp.'.'.$rawBody, 'local_replay_secret');
+        $headers = [
+            'x-webhook-timestamp' => (string) $timestamp,
+            'x-webhook-signature' => $signature,
+        ];
 
-        $service->processWebhook('local', [], $payload, json_encode($payload));
-        $service->processWebhook('local', [], $payload, json_encode($payload));
+        $service->processWebhook('local', $headers, $payload, $rawBody);
+        $service->processWebhook('local', $headers, $payload, $rawBody);
 
         $this->assertSame(1, WebhookEvent::withoutGlobalScopes()->count());
         $this->assertSame('paid', $payment->fresh()->status);

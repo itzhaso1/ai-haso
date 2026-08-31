@@ -93,13 +93,18 @@ class ConversationController extends Controller
                 ->find($activeConversationId);
 
             if ($activeConversation) {
-                $activeConversation->setAttribute('display_channel', $this->resolveDisplayChannel($activeConversation));
-
                 $metadata = is_array($activeConversation->metadata) ? $activeConversation->metadata : [];
                 if ((int) ($metadata['unread_count'] ?? 0) > 0) {
                     $metadata['unread_count'] = 0;
-                    $activeConversation->update(['metadata' => $metadata]);
+                    // Update only metadata via query to avoid persisting virtual attributes.
+                    Conversation::query()
+                        ->whereKey($activeConversation->id)
+                        ->update(['metadata' => $metadata]);
+                    $activeConversation->setAttribute('metadata', $metadata);
+                    $activeConversation->syncOriginalAttribute('metadata');
                 }
+
+                $activeConversation->setAttribute('display_channel', $this->resolveDisplayChannel($activeConversation));
 
                 $activeConversation->setRelation(
                     'messages',

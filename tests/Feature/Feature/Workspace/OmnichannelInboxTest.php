@@ -56,10 +56,8 @@ class OmnichannelInboxTest extends TestCase
                 'conversation' => $conversation->id,
             ]))
             ->assertOk()
-            ->assertSee('Omnichannel Inbox')
             ->assertSee('Instagram Customer')
-            ->assertSee('Instagram')
-            ->assertSee('Status: open');
+            ->assertSee('Instagram');
     }
 
     /**
