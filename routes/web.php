@@ -49,6 +49,7 @@ use App\Http\Controllers\Workspace\OrderController;
 use App\Http\Controllers\Workspace\PaymentController;
 use App\Http\Controllers\Workspace\PaymentGatewayController;
 use App\Http\Controllers\Workspace\Pos\CashierController as PosCashierController;
+use App\Http\Controllers\Workspace\Pos\PosCartController as PosCartController;
 use App\Http\Controllers\Workspace\Pos\PosCashierInvoiceController as PosCashierInvoiceController;
 use App\Http\Controllers\Workspace\Pos\CustomerMenuController as PosCustomerMenuController;
 use App\Http\Controllers\Workspace\Pos\PosItemCategoryController as PosItemCategoryController;
@@ -57,8 +58,10 @@ use App\Http\Controllers\Workspace\Pos\PosMenuItemController as PosMenuItemContr
 use App\Http\Controllers\Workspace\Pos\PosMenuPageController as PosMenuPageController;
 use App\Http\Controllers\Workspace\Pos\PosOrderController as PosOrderController;
 use App\Http\Controllers\Workspace\Pos\PosReportController as PosReportController;
+use App\Http\Controllers\Workspace\Pos\PosReturnController as PosReturnController;
 use App\Http\Controllers\Workspace\Pos\PosSettingsController as PosSettingsController;
 use App\Http\Controllers\Workspace\Pos\TableController as PosTableController;
+use App\Http\Controllers\Download\DigitalDownloadController;
 use App\Http\Controllers\Workspace\ProductController;
 use App\Http\Controllers\Workspace\SubscriptionController;
 use App\Http\Controllers\Workspace\WhatsAppAccountController;
@@ -478,6 +481,17 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::post('orders/{order}/payment-link', [PosOrderController::class, 'createPaymentLink'])->name('orders.payment-link');
             Route::post('orders/{order}/items', [PosOrderController::class, 'updateItems'])->name('orders.update-items');
             Route::get('orders/{order}/print', [PosOrderController::class, 'printOrder'])->name('orders.print');
+            Route::get('orders/{order}/returns/create', [PosReturnController::class, 'create'])->name('orders.returns.create');
+            Route::post('orders/{order}/returns', [PosReturnController::class, 'store'])->name('orders.returns.store');
+            Route::post('returns/{return}/refund', [PosReturnController::class, 'markRefunded'])->name('returns.refund');
+
+            Route::get('cart', [PosCartController::class, 'show'])->name('cart.show');
+            Route::post('cart/items', [PosCartController::class, 'addItem'])->name('cart.items.store');
+            Route::patch('cart/items/{key}', [PosCartController::class, 'updateItem'])->name('cart.items.update');
+            Route::delete('cart/items/{key}', [PosCartController::class, 'removeItem'])->name('cart.items.destroy');
+            Route::post('cart/meta', [PosCartController::class, 'updateMeta'])->name('cart.meta');
+            Route::post('cart/clear', [PosCartController::class, 'clear'])->name('cart.clear');
+            Route::post('cart/checkout', [PosCartController::class, 'checkout'])->name('cart.checkout');
 
             Route::get('invoices', [PosCashierInvoiceController::class, 'index'])->name('invoices.index');
             Route::get('invoices/{invoice}', [PosCashierInvoiceController::class, 'show'])->name('invoices.show');
@@ -512,3 +526,7 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
     });
 
 require __DIR__.'/auth.php';
+
+Route::get('/downloads/digital/{orderItem}', DigitalDownloadController::class)
+    ->middleware('signed')
+    ->name('downloads.digital');

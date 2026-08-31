@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[Fillable([
     'workspace_id',
     'pos_item_category_id',
+    'product_id',
     'name',
     'item_type',
     'size_label',
@@ -39,6 +40,15 @@ class PosMenuItem extends WorkspaceScopedModel
     public function category(): BelongsTo
     {
         return $this->belongsTo(PosItemCategory::class, 'pos_item_category_id');
+    }
+
+    /**
+     * Optional link to catalog Product for inventory sync.
+     * When null, PosOrderService skips inventory adjustments.
+     */
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class);
     }
 
     public function orderItems(): HasMany

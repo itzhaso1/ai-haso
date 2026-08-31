@@ -779,11 +779,12 @@ class DomainService
                     }
 
                     if (
-                        $domain->ssl_status === 'active'
+                        in_array($domain->ssl_status, ['active', 'expired'], true)
                         && $domain->ssl_expires_at
                         && $domain->ssl_expires_at->lte(now()->addDays($renewBefore))
                     ) {
-                        ProvisionSslJob::dispatch($domain->id);
+                        // Prefer renewAndSync for nearing-expiry certs; falls back safely if certbot missing.
+                        $this->sslService->renewAndSync($domain);
                         $count++;
                     } else {
                         $this->sslService->syncFromFilesystem($domain);

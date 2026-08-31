@@ -87,4 +87,9 @@ class Order extends WorkspaceScopedModel
     {
         return $this->hasMany(Payment::class);
     }
+
+    public function posReturns(): HasMany
+    {
+        return $this->hasMany(PosOrderReturn::class);
+    }
 }

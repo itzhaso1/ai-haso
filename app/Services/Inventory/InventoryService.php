@@ -55,6 +55,7 @@ class InventoryService
             }
 
             return InventoryMovement::query()->create([
+                'workspace_id' => $product->workspace_id,
                 'product_id' => $product->id,
                 'product_variant_id' => $variant?->id,
                 'type' => $type,

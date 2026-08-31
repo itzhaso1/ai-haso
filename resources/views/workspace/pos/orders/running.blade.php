@@ -58,6 +58,9 @@
                         @endif
 
                         <a href="{{ route('workspace.pos.orders.print', $order) }}" target="_blank" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">طباعة</a>
+                        @if($order->pos_status !== 'cancelled')
+                            <a href="{{ route('workspace.pos.orders.returns.create', $order) }}" class="rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50">مرتجع / استرجاع</a>
+                        @endif
                         <p class="mr-auto text-sm font-bold text-slate-900">Total: {{ number_format((float) $order->total_amount, 2) }} {{ $order->currency }}</p>
                     </div>
                 </article>

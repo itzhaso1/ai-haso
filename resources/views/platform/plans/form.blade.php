@@ -8,6 +8,7 @@
         'inventory' => 'المخزون',
         'customers' => 'العملاء',
         'orders' => 'الطلبات',
+        'pos' => 'نقاط البيع',
         'conversations' => 'المحادثات',
         'messages' => 'الرسائل',
         'smart_replies' => 'الردود الذكية',
@@ -32,35 +33,68 @@
         'employees.manage' => 'إدارة الموظفين',
         'subscriptions.manage' => 'إدارة الاشتراكات',
     ];
+    $tierOptions = [
+        '' => '— بدون مستوى —',
+        'starter' => 'مبتدئ',
+        'growth' => 'نمو',
+        'pro' => 'احترافي',
+        'enterprise' => 'مؤسسات',
+    ];
 
     $selectedFeatures = old('features', $planData?->features ?? []);
     $selectedPermissions = old('permissions', $planData?->permissions ?? []);
 @endphp
 <div class="grid gap-4 md:grid-cols-2">
-    <div><label class="mb-1 block text-sm">Code</label><input name="code" value="{{ old('code', $planData?->code) }}" class="w-full rounded-lg border-gray-300" /></div>
-    <div><label class="mb-1 block text-sm">Name</label><input name="name" required value="{{ old('name', $planData?->name) }}" class="w-full rounded-lg border-gray-300" /></div>
     <div>
-        <label class="mb-1 block text-sm">Workspace Type</label>
+        <label class="mb-1 block text-sm font-semibold text-gray-700">رمز الخطة (Code)</label>
+        <input name="code" value="{{ old('code', $planData?->code) }}" class="w-full rounded-lg border-gray-300" />
+    </div>
+    <div>
+        <label class="mb-1 block text-sm font-semibold text-gray-700">اسم الخطة</label>
+        <input name="name" required value="{{ old('name', $planData?->name) }}" class="w-full rounded-lg border-gray-300" />
+    </div>
+    <div>
+        <label class="mb-1 block text-sm font-semibold text-gray-700">المستوى التجاري (Tier)</label>
+        <select name="tier" class="w-full rounded-lg border-gray-300">
+            @foreach($tierOptions as $tierValue => $tierLabel)
+                <option value="{{ $tierValue }}" @selected(old('tier', $planData?->tier ?? '') === $tierValue)>{{ $tierLabel }}</option>
+            @endforeach
+        </select>
+    </div>
+    <div>
+        <label class="mb-1 block text-sm font-semibold text-gray-700">نوع مساحة العمل</label>
         <select name="workspace_type" class="w-full rounded-lg border-gray-300">
-            @foreach(['individual','company','store'] as $type)
-                <option value="{{ $type }}" @selected(old('workspace_type', $planData?->workspace_type ?? 'individual') === $type)>{{ $type }}</option>
+            @foreach(['individual' => 'فردي', 'company' => 'شركة', 'store' => 'متجر'] as $type => $label)
+                <option value="{{ $type }}" @selected(old('workspace_type', $planData?->workspace_type ?? 'individual') === $type)>{{ $label }}</option>
             @endforeach
         </select>
     </div>
     <div>
-        <label class="mb-1 block text-sm">Billing Period</label>
+        <label class="mb-1 block text-sm font-semibold text-gray-700">دورة الفوترة</label>
         <select name="billing_period" class="w-full rounded-lg border-gray-300">
-            @foreach(['monthly','yearly','lifetime'] as $period)
-                <option value="{{ $period }}" @selected(old('billing_period', $planData?->billing_period ?? 'monthly') === $period)>{{ $period }}</option>
+            @foreach(['monthly' => 'شهري', 'yearly' => 'سنوي', 'lifetime' => 'مدى الحياة'] as $period => $label)
+                <option value="{{ $period }}" @selected(old('billing_period', $planData?->billing_period ?? 'monthly') === $period)>{{ $label }}</option>
             @endforeach
         </select>
     </div>
-    <div><label class="mb-1 block text-sm">Currency</label><input name="currency" value="{{ old('currency', $planData?->currency ?? 'USD') }}" class="w-full rounded-lg border-gray-300" /></div>
-    <div><label class="mb-1 block text-sm">Price</label><input type="number" step="0.01" name="price" value="{{ old('price', $planData?->price ?? 0) }}" class="w-full rounded-lg border-gray-300" /></div>
-    <label class="inline-flex items-center gap-2 mt-7">
-        <input type="checkbox" name="is_active" value="1" @checked(old('is_active', $planData?->is_active ?? true))>
-        <span>نشطة</span>
-    </label>
+    <div>
+        <label class="mb-1 block text-sm font-semibold text-gray-700">العملة</label>
+        <input name="currency" value="{{ old('currency', $planData?->currency ?? 'USD') }}" class="w-full rounded-lg border-gray-300" />
+    </div>
+    <div>
+        <label class="mb-1 block text-sm font-semibold text-gray-700">السعر</label>
+        <input type="number" step="0.01" name="price" value="{{ old('price', $planData?->price ?? 0) }}" class="w-full rounded-lg border-gray-300" />
+    </div>
+    <div class="flex flex-wrap items-center gap-6 mt-7">
+        <label class="inline-flex items-center gap-2">
+            <input type="checkbox" name="is_active" value="1" @checked(old('is_active', $planData?->is_active ?? true))>
+            <span class="text-sm font-semibold text-gray-700">نشطة</span>
+        </label>
+        <label class="inline-flex items-center gap-2">
+            <input type="checkbox" name="is_public" value="1" @checked(old('is_public', $planData?->is_public ?? true))>
+            <span class="text-sm font-semibold text-gray-700">عامة (ظاهرة للعملاء)</span>
+        </label>
+    </div>
 </div>
 
 <div>
@@ -88,14 +122,14 @@
 </div>
 
 <div>
-    <label class="mb-1 block text-sm">Features JSON (اختياري للتخصيص المتقدم)</label>
-    <textarea name="features_json" rows="4" class="w-full rounded-lg border-gray-300">{{ old('features_json', $featuresJson ?? json_encode($planData?->features ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) }}</textarea>
+    <label class="mb-1 block text-sm font-semibold text-gray-700">Features JSON (تخصيص متقدم)</label>
+    <textarea name="features_json" rows="4" class="w-full rounded-lg border-gray-300 font-mono text-xs">{{ old('features_json', $featuresJson ?? json_encode($planData?->features ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) }}</textarea>
 </div>
 <div>
-    <label class="mb-1 block text-sm">Permissions JSON (اختياري للتخصيص المتقدم)</label>
-    <textarea name="permissions_json" rows="4" class="w-full rounded-lg border-gray-300">{{ old('permissions_json', $permissionsJson ?? json_encode($planData?->permissions ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) }}</textarea>
+    <label class="mb-1 block text-sm font-semibold text-gray-700">Permissions JSON (تخصيص متقدم)</label>
+    <textarea name="permissions_json" rows="4" class="w-full rounded-lg border-gray-300 font-mono text-xs">{{ old('permissions_json', $permissionsJson ?? json_encode($planData?->permissions ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) }}</textarea>
 </div>
 <div>
-    <label class="mb-1 block text-sm">Limits JSON</label>
-    <textarea name="limits_json" rows="4" class="w-full rounded-lg border-gray-300">{{ old('limits_json', $limitsJson ?? json_encode($planData?->limits ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) }}</textarea>
+    <label class="mb-1 block text-sm font-semibold text-gray-700">Limits JSON (حدود الاستخدام)</label>
+    <textarea name="limits_json" rows="4" class="w-full rounded-lg border-gray-300 font-mono text-xs">{{ old('limits_json', $limitsJson ?? json_encode($planData?->limits ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) }}</textarea>
 </div>

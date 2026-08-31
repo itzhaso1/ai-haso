@@ -26,6 +26,11 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'stock',
     'inventory_tracking',
     'status',
+    'product_kind',
+    'digital_type',
+    'download_limit',
+    'digital_asset_disk',
+    'digital_asset_path',
     'brand',
     'weight',
     'images',
@@ -45,9 +50,15 @@ class Product extends WorkspaceScopedModel
             'vat_rate' => 'decimal:2',
             'weight' => 'decimal:3',
             'inventory_tracking' => 'boolean',
+            'download_limit' => 'integer',
             'images' => 'array',
             'attributes' => 'array',
         ];
+    }
+
+    public function isDigital(): bool
+    {
+        return $this->product_kind === 'digital';
     }
 
     public function category(): BelongsTo

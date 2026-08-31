@@ -5,6 +5,14 @@
         x-data="cashierPos({
             items: @js($items),
             categories: @js($categories),
+            cartEndpoints: {
+                addItem: @js(route('workspace.pos.cart.items.store')),
+                updateItem: @js(url('/workspace/pos/cart/items')),
+                removeItem: @js(url('/workspace/pos/cart/items')),
+                meta: @js(route('workspace.pos.cart.meta')),
+                checkout: @js(route('workspace.pos.cart.checkout')),
+                csrf: @js(csrf_token()),
+            },
         })"
         class="grid gap-4 xl:grid-cols-12"
     >
@@ -47,12 +55,13 @@
         <aside class="space-y-4 xl:col-span-4">
             <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <h2 class="text-base font-bold text-slate-900">طلب جديد</h2>
+                {{-- Existing full-order POST path kept for compatibility --}}
                 <form method="POST" action="{{ route('workspace.pos.orders.store') }}" @submit="prepareSubmit">
                     @csrf
                     <div class="mt-3 space-y-3">
                         <div>
                             <label class="mb-1 block text-xs font-semibold text-slate-600">العميل (اختياري)</label>
-                            <select name="customer_id" class="w-full rounded-lg border-slate-300 text-sm">
+                            <select name="customer_id" x-model="customerId" @change="syncMeta" class="w-full rounded-lg border-slate-300 text-sm">
                                 <option value="">بدون عميل</option>
                                 @foreach($customers as $customer)
                                     <option value="{{ $customer->id }}">{{ $customer->name }}{{ $customer->phone ? ' - '.$customer->phone : '' }}</option>
@@ -61,7 +70,7 @@
                         </div>
                         <div>
                             <label class="mb-1 block text-xs font-semibold text-slate-600">الطاولة (اختياري)</label>
-                            <select name="dining_table_id" class="w-full rounded-lg border-slate-300 text-sm">
+                            <select name="dining_table_id" x-model="diningTableId" @change="syncMeta" class="w-full rounded-lg border-slate-300 text-sm">
                                 <option value="">بدون طاولة</option>
                                 @foreach($tables as $table)
                                     <option value="{{ $table->id }}">{{ $table->name }} - {{ $table->status === 'occupied' ? 'Occupied' : 'Available' }}</option>
@@ -70,11 +79,11 @@
                         </div>
                         <div>
                             <label class="mb-1 block text-xs font-semibold text-slate-600">الخصم</label>
-                            <input x-model.number="discount" type="number" name="discount_amount" min="0" step="0.01" class="w-full rounded-lg border-slate-300 text-sm" />
+                            <input x-model.number="discount" @change="syncMeta" type="number" name="discount_amount" min="0" step="0.01" class="w-full rounded-lg border-slate-300 text-sm" />
                         </div>
                         <div>
                             <label class="mb-1 block text-xs font-semibold text-slate-600">ملاحظات</label>
-                            <textarea name="notes" rows="2" class="w-full rounded-lg border-slate-300 text-sm"></textarea>
+                            <textarea name="notes" x-model="notes" @change="syncMeta" rows="2" class="w-full rounded-lg border-slate-300 text-sm"></textarea>
                         </div>
                     </div>
 
@@ -116,23 +125,32 @@
                         </div>
                     </div>
 
-                    <button class="mt-3 w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
-                        إنشاء Order
-                    </button>
+                    <div class="mt-3 grid gap-2">
+                        <button class="w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+                            إنشاء Order
+                        </button>
+                        <button type="button" @click="checkoutViaCart" class="w-full rounded-lg border border-emerald-600 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50">
+                            إتمام عبر سلة الجلسة
+                        </button>
+                    </div>
                 </form>
             </article>
         </aside>
     </div>
 
     <script>
-        function cashierPos({ items, categories }) {
+        function cashierPos({ items, categories, cartEndpoints }) {
             return {
                 items,
                 categories,
+                cartEndpoints,
                 search: '',
                 selectedCategoryId: '',
                 cart: [],
                 discount: 0,
+                customerId: '',
+                diningTableId: '',
+                notes: '',
                 get filteredItems() {
                     return this.items.filter((item) => {
                         const matchesCategory = !this.selectedCategoryId || Number(item.pos_item_category_id) === Number(this.selectedCategoryId);
@@ -147,29 +165,38 @@
                     const existing = this.cart.find((line) => line.pos_menu_item_id === item.id);
                     if (existing) {
                         existing.quantity += 1;
+                        this.syncCartAdd(item.id, 1);
                         return;
                     }
 
                     this.cart.push({
                         pos_menu_item_id: item.id,
+                        key: `item_${item.id}`,
                         name: item.name,
                         unit_price: Number(item.price || 0),
                         currency: item.currency || '---',
                         quantity: 1,
                     });
+                    this.syncCartAdd(item.id, 1);
                 },
                 increase(index) {
                     this.cart[index].quantity += 1;
+                    this.syncCartQty(this.cart[index]);
                 },
                 decrease(index) {
                     if (this.cart[index].quantity <= 1) {
-                        this.cart.splice(index, 1);
+                        this.removeLine(index);
                         return;
                     }
                     this.cart[index].quantity -= 1;
+                    this.syncCartQty(this.cart[index]);
                 },
                 removeLine(index) {
+                    const line = this.cart[index];
                     this.cart.splice(index, 1);
+                    if (line?.key) {
+                        this.cartFetch(`${this.cartEndpoints.removeItem}/${line.key}`, 'DELETE');
+                    }
                 },
                 get subtotal() {
                     return this.cart.reduce((sum, line) => sum + (line.quantity * line.unit_price), 0);
@@ -191,6 +218,84 @@
                 },
                 money(amount) {
                     return Number(amount || 0).toFixed(2);
+                },
+                syncCartAdd(posMenuItemId, quantity) {
+                    this.cartFetch(this.cartEndpoints.addItem, 'POST', {
+                        pos_menu_item_id: posMenuItemId,
+                        quantity,
+                    });
+                },
+                syncCartQty(line) {
+                    if (!line?.key) {
+                        return;
+                    }
+                    this.cartFetch(`${this.cartEndpoints.updateItem}/${line.key}`, 'PATCH', {
+                        quantity: line.quantity,
+                    });
+                },
+                syncMeta() {
+                    this.cartFetch(this.cartEndpoints.meta, 'POST', {
+                        customer_id: this.customerId || null,
+                        dining_table_id: this.diningTableId || null,
+                        discount_amount: this.discount || 0,
+                        notes: this.notes || null,
+                    });
+                },
+                async cartFetch(url, method, body) {
+                    try {
+                        await fetch(url, {
+                            method,
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': this.cartEndpoints.csrf,
+                                'X-Requested-With': 'XMLHttpRequest',
+                            },
+                            body: body ? JSON.stringify(body) : undefined,
+                            credentials: 'same-origin',
+                        });
+                    } catch (error) {
+                        // Non-blocking: local cart + classic form submit remain primary.
+                        console.warn('pos cart sync skipped', error);
+                    }
+                },
+                async checkoutViaCart() {
+                    if (this.cart.length === 0) {
+                        alert('أضف صنفًا واحدًا على الأقل قبل إنشاء الطلب.');
+                        return;
+                    }
+
+                    await this.syncMeta();
+                    try {
+                        const response = await fetch(this.cartEndpoints.checkout, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': this.cartEndpoints.csrf,
+                                'X-Requested-With': 'XMLHttpRequest',
+                            },
+                            body: JSON.stringify({
+                                customer_id: this.customerId || null,
+                                dining_table_id: this.diningTableId || null,
+                                discount_amount: this.discount || 0,
+                                notes: this.notes || null,
+                            }),
+                            credentials: 'same-origin',
+                        });
+                        const payload = await response.json();
+                        if (!response.ok) {
+                            alert(payload.message || 'تعذر إتمام السلة.');
+                            return;
+                        }
+                        if (payload.redirect) {
+                            window.location.href = payload.redirect;
+                            return;
+                        }
+                        window.location.reload();
+                    } catch (error) {
+                        alert('تعذر إتمام السلة.');
+                    }
                 },
                 prepareSubmit(event) {
                     if (this.cart.length === 0) {

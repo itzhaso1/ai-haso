@@ -12,10 +12,12 @@ use App\Models\PosMenuItem;
 use App\Models\TableSession;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\Inventory\InventoryService;
 use App\Services\Order\OrderService;
 use App\Services\Payment\PaymentService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class PosOrderService
@@ -23,6 +25,7 @@ class PosOrderService
     public function __construct(
         private readonly OrderService $orderService,
         private readonly PaymentService $paymentService,
+        private readonly InventoryService $inventoryService,
     ) {}
 
     /**
@@ -439,8 +442,11 @@ class PosOrderService
             $quantity = max(1, (int) ($item['quantity'] ?? 1));
             $unitPrice = (float) $menuItem->price;
             $lineTotal = round($quantity * $unitPrice, 2);
+            // Inventory sync only when PosMenuItem.product_id is set; otherwise skip.
+            $productId = $menuItem->product_id ? (int) $menuItem->product_id : null;
             $normalized->push([
                 'pos_menu_item_id' => $menuItem->id,
+                'product_id' => $productId,
                 'name' => $menuItem->name,
                 'item_type' => $menuItem->item_type ?: ($menuItem->category?->name ?? 'عام'),
                 'size_label' => $menuItem->size_label,
@@ -525,10 +531,10 @@ class PosOrderService
         ]);
 
         foreach ($items as $item) {
-            $order->items()->create([
+            $orderItem = $order->items()->create([
                 'workspace_id' => $workspace->id,
                 'order_id' => $order->id,
-                'product_id' => null,
+                'product_id' => $item['product_id'] ?? null,
                 'product_variant_id' => null,
                 'pos_menu_item_id' => $item['pos_menu_item_id'],
                 'product_name' => $item['name'],
@@ -540,6 +546,8 @@ class PosOrderService
                 'discount_amount' => 0,
                 'total_amount' => $item['total_amount'],
             ]);
+
+            $this->syncInventoryForPosLine($orderItem, $actorUserId = null);
         }
 
         if ($customerId) {
@@ -738,5 +746,37 @@ class PosOrderService
             ->exists();
 
         $table->update(['status' => $hasOpenSessions ? 'occupied' : 'available']);
+    }
+
+    /**
+     * Deduct inventory when the POS menu item is linked to a catalog product.
+     * Menu items without product_id are intentionally skipped (no inventory side effects).
+     */
+    private function syncInventoryForPosLine(OrderItem $orderItem, ?int $actorUserId = null): void
+    {
+        if (! $orderItem->product_id) {
+            return;
+        }
+
+        try {
+            $actor = $actorUserId ? User::query()->find($actorUserId) : null;
+            $this->inventoryService->adjustStock(
+                productId: (int) $orderItem->product_id,
+                variantId: $orderItem->product_variant_id ? (int) $orderItem->product_variant_id : null,
+                type: 'remove',
+                quantity: max(1, (int) $orderItem->quantity),
+                actor: $actor,
+                referenceType: Order::class,
+                referenceId: (int) $orderItem->order_id,
+                notes: 'POS order inventory sync',
+            );
+        } catch (\Throwable $exception) {
+            // Stub-safe: log and continue so cashier flow is not broken by inventory edge cases.
+            Log::warning('pos.inventory_sync_skipped', [
+                'order_item_id' => $orderItem->id,
+                'product_id' => $orderItem->product_id,
+                'error' => $exception->getMessage(),
+            ]);
+        }
     }
 }

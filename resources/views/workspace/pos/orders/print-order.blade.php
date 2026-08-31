@@ -43,6 +43,11 @@
             <p>Subtotal: {{ number_format((float) $order->subtotal, 2) }} {{ $order->currency }}</p>
             <p>Discount: {{ number_format((float) $order->discount_amount, 2) }} {{ $order->currency }}</p>
             <p class="font-bold">Total: {{ number_format((float) $order->total_amount, 2) }} {{ $order->currency }}</p>
+            @if($order->pos_status !== 'cancelled')
+                <p class="print:hidden mt-3">
+                    <a href="{{ route('workspace.pos.orders.returns.create', $order) }}" class="text-rose-700 underline">مرتجع / استرجاع</a>
+                </p>
+            @endif
         </footer>
     </main>
 

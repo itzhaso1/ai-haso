@@ -130,21 +130,45 @@ class SslService
     public function renewAndSync(WebsiteDomain $domain): array
     {
         if (! (bool) config('website.ssl.enabled', false)) {
-            return $this->syncFromFilesystem($domain);
+            return [
+                'renew_exit_code' => null,
+                'renew_successful' => false,
+                'renew_skipped' => true,
+                'renew_output' => 'SSL disabled; synced from filesystem only.',
+                'sync' => $this->syncFromFilesystem($domain),
+            ];
         }
 
         $bin = (string) config('website.ssl.certbot_bin', 'certbot');
-        $process = Process::timeout((int) config('website.ssl.command_timeout', 180))
-            ->run([$bin, 'renew', '--cert-name', $domain->normalized_domain, '--quiet', '--no-random-sleep-on-renew']);
 
-        $sync = $this->syncFromFilesystem($domain);
+        try {
+            $process = Process::timeout((int) config('website.ssl.command_timeout', 180))
+                ->run([$bin, 'renew', '--cert-name', $domain->normalized_domain, '--quiet', '--no-random-sleep-on-renew']);
 
-        return [
-            'renew_exit_code' => $process->exitCode(),
-            'renew_successful' => $process->successful(),
-            'renew_output' => $this->redactSecrets($process->output().$process->errorOutput()),
-            'sync' => $sync,
-        ];
+            $sync = $this->syncFromFilesystem($domain);
+
+            return [
+                'renew_exit_code' => $process->exitCode(),
+                'renew_successful' => $process->successful(),
+                'renew_skipped' => false,
+                'renew_output' => $this->redactSecrets($process->output().$process->errorOutput()),
+                'sync' => $sync,
+            ];
+        } catch (\Throwable $exception) {
+            // Safe when certbot binary is missing or renew fails unexpectedly.
+            Log::warning('ssl.renew_and_sync_failed', [
+                'domain' => $domain->normalized_domain,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return [
+                'renew_exit_code' => null,
+                'renew_successful' => false,
+                'renew_skipped' => true,
+                'renew_output' => $this->redactSecrets($exception->getMessage()),
+                'sync' => $this->syncFromFilesystem($domain),
+            ];
+        }
     }
 
     /**
