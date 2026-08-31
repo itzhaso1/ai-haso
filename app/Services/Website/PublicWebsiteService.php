@@ -72,7 +72,7 @@ class PublicWebsiteService
             'seo' => [
                 'title' => $settings['seo_title'] ?? $website->name,
                 'description' => $settings['seo_description'] ?? null,
-                'canonical' => $this->canonicalUrl($website),
+                'canonical' => $this->canonicalUrl($website, $pageSlug),
                 'robots' => $website->status === 'published' ? 'index,follow' : 'noindex,nofollow',
                 'favicon' => $settings['favicon_url'] ?? null,
                 'og_title' => $settings['seo_title'] ?? $website->name,
@@ -92,14 +92,20 @@ class PublicWebsiteService
         return is_array($section?->config) ? $section->config : [];
     }
 
-    private function canonicalUrl(Website $website): ?string
+    private function canonicalUrl(Website $website, string $pageSlug): ?string
     {
         $domain = $website->primaryDomain;
+        $path = in_array($pageSlug, ['booking', 'contact'], true) ? '/'.$pageSlug : '';
+
         if ($domain && $domain->normalized_domain !== '') {
-            return 'https://'.$domain->normalized_domain;
+            return 'https://'.$domain->normalized_domain.$path;
         }
 
-        return null;
+        if ($pageSlug === 'home') {
+            return route('public.website.show', ['website' => $website->slug]);
+        }
+
+        return route('public.website.page', ['website' => $website->slug, 'page' => $pageSlug]);
     }
 
     /**

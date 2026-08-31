@@ -130,7 +130,13 @@
                         </div>
                         <div class="mt-3">
                             <label class="mb-1 block text-xs font-semibold text-slate-600">Config (JSON)</label>
-                            <textarea name="sections[{{ $index }}][config]" rows="4" class="w-full rounded-xl border-slate-300 font-mono text-xs">{{ json_encode(old("sections.$index.config", $section->config ?? []), JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE) }}</textarea>
+                            @php
+                                $oldConfig = old("sections.$index.config");
+                                $configText = is_string($oldConfig)
+                                    ? $oldConfig
+                                    : json_encode($section->config ?? [], JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE);
+                            @endphp
+                            <textarea name="sections[{{ $index }}][config]" rows="4" class="w-full rounded-xl border-slate-300 font-mono text-xs">{{ $configText }}</textarea>
                         </div>
                     </div>
                 @endforeach

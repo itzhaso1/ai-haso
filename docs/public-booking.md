@@ -1,3 +1,78 @@
+# Public Booking
+
+## Goal
+
+Expose a tenant-safe public booking funnel while reusing the existing appointments engine.
+
+Core service:
+
+- `App\Services\Website\PublicBookingService`
+
+Reused core:
+
+- `App\Services\Appointments\AppointmentService`
+- `App\Services\Appointments\AppointmentBillingService`
+
+## Public Endpoints
+
+### Slug based (`/public/{website}`)
+
+- `GET /api/services`
+- `GET /api/services/{service}/staff`
+- `GET /api/availability`
+- `POST /api/booking/validate`
+- `POST /api/booking`
+- `GET /api/booking/{reference}`
+
+### Host resolved (`/api/public/*`)
+
+- `GET /services`
+- `GET /services/{service}/staff`
+- `GET /availability`
+- `POST /booking/validate`
+- `POST /booking`
+- `GET /booking/{reference}`
+
+## Validation and Security
+
+- service and staff are constrained by website workspace
+- booking total is never trusted from frontend
+- booking is created from server-side service price/rules
+- booking dates in the past are rejected
+- public writes are throttled
+
+## Availability Rules
+
+`AppointmentService::availableSlots` now applies:
+
+- business timezone normalization
+- service/staff availability
+- slot interval
+- booking window rules (min notice / max advance)
+- holiday blocking (`appointment_holidays`)
+- overlap checks against existing bookings
+- past slot filtering
+
+## Concurrency Protection
+
+During public booking creation:
+
+1. acquire cache lock by workspace/service/staff/slot key
+2. run transactional booking creation
+3. execute overlap/duplicate checks inside transaction with row locks
+
+## Guest Booking
+
+Customer can submit name/phone/email without dashboard authentication.
+If email or phone maps to an existing workspace customer, booking links to that customer; otherwise a guest profile is stored on booking.
+
+## Payment-required Services
+
+If service requires payment:
+
+- booking remains pending payment
+- billing service creates invoice/payment link
+- response includes payment URL
 # Public Booking Flow
 
 ## Goal

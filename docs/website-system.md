@@ -1,3 +1,101 @@
+# Website System
+
+## Overview
+
+This module adds a **public booking website layer** on top of the existing appointments core.
+
+It does **not** replace appointment models/services.  
+It reuses:
+
+- `AppointmentService` for booking creation and availability rules
+- `AppointmentBillingService` for payment-required bookings
+- existing workspace tenancy (`workspace_id` + `WorkspaceScopedModel`)
+- existing audit observer infrastructure
+
+## Main Entities
+
+- `website_templates`
+- `websites`
+- `website_pages`
+- `website_sections`
+- `website_assets`
+
+## Lifecycle
+
+1. Create website (`draft`)
+2. Select template
+3. Customize settings/theme/sections
+4. Preview via secure preview token
+5. Publish (`published`)
+6. Unpublish (`unpublished`) or suspend (`suspended`)
+
+## Dashboard Routes
+
+Under `workspace/appointments`:
+
+- `GET website` → overview
+- `POST website` → create
+- `GET website/{website}/templates`
+- `POST website/{website}/template`
+- `GET website/{website}/customize`
+- `POST website/{website}/customize`
+- `POST website/{website}/sections`
+- `GET website/{website}/preview`
+- `POST website/{website}/publish`
+- `POST website/{website}/unpublish`
+
+## Public Rendering
+
+- Host-based resolver (`ResolvePublicWebsite` middleware):
+  - `/`
+  - `/booking`
+  - `/contact`
+  - `/robots.txt`
+  - `/sitemap.xml`
+- Slug-based fallback:
+  - `/public/{website}`
+  - `/public/{website}/booking`
+  - `/public/{website}/contact`
+
+## Section System
+
+Sections are config-driven with `section_key`, `component_key`, `position`, `is_enabled`, and `config` JSON.
+
+Current components:
+
+- `hero`
+- `about`
+- `services_grid`
+- `staff_grid`
+- `booking_cta`
+- `testimonials`
+- `faq`
+- `gallery`
+- `contact`
+- `business_hours`
+- `footer`
+
+No raw HTML is stored in DB.
+
+## Templates
+
+Seeded dynamically through `TemplateService`:
+
+1. Dental Clinic - Modern
+2. Medical Clinic - Classic
+3. Beauty & Salon - Elegant
+4. Law Firm - Professional
+5. Consultant - Professional
+
+## Feature Flags
+
+Website module uses workspace features:
+
+- `website_builder`
+- `custom_domains`
+- `public_booking`
+
+Routes are protected with `workspace.feature` middleware.
 # Website System (Appointments Module)
 
 ## Scope

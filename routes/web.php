@@ -63,19 +63,21 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 
 Route::get('/', function () {
-    $website = app(\App\Services\Website\WebsiteResolverService::class)
-        ->resolveByHost((string) request()->getHost());
-    if ($website && $website->status === 'published') {
-        $primary = $website->primaryDomain()->withoutGlobalScopes()->first();
-        if ($primary && ! str_contains((string) request()->getHost(), 'localhost')) {
-            $currentHost = \App\Services\Domain\DomainName::normalize((string) request()->getHost());
-            if ($currentHost !== '' && $currentHost !== (string) $primary->normalized_domain) {
-                return redirect()->to('https://'.$primary->normalized_domain.request()->getRequestUri(), 301);
+    if (Schema::hasTable('websites') && Schema::hasTable('website_domains')) {
+        $website = app(\App\Services\Website\WebsiteResolverService::class)
+            ->resolveByHost((string) request()->getHost());
+        if ($website && $website->status === 'published') {
+            $primary = $website->primaryDomain()->withoutGlobalScopes()->first();
+            if ($primary && ! str_contains((string) request()->getHost(), 'localhost')) {
+                $currentHost = \App\Services\Domain\DomainName::normalize((string) request()->getHost());
+                if ($currentHost !== '' && $currentHost !== (string) $primary->normalized_domain) {
+                    return redirect()->to('https://'.$primary->normalized_domain.request()->getRequestUri(), 301);
+                }
             }
-        }
 
-        return view('public.website.show', app(\App\Services\Website\PublicWebsiteService::class)
-            ->buildWebsiteViewData($website, 'home'));
+            return view('public.website.show', app(\App\Services\Website\PublicWebsiteService::class)
+                ->buildWebsiteViewData($website, 'home'));
+        }
     }
 
     $plans = collect();

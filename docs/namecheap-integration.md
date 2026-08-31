@@ -1,3 +1,69 @@
+# Namecheap Integration (Sandbox First)
+
+## Service
+
+Implementation class:
+
+- `App\Services\Domain\NamecheapRegistrar`
+
+Parser:
+
+- `App\Services\Domain\NamecheapXmlParser`
+
+Error type:
+
+- `App\Services\Domain\DomainProviderException`
+
+## Supported API Commands
+
+- `namecheap.domains.check`
+- `namecheap.domains.create`
+- `namecheap.domains.getInfo`
+- `namecheap.domains.getList`
+- `namecheap.domains.dns.getHosts`
+- `namecheap.domains.dns.setHosts`
+- `namecheap.domains.renew`
+
+## Configuration
+
+`config/services.php`:
+
+```php
+'namecheap' => [
+    'env' => env('NAMECHEAP_ENV', 'sandbox'),
+    'api_user' => env('NAMECHEAP_API_USER'),
+    'api_key' => env('NAMECHEAP_API_KEY'),
+    'username' => env('NAMECHEAP_USERNAME'),
+    'client_ip' => env('NAMECHEAP_CLIENT_IP'),
+    'timeout' => (int) env('NAMECHEAP_TIMEOUT', 20),
+    'connect_timeout' => (int) env('NAMECHEAP_CONNECT_TIMEOUT', 8),
+    'base_url_sandbox' => 'https://api.sandbox.namecheap.com/xml.response',
+    'base_url_production' => 'https://api.namecheap.com/xml.response',
+],
+```
+
+## Environment Variables
+
+```dotenv
+NAMECHEAP_ENV=sandbox
+NAMECHEAP_API_USER=
+NAMECHEAP_API_KEY=
+NAMECHEAP_USERNAME=
+NAMECHEAP_CLIENT_IP=
+NAMECHEAP_TIMEOUT=20
+NAMECHEAP_CONNECT_TIMEOUT=8
+```
+
+## Security Notes
+
+- API credentials are backend-only.
+- No credentials are exposed to frontend code.
+- Errors are parsed and normalized before surfacing.
+- Logging excludes sensitive API values.
+
+## Provider Abstraction
+
+`DomainRegistrarInterface` allows adding another registrar later without changing controllers/service orchestration.
 # Namecheap Integration
 
 ## Architecture

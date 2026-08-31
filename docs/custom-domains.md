@@ -1,3 +1,91 @@
+# Custom Domains
+
+## Overview
+
+The custom domain module is implemented around `website_domains` with provider-agnostic services.
+
+Core classes:
+
+- `App\Services\Domain\DomainService`
+- `App\Services\Domain\DnsService`
+- `App\Services\Domain\SslService`
+- `App\Services\Domain\Contracts\DomainRegistrarInterface`
+- `App\Services\Domain\NamecheapRegistrar`
+
+## Database Tables
+
+- `website_domains`
+- `website_domain_contacts`
+- `website_domain_operations`
+
+## Domain Types
+
+- `platform_subdomain`
+- `custom_domain`
+
+## Domain Status Flow
+
+Supported statuses:
+
+- `pending`
+- `registering`
+- `registered`
+- `dns_pending`
+- `dns_configured`
+- `verifying`
+- `verified`
+- `ssl_pending`
+- `active`
+- `failed`
+- `expired`
+- `cancelled`
+
+## Dashboard Routes
+
+Under `workspace/appointments/website/{website}/domains`:
+
+- `GET /domains`
+- `POST /domains/search`
+- `POST /domains/purchase`
+- `POST /domains/{domain}/set-primary`
+- `POST /domains/{domain}/verify`
+- `POST /domains/{domain}/renew`
+- `POST /domains/{domain}/sync`
+- `DELETE /domains/{domain}`
+
+## Async Jobs
+
+- `RegisterDomainJob`
+- `ConfigureDomainDnsJob`
+- `VerifyDomainJob`
+- `ProvisionSslJob`
+- `RenewDomainJob`
+- `SyncDomainStatusJob`
+
+## Scheduler
+
+`routes/console.php` includes:
+
+- `domains:sync-status`
+- scheduled daily execution (`02:10`)
+
+## DNS Provisioning
+
+`DnsService` follows read-modify-write behavior:
+
+1. read existing hosts
+2. preserve non-platform records
+3. enforce apex record (`WEBSITE_DNS_TARGET`)
+4. enforce `www` CNAME target (`WEBSITE_DNS_WWW_TARGET`)
+5. write full host set back via registrar
+
+This prevents accidental deletion of unrelated customer DNS records.
+
+## Primary Domain Rules
+
+Only one domain per website can be primary (`is_primary = true`) and linked in `websites.primary_domain_id`.
+
+Resolver cache is invalidated on website/domain save/delete via `WebsiteResolverObserver`.
 # Custom Domains (Appointments Website Builder)
 
 ## Domain model

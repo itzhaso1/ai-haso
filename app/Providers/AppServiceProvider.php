@@ -61,6 +61,7 @@ use App\Models\Website\WebsiteSection;
 use App\Models\Website\WebsiteTemplate;
 use App\Models\Workspace;
 use App\Observers\FinanceInvoicePaymentObserver;
+use App\Observers\WebsiteResolverObserver;
 use App\Observers\WorkspaceAuditObserver;
 use App\Notifications\Channels\CentralMailChannel;
 use App\Policies\CategoryPolicy;
@@ -175,5 +176,7 @@ class AppServiceProvider extends ServiceProvider
         WebsiteAsset::observe(WorkspaceAuditObserver::class);
         WebsiteDomainOperation::observe(WorkspaceAuditObserver::class);
         WebsiteDomainContact::observe(WorkspaceAuditObserver::class);
+        Website::observe(WebsiteResolverObserver::class);
+        WebsiteDomain::observe(WebsiteResolverObserver::class);
     }
 }
