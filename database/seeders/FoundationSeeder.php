@@ -193,106 +193,7 @@ class FoundationSeeder extends Seeder
             'appointments.billing.manage',
         ]);
 
-        $plans = [
-            [
-                'code' => 'individual_free',
-                'name' => 'Individual Free',
-                'workspace_type' => 'individual',
-                'billing_period' => 'monthly',
-                'currency' => 'USD',
-                'price' => 0,
-                'is_active' => true,
-                'features' => ['conversations', 'smart_replies', 'ai', 'subscription', 'usage'],
-                'permissions' => ['workspace.view', 'conversations.manage', 'ai.manage', 'subscriptions.manage'],
-                'limits' => ['ai_usage' => 500, 'conversations' => 300, 'whatsapp_numbers' => 0],
-            ],
-            [
-                'code' => 'individual_pro',
-                'name' => 'Individual Pro',
-                'workspace_type' => 'individual',
-                'billing_period' => 'monthly',
-                'currency' => 'USD',
-                'price' => 19,
-                'is_active' => true,
-                'features' => ['conversations', 'smart_replies', 'ai', 'subscription', 'usage', 'whatsapp'],
-                'permissions' => ['workspace.view', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'subscriptions.manage'],
-                'limits' => ['ai_usage' => 5000, 'conversations' => 5000, 'whatsapp_numbers' => 1],
-            ],
-            [
-                'code' => 'company_basic',
-                'name' => 'Company Basic',
-                'workspace_type' => 'company',
-                'billing_period' => 'monthly',
-                'currency' => 'USD',
-                'price' => 99,
-                'is_active' => true,
-                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'pos', 'qr_menu', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'finance', 'appointments', 'website_builder', 'custom_domains', 'public_booking'],
-                'permissions' => ['workspace.view', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'pos.manage', 'tables.manage', 'menu.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'subscriptions.manage', 'finance.view', 'invoices.view', 'expenses.view', 'accounting.view', 'reports.view', 'appointments.view', 'appointments.website.manage', 'appointments.domains.manage'],
-                'limits' => ['products' => 1000, 'users' => 10, 'orders' => 2000, 'ai_usage' => 20000],
-            ],
-            [
-                'code' => 'store_basic',
-                'name' => 'Store Basic',
-                'workspace_type' => 'store',
-                'billing_period' => 'monthly',
-                'currency' => 'USD',
-                'price' => 99,
-                'is_active' => true,
-                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'pos', 'qr_menu', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'finance', 'appointments', 'website_builder', 'custom_domains', 'public_booking'],
-                'permissions' => ['workspace.view', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'pos.manage', 'tables.manage', 'menu.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'subscriptions.manage', 'finance.view', 'invoices.view', 'expenses.view', 'accounting.view', 'reports.view', 'appointments.view', 'appointments.website.manage', 'appointments.domains.manage'],
-                'limits' => ['products' => 1000, 'users' => 10, 'orders' => 2000, 'ai_usage' => 20000],
-            ],
-            [
-                'code' => 'company_pro',
-                'name' => 'Company Pro',
-                'workspace_type' => 'company',
-                'billing_period' => 'monthly',
-                'currency' => 'USD',
-                'price' => 199,
-                'is_active' => true,
-                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'pos', 'qr_menu', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'payments', 'employees', 'analytics', 'finance', 'appointments', 'website_builder', 'custom_domains', 'public_booking'],
-                'permissions' => ['workspace.view', 'workspace.manage', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'pos.manage', 'tables.manage', 'menu.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'payments.manage', 'employees.manage', 'subscriptions.manage', 'finance.view', 'finance.manage', 'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.cancel', 'expenses.view', 'expenses.create', 'expenses.edit', 'accounting.view', 'accounting.manage', 'payroll.view', 'reports.view', 'finance.settings', 'appointments.view', 'appointments.manage', 'appointments.website.manage', 'appointments.domains.manage'],
-                'limits' => ['products' => 5000, 'users' => 30, 'orders' => 15000, 'ai_usage' => 120000],
-            ],
-            [
-                'code' => 'store_pro',
-                'name' => 'Store Pro',
-                'workspace_type' => 'store',
-                'billing_period' => 'monthly',
-                'currency' => 'USD',
-                'price' => 199,
-                'is_active' => true,
-                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'pos', 'qr_menu', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'payments', 'employees', 'analytics', 'finance', 'appointments', 'website_builder', 'custom_domains', 'public_booking'],
-                'permissions' => ['workspace.view', 'workspace.manage', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'pos.manage', 'tables.manage', 'menu.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'payments.manage', 'employees.manage', 'subscriptions.manage', 'finance.view', 'finance.manage', 'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.cancel', 'expenses.view', 'expenses.create', 'expenses.edit', 'accounting.view', 'accounting.manage', 'payroll.view', 'reports.view', 'finance.settings', 'appointments.view', 'appointments.manage', 'appointments.website.manage', 'appointments.domains.manage'],
-                'limits' => ['products' => 5000, 'users' => 30, 'orders' => 15000, 'ai_usage' => 120000],
-            ],
-            [
-                'code' => 'company_enterprise',
-                'name' => 'Company Enterprise',
-                'workspace_type' => 'company',
-                'billing_period' => 'monthly',
-                'currency' => 'USD',
-                'price' => 499,
-                'is_active' => true,
-                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'pos', 'qr_menu', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'payments', 'employees', 'analytics', 'finance', 'appointments', 'website_builder', 'custom_domains', 'public_booking'],
-                'permissions' => ['workspace.view', 'workspace.manage', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'pos.manage', 'tables.manage', 'menu.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'payments.manage', 'employees.manage', 'subscriptions.manage', 'finance.view', 'finance.manage', 'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.cancel', 'expenses.view', 'expenses.create', 'expenses.edit', 'accounting.view', 'accounting.manage', 'payroll.view', 'reports.view', 'finance.settings', 'appointments.view', 'appointments.manage', 'appointments.website.manage', 'appointments.domains.manage'],
-                'limits' => ['products' => 50000, 'users' => 200, 'orders' => 200000, 'ai_usage' => 1000000],
-            ],
-            [
-                'code' => 'store_enterprise',
-                'name' => 'Store Enterprise',
-                'workspace_type' => 'store',
-                'billing_period' => 'monthly',
-                'currency' => 'USD',
-                'price' => 499,
-                'is_active' => true,
-                'features' => ['dashboard', 'products', 'categories', 'inventory', 'customers', 'orders', 'pos', 'qr_menu', 'conversations', 'messages', 'smart_replies', 'ai', 'subscription', 'whatsapp', 'payments', 'employees', 'analytics', 'finance', 'appointments', 'website_builder', 'custom_domains', 'public_booking'],
-                'permissions' => ['workspace.view', 'workspace.manage', 'products.manage', 'inventory.manage', 'customers.manage', 'orders.manage', 'pos.manage', 'tables.manage', 'menu.manage', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'payments.manage', 'employees.manage', 'subscriptions.manage', 'finance.view', 'finance.manage', 'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.cancel', 'expenses.view', 'expenses.create', 'expenses.edit', 'accounting.view', 'accounting.manage', 'payroll.view', 'reports.view', 'finance.settings', 'appointments.view', 'appointments.manage', 'appointments.website.manage', 'appointments.domains.manage'],
-                'limits' => ['products' => 50000, 'users' => 200, 'orders' => 200000, 'ai_usage' => 1000000],
-            ],
-        ];
-
-        foreach ($plans as $plan) {
+        foreach ($this->commercialPlans() as $plan) {
             Plan::query()->updateOrCreate(['code' => $plan['code']], $plan);
         }
 
@@ -306,5 +207,297 @@ class FoundationSeeder extends Seeder
         );
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function commercialPlans(): array
+    {
+        $currency = (string) config('plans.currency', 'SAR');
+        $matrix = config('plans.feature_matrix', []);
+        $overageRules = $this->overageRulesFromMeters();
+
+        $tierMeta = [
+            'starter' => [
+                'sort_order' => 10,
+                'price' => 99,
+                'trial_days' => 14,
+                'description' => 'للبدء: حجوزات، موقع إلكتروني، وذكاء اصطناعي أساسي بدون نقطة بيع أو واتساب.',
+            ],
+            'pro' => [
+                'sort_order' => 20,
+                'price' => 199,
+                'trial_days' => 14,
+                'description' => 'للنمو: نقطة بيع، مالية، واتساب، بريد احترافي، وتحليلات.',
+            ],
+            'business' => [
+                'sort_order' => 30,
+                'price' => 349,
+                'trial_days' => 14,
+                'description' => 'للأعمال: صلاحيات متقدمة، واجهة برمجة API، وإدارة عملاء CRM.',
+            ],
+            'enterprise' => [
+                'sort_order' => 40,
+                'price' => 499,
+                'trial_days' => 30,
+                'description' => 'للمؤسسات: تخصيص كامل، تدقيق، وحدود استخدام مرتفعة.',
+            ],
+        ];
+
+        $plans = [];
+
+        // Individual plans (legacy codes kept).
+        $plans[] = $this->planRow(
+            code: 'individual_free',
+            name: 'Individual Free',
+            description: 'باقة فردية مجانية للمحادثات والردود الذكية.',
+            tier: 'starter',
+            workspaceType: 'individual',
+            currency: $currency,
+            price: 0,
+            sortOrder: 5,
+            isPublic: true,
+            trialDays: 0,
+            features: ['conversations', 'smart_replies', 'ai', 'subscription', 'usage'],
+            permissions: ['workspace.view', 'conversations.manage', 'ai.manage', 'subscriptions.manage'],
+            limits: array_merge($matrix['starter']['limits'] ?? [], [
+                'ai_usage' => 500,
+                'conversations' => 300,
+                'whatsapp_numbers' => 0,
+                'whatsapp_messages' => 0,
+            ]),
+            overageRules: $overageRules,
+        );
+
+        $plans[] = $this->planRow(
+            code: 'individual_pro',
+            name: 'Individual Pro',
+            description: 'باقة فردية احترافية مع واتساب واستخدام أعلى للذكاء الاصطناعي.',
+            tier: 'pro',
+            workspaceType: 'individual',
+            currency: $currency,
+            price: 19,
+            sortOrder: 15,
+            isPublic: true,
+            trialDays: 7,
+            features: ['conversations', 'smart_replies', 'ai', 'subscription', 'usage', 'whatsapp'],
+            permissions: ['workspace.view', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'subscriptions.manage'],
+            limits: array_merge($matrix['pro']['limits'] ?? [], [
+                'ai_usage' => 5000,
+                'conversations' => 5000,
+                'whatsapp_numbers' => 1,
+            ]),
+            overageRules: $overageRules,
+        );
+
+        $typeLabels = [
+            'company' => 'Company',
+            'store' => 'Store',
+        ];
+
+        // New public commercial plans + legacy basic/pro/enterprise aligned to matrix.
+        foreach (['company', 'store'] as $workspaceType) {
+            $label = $typeLabels[$workspaceType];
+
+            // New public starter (and legacy basic → starter matrix, hidden from catalog).
+            foreach ([
+                ['code' => "{$workspaceType}_starter", 'name' => "{$label} Starter", 'is_public' => true],
+                ['code' => "{$workspaceType}_basic", 'name' => "{$label} Basic", 'is_public' => false],
+            ] as $row) {
+                $plans[] = $this->planRow(
+                    code: $row['code'],
+                    name: $row['name'],
+                    description: $tierMeta['starter']['description'],
+                    tier: 'starter',
+                    workspaceType: $workspaceType,
+                    currency: $currency,
+                    price: $tierMeta['starter']['price'],
+                    sortOrder: $tierMeta['starter']['sort_order'],
+                    isPublic: $row['is_public'],
+                    trialDays: $tierMeta['starter']['trial_days'],
+                    features: $matrix['starter']['features'] ?? [],
+                    permissions: $this->permissionsForTier('starter'),
+                    limits: $matrix['starter']['limits'] ?? [],
+                    overageRules: $overageRules,
+                );
+            }
+
+            $plans[] = $this->planRow(
+                code: "{$workspaceType}_pro",
+                name: "{$label} Pro",
+                description: $tierMeta['pro']['description'],
+                tier: 'pro',
+                workspaceType: $workspaceType,
+                currency: $currency,
+                price: $tierMeta['pro']['price'],
+                sortOrder: $tierMeta['pro']['sort_order'],
+                isPublic: true,
+                trialDays: $tierMeta['pro']['trial_days'],
+                features: $matrix['pro']['features'] ?? [],
+                permissions: $this->permissionsForTier('pro'),
+                limits: $matrix['pro']['limits'] ?? [],
+                overageRules: $overageRules,
+            );
+
+            $plans[] = $this->planRow(
+                code: "{$workspaceType}_business",
+                name: "{$label} Business",
+                description: $tierMeta['business']['description'],
+                tier: 'business',
+                workspaceType: $workspaceType,
+                currency: $currency,
+                price: $tierMeta['business']['price'],
+                sortOrder: $tierMeta['business']['sort_order'],
+                isPublic: true,
+                trialDays: $tierMeta['business']['trial_days'],
+                features: $matrix['business']['features'] ?? [],
+                permissions: $this->permissionsForTier('business'),
+                limits: $matrix['business']['limits'] ?? [],
+                overageRules: $overageRules,
+            );
+
+            $plans[] = $this->planRow(
+                code: "{$workspaceType}_enterprise",
+                name: "{$label} Enterprise",
+                description: $tierMeta['enterprise']['description'],
+                tier: 'enterprise',
+                workspaceType: $workspaceType,
+                currency: $currency,
+                price: $tierMeta['enterprise']['price'],
+                sortOrder: $tierMeta['enterprise']['sort_order'],
+                isPublic: true,
+                trialDays: $tierMeta['enterprise']['trial_days'],
+                features: $matrix['enterprise']['features'] ?? [],
+                permissions: $this->permissionsForTier('enterprise'),
+                limits: $matrix['enterprise']['limits'] ?? [],
+                overageRules: $overageRules,
+            );
+        }
+
+        return $plans;
+    }
+
+    /**
+     * @param  array<int, string>  $features
+     * @param  array<int, string>  $permissions
+     * @param  array<string, int|float|null>  $limits
+     * @param  array<string, string>  $overageRules
+     * @return array<string, mixed>
+     */
+    private function planRow(
+        string $code,
+        string $name,
+        string $description,
+        string $tier,
+        string $workspaceType,
+        string $currency,
+        float|int $price,
+        int $sortOrder,
+        bool $isPublic,
+        int $trialDays,
+        array $features,
+        array $permissions,
+        array $limits,
+        array $overageRules,
+    ): array {
+        return [
+            'code' => $code,
+            'name' => $name,
+            'description' => $description,
+            'tier' => $tier,
+            'workspace_type' => $workspaceType,
+            'billing_period' => 'monthly',
+            'trial_days' => $trialDays,
+            'currency' => $currency,
+            'price' => $price,
+            'is_active' => true,
+            'is_public' => $isPublic,
+            'sort_order' => $sortOrder,
+            'features' => array_values($features),
+            'permissions' => array_values($permissions),
+            'limits' => $limits,
+            'overage_rules' => $overageRules,
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function overageRulesFromMeters(): array
+    {
+        $rules = [];
+        foreach (config('plans.meters', []) as $meter => $meta) {
+            $rules[$meter] = (string) ($meta['overage'] ?? 'hard_block');
+        }
+
+        return $rules;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function permissionsForTier(string $tier): array
+    {
+        $starter = [
+            'workspace.view',
+            'customers.manage',
+            'conversations.manage',
+            'ai.manage',
+            'subscriptions.manage',
+            'payments.manage',
+            'appointments.view',
+            'appointments.manage',
+            'appointments.requests.view',
+            'appointments.requests.manage',
+            'appointments.calendar.view',
+            'appointments.billing.manage',
+            'appointments.settings.manage',
+            'appointments.website.manage',
+        ];
+
+        $pro = array_values(array_unique(array_merge($starter, [
+            'workspace.manage',
+            'products.manage',
+            'inventory.manage',
+            'orders.manage',
+            'pos.manage',
+            'tables.manage',
+            'menu.manage',
+            'whatsapp.manage',
+            'employees.manage',
+            'finance.view',
+            'finance.manage',
+            'finance.sales.view',
+            'finance.price_lists.view',
+            'finance.price_lists.manage',
+            'finance.adjustments.view',
+            'finance.adjustments.manage',
+            'finance.salary_advances.view',
+            'finance.salary_advances.manage',
+            'finance.fiscal_years.view',
+            'finance.fiscal_years.manage',
+            'invoices.view',
+            'invoices.create',
+            'invoices.edit',
+            'invoices.cancel',
+            'expenses.view',
+            'expenses.create',
+            'expenses.edit',
+            'accounting.view',
+            'accounting.manage',
+            'payroll.view',
+            'reports.view',
+            'finance.settings',
+            'contracts.view',
+            'contracts.manage',
+            'appointments.domains.manage',
+        ])));
+
+        return match ($tier) {
+            'starter' => $starter,
+            'pro', 'business', 'enterprise' => $pro,
+            default => $starter,
+        };
     }
 }

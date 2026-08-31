@@ -94,4 +94,52 @@ class FeatureAccessServiceTest extends TestCase
         $this->assertTrue($service->hasFeature($user, $workspace, 'custom_domains'));
         $this->assertTrue($service->hasFeature($user, $workspace, 'public_booking'));
     }
+
+    public function test_starter_tier_cannot_access_custom_domains(): void
+    {
+        $service = app(FeatureAccessService::class);
+
+        $user = User::factory()->create();
+        $workspace = Workspace::factory()->create([
+            'owner_user_id' => $user->id,
+            'type' => 'company',
+        ]);
+        $workspace->users()->attach($user->id, [
+            'membership_role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $starterFeatures = config('plans.feature_matrix.starter.features', []);
+
+        $plan = Plan::query()->create([
+            'code' => 'company_starter',
+            'name' => 'Company Starter',
+            'tier' => 'starter',
+            'workspace_type' => 'company',
+            'billing_period' => 'monthly',
+            'currency' => 'SAR',
+            'price' => 99,
+            'is_active' => true,
+            'features' => $starterFeatures,
+            'limits' => config('plans.feature_matrix.starter.limits', []),
+        ]);
+
+        Subscription::query()->create([
+            'workspace_id' => $workspace->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'starts_at' => now(),
+            'current_period_start' => now(),
+            'current_period_end' => now()->addMonth(),
+        ]);
+
+        $this->assertTrue($service->hasFeature($user, $workspace, 'appointments'));
+        $this->assertTrue($service->hasFeature($user, $workspace, 'website_builder'));
+        $this->assertTrue($service->hasFeature($user, $workspace, 'public_booking'));
+        $this->assertFalse($service->hasFeature($user, $workspace, 'custom_domains'));
+        $this->assertFalse($service->hasFeature($user, $workspace, 'pos'));
+        $this->assertFalse($service->hasFeature($user, $workspace, 'whatsapp'));
+        $this->assertFalse($service->hasFeature($user, $workspace, 'finance'));
+    }
 }

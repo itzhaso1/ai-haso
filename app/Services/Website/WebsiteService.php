@@ -148,6 +148,7 @@ class WebsiteService
         $settings['seo_title'] = trim((string) ($payload['seo_title'] ?? ($settings['seo_title'] ?? '')));
         $settings['seo_description'] = trim((string) ($payload['seo_description'] ?? ($settings['seo_description'] ?? '')));
         $settings['footer_text'] = trim((string) ($payload['footer_text'] ?? ($settings['footer_text'] ?? '')));
+        $settings['logo_alt'] = trim((string) ($payload['logo_alt'] ?? ($settings['logo_alt'] ?? '')));
         $settings['social_links'] = is_array($payload['social_links'] ?? null) ? $payload['social_links'] : ($settings['social_links'] ?? []);
 
         $theme['primary_color'] = trim((string) ($payload['primary_color'] ?? ($theme['primary_color'] ?? '#0f766e')));

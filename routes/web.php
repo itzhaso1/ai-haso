@@ -11,7 +11,10 @@ use App\Http\Controllers\Webhook\ResendWebhookController;
 use App\Http\Controllers\Webhook\WhatsAppWebhookController;
 use App\Http\Controllers\WorkspaceSelectionController;
 use App\Http\Controllers\Workspace\AiSettingController;
+use App\Http\Controllers\Workspace\AnalyticsController as WorkspaceAnalyticsController;
+use App\Http\Controllers\Workspace\ApiKeyController as WorkspaceApiKeyController;
 use App\Http\Controllers\Workspace\Appointments\BookingController as AppointmentsBookingController;
+use App\Http\Controllers\Workspace\Appointments\HolidayController as AppointmentsHolidayController;
 use App\Http\Controllers\Workspace\Appointments\CustomerProfileController as AppointmentsCustomerProfileController;
 use App\Http\Controllers\Workspace\Appointments\CustomerPortalController as AppointmentsCustomerPortalController;
 use App\Http\Controllers\Workspace\Appointments\DashboardController as AppointmentsDashboardController;
@@ -212,15 +215,30 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
     ->group(function (): void {
         Route::get('/', [WorkspaceDashboardController::class, 'index'])->name('dashboard');
 
+        Route::middleware('workspace.feature:analytics')->group(function (): void {
+            Route::get('analytics', [WorkspaceAnalyticsController::class, 'index'])->name('analytics.index');
+        });
+
+        Route::middleware('workspace.feature:api')->prefix('api-keys')->as('api-keys.')->group(function (): void {
+            Route::get('/', [WorkspaceApiKeyController::class, 'index'])->name('index');
+            Route::post('/', [WorkspaceApiKeyController::class, 'store'])->name('store');
+            Route::post('{apiKey}/revoke', [WorkspaceApiKeyController::class, 'revoke'])->name('revoke');
+            Route::post('{apiKey}/regenerate', [WorkspaceApiKeyController::class, 'regenerate'])->name('regenerate');
+        });
+
         Route::resource('categories', CategoryController::class)->except(['show']);
-        Route::resource('products', ProductController::class)->except(['show']);
+        Route::middleware('workspace.feature:products')->group(function (): void {
+            Route::resource('products', ProductController::class)->except(['show']);
+        });
         Route::resource('customers', CustomerController::class)->except(['show']);
         Route::post('customers/{customer}/notes', [CustomerController::class, 'storeNote'])->name('customers.notes.store');
         Route::post('customers/{customer}/tags', [CustomerController::class, 'attachTag'])->name('customers.tags.attach');
         Route::delete('customers/{customer}/tags/{tag}', [CustomerController::class, 'detachTag'])->name('customers.tags.detach');
         Route::post('customers/{customer}/groups', [CustomerController::class, 'attachGroup'])->name('customers.groups.attach');
         Route::delete('customers/{customer}/groups/{group}', [CustomerController::class, 'detachGroup'])->name('customers.groups.detach');
-        Route::resource('orders', OrderController::class)->except(['show']);
+        Route::middleware('workspace.feature:orders')->group(function (): void {
+            Route::resource('orders', OrderController::class)->except(['show']);
+        });
         Route::get('contracts', [WorkspaceContractController::class, 'index'])->name('contracts.index');
         Route::get('contracts/create', [WorkspaceContractController::class, 'create'])->name('contracts.create');
         Route::post('contracts', [WorkspaceContractController::class, 'store'])->name('contracts.store');
@@ -247,42 +265,49 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
         Route::resource('payment-gateways', PaymentGatewayController::class)->except(['show']);
 
         Route::get('subscriptions', [SubscriptionController::class, 'index'])->name('subscriptions.index');
+        Route::get('subscriptions/compare', [SubscriptionController::class, 'compare'])->name('subscriptions.compare');
         Route::post('subscriptions', [SubscriptionController::class, 'store'])->name('subscriptions.store');
         Route::get('subscriptions/checkout/{checkoutSession}', [SubscriptionController::class, 'showCheckout'])->name('subscriptions.checkout.show');
         Route::post('subscriptions/checkout/{checkoutSession}/confirm-payment', [SubscriptionController::class, 'confirmCheckoutPayment'])->name('subscriptions.checkout.confirm-payment');
         Route::delete('subscriptions/{subscription}', [SubscriptionController::class, 'destroy'])->name('subscriptions.destroy');
 
-        Route::get('ai-settings', [AiSettingController::class, 'edit'])->name('ai-settings.edit');
-        Route::put('ai-settings', [AiSettingController::class, 'update'])->name('ai-settings.update');
+        Route::middleware('workspace.feature:ai')->group(function (): void {
+            Route::get('ai-settings', [AiSettingController::class, 'edit'])->name('ai-settings.edit');
+            Route::put('ai-settings', [AiSettingController::class, 'update'])->name('ai-settings.update');
+        });
 
-        Route::resource('whatsapp-accounts', WhatsAppAccountController::class)->except(['show']);
+        Route::middleware('workspace.feature:whatsapp')->group(function (): void {
+            Route::resource('whatsapp-accounts', WhatsAppAccountController::class)->except(['show']);
+            Route::post('channels/whatsapp/connect', [ChannelController::class, 'connectWhatsApp'])->name('channels.whatsapp.connect');
+        });
         Route::get('channels', [ChannelController::class, 'index'])->name('channels.index');
-        Route::post('channels/whatsapp/connect', [ChannelController::class, 'connectWhatsApp'])->name('channels.whatsapp.connect');
 
-        Route::get('emails', [EmailController::class, 'index'])->name('emails.index');
-        Route::get('emails/inbox', [EmailController::class, 'inbox'])->name('emails.inbox');
-        Route::get('emails/sent', [EmailController::class, 'sent'])->name('emails.sent');
-        Route::get('emails/messages/{emailMessage}', [EmailController::class, 'showMessage'])->name('emails.messages.show');
-        Route::delete('emails/messages/{emailMessage}', [EmailController::class, 'destroyMessage'])->name('emails.messages.destroy');
+        Route::middleware('workspace.feature:email')->prefix('emails')->group(function (): void {
+            Route::get('/', [EmailController::class, 'index'])->name('emails.index');
+            Route::get('/inbox', [EmailController::class, 'inbox'])->name('emails.inbox');
+            Route::get('/sent', [EmailController::class, 'sent'])->name('emails.sent');
+            Route::get('/messages/{emailMessage}', [EmailController::class, 'showMessage'])->name('emails.messages.show');
+            Route::delete('/messages/{emailMessage}', [EmailController::class, 'destroyMessage'])->name('emails.messages.destroy');
 
-        Route::get('emails/compose', [EmailController::class, 'compose'])->name('emails.compose');
-        Route::post('emails/compose/clear', [EmailController::class, 'clearComposeDraft'])->name('emails.compose.clear');
-        Route::post('emails/messages/send', [EmailController::class, 'sendMessage'])->name('emails.messages.send');
+            Route::get('/compose', [EmailController::class, 'compose'])->name('emails.compose');
+            Route::post('/compose/clear', [EmailController::class, 'clearComposeDraft'])->name('emails.compose.clear');
+            Route::post('/messages/send', [EmailController::class, 'sendMessage'])->name('emails.messages.send');
 
-        Route::get('emails/contacts', [EmailController::class, 'contacts'])->name('emails.contacts.index');
-        Route::post('emails/contacts', [EmailController::class, 'storeContact'])->name('emails.contacts.store');
-        Route::put('emails/contacts/{emailContact}', [EmailController::class, 'updateContact'])->name('emails.contacts.update');
-        Route::delete('emails/contacts/{emailContact}', [EmailController::class, 'destroyContact'])->name('emails.contacts.destroy');
-        Route::get('emails/contacts/search', [EmailController::class, 'searchContacts'])->name('emails.contacts.search');
-        Route::get('emails/contacts/lookup', [EmailController::class, 'lookupContact'])->name('emails.contacts.lookup');
+            Route::get('/contacts', [EmailController::class, 'contacts'])->name('emails.contacts.index');
+            Route::post('/contacts', [EmailController::class, 'storeContact'])->name('emails.contacts.store');
+            Route::put('/contacts/{emailContact}', [EmailController::class, 'updateContact'])->name('emails.contacts.update');
+            Route::delete('/contacts/{emailContact}', [EmailController::class, 'destroyContact'])->name('emails.contacts.destroy');
+            Route::get('/contacts/search', [EmailController::class, 'searchContacts'])->name('emails.contacts.search');
+            Route::get('/contacts/lookup', [EmailController::class, 'lookupContact'])->name('emails.contacts.lookup');
 
-        Route::get('emails/accounts', [EmailController::class, 'accounts'])->name('emails.accounts.index');
-        Route::post('emails/accounts', [EmailController::class, 'storeAccount'])->name('emails.accounts.store');
-        Route::put('emails/accounts/{emailAccount}', [EmailController::class, 'updateAccount'])->name('emails.accounts.update');
-        Route::delete('emails/accounts/{emailAccount}', [EmailController::class, 'destroyAccount'])->name('emails.accounts.destroy');
-        Route::post('emails/accounts/{emailAccount}/sync', [EmailController::class, 'syncAccount'])->name('emails.accounts.sync');
+            Route::get('/accounts', [EmailController::class, 'accounts'])->name('emails.accounts.index');
+            Route::post('/accounts', [EmailController::class, 'storeAccount'])->name('emails.accounts.store');
+            Route::put('/accounts/{emailAccount}', [EmailController::class, 'updateAccount'])->name('emails.accounts.update');
+            Route::delete('/accounts/{emailAccount}', [EmailController::class, 'destroyAccount'])->name('emails.accounts.destroy');
+            Route::post('/accounts/{emailAccount}/sync', [EmailController::class, 'syncAccount'])->name('emails.accounts.sync');
+        });
 
-        Route::prefix('finance')->as('finance.')->group(function (): void {
+        Route::middleware('workspace.feature:finance')->prefix('finance')->as('finance.')->group(function (): void {
             Route::get('/', [FinanceDashboardController::class, 'index'])->name('dashboard');
             Route::get('contracts', [WorkspaceContractController::class, 'index'])->name('contracts.index');
             Route::get('contracts/create', [WorkspaceContractController::class, 'create'])->name('contracts.create');
@@ -381,6 +406,10 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::get('settings', [AppointmentsModulePageController::class, 'settings'])->name('settings.index');
             Route::post('settings', [AppointmentsDashboardController::class, 'updateSettings'])->name('settings.update');
 
+            Route::get('holidays', [AppointmentsHolidayController::class, 'index'])->name('holidays.index');
+            Route::post('holidays', [AppointmentsHolidayController::class, 'store'])->name('holidays.store');
+            Route::delete('holidays/{holiday}', [AppointmentsHolidayController::class, 'destroy'])->name('holidays.destroy');
+
             Route::post('services', [AppointmentsDashboardController::class, 'storeService'])->name('services.store');
             Route::put('services/{service}', [AppointmentsDashboardController::class, 'updateService'])->name('services.update');
 
@@ -436,7 +465,7 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             });
         });
 
-        Route::prefix('pos')->as('pos.')->group(function (): void {
+        Route::middleware('workspace.feature:pos')->prefix('pos')->as('pos.')->group(function (): void {
             Route::get('/', [PosTableController::class, 'index'])->name('dashboard');
             Route::get('cashier', [PosCashierController::class, 'index'])->name('cashier.index');
             Route::get('menu', [PosMenuPageController::class, 'index'])->name('menu.index');

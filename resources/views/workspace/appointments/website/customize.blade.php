@@ -76,14 +76,13 @@
                     <input type="text" name="seo_description" value="{{ old('seo_description', $settings['seo_description'] ?? '') }}" class="w-full rounded-xl border-slate-300 text-sm">
                 </div>
                 <div>
-                    <label class="mb-1 block text-xs font-semibold text-slate-600">Logo</label>
-                    <input type="file" name="logo" class="w-full rounded-xl border-slate-300 text-sm">
-                    @if(!empty($settings['logo_url']))
-                        <div class="mt-2 flex items-center gap-3">
-                            <img src="{{ $settings['logo_url'] }}" alt="Current logo" class="h-10 w-auto max-w-[160px] object-contain">
-                            <span class="text-[11px] text-slate-500">Current logo</span>
-                        </div>
-                    @endif
+                    <x-image-uploader
+                        name="logo"
+                        label="الشعار"
+                        :current-url="$settings['logo_url'] ?? null"
+                        alt-name="logo_alt"
+                        :alt-value="old('logo_alt', $settings['logo_alt'] ?? '')"
+                    />
                 </div>
                 <div>
                     <label class="mb-1 block text-xs font-semibold text-slate-600">Hero Image</label>

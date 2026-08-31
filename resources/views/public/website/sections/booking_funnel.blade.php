@@ -1,38 +1,38 @@
-<section class="mx-auto max-w-4xl px-4 py-12" x-data="publicBookingFunnel()">
+<section class="mx-auto max-w-4xl px-4 py-12" x-data="publicBookingFunnel()" dir="rtl">
     <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 class="text-2xl font-bold text-slate-900">Book Appointment</h1>
+        <h1 class="text-2xl font-bold text-slate-900">حجز موعد</h1>
         <p class="mt-2 text-sm text-slate-500">اختر الخدمة والموظف والوقت المناسب ثم أكمل بيانات الحجز.</p>
 
         <div class="mt-6 grid gap-4 md:grid-cols-2">
             <div>
-                <label class="mb-1 block text-xs font-semibold text-slate-600">Service</label>
+                <label class="mb-1 block text-xs font-semibold text-slate-600">الخدمة</label>
                 <select x-model="form.service_id" @change="onServiceChange()" class="w-full rounded-xl border-slate-300 text-sm">
-                    <option value="">Select service</option>
+                    <option value="">اختر الخدمة</option>
                     <template x-for="service in services" :key="service.id">
-                        <option :value="service.id" x-text="`${service.name} (${service.duration_minutes}m)`"></option>
+                        <option :value="service.id" x-text="`${service.name} (${service.duration_minutes} د)`"></option>
                     </template>
                 </select>
             </div>
             <div>
-                <label class="mb-1 block text-xs font-semibold text-slate-600">Staff</label>
+                <label class="mb-1 block text-xs font-semibold text-slate-600">الموظف</label>
                 <select x-model="form.staff_id" class="w-full rounded-xl border-slate-300 text-sm">
-                    <option value="">Any staff</option>
+                    <option value="">أي موظف</option>
                     <template x-for="member in staff" :key="member.id">
                         <option :value="member.id" x-text="member.name"></option>
                     </template>
                 </select>
             </div>
             <div>
-                <label class="mb-1 block text-xs font-semibold text-slate-600">Date</label>
+                <label class="mb-1 block text-xs font-semibold text-slate-600">التاريخ</label>
                 <input type="date" x-model="form.date" class="w-full rounded-xl border-slate-300 text-sm">
             </div>
             <div class="flex items-end">
-                <button type="button" @click="loadAvailability()" class="ws-btn w-full rounded-xl px-4 py-2 text-sm font-semibold">Get Available Slots</button>
+                <button type="button" @click="loadAvailability()" class="ws-btn w-full rounded-xl px-4 py-2 text-sm font-semibold">عرض الأوقات المتاحة</button>
             </div>
         </div>
 
         <div class="mt-5">
-            <p class="mb-2 text-xs font-semibold text-slate-600">Available Slots</p>
+            <p class="mb-2 text-xs font-semibold text-slate-600">الأوقات المتاحة</p>
             <div class="flex flex-wrap gap-2">
                 <template x-for="slot in slots" :key="slot.starts_at">
                     <button type="button" @click="selectSlot(slot)" :class="selectedSlot === slot.starts_at ? 'ws-btn text-white' : 'border-slate-300 text-slate-700'" class="rounded-lg border px-3 py-1.5 text-xs font-semibold">
@@ -40,40 +40,40 @@
                     </button>
                 </template>
             </div>
-            <p x-show="slots.length === 0" class="mt-2 text-xs text-slate-500">No slots loaded yet.</p>
+            <p x-show="slots.length === 0" class="mt-2 text-xs text-slate-500">لم يتم تحميل أوقات بعد.</p>
         </div>
 
         <div class="mt-6 grid gap-4 md:grid-cols-2">
             <div>
-                <label class="mb-1 block text-xs font-semibold text-slate-600">Customer Name</label>
+                <label class="mb-1 block text-xs font-semibold text-slate-600">اسم العميل</label>
                 <input type="text" x-model="form.customer_name" class="w-full rounded-xl border-slate-300 text-sm">
             </div>
             <div>
-                <label class="mb-1 block text-xs font-semibold text-slate-600">Phone</label>
+                <label class="mb-1 block text-xs font-semibold text-slate-600">الجوال</label>
                 <input type="text" x-model="form.customer_phone" class="w-full rounded-xl border-slate-300 text-sm">
             </div>
             <div class="md:col-span-2">
-                <label class="mb-1 block text-xs font-semibold text-slate-600">Email</label>
+                <label class="mb-1 block text-xs font-semibold text-slate-600">البريد الإلكتروني</label>
                 <input type="email" x-model="form.customer_email" class="w-full rounded-xl border-slate-300 text-sm">
             </div>
             <div class="md:col-span-2">
-                <label class="mb-1 block text-xs font-semibold text-slate-600">Notes (optional)</label>
+                <label class="mb-1 block text-xs font-semibold text-slate-600">ملاحظات (اختياري)</label>
                 <textarea x-model="form.notes" rows="3" class="w-full rounded-xl border-slate-300 text-sm"></textarea>
             </div>
         </div>
 
         <div class="mt-6 flex items-center gap-3">
-            <button type="button" @click="submitBooking()" class="ws-btn rounded-xl px-5 py-2.5 text-sm font-semibold">Confirm Booking</button>
-            <span x-show="loading" class="text-xs text-slate-500">Processing...</span>
+            <button type="button" @click="submitBooking()" class="ws-btn rounded-xl px-5 py-2.5 text-sm font-semibold">تأكيد الحجز</button>
+            <span x-show="loading" class="text-xs text-slate-500">جارٍ المعالجة...</span>
         </div>
 
         <p x-show="errorMessage" x-text="errorMessage" class="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700"></p>
 
         <div x-show="confirmation" class="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-            <p class="font-semibold">Booking confirmed</p>
-            <p class="mt-1">Reference: <span x-text="confirmation?.booking_number"></span></p>
-            <p class="mt-1">Payment status: <span x-text="confirmation?.payment_status"></span></p>
-            <a x-show="confirmation?.payment_link" :href="confirmation?.payment_link" target="_blank" class="mt-2 inline-flex rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white">Complete Payment</a>
+            <p class="font-semibold">تم تأكيد الحجز</p>
+            <p class="mt-1">المرجع: <span x-text="confirmation?.booking_number"></span></p>
+            <p class="mt-1">حالة الدفع: <span x-text="confirmation?.payment_status"></span></p>
+            <a x-show="confirmation?.payment_link" :href="confirmation?.payment_link" target="_blank" class="mt-2 inline-flex rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white">إكمال الدفع</a>
         </div>
     </div>
 </section>
@@ -123,7 +123,7 @@
                 this.slots = [];
                 this.selectedSlot = null;
                 if (!this.form.service_id || !this.form.date) {
-                    this.errorMessage = 'Select service and date first.';
+                    this.errorMessage = 'اختر الخدمة والتاريخ أولًا.';
                     return;
                 }
                 const params = new URLSearchParams({
@@ -144,7 +144,7 @@
                 this.errorMessage = '';
                 this.confirmation = null;
                 if (!this.form.starts_at) {
-                    this.errorMessage = 'Please select a slot.';
+                    this.errorMessage = 'يرجى اختيار وقت.';
                     return;
                 }
                 this.loading = true;
@@ -171,7 +171,7 @@
 
                     const json = await response.json();
                     if (!response.ok) {
-                        this.errorMessage = json.message || 'Booking failed.';
+                        this.errorMessage = json.message || 'فشل الحجز.';
                         return;
                     }
 

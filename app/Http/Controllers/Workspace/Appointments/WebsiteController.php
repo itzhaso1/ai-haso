@@ -135,7 +135,8 @@ class WebsiteController extends AppointmentsBaseController
             'social_links.linkedin' => ['nullable', 'url', 'max:255'],
             'social_links.youtube' => ['nullable', 'url', 'max:255'],
             'social_links.tiktok' => ['nullable', 'url', 'max:255'],
-            'logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp,gif', 'max:4096'],
+            'logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp,gif', 'max:5120'],
+            'logo_alt' => ['nullable', 'string', 'max:255'],
             'hero_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp,gif', 'max:8192'],
             'favicon' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp,ico', 'max:2048'],
         ]);

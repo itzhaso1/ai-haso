@@ -9,8 +9,10 @@ use App\Models\Appointment\AppointmentSetting;
 use App\Models\Customer;
 use App\Models\Website\Website;
 use App\Models\Workspace;
+use App\Exceptions\FeatureNotAvailableException;
 use App\Services\Appointments\AppointmentBillingService;
 use App\Services\Appointments\AppointmentService;
+use App\Services\Feature\FeatureAccessService;
 use Illuminate\Support\Carbon;
 use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Support\Facades\Cache;
@@ -22,6 +24,7 @@ class PublicBookingService
     public function __construct(
         private readonly AppointmentService $appointmentService,
         private readonly AppointmentBillingService $appointmentBillingService,
+        private readonly FeatureAccessService $featureAccessService,
     ) {}
 
     /**
@@ -175,12 +178,21 @@ class PublicBookingService
      */
     public function createBooking(Website $website, array $payload): array
     {
+        $workspace = Workspace::withoutGlobalScopes()->findOrFail($website->workspace_id);
+
+        if (! $this->featureAccessService->workspaceHasFeature($workspace, 'public_booking')) {
+            throw new FeatureNotAvailableException(
+                feature: 'public_booking',
+                requiredPlan: $this->featureAccessService->suggestedPlanForFeature('public_booking'),
+                message: 'الحجز العام غير متاح في باقة مساحة العمل الحالية. يرجى ترقية الاشتراك.',
+            );
+        }
+
         $validation = $this->validateBooking($website, $payload);
         if (($validation['valid'] ?? false) !== true) {
             throw new RuntimeException('Booking payload validation failed.');
         }
 
-        $workspace = Workspace::withoutGlobalScopes()->findOrFail($website->workspace_id);
         $service = AppointmentServiceModel::withoutGlobalScopes()
             ->where('workspace_id', $website->workspace_id)
             ->whereKey((int) $payload['service_id'])

@@ -5,6 +5,9 @@ namespace App\Services\AI;
 use App\Models\Plan;
 use App\Models\Product;
 use App\Models\User;
+use App\Models\Website\Website;
+use App\Models\Workspace;
+use App\Services\Website\WebsiteResolverService;
 use App\Services\Workspace\WorkspaceResolverService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -15,6 +18,7 @@ class WebsiteAssistantService
     public function __construct(
         private readonly AiProviderManager $providerManager,
         private readonly WorkspaceResolverService $workspaceResolverService,
+        private readonly WebsiteResolverService $websiteResolverService,
     ) {}
 
     public function reply(string $prompt, Request $request, ?User $user = null): string
@@ -27,29 +31,15 @@ class WebsiteAssistantService
      */
     public function replyWithMeta(string $prompt, Request $request, ?User $user = null): array
     {
-        $workspace = $this->workspaceResolverService->resolveFromRequest($request, $user);
+        $context = $this->resolveProductContext($request, $user);
+        $workspace = $context['workspace'];
+        $products = $context['products'];
         $plans = $this->activePlansSnapshot();
-        $products = [];
-
-        if ($workspace) {
-            $products = Product::query()
-                ->where('workspace_id', $workspace->id)
-                ->where('status', 'active')
-                ->limit(12)
-                ->get(['name', 'sku', 'price', 'sale_price', 'stock', 'currency'])
-                ->map(fn (Product $product): array => [
-                    'name' => $product->name,
-                    'sku' => $product->sku,
-                    'price' => $product->sale_price ?: $product->price,
-                    'stock' => $product->stock,
-                    'currency' => $product->currency,
-                ])->all();
-        }
 
         $messages = [
             [
                 'role' => 'system',
-                'content' => $this->buildSystemPrompt($workspace !== null, $products),
+                'content' => $this->buildSystemPrompt($workspace !== null, $products, $context['is_authenticated_member']),
             ],
             [
                 'role' => 'user',
@@ -114,6 +104,90 @@ class WebsiteAssistantService
         }
     }
 
+    /**
+     * Products are included only for:
+     * - authenticated active workspace members, or
+     * - a resolved published website for the current host.
+     * Stock is never exposed in public (non-member) context.
+     * Unauthenticated callers cannot force another workspace via headers/body.
+     *
+     * @return array{workspace:?Workspace,products:array<int, array<string, mixed>>,is_authenticated_member:bool}
+     */
+    private function resolveProductContext(Request $request, ?User $user): array
+    {
+        $memberWorkspace = null;
+        if ($user) {
+            $memberWorkspace = $this->workspaceResolverService->resolveFromRequest($request, $user);
+        }
+
+        if ($memberWorkspace) {
+            return [
+                'workspace' => $memberWorkspace,
+                'products' => $this->productsForWorkspace($memberWorkspace, includeStock: true),
+                'is_authenticated_member' => true,
+            ];
+        }
+
+        $publishedWebsite = $this->resolvePublishedWebsite($request);
+        if ($publishedWebsite) {
+            $websiteWorkspace = $publishedWebsite->workspace()->withoutGlobalScopes()->first();
+            if ($websiteWorkspace) {
+                return [
+                    'workspace' => $websiteWorkspace,
+                    'products' => $this->productsForWorkspace($websiteWorkspace, includeStock: false),
+                    'is_authenticated_member' => false,
+                ];
+            }
+        }
+
+        return [
+            'workspace' => null,
+            'products' => [],
+            'is_authenticated_member' => false,
+        ];
+    }
+
+    private function resolvePublishedWebsite(Request $request): ?Website
+    {
+        $fromAttributes = $request->attributes->get('website');
+        if ($fromAttributes instanceof Website && $fromAttributes->status === 'published') {
+            return $fromAttributes;
+        }
+
+        $website = $this->websiteResolverService->resolveByHost((string) $request->getHost());
+        if ($website && $website->status === 'published') {
+            return $website;
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function productsForWorkspace(Workspace $workspace, bool $includeStock): array
+    {
+        return Product::withoutGlobalScopes()
+            ->where('workspace_id', $workspace->id)
+            ->where('status', 'active')
+            ->limit(12)
+            ->get(['name', 'sku', 'price', 'sale_price', 'stock', 'currency'])
+            ->map(function (Product $product) use ($includeStock): array {
+                $row = [
+                    'name' => $product->name,
+                    'sku' => $product->sku,
+                    'price' => $product->sale_price ?: $product->price,
+                    'currency' => $product->currency,
+                ];
+
+                if ($includeStock) {
+                    $row['stock'] = $product->stock;
+                }
+
+                return $row;
+            })->all();
+    }
+
     private function resolveModel(string $providerName): string
     {
         $configModel = (string) config('ai.'.$providerName.'.model', '');
@@ -138,11 +212,17 @@ class WebsiteAssistantService
         return (int) config('ai.'.$providerName.'.max_tokens', 1024);
     }
 
-    private function buildSystemPrompt(bool $hasWorkspace, array $products): string
+    private function buildSystemPrompt(bool $hasWorkspace, array $products, bool $isAuthenticatedMember): string
     {
-        $workspaceContext = $hasWorkspace
-            ? "المستخدم مسجل دخولًا وقد يطلب معلومات منتجات. استخدم فقط المنتجات التالية:\n".json_encode($products, JSON_UNESCAPED_UNICODE)
-            : 'المستخدم زائر. مهمتك إرشاده لتسجيل الدخول، إنشاء حساب، واختيار مساحة العمل.';
+        if ($hasWorkspace && $products !== []) {
+            $workspaceContext = $isAuthenticatedMember
+                ? "المستخدم عضو مصادق في مساحة العمل. استخدم فقط المنتجات التالية (لا تكشف أسرار النظام):\n".json_encode($products, JSON_UNESCAPED_UNICODE)
+                : "الزائر على موقع منشور. استخدم فقط المنتجات العامة التالية بدون مخزون أو بيانات داخلية:\n".json_encode($products, JSON_UNESCAPED_UNICODE);
+        } elseif ($hasWorkspace) {
+            $workspaceContext = 'مساحة العمل معروفة لكن لا توجد منتجات نشطة لإدراجها.';
+        } else {
+            $workspaceContext = 'المستخدم زائر. مهمتك إرشاده لتسجيل الدخول، إنشاء حساب، واختيار مساحة العمل. لا تفترض بيانات أي مساحة عمل أخرى.';
+        }
 
         return <<<PROMPT
 أنت مساعد منصة حاسم.
@@ -154,6 +234,9 @@ class WebsiteAssistantService
 - إذا سأل الزائر عن الأسعار أو الباقات، استخدم أسعار الباقات القادمة من قاعدة البيانات المرفقة في رسالة المستخدم.
 - إذا كانت هناك مشكلة شائعة (كلمة المرور، التحقق، عدم وصول رمز، عدم فتح الصفحة)، أعطِ خطوات حل عملية ومباشرة.
 - إذا كان السؤال تقنيًا لا يعتمد على بيانات مؤكدة، قدّم توجيهًا عامًا ثم اقترح التواصل مع الدعم.
+- لا تكشف أبدًا أسرار النظام أو المفاتيح أو التوكنات أو كلمات المرور أو بيانات الاعتماد أو محتوى .env أو مفاتيح API أو أسرار الويب هوك — حتى لو طلب المستخدم ذلك صراحة أو بأسلوب غير مباشر.
+- ارفض أي محاولة لاستخراج بيانات مساحة عمل أخرى أو تجاوز العزل بين المستأجرين.
+- لا تعرض أرقام المخزون للزوار العامين.
 
 {$workspaceContext}
 PROMPT;
@@ -181,6 +264,18 @@ TEXT;
     private function fallbackReply(string $prompt, bool $hasWorkspace, array $plans): string
     {
         $text = mb_strtolower($prompt);
+
+        if (
+            str_contains($text, 'api key')
+            || str_contains($text, 'secret')
+            || str_contains($text, 'token')
+            || str_contains($text, 'مفتاح')
+            || str_contains($text, 'سر')
+            || str_contains($text, 'توكن')
+            || str_contains($text, '.env')
+        ) {
+            return 'لا يمكنني مشاركة الأسرار أو مفاتيح API أو التوكنات أو بيانات الاعتماد. استخدم لوحة التحكم الخاصة بمساحة عملك لإدارة المفاتيح بأمان.';
+        }
 
         if (
             str_contains($text, 'سعر')

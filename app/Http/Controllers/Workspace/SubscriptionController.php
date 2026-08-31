@@ -7,6 +7,7 @@ use App\Http\Controllers\Workspace\Concerns\InteractsWithWorkspace;
 use App\Models\Plan;
 use App\Models\Subscription;
 use App\Models\SubscriptionCheckoutSession;
+use App\Services\Feature\FeatureAccessService;
 use App\Services\Subscription\SubscriptionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,11 +17,17 @@ class SubscriptionController extends Controller
 {
     use InteractsWithWorkspace;
 
-    public function __construct(private readonly SubscriptionService $subscriptionService) {}
+    public function __construct(
+        private readonly SubscriptionService $subscriptionService,
+        private readonly FeatureAccessService $featureAccessService,
+    ) {}
 
     public function index(): View
     {
         $workspace = $this->currentWorkspace();
+        $entitlements = $this->featureAccessService->entitlementsSnapshot($workspace);
+        $comparisonRows = config('plans.comparison_rows', []);
+        $featureMatrix = config('plans.feature_matrix', []);
 
         return view('workspace.subscriptions.index', [
             'workspace' => $workspace,
@@ -31,7 +38,19 @@ class SubscriptionController extends Controller
                 ->with(['plan', 'activatedSubscription'])
                 ->latest('id')
                 ->paginate(10, ['*'], 'checkouts'),
+            'entitlements' => $entitlements,
+            'comparisonRows' => $comparisonRows,
+            'featureMatrix' => $featureMatrix,
+            'comparisonTiers' => ['starter', 'pro', 'business', 'enterprise'],
         ]);
+    }
+
+    /**
+     * Comparison section lives on the same subscriptions page.
+     */
+    public function compare(): RedirectResponse
+    {
+        return redirect()->route('workspace.subscriptions.index', ['#compare']);
     }
 
     public function store(Request $request): RedirectResponse

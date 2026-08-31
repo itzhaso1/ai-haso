@@ -32,7 +32,7 @@ class FeatureAccessService
      * @var array<string, array<int, string>>
      */
     public const TIER_PLAN_CODES = [
-        'starter' => ['starter', 'company_basic', 'store_basic', 'individual_free'],
+        'starter' => ['starter', 'company_starter', 'store_starter', 'company_basic', 'store_basic', 'individual_free'],
         'pro' => ['pro', 'company_pro', 'store_pro', 'individual_pro'],
         'business' => ['business', 'company_business', 'store_business'],
         'enterprise' => ['enterprise', 'company_enterprise', 'store_enterprise'],
@@ -74,6 +74,17 @@ class FeatureAccessService
             && ! in_array($feature, $planFeatures, true)
             && in_array('appointments', $planFeatures, true)
         ) {
+            // Curated modern plans (e.g. starter) may include website_builder but omit
+            // custom_domains on purpose — do not re-grant via legacy appointments compat.
+            if ($feature === 'custom_domains' && in_array('website_builder', $planFeatures, true)) {
+                return false;
+            }
+
+            $tier = $plan->tier ?? $this->inferTier((string) $plan->code);
+            if ($feature === 'custom_domains' && $tier === 'starter') {
+                return false;
+            }
+
             return true;
         }
 

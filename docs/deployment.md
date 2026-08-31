@@ -1,82 +1,67 @@
-# Deployment Notes (Websites, Domains, Public Booking)
+# Deployment (Linux)
 
-## Runtime stack assumptions
+Target production stack:
 
-- Linux
-- Nginx (or reverse proxy)
-- PHP-FPM
-- Queue workers
-- Scheduler
-- Database + cache configured for production
+- **Linux** host
+- **Nginx** reverse proxy (catch-all server for custom domains)
+- **PHP-FPM** (PHP 8.3+)
+- **Queue workers** (`php artisan queue:work`)
+- **Scheduler** (`* * * * * php artisan schedule:run`)
+- **Certbot** (or other ACME) for TLS
+- Database + Redis/cache as configured
 
-## Application-level domain resolution
+## Nginx sketch
 
-Custom domain routing is implemented in Laravel via `WebsiteResolverService` + `ResolvePublicWebsite` middleware.
+```nginx
+server {
+    listen 80;
+    server_name _;
+    root /var/www/hasem/public;
+    index index.php;
 
-Infrastructure must still route all relevant hosts to this Laravel app instance.
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
 
-## Required environment variables
+    location ~ \.php$ {
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+    }
+}
+```
 
-Set values in production:
+Use a catch-all / wildcard approach so customer domains hit Laravel; do **not** require one vhost file per tenant. Preserve `Host` and `X-Forwarded-*`.
 
-- Namecheap:
-  - `NAMECHEAP_ENV=production`
-  - `NAMECHEAP_API_USER`
-  - `NAMECHEAP_API_KEY`
-  - `NAMECHEAP_USERNAME`
-  - `NAMECHEAP_CLIENT_IP`
-- Website DNS:
-  - `WEBSITE_PLATFORM_DOMAIN`
-  - `WEBSITE_DNS_TARGET`
-  - `WEBSITE_DNS_TARGET_TYPE`
-  - `WEBSITE_DNS_TTL`
-  - `WEBSITE_DNS_WWW_TARGET`
-- Payment webhooks:
-  - `STRIPE_WEBHOOK_SECRET`
-  - `STRIPE_WEBHOOK_TOLERANCE_SECONDS`
-  - optional `LOCAL_PAYMENT_WEBHOOK_SECRET`
+## TLS / Certbot
 
-## Queue and scheduler
+SSL for custom domains is **not fully automatic inside the app alone**.
 
-Run workers for domain and webhook jobs:
+- App layer: `SslService` + provisioning jobs are abstractions.
+- Infra: run Certbot (or CDN/ACME) on Linux against Nginx. Windows-only environments cannot complete real public certificate issuance the same way.
 
-- `RegisterDomainJob`
-- `ConfigureDomainDnsJob`
-- `VerifyDomainJob`
-- `ProvisionSslJob`
-- `RenewDomainJob`
-- `SyncDomainStatusJob`
-- payment/whatsapp processing jobs
+Example:
 
-Enable scheduler (`php artisan schedule:work` or cron) for:
+```bash
+certbot --nginx -d example-customer.com -d www.example-customer.com
+```
 
-- `domains:sync-status` (daily status synchronization)
-- existing reminder/payment maintenance commands
+Automate renewals (`certbot renew` via cron/systemd timer).
 
-## DNS and SSL caveat
+## Queue & scheduler
 
-DNS alone is not enough for HTTPS.
+Workers should process domain/DNS/SSL/payment/WhatsApp jobs. Scheduler covers:
 
-To serve custom domains over TLS, infrastructure must also:
+- `domains:sync-status`
+- appointment reminders prepare/dispatch
+- other maintenance commands in `routes/console.php`
 
-1. accept incoming host
-2. route request to Laravel app
-3. issue/provision certificate for host
-4. renew certificate lifecycle
+## Environment
 
-`SslService` is currently an app-layer abstraction and should be integrated with your actual TLS automation stack (reverse proxy, ACME, CDN, etc.).
+Configure app URL, DB, cache, queue, mail, Namecheap, WhatsApp, AI keys, and payment webhook secrets before go-live.
 
-## Nginx guidance
+## Related docs
 
-- Use a catch-all server block and forward host header to Laravel.
-- Do not require one static vhost file per customer domain.
-- Ensure `X-Forwarded-*` headers are correct when using proxy/load balancer.
-
-## Post-deploy checks
-
-1. Create website and publish.
-2. Search/purchase sandbox or production domain.
-3. Verify DNS records and status transitions.
-4. Confirm public website resolution by host and by slug.
-5. Test public booking end-to-end.
-6. Confirm webhook endpoints return expected status codes.
+- `docs/website-deployment.md`
+- `docs/custom-domains.md`
+- `docs/webhook-setup.md`

@@ -8,6 +8,7 @@
     ];
     $settingsLinks = [
         ['label' => 'الإعدادات', 'route' => 'workspace.appointments.settings.index', 'active' => 'workspace.appointments.settings.*'],
+        ['label' => 'الإجازات والعطل', 'route' => 'workspace.appointments.holidays.index', 'active' => 'workspace.appointments.holidays.*'],
         ['label' => 'Website Builder', 'route' => 'workspace.appointments.website.overview', 'active' => 'workspace.appointments.website.*'],
     ];
 @endphp

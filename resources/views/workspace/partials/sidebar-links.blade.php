@@ -7,6 +7,8 @@
             'icon' => 'home',
             'links' => [
                 ['label' => 'Dashboard', 'route' => 'workspace.dashboard', 'active' => 'workspace.dashboard'],
+                ['label' => 'التحليلات', 'route' => 'workspace.analytics.index', 'active' => 'workspace.analytics.*'],
+                ['label' => 'مفاتيح API', 'route' => 'workspace.api-keys.index', 'active' => 'workspace.api-keys.*'],
             ],
         ],
         [
