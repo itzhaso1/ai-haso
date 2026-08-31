@@ -14,7 +14,12 @@ class ImapSyncService
     public function syncAccount(EmailAccount $account, int $limit = 30): int
     {
         if (! function_exists('imap_open')) {
-            throw new \RuntimeException('PHP IMAP extension is not installed.');
+            \Illuminate\Support\Facades\Log::warning('email.imap.extension_missing', [
+                'email_account_id' => $account->id,
+                'workspace_id' => $account->workspace_id,
+            ]);
+
+            return 0;
         }
 
         $mailbox = sprintf('{%s:%d/imap/ssl}INBOX', $account->imap_host, $account->imap_port);
