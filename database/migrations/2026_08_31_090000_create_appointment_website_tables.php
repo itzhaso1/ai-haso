@@ -166,7 +166,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(['provider', 'idempotency_key']);
-            $table->index(['workspace_id', 'operation_type', 'status']);
+            $table->index(['workspace_id', 'operation_type', 'status'], 'ws_dom_ops_ws_op_status_idx');
         });
 
         Schema::create('website_domain_contacts', function (Blueprint $table): void {
