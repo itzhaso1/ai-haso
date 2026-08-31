@@ -10,6 +10,7 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Services\Finance\InvoicePaymentService;
 use App\Services\Finance\InvoiceService;
+use App\Services\Merchant\MerchantPaymentEligibilityService;
 use App\Services\Notification\DomainNotificationService;
 use App\Services\Payment\PaymentService;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +23,7 @@ class AppointmentBillingService
         private readonly InvoicePaymentService $invoicePaymentService,
         private readonly PaymentService $paymentService,
         private readonly DomainNotificationService $domainNotificationService,
+        private readonly MerchantPaymentEligibilityService $merchantPaymentEligibilityService,
     ) {}
 
     public function createInvoiceAndPaymentLink(AppointmentBooking $booking, ?int $actorUserId): AppointmentBooking
@@ -118,21 +120,41 @@ class AppointmentBillingService
                 ]);
             }
 
-            $payment = $this->paymentService->createPaymentLink($order);
+            $eligibility = $this->merchantPaymentEligibilityService->statusSnapshot($booking->workspace);
+            $payment = null;
+            $paymentLink = null;
+            $metadata = is_array($booking->metadata) ? $booking->metadata : [];
+
+            if ($eligibility['eligible']) {
+                $payment = $this->paymentService->createPaymentLink($order, null, 'merchant_booking');
+                $paymentLink = $payment->payment_link;
+                unset($metadata['payment_blocked_reason']);
+            } else {
+                $metadata['payment_blocked_reason'] = implode(' ', $eligibility['blockers']);
+            }
 
             $booking->update([
                 'finance_invoice_id' => $invoice->id,
                 'order_id' => $order->id,
-                'latest_payment_id' => $payment->id,
-                'payment_link' => $payment->payment_link,
+                'latest_payment_id' => $payment?->id,
+                'payment_link' => $paymentLink,
                 'payment_status' => 'pending',
+                'metadata' => $metadata,
             ]);
 
-            $this->domainNotificationService->notifyAppointmentBookingStatusChanged(
-                $booking,
-                'تم إنشاء رابط دفع للموعد',
-                'تم إصدار فاتورة ورابط دفع مرتبط بموعد العميل.'
-            );
+            if ($payment) {
+                $this->domainNotificationService->notifyAppointmentBookingStatusChanged(
+                    $booking,
+                    'تم إنشاء رابط دفع للموعد',
+                    'تم إصدار فاتورة ورابط دفع مرتبط بموعد العميل.'
+                );
+            } else {
+                $this->domainNotificationService->notifyAppointmentBookingStatusChanged(
+                    $booking,
+                    'تم إنشاء فاتورة بدون رابط دفع',
+                    'تم إصدار الفاتورة، لكن استقبال المدفوعات غير مفعّل حالياً للتاجر.'
+                );
+            }
 
             return $booking->fresh(['invoice', 'order', 'latestPayment']);
         });

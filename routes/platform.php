@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Platform\AuthController;
 use App\Http\Controllers\Platform\DashboardController;
+use App\Http\Controllers\Platform\MerchantVerificationController;
 use App\Http\Controllers\Platform\PlanController;
 use App\Http\Controllers\Platform\SubscriptionController;
 use App\Http\Controllers\Platform\UserController;
@@ -32,4 +33,13 @@ Route::middleware('platform.admin')->group(function (): void {
     Route::get('/subscriptions', [SubscriptionController::class, 'index'])->name('platform.subscriptions.index');
     Route::get('/subscriptions/{subscription}/edit', [SubscriptionController::class, 'edit'])->name('platform.subscriptions.edit');
     Route::put('/subscriptions/{subscription}', [SubscriptionController::class, 'update'])->name('platform.subscriptions.update');
+
+    Route::get('/merchant-verifications', [MerchantVerificationController::class, 'index'])->name('platform.merchant-verifications.index');
+    Route::get('/merchant-verifications/{merchantProfile}', [MerchantVerificationController::class, 'show'])->name('platform.merchant-verifications.show');
+    Route::post('/merchant-verifications/{merchantProfile}/approve', [MerchantVerificationController::class, 'approve'])->name('platform.merchant-verifications.approve');
+    Route::post('/merchant-verifications/{merchantProfile}/reject', [MerchantVerificationController::class, 'reject'])->name('platform.merchant-verifications.reject');
+    Route::post('/merchant-verifications/{merchantProfile}/suspend', [MerchantVerificationController::class, 'suspend'])->name('platform.merchant-verifications.suspend');
+    Route::post('/merchant-verifications/{merchantProfile}/request-documents', [MerchantVerificationController::class, 'requestDocuments'])->name('platform.merchant-verifications.request-documents');
+    Route::get('/merchant-verifications/documents/{document}/download', [MerchantVerificationController::class, 'downloadDocument'])
+        ->name('platform.merchant-verifications.documents.download');
 });

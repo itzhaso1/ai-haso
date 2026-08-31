@@ -224,14 +224,24 @@ class SubscriptionService
 
     public function availablePlans(?string $workspaceType = null): Collection
     {
-        $query = Plan::query()
-            ->when($workspaceType, fn ($q) => $q->where('workspace_type', $workspaceType))
-            ->where('is_active', true);
+        $officialCodes = ['starter', 'pro', 'business', 'enterprise'];
+
+        $query = Plan::query()->where('is_active', true);
 
         if ($this->plansHaveColumn('is_public')) {
             $query->where('is_public', true);
         }
 
+        if ($this->plansHaveColumn('is_official')) {
+            $query->where(function ($q) use ($officialCodes): void {
+                $q->where('is_official', true)
+                    ->orWhereIn('code', $officialCodes);
+            });
+        } else {
+            $query->whereIn('code', $officialCodes);
+        }
+
+        // Official catalog is shared across all workspace types — ignore workspace_type filter.
         if ($this->plansHaveColumn('sort_order')) {
             $query->orderBy('sort_order');
         }

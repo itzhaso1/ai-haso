@@ -19,6 +19,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'currency',
     'payment_link',
     'provider_payload',
+    'payment_context',
+    'money_bucket',
     'paid_at',
     'failed_at',
     'failure_reason',

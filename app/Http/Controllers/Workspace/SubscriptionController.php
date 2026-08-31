@@ -64,7 +64,11 @@ class SubscriptionController extends Controller
         $plan = Plan::query()
             ->whereKey($validated['plan_id'])
             ->where('is_active', true)
-            ->where('workspace_type', $workspace->type)
+            ->where(function ($query) use ($workspace): void {
+                $query->where('is_official', true)
+                    ->orWhereIn('code', ['starter', 'pro', 'business', 'enterprise'])
+                    ->orWhere('workspace_type', $workspace->type);
+            })
             ->firstOrFail();
 
         $checkoutSession = $this->subscriptionService->createCheckoutSession(

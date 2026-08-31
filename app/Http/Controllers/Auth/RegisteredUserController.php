@@ -38,11 +38,11 @@ class RegisteredUserController extends Controller
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email'],
             'phone' => ['nullable', 'string', 'max:32', 'unique:users,phone'],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
-            'workspace_type' => ['nullable', 'in:individual,company,store'],
             'workspace_name' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $workspaceType = $request->string('workspace_type')->toString() ?: 'individual';
+        // Legacy workspace_type column kept; new registrations default to company.
+        $workspaceType = 'company';
 
         $payload = $this->authenticationService->registerForSession([
             'name' => $request->string('name')->toString(),

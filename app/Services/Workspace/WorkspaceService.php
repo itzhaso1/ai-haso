@@ -40,10 +40,22 @@ class WorkspaceService
             app(PermissionRegistrar::class)->setPermissionsTeamId(null);
 
             $defaultPlan = Plan::query()
-                ->where('workspace_type', $workspace->type)
+                ->where('code', 'starter')
                 ->where('is_active', true)
-                ->orderBy('price')
-                ->first();
+                ->first()
+                ?? Plan::query()
+                    ->where('is_active', true)
+                    ->when(
+                        \Illuminate\Support\Facades\Schema::hasColumn('plans', 'is_official'),
+                        fn ($q) => $q->where('is_official', true)
+                    )
+                    ->orderBy('price')
+                    ->first()
+                ?? Plan::query()
+                    ->where('workspace_type', $workspace->type)
+                    ->where('is_active', true)
+                    ->orderBy('price')
+                    ->first();
 
             if ($defaultPlan) {
                 Subscription::withoutGlobalScopes()->firstOrCreate(

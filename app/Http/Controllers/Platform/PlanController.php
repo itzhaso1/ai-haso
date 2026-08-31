@@ -101,6 +101,7 @@ class PlanController extends Controller
         $data = $request->validate([
             'code' => ['nullable', 'string', 'max:100'],
             'name' => ['required', 'string', 'max:255'],
+            'display_name_ar' => ['nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:2000'],
             'tier' => ['nullable', 'in:starter,pro,business,enterprise'],
             'workspace_type' => ['required', 'in:individual,company,store'],
@@ -111,6 +112,7 @@ class PlanController extends Controller
             'sort_order' => ['nullable', 'integer', 'min:0'],
             'is_active' => ['nullable', 'boolean'],
             'is_public' => ['nullable', 'boolean'],
+            'is_official' => ['nullable', 'boolean'],
             'features' => ['nullable', 'array'],
             'features.*' => ['string', 'max:100'],
             'permissions' => ['nullable', 'array'],
@@ -152,6 +154,7 @@ class PlanController extends Controller
         return [
             'code' => $data['code'] ?: Str::slug($data['workspace_type'].'-'.$data['name']),
             'name' => $data['name'],
+            'display_name_ar' => $data['display_name_ar'] ?? null,
             'description' => $data['description'] ?? null,
             'tier' => $data['tier'] ?? null,
             'workspace_type' => $data['workspace_type'],
@@ -162,6 +165,7 @@ class PlanController extends Controller
             'sort_order' => (int) ($data['sort_order'] ?? 0),
             'is_active' => $request->boolean('is_active'),
             'is_public' => $request->boolean('is_public'),
+            'is_official' => $request->boolean('is_official'),
             'features' => is_array($features) ? array_values(array_unique($features)) : [],
             'permissions' => is_array($permissions) ? array_values(array_unique($permissions)) : [],
             'limits' => is_array($limits) ? $limits : [],

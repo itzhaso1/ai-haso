@@ -5,5 +5,6 @@
         <a href="{{ route('platform.workspaces.index') }}" class="px-3 py-2 rounded-lg {{ request()->routeIs('platform.workspaces.*') ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700' }}">مساحات العمل</a>
         <a href="{{ route('platform.plans.index') }}" class="px-3 py-2 rounded-lg {{ request()->routeIs('platform.plans.*') ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700' }}">الخطط</a>
         <a href="{{ route('platform.subscriptions.index') }}" class="px-3 py-2 rounded-lg {{ request()->routeIs('platform.subscriptions.*') ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700' }}">الاشتراكات</a>
+        <a href="{{ route('platform.merchant-verifications.index') }}" class="px-3 py-2 rounded-lg {{ request()->routeIs('platform.merchant-verifications.*') ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700' }}">توثيق التجار</a>
     </div>
 </div>

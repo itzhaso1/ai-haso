@@ -80,4 +80,13 @@ return [
         'base_url_production' => 'https://api.namecheap.com/xml.response',
     ],
 
+    'hyperpay' => [
+        'enabled' => env('HYPERPAY_ENABLED', false),
+        'entity_id' => env('HYPERPAY_ENTITY_ID'),
+        'access_token' => env('HYPERPAY_ACCESS_TOKEN'),
+        'merchant_onboarding_enabled' => env('HYPERPAY_MERCHANT_ONBOARDING_ENABLED', false),
+        // Staging-only local_sandbox convenience — never invents a real HyperPay success.
+        'merchant_sandbox_auto_approve' => env('HYPERPAY_MERCHANT_SANDBOX_AUTO_APPROVE', false),
+    ],
+
 ];

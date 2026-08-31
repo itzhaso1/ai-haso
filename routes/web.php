@@ -48,6 +48,7 @@ use App\Http\Controllers\Workspace\InventoryController;
 use App\Http\Controllers\Workspace\OrderController;
 use App\Http\Controllers\Workspace\PaymentController;
 use App\Http\Controllers\Workspace\PaymentGatewayController;
+use App\Http\Controllers\Workspace\MerchantPaymentController;
 use App\Http\Controllers\Workspace\Pos\CashierController as PosCashierController;
 use App\Http\Controllers\Workspace\Pos\PosCartController as PosCartController;
 use App\Http\Controllers\Workspace\Pos\PosCashierInvoiceController as PosCashierInvoiceController;
@@ -266,6 +267,11 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
         Route::get('payments', [PaymentController::class, 'index'])->name('payments.index');
         Route::get('payments/create', [PaymentController::class, 'create'])->name('payments.create');
         Route::post('payments', [PaymentController::class, 'store'])->name('payments.store');
+        Route::get('payments/merchant', [MerchantPaymentController::class, 'show'])->name('payments.merchant.show');
+        Route::post('payments/merchant/request', [MerchantPaymentController::class, 'requestVerification'])->name('payments.merchant.request');
+        Route::post('payments/merchant/upload', [MerchantPaymentController::class, 'uploadDocument'])->name('payments.merchant.upload');
+        Route::post('payments/merchant/submit', [MerchantPaymentController::class, 'submit'])->name('payments.merchant.submit');
+        Route::get('payments/merchant/documents/{document}', [MerchantPaymentController::class, 'downloadDocument'])->name('payments.merchant.documents.download');
 
         Route::resource('payment-gateways', PaymentGatewayController::class)->except(['show']);
 

@@ -197,6 +197,25 @@ class FoundationSeeder extends Seeder
             Plan::query()->updateOrCreate(['code' => $plan['code']], $plan);
         }
 
+        // Hide legacy catalog rows; keep them for existing subscriptions.
+        $officialCodes = ['starter', 'pro', 'business', 'enterprise'];
+        if (\Illuminate\Support\Facades\Schema::hasColumn('plans', 'is_official')) {
+            Plan::query()
+                ->whereNotIn('code', $officialCodes)
+                ->update([
+                    'is_public' => false,
+                    'is_official' => false,
+                ]);
+            Plan::query()
+                ->whereIn('code', $officialCodes)
+                ->update([
+                    'is_public' => true,
+                    'is_official' => true,
+                ]);
+        }
+
+        $this->seedMerchantDocumentTypes();
+
         PlatformAdmin::query()->updateOrCreate(
             ['email' => env('PLATFORM_ADMIN_EMAIL', 'admin@hasem.local')],
             [
@@ -224,40 +243,69 @@ class FoundationSeeder extends Seeder
                 'price' => 99,
                 'trial_days' => 14,
                 'description' => 'للبدء: حجوزات، موقع إلكتروني، وذكاء اصطناعي أساسي بدون نقطة بيع أو واتساب.',
+                'display_name_ar' => 'المبتدئة',
             ],
             'pro' => [
                 'sort_order' => 20,
                 'price' => 199,
                 'trial_days' => 14,
                 'description' => 'للنمو: نقطة بيع، مالية، واتساب، بريد احترافي، وتحليلات.',
+                'display_name_ar' => 'الاحترافية',
             ],
             'business' => [
                 'sort_order' => 30,
                 'price' => 349,
                 'trial_days' => 14,
                 'description' => 'للأعمال: صلاحيات متقدمة، واجهة برمجة API، وإدارة عملاء CRM.',
+                'display_name_ar' => 'الأعمال',
             ],
             'enterprise' => [
                 'sort_order' => 40,
                 'price' => 499,
                 'trial_days' => 30,
                 'description' => 'للمؤسسات: تخصيص كامل، تدقيق، وحدود استخدام مرتفعة.',
+                'display_name_ar' => 'المؤسسات',
             ],
         ];
 
         $plans = [];
 
-        // Individual plans (legacy codes kept).
+        // Official shared catalog (workspace_type=company, visible to all workspaces).
+        foreach (['starter', 'pro', 'business', 'enterprise'] as $tier) {
+            $meta = $tierMeta[$tier];
+            $plans[] = $this->planRow(
+                code: $tier,
+                name: ucfirst($tier),
+                displayNameAr: $meta['display_name_ar'],
+                description: $meta['description'],
+                tier: $tier,
+                workspaceType: 'company',
+                currency: $currency,
+                price: $meta['price'],
+                sortOrder: $meta['sort_order'],
+                isPublic: true,
+                isOfficial: true,
+                trialDays: $meta['trial_days'],
+                features: $matrix[$tier]['features'] ?? [],
+                permissions: $this->permissionsForTier($tier),
+                limits: $matrix[$tier]['limits'] ?? [],
+                overageRules: $overageRules,
+            );
+        }
+
+        // Individual plans (legacy codes kept, hidden from public catalog).
         $plans[] = $this->planRow(
             code: 'individual_free',
             name: 'Individual Free',
+            displayNameAr: null,
             description: 'باقة فردية مجانية للمحادثات والردود الذكية.',
             tier: 'starter',
             workspaceType: 'individual',
             currency: $currency,
             price: 0,
             sortOrder: 5,
-            isPublic: true,
+            isPublic: false,
+            isOfficial: false,
             trialDays: 0,
             features: ['conversations', 'smart_replies', 'ai', 'subscription', 'usage'],
             permissions: ['workspace.view', 'conversations.manage', 'ai.manage', 'subscriptions.manage'],
@@ -273,13 +321,15 @@ class FoundationSeeder extends Seeder
         $plans[] = $this->planRow(
             code: 'individual_pro',
             name: 'Individual Pro',
+            displayNameAr: null,
             description: 'باقة فردية احترافية مع واتساب واستخدام أعلى للذكاء الاصطناعي.',
             tier: 'pro',
             workspaceType: 'individual',
             currency: $currency,
             price: 19,
             sortOrder: 15,
-            isPublic: true,
+            isPublic: false,
+            isOfficial: false,
             trialDays: 7,
             features: ['conversations', 'smart_replies', 'ai', 'subscription', 'usage', 'whatsapp'],
             permissions: ['workspace.view', 'conversations.manage', 'ai.manage', 'whatsapp.manage', 'subscriptions.manage'],
@@ -296,25 +346,26 @@ class FoundationSeeder extends Seeder
             'store' => 'Store',
         ];
 
-        // New public commercial plans + legacy basic/pro/enterprise aligned to matrix.
+        // Legacy typed plans kept for existing subscriptions — not public / not official.
         foreach (['company', 'store'] as $workspaceType) {
             $label = $typeLabels[$workspaceType];
 
-            // New public starter (and legacy basic → starter matrix, hidden from catalog).
             foreach ([
-                ['code' => "{$workspaceType}_starter", 'name' => "{$label} Starter", 'is_public' => true],
-                ['code' => "{$workspaceType}_basic", 'name' => "{$label} Basic", 'is_public' => false],
+                ['code' => "{$workspaceType}_starter", 'name' => "{$label} Starter"],
+                ['code' => "{$workspaceType}_basic", 'name' => "{$label} Basic"],
             ] as $row) {
                 $plans[] = $this->planRow(
                     code: $row['code'],
                     name: $row['name'],
+                    displayNameAr: $tierMeta['starter']['display_name_ar'],
                     description: $tierMeta['starter']['description'],
                     tier: 'starter',
                     workspaceType: $workspaceType,
                     currency: $currency,
                     price: $tierMeta['starter']['price'],
                     sortOrder: $tierMeta['starter']['sort_order'],
-                    isPublic: $row['is_public'],
+                    isPublic: false,
+                    isOfficial: false,
                     trialDays: $tierMeta['starter']['trial_days'],
                     features: $matrix['starter']['features'] ?? [],
                     permissions: $this->permissionsForTier('starter'),
@@ -323,56 +374,26 @@ class FoundationSeeder extends Seeder
                 );
             }
 
-            $plans[] = $this->planRow(
-                code: "{$workspaceType}_pro",
-                name: "{$label} Pro",
-                description: $tierMeta['pro']['description'],
-                tier: 'pro',
-                workspaceType: $workspaceType,
-                currency: $currency,
-                price: $tierMeta['pro']['price'],
-                sortOrder: $tierMeta['pro']['sort_order'],
-                isPublic: true,
-                trialDays: $tierMeta['pro']['trial_days'],
-                features: $matrix['pro']['features'] ?? [],
-                permissions: $this->permissionsForTier('pro'),
-                limits: $matrix['pro']['limits'] ?? [],
-                overageRules: $overageRules,
-            );
-
-            $plans[] = $this->planRow(
-                code: "{$workspaceType}_business",
-                name: "{$label} Business",
-                description: $tierMeta['business']['description'],
-                tier: 'business',
-                workspaceType: $workspaceType,
-                currency: $currency,
-                price: $tierMeta['business']['price'],
-                sortOrder: $tierMeta['business']['sort_order'],
-                isPublic: true,
-                trialDays: $tierMeta['business']['trial_days'],
-                features: $matrix['business']['features'] ?? [],
-                permissions: $this->permissionsForTier('business'),
-                limits: $matrix['business']['limits'] ?? [],
-                overageRules: $overageRules,
-            );
-
-            $plans[] = $this->planRow(
-                code: "{$workspaceType}_enterprise",
-                name: "{$label} Enterprise",
-                description: $tierMeta['enterprise']['description'],
-                tier: 'enterprise',
-                workspaceType: $workspaceType,
-                currency: $currency,
-                price: $tierMeta['enterprise']['price'],
-                sortOrder: $tierMeta['enterprise']['sort_order'],
-                isPublic: true,
-                trialDays: $tierMeta['enterprise']['trial_days'],
-                features: $matrix['enterprise']['features'] ?? [],
-                permissions: $this->permissionsForTier('enterprise'),
-                limits: $matrix['enterprise']['limits'] ?? [],
-                overageRules: $overageRules,
-            );
+            foreach (['pro', 'business', 'enterprise'] as $tier) {
+                $plans[] = $this->planRow(
+                    code: "{$workspaceType}_{$tier}",
+                    name: "{$label} ".ucfirst($tier),
+                    displayNameAr: $tierMeta[$tier]['display_name_ar'],
+                    description: $tierMeta[$tier]['description'],
+                    tier: $tier,
+                    workspaceType: $workspaceType,
+                    currency: $currency,
+                    price: $tierMeta[$tier]['price'],
+                    sortOrder: $tierMeta[$tier]['sort_order'],
+                    isPublic: false,
+                    isOfficial: false,
+                    trialDays: $tierMeta[$tier]['trial_days'],
+                    features: $matrix[$tier]['features'] ?? [],
+                    permissions: $this->permissionsForTier($tier),
+                    limits: $matrix[$tier]['limits'] ?? [],
+                    overageRules: $overageRules,
+                );
+            }
         }
 
         return $plans;
@@ -388,6 +409,7 @@ class FoundationSeeder extends Seeder
     private function planRow(
         string $code,
         string $name,
+        ?string $displayNameAr,
         string $description,
         string $tier,
         string $workspaceType,
@@ -395,6 +417,7 @@ class FoundationSeeder extends Seeder
         float|int $price,
         int $sortOrder,
         bool $isPublic,
+        bool $isOfficial,
         int $trialDays,
         array $features,
         array $permissions,
@@ -404,6 +427,7 @@ class FoundationSeeder extends Seeder
         return [
             'code' => $code,
             'name' => $name,
+            'display_name_ar' => $displayNameAr,
             'description' => $description,
             'tier' => $tier,
             'workspace_type' => $workspaceType,
@@ -413,12 +437,54 @@ class FoundationSeeder extends Seeder
             'price' => $price,
             'is_active' => true,
             'is_public' => $isPublic,
+            'is_official' => $isOfficial,
             'sort_order' => $sortOrder,
             'features' => array_values($features),
             'permissions' => array_values($permissions),
             'limits' => $limits,
             'overage_rules' => $overageRules,
         ];
+    }
+
+    private function seedMerchantDocumentTypes(): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('merchant_document_types')) {
+            return;
+        }
+
+        $types = [
+            [
+                'code' => 'freelance_certificate',
+                'name_ar' => 'وثيقة عمل حر',
+                'name_en' => 'Freelance certificate',
+                'requires_number' => true,
+                'requires_expiry' => true,
+                'sort_order' => 10,
+            ],
+            [
+                'code' => 'commercial_registration',
+                'name_ar' => 'السجل التجاري',
+                'name_en' => 'Commercial registration',
+                'requires_number' => true,
+                'requires_expiry' => true,
+                'sort_order' => 20,
+            ],
+            [
+                'code' => 'other_legal',
+                'name_ar' => 'مستند نظامي آخر',
+                'name_en' => 'Other legal document',
+                'requires_number' => false,
+                'requires_expiry' => false,
+                'sort_order' => 30,
+            ],
+        ];
+
+        foreach ($types as $type) {
+            \App\Models\MerchantDocumentType::query()->updateOrCreate(
+                ['code' => $type['code']],
+                array_merge($type, ['is_active' => true])
+            );
+        }
     }
 
     /**

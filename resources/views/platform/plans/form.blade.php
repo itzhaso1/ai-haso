@@ -45,6 +45,10 @@
         <label class="mb-1 block text-sm font-semibold text-gray-700">اسم الباقة</label>
         <input name="name" required value="{{ old('name', $planData?->name) }}" class="w-full rounded-lg border-gray-300" />
     </div>
+    <div>
+        <label class="mb-1 block text-sm font-semibold text-gray-700">الاسم العربي (display_name_ar)</label>
+        <input name="display_name_ar" value="{{ old('display_name_ar', $planData?->display_name_ar) }}" class="w-full rounded-lg border-gray-300" />
+    </div>
     <div class="md:col-span-2">
         <label class="mb-1 block text-sm font-semibold text-gray-700">الوصف</label>
         <textarea name="description" rows="2" class="w-full rounded-lg border-gray-300">{{ old('description', $planData?->description) }}</textarea>
@@ -97,6 +101,10 @@
         <label class="inline-flex items-center gap-2">
             <input type="checkbox" name="is_public" value="1" @checked(old('is_public', $planData?->is_public ?? true))>
             <span class="text-sm font-semibold text-gray-700">عامة (ظاهرة للعملاء)</span>
+        </label>
+        <label class="inline-flex items-center gap-2">
+            <input type="checkbox" name="is_official" value="1" @checked(old('is_official', $planData?->is_official ?? false))>
+            <span class="text-sm font-semibold text-gray-700">رسمية (الكتالوج الرسمي)</span>
         </label>
     </div>
 </div>

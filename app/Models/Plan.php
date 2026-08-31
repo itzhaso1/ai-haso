@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable([
     'code',
     'name',
+    'display_name_ar',
     'description',
     'tier',
     'workspace_type',
@@ -18,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'price',
     'is_active',
     'is_public',
+    'is_official',
     'sort_order',
     'features',
     'permissions',
@@ -32,6 +34,7 @@ class Plan extends Model
             'price' => 'decimal:2',
             'is_active' => 'boolean',
             'is_public' => 'boolean',
+            'is_official' => 'boolean',
             'trial_days' => 'integer',
             'sort_order' => 'integer',
             'features' => 'array',

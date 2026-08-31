@@ -98,6 +98,10 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(WorkspaceContext::class);
         $this->app->bind(DomainRegistrarInterface::class, NamecheapRegistrar::class);
         $this->app->bind(SubscriptionBillingProviderInterface::class, LocalSubscriptionBillingProvider::class);
+        $this->app->bind(
+            \App\Services\Payment\Contracts\MerchantSettlementProviderInterface::class,
+            \App\Services\Payment\Providers\HyperPayMerchantSettlementProvider::class
+        );
     }
 
     /**

@@ -50,7 +50,7 @@
                 <div class="mt-3 grid gap-3 text-sm text-gray-700 sm:grid-cols-2 lg:grid-cols-4">
                     <p>
                         <span class="font-semibold">{{ __('الخطة') }}:</span>
-                        {{ $currentSubscription->plan?->name ?? ($entitlements['plan']['name'] ?? '-') }}
+                        {{ $currentSubscription->plan?->display_name_ar ?: ($currentSubscription->plan?->name ?? ($entitlements['plan']['name'] ?? '-')) }}
                     </p>
                     <p>
                         <span class="font-semibold">{{ __('المستوى') }}:</span>
@@ -152,7 +152,7 @@
                         @endphp
                         <article class="rounded-2xl border p-4 {{ $isCurrent ? 'border-[#06C2A4] bg-[#F3FCFA]' : 'border-gray-200' }}">
                             <div class="flex items-start justify-between gap-3">
-                                <h4 class="text-lg font-bold text-gray-900">{{ $plan->name }}</h4>
+                                <h4 class="text-lg font-bold text-gray-900">{{ $plan->display_name_ar ?: $plan->name }}</h4>
                                 @if($plan->tier)
                                     <span class="rounded-md bg-[#E8FAF6] px-2 py-1 text-xs font-semibold text-[#067e6b]">
                                         {{ $tierLabels[$plan->tier] ?? $plan->tier }}

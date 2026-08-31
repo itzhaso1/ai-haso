@@ -7,6 +7,8 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PaymentGateway;
 use App\Models\WebhookEvent;
+use App\Models\Workspace;
+use App\Services\Merchant\MerchantPaymentEligibilityService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -14,12 +16,23 @@ class PaymentService
 {
     public function __construct(
         private readonly PaymentGatewayManager $paymentGatewayManager,
+        private readonly MerchantPaymentEligibilityService $merchantPaymentEligibilityService,
     ) {}
 
-    public function createPaymentLink(Order $order, ?PaymentGateway $gateway = null): Payment
-    {
+    public function createPaymentLink(
+        Order $order,
+        ?PaymentGateway $gateway = null,
+        string $paymentContext = 'merchant_order',
+    ): Payment {
         if ($order->payment_status === 'paid') {
             throw new \RuntimeException('Order is already paid.');
+        }
+
+        $moneyBucket = $this->resolveMoneyBucket($paymentContext);
+
+        if (str_starts_with($paymentContext, 'merchant_')) {
+            $workspace = Workspace::query()->findOrFail($order->workspace_id);
+            $this->merchantPaymentEligibilityService->assertCanAcceptCustomerPayments($workspace);
         }
 
         $gateway = $gateway ?? PaymentGateway::query()->first();
@@ -33,10 +46,12 @@ class PaymentService
             metadata: [
                 'workspace_id' => $order->workspace_id,
                 'order_id' => $order->id,
+                'payment_context' => $paymentContext,
+                'money_bucket' => $moneyBucket,
             ]
         );
 
-        return DB::transaction(function () use ($order, $gateway, $result, $idempotencyKey): Payment {
+        return DB::transaction(function () use ($order, $gateway, $result, $idempotencyKey, $paymentContext, $moneyBucket): Payment {
             $payment = Payment::query()->create([
                 'workspace_id' => $order->workspace_id,
                 'order_id' => $order->id,
@@ -49,6 +64,8 @@ class PaymentService
                 'currency' => $order->currency,
                 'payment_link' => $result['payment_link'],
                 'provider_payload' => $result['payload'],
+                'payment_context' => $paymentContext,
+                'money_bucket' => $moneyBucket,
             ]);
 
             $order->update(['payment_link' => $payment->payment_link]);
@@ -145,5 +162,17 @@ class PaymentService
 
             event(new PaymentConfirmed($payment));
         });
+    }
+
+    private function resolveMoneyBucket(string $paymentContext): string
+    {
+        return match ($paymentContext) {
+            'platform_subscription' => 'platform_subscription',
+            'platform_commerce' => 'platform_commerce',
+            'merchant_booking', 'merchant_order' => 'merchant_gmv',
+            default => str_starts_with($paymentContext, 'platform_')
+                ? 'platform_commerce'
+                : 'merchant_gmv',
+        };
     }
 }

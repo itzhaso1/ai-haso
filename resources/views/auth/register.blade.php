@@ -21,18 +21,7 @@
         </div>
 
         <div class="mt-4">
-            <x-input-label for="workspace_type" value="نوع الحساب" />
-            <select id="workspace_type" name="workspace_type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
-                <option value="">اختر النوع</option>
-                <option value="individual" @selected(old('workspace_type') === 'individual')>Individual</option>
-                <option value="company" @selected(old('workspace_type') === 'company')>Company</option>
-                <option value="store" @selected(old('workspace_type') === 'store')>Store</option>
-            </select>
-            <x-input-error :messages="$errors->get('workspace_type')" class="mt-2" />
-        </div>
-
-        <div class="mt-4">
-            <x-input-label for="workspace_name" value="اسم مساحة العمل" />
+            <x-input-label for="workspace_name" value="اسم النشاط" />
             <x-text-input id="workspace_name" class="block mt-1 w-full" type="text" name="workspace_name" :value="old('workspace_name')" />
             <x-input-error :messages="$errors->get('workspace_name')" class="mt-2" />
         </div>
