@@ -4,8 +4,9 @@
         <div class="mx-auto max-w-7xl px-4">
             @include('workspace.partials.nav')
             @include('partials.flash')
-            <div class="mb-4 text-left">
+            <div class="mb-4 flex flex-wrap gap-2 text-left">
                 <a href="{{ route('workspace.payments.create') }}" class="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">إنشاء رابط دفع</a>
+                <a href="{{ route('workspace.payments.merchant.show') }}" class="rounded-lg bg-[#06C2A4] px-4 py-2 text-sm text-white">توثيق التاجر والمدفوعات</a>
             </div>
             <div class="overflow-x-auto rounded-xl border bg-white">
                 <table class="min-w-full text-sm">
