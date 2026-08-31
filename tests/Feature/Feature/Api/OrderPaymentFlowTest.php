@@ -2,11 +2,15 @@
 
 namespace Tests\Feature\Feature\Api;
 
+use App\Models\MerchantProfile;
+use App\Models\Plan;
 use App\Models\Product;
+use App\Models\Subscription;
 use App\Models\User;
 use App\Models\Workspace;
 use Database\Seeders\FoundationSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Config;
 use Tests\TestCase;
 
 class OrderPaymentFlowTest extends TestCase
@@ -16,6 +20,7 @@ class OrderPaymentFlowTest extends TestCase
     public function test_order_creation_and_payment_webhook_update_statuses(): void
     {
         $this->seed(FoundationSeeder::class);
+        Config::set('services.hyperpay.merchant_sandbox_auto_approve', true);
 
         $user = User::factory()->create();
         $workspace = Workspace::factory()->create(['owner_user_id' => $user->id, 'type' => 'company']);
@@ -24,6 +29,25 @@ class OrderPaymentFlowTest extends TestCase
             'status' => 'active',
             'joined_at' => now(),
         ]);
+
+        $plan = Plan::query()->where('code', 'pro')->firstOrFail();
+        Subscription::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'starts_at' => now(),
+            'current_period_start' => now(),
+            'current_period_end' => now()->addMonth(),
+        ]);
+
+        $profile = MerchantProfile::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+        ]);
+        $profile->forceFill([
+            'verification_status' => MerchantProfile::VERIFICATION_APPROVED,
+            'provider_onboarding_status' => MerchantProfile::PROVIDER_ACTIVE,
+            'approved_at' => now(),
+        ])->save();
 
         $product = Product::withoutGlobalScopes()->create([
             'workspace_id' => $workspace->id,
