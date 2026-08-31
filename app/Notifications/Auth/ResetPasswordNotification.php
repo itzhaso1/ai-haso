@@ -10,7 +10,7 @@ class ResetPasswordNotification extends BaseResetPassword implements CentralEmai
     /**
      * @return array<int, string>
      */
-    public function via(object $notifiable): array
+    public function via($notifiable): array
     {
         return ['central_mail'];
     }

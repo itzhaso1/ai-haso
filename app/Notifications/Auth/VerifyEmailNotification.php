@@ -10,7 +10,7 @@ class VerifyEmailNotification extends BaseVerifyEmail implements CentralEmailNot
     /**
      * @return array<int, string>
      */
-    public function via(object $notifiable): array
+    public function via($notifiable): array
     {
         return ['central_mail'];
     }
