@@ -60,8 +60,25 @@ Workers should process domain/DNS/SSL/payment/WhatsApp jobs. Scheduler covers:
 
 Configure app URL, DB, cache, queue, mail, Namecheap, WhatsApp, AI keys, and payment webhook secrets before go-live.
 
+HyperPay (merchant settlement — optional until contract ready):
+
+```
+HYPERPAY_ENABLED=false
+HYPERPAY_ENTITY_ID=
+HYPERPAY_ACCESS_TOKEN=
+HYPERPAY_MERCHANT_ONBOARDING_ENABLED=false
+HYPERPAY_MERCHANT_SANDBOX_AUTO_APPROVE=false
+```
+
+Never set `HYPERPAY_MERCHANT_SANDBOX_AUTO_APPROVE=true` in production.
+
+Private merchant documents live under `storage/app/private` — ensure disk permissions and backups.
+
 ## Related docs
 
 - `docs/website-deployment.md`
 - `docs/custom-domains.md`
 - `docs/webhook-setup.md`
+- `docs/hyperpay.md`
+- `docs/merchant-payments.md`
+- `docs/billing.md`

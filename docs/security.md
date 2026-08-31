@@ -6,6 +6,19 @@
 - Public booking and website resolution bind a single website/workspace from host or slug — never from attacker-controlled foreign IDs without membership checks.
 - Public assistant **does not** accept arbitrary `workspace_id` for unauthenticated users; products appear only for authenticated members or a **published** website resolved by host.
 
+## Merchant verification & payments
+
+- Users **cannot** mass-assign `verification_status`, `provider_onboarding_status`, `provider_merchant_id`, or plan IDs from the frontend.
+- Merchant document files are stored on the **private** disk (`local` / `storage/app/private`).
+- Downloads go through authorized Platform Admin or owning-workspace routes — not public URLs.
+- Do **not** log document storage paths as public URLs or include signed URLs in audit payloads beyond IDs.
+- Platform Admin approve/reject/suspend/request-documents require platform auth middleware.
+
+## Money contexts
+
+- Merchant payment link creation asserts eligibility server-side (`MerchantPaymentEligibilityService`).
+- Platform subscription checkout must never create a `merchant_gmv` payment row.
+
 ## API keys
 
 - Table `api_keys` stores `key_hash` (SHA-256) + `key_prefix` only.
@@ -22,9 +35,11 @@
 ## Uploads
 
 - Website assets reject SVG; MIME allow-list JPEG/PNG/WebP/GIF; size capped (~5MB in service).
-- Client-side image uploader mirrors accept list + 5MB hint (server still validates).
+- Merchant documents: PDF/JPEG/PNG/WebP, size capped (~8MB), private disk.
+- Client-side image uploader mirrors accept list + size hint (server still validates).
 
 ## Ops reminders
 
-- Never log Namecheap `ApiKey` or WhatsApp tokens.
+- Never log Namecheap `ApiKey`, WhatsApp tokens, or `HYPERPAY_ACCESS_TOKEN`.
 - Webhook signature verification required in production (`WHATSAPP_APP_SECRET`, Stripe secrets).
+- Never enable `HYPERPAY_MERCHANT_SANDBOX_AUTO_APPROVE` in production.

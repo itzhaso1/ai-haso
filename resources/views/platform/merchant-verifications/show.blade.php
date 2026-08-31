@@ -13,10 +13,11 @@
     <div class="rounded-xl border bg-white p-5 space-y-2 text-sm">
         <p><span class="font-semibold">مساحة العمل:</span> {{ $profile->workspace?->name }}</p>
         <p><span class="font-semibold">المالك:</span> {{ $profile->workspace?->owner?->email }}</p>
-        <p><span class="font-semibold">حالة التوثيق:</span> {{ $profile->verification_status }}</p>
-        <p><span class="font-semibold">حالة البوابة:</span> {{ $profile->provider_onboarding_status }}</p>
+        <p><span class="font-semibold">حالة التوثيق:</span> {{ \App\Support\MerchantStatusLabels::verificationLabel($profile->verification_status) }}</p>
+        <p><span class="font-semibold">حالة البوابة:</span> {{ \App\Support\MerchantStatusLabels::providerLabel($profile->provider_onboarding_status) }}</p>
+        <p><span class="font-semibold">معرّف المزوّد:</span> {{ $profile->provider_merchant_id ?: '—' }}</p>
         @if($profile->rejection_reason)
-            <p class="text-red-700"><span class="font-semibold">السبب:</span> {{ $profile->rejection_reason }}</p>
+            <p class="text-red-700"><span class="font-semibold">سبب الرفض:</span> {{ $profile->rejection_reason }}</p>
         @endif
         @if(!empty($profile->metadata['provider_onboarding_message']))
             <p class="text-amber-800"><span class="font-semibold">ملاحظة البوابة:</span> {{ $profile->metadata['provider_onboarding_message'] }}</p>
@@ -31,6 +32,7 @@
                     <tr>
                         <th class="px-3 py-2 text-right">النوع</th>
                         <th class="px-3 py-2 text-right">الملف</th>
+                        <th class="px-3 py-2 text-right">الانتهاء</th>
                         <th class="px-3 py-2 text-right">الحالة</th>
                         <th class="px-3 py-2 text-right">عرض</th>
                     </tr>
@@ -40,13 +42,14 @@
                         <tr>
                             <td class="px-3 py-2">{{ $document->document_type_code }}</td>
                             <td class="px-3 py-2">{{ $document->original_name }}</td>
-                            <td class="px-3 py-2">{{ $document->status }}</td>
+                            <td class="px-3 py-2">{{ $document->expires_at?->format('Y-m-d') ?? '—' }}</td>
+                            <td class="px-3 py-2">{{ \App\Support\MerchantStatusLabels::documentLabel($document->status) }}</td>
                             <td class="px-3 py-2">
-                                <a class="text-blue-600" href="{{ $verificationService->temporaryDocumentUrl($document) }}">رابط موقّع</a>
+                                <a class="text-blue-600" href="{{ route('platform.merchant-verifications.documents.download', $document->id) }}">تحميل آمن</a>
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="4" class="px-3 py-4 text-center text-gray-500">لا مستندات</td></tr>
+                        <tr><td colspan="5" class="px-3 py-4 text-center text-gray-500">لا مستندات</td></tr>
                     @endforelse
                 </tbody>
             </table>

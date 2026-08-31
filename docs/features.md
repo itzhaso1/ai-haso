@@ -2,11 +2,32 @@
 
 Feature flags and plan entitlements gate product modules.
 
+## Official commercial matrix (source of truth = `plans` table)
+
+After seed / Platform Dashboard edits, FeatureAccessService reads DB JSON — not hardcoded controllers.
+
+| Feature | Starter | Pro | Business | Enterprise |
+|---------|---------|-----|----------|------------|
+| Appointments | ✓ | ✓ | ✓ | ✓ |
+| Website | ✓ | ✓ | ✓ | ✓ |
+| Custom domain | — | ✓ | ✓ | ✓ |
+| AI | ✓ | ✓ | ✓ | ✓ |
+| WhatsApp | — | ✓ | ✓ | ✓ |
+| POS | — | ✓ | ✓ | ✓ |
+| Finance | — | ✓ | ✓ | ✓ |
+| Email | — | ✓ | ✓ | ✓ |
+| API | — | — | ✓ | ✓ |
+| Analytics | — | ✓ | ✓ | ✓ |
+| Advanced customers | — | — | ✓ | ✓ |
+
+`payments` / `payment_gateway` on a plan means the **feature may be used if merchant-eligible** — it does **not** approve the merchant.
+
 ## How to check in code
 
 ```php
 $featureAccess->hasFeature($user, $workspace, 'analytics');
 $featureAccess->assertCanUse($user, $workspace, 'ai', 'ai_usage');
+app(MerchantPaymentEligibilityService::class)->assertCanAcceptCustomerPayments($workspace);
 ```
 
 Middleware example:
@@ -20,15 +41,16 @@ Route::middleware('workspace.feature:api')->group(...);
 
 | Feature | Route / UI |
 |---------|------------|
-| Holidays | `workspace/appointments/holidays` (auth via appointments elevated members) |
+| Holidays | `workspace/appointments/holidays` |
 | Analytics | `workspace/analytics` |
 | API keys | `workspace/api-keys` |
-| Image uploader | Blade component `x-image-uploader` (used on website logo) |
+| Merchant payments | `workspace/payments/merchant` |
+| Platform merchant queue | `platform/merchant-verifications` |
 
 ## Overrides
 
-`workspace_feature_flags` can force-enable/disable a key per workspace (`source = manual` commonly used in tests).
+`workspace_feature_flags` can force-enable/disable a key per workspace.
 
 ## Compatibility
 
-Plans that only grant `appointments` also unlock `website_builder`, `custom_domains`, and `public_booking` via compatibility aliases in `FeatureAccessService`.
+Legacy plan codes map via `config/plans.php` `legacy_code_tier_map` + `FeatureAccessService::resolveTier`.

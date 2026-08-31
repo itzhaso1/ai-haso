@@ -167,7 +167,7 @@ class PaymentService
     private function resolveMoneyBucket(string $paymentContext): string
     {
         return match ($paymentContext) {
-            'platform_subscription' => 'platform_subscription',
+            'platform_subscription' => 'platform_revenue',
             'platform_commerce' => 'platform_commerce',
             'merchant_booking', 'merchant_order' => 'merchant_gmv',
             default => str_starts_with($paymentContext, 'platform_')

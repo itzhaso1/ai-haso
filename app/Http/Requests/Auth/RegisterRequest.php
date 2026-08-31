@@ -28,7 +28,8 @@ class RegisterRequest extends FormRequest
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'phone' => ['nullable', 'string', 'max:32', 'unique:users,phone'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'workspace_type' => ['required', Rule::in(config('workspace.types'))],
+            // Optional legacy compatibility only — not required for open registration.
+            'workspace_type' => ['nullable', Rule::in(config('workspace.types'))],
             'workspace_name' => ['nullable', 'string', 'max:255'],
         ];
     }

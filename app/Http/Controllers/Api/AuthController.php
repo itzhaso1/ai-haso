@@ -22,7 +22,7 @@ class AuthController extends Controller
 
     public function register(RegisterRequest $request): JsonResponse
     {
-        $payload = $this->authenticationService->register($request->validated());
+        $payload = $this->authenticationService->register($request->registrationPayload());
 
         return response()->json([
             'message' => 'Registration completed.',

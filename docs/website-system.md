@@ -8,7 +8,7 @@ It does **not** replace appointment models/services.
 It reuses:
 
 - `AppointmentService` for booking creation and availability rules
-- `AppointmentBillingService` for payment-required bookings
+- `AppointmentBillingService` for payment-required bookings (merchant eligibility gated; see `docs/merchant-payments.md`)
 - existing workspace tenancy (`workspace_id` + `WorkspaceScopedModel`)
 - existing audit observer infrastructure
 

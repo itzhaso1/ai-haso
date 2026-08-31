@@ -75,8 +75,11 @@ If email or phone maps to an existing workspace customer, booking links to that 
 If service requires payment:
 
 - booking remains pending payment
-- billing service creates invoice/payment link
-- response includes payment URL
+- `AppointmentBillingService` creates invoice/order with `payment_context=merchant_booking`
+- payment link is created **only if** merchant eligibility passes (plan feature + verification approved + provider active)
+- if merchant is not eligible: booking/invoice may still exist, but **no** customer payment link toward Platform account; blocked reason stored in metadata
+- Merchant GMV ≠ Platform Revenue (see `docs/merchant-payments.md`)
+
 # Public Booking Flow
 
 ## Goal

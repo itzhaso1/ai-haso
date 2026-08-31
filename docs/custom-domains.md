@@ -165,3 +165,8 @@ DNS verification retries:
 It inspects `/etc/letsencrypt/live/{domain}` and sets `ssl_status=active` **only** after OpenSSL validates the certificate host + expiry.
 With SSL disabled, status remains honest `pending` (never fake-active).
 See `docs/website-deployment.md` for Linux/Nginx requirements.
+
+## Billing context
+
+Purchasing a custom domain through the platform is **not** a subscription charge and **not** merchant GMV.
+It is Platform commerce (see `docs/billing.md`, `docs/namecheap-integration.md`).

@@ -149,6 +149,15 @@ All provider failures are normalized into `DomainProviderException` with:
 
 Controller-level flows return user-friendly errors while retaining technical context in operation metadata for diagnostics.
 
+## Money context
+
+Domain registration / renewal payments are **Platform commerce** (`platform_commerce`), separate from:
+
+- Platform subscription billing
+- Merchant customer GMV (HyperPay / booking / order payments)
+
+See `docs/billing.md`.
+
 ## Sandbox testing guidance
 
 1. Keep `NAMECHEAP_ENV=sandbox`.

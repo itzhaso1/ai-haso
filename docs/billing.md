@@ -1,6 +1,16 @@
 # Billing
 
-## Current provider
+## Three money contexts (never mix)
+
+| Context | Who pays | `payment_context` | `money_bucket` | Is Platform Revenue? |
+|---------|----------|-------------------|----------------|----------------------|
+| Platform subscription | Workspace → SaaS | `platform_subscription` | `platform_revenue` | Yes |
+| Domain / add-on commerce | Workspace → platform product | `platform_commerce` | `platform_commerce` | Platform commerce (not subscription MRR) |
+| Merchant customer payment | End customer → merchant | `merchant_booking` / `merchant_order` | `merchant_gmv` | **No** (GMV only) |
+
+Merchant GMV must never be reported as Platform Revenue.
+
+## Platform subscription provider
 
 `App\Providers\AppServiceProvider` binds:
 
@@ -9,18 +19,24 @@
 That means:
 
 - Checkout sessions can be created and confirmed **locally**.
-- There is **no live Stripe Billing / paid gateway** wired for platform subscriptions in this binding.
-- Order/payment **payment links** for customers still use the existing Payment gateway manager (local + optional Stripe payment config) — separate from subscription billing.
+- There is **no live Stripe Billing / HyperPay charge API** for platform subscriptions in this binding.
+- UI may show a HyperPay label as a **placeholder** — confirmation still activates via local provider.
 
-## Subscription UI
+## Merchant customer payments
 
-Workspace routes under `workspace/subscriptions` drive plan selection and local checkout confirmation.
+- Use `PaymentService` + payment gateway manager (`local` / optional `stripe`).
+- Merchant contexts call `MerchantPaymentEligibilityService` before creating a payment link.
+- Eligibility requires: plan feature `payments`/`payment_gateway` **AND** verification `approved` **AND** provider onboarding `active`.
 
-## What to do for production payments
+## HyperPay marketplace / split
 
-1. Implement a real provider (e.g. Stripe) against `SubscriptionBillingProviderInterface`.
-2. Bind it in `AppServiceProvider` behind env (`BILLING_PROVIDER=stripe`).
-3. Configure webhook secrets (`STRIPE_WEBHOOK_SECRET`, etc.).
+See `docs/hyperpay.md`. Live split settlement is **not** implemented. Do not invent provider APIs.
+
+## What to do for production platform billing
+
+1. Implement a real provider against `SubscriptionBillingProviderInterface`.
+2. Bind it behind env (`BILLING_PROVIDER=…`).
+3. Configure webhook secrets.
 4. Keep `LocalSubscriptionBillingProvider` for CI/dev.
 
 ## Status label

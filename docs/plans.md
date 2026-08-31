@@ -1,39 +1,38 @@
-# Plans & Entitlements
+# Plans (official catalog)
 
-## Source of truth
+## User-facing plans (only four)
 
-Runtime access is decided by:
+| Code | Arabic | Internal tier |
+|------|--------|---------------|
+| `starter` | المبتدئة | starter |
+| `pro` | الاحترافية | pro |
+| `business` | الأعمال | business |
+| `enterprise` | المؤسسات | enterprise |
 
-1. `plans` table (`features`, `limits`, `tier`, …) — edited in **Platform Dashboard → Plans**
-2. `workspace_feature_flags` overrides
-3. Active `workspace_addons` grants
-4. Workspace type allow-list (`config/workspace.php`)
+`SubscriptionService::availablePlans()` returns only `is_official=true` (or these codes) + active + public.
 
-`FeatureAccessService` combines these.  
-`config/plans.php` holds **labels + seed defaults only** — changing Platform plans does **not** require code changes.
+Legacy rows (`company_basic`, `individual_free`, …) remain for compatibility with `is_public=false` / `is_official=false`.
 
-## Commercial matrix (Starter / Pro / Business / Enterprise)
+## Legacy mapping (`config/plans.php`)
 
-| Feature | Starter | Pro | Business | Enterprise |
-|---|---|---|---|---|
-| Appointments | ✓ | ✓ | ✓ | ✓ |
-| Website | ✓ | ✓ | ✓ | ✓ |
-| Custom domain | — | ✓ | ✓ | ✓ |
-| AI | ✓ | ✓ | ✓ | ✓ |
-| WhatsApp | — | ✓ | ✓ | ✓ |
-| POS | — | ✓ | ✓ | ✓ |
-| Finance | — | ✓ | ✓ | ✓ |
-| Email | — | ✓ | ✓ | ✓ |
-| API | — | — | ✓ | ✓ |
-| Analytics | — | ✓ | ✓ | ✓ |
-| Advanced customers | — | — | ✓ | ✓ |
+| Legacy code | Maps to |
+|-------------|---------|
+| individual_free, company_basic, store_basic, *_starter | starter |
+| individual_pro, company_pro, store_pro | pro |
+| company_business, store_business | business |
+| company_enterprise, store_enterprise | enterprise |
 
-Seeded into `company_*` / `store_*` plan rows. Legacy codes (`company_basic`, …) keep working via `tier` + `legacy_code_tier_map`.
+Runtime entitlements use `FeatureAccessService::resolveTier` — catalog UI never shows legacy groups.
 
-## Platform Dashboard
+## Feature matrix
 
-Existing `/platform/plans` UI shows the matrix from DB and edits features/limits/trial/status without a second plans system.
+See commercial matrix in Platform Plans UI (reads DB). Seed defaults in `config/plans.php` `feature_matrix`.
 
-## Enforcement
+## Prices
 
-Route middleware `workspace.feature:*` + service asserts. Missing feature → Arabic upgrade redirect / JSON 402.
+Prices are editable in Platform Dashboard. Seeded values are placeholders until commercial pricing is set — do not treat seed SAR amounts as final list prices without Platform Admin confirmation.
+
+## Money ≠ plan
+
+Plan may include `payments` feature.  
+Merchant still needs verification + provider onboarding before accepting customer funds.

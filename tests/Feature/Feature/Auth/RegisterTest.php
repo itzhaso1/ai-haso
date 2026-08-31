@@ -20,13 +20,12 @@ class RegisterTest extends TestCase
             'phone' => '+966500000001',
             'password' => 'StrongPass123!',
             'password_confirmation' => 'StrongPass123!',
-            'workspace_type' => 'individual',
             'workspace_name' => 'Hassan Personal',
         ]);
 
         $response
             ->assertCreated()
-            ->assertJsonPath('data.workspace.type', 'individual')
+            ->assertJsonPath('data.workspace.type', 'company')
             ->assertJsonStructure(['data' => ['token', 'user', 'workspace']]);
 
         $this->assertDatabaseHas('users', [
@@ -35,12 +34,30 @@ class RegisterTest extends TestCase
 
         $this->assertDatabaseHas('workspaces', [
             'name' => 'Hassan Personal',
-            'type' => 'individual',
+            'type' => 'company',
         ]);
 
         $this->assertDatabaseHas('workspace_users', [
             'membership_role' => 'owner',
             'status' => 'active',
         ]);
+    }
+
+    public function test_register_still_accepts_optional_legacy_workspace_type(): void
+    {
+        $this->seed(FoundationSeeder::class);
+
+        $response = $this->postJson('/api/auth/register', [
+            'name' => 'Legacy User',
+            'email' => 'legacy@example.com',
+            'password' => 'StrongPass123!',
+            'password_confirmation' => 'StrongPass123!',
+            'workspace_type' => 'individual',
+            'workspace_name' => 'Legacy Shop',
+        ]);
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('data.workspace.type', 'individual');
     }
 }

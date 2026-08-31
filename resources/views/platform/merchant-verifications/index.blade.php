@@ -10,8 +10,10 @@
         <form method="GET" class="flex items-center gap-2">
             <select name="status" class="rounded-lg border-gray-300 text-sm" onchange="this.form.submit()">
                 <option value="">الكل النشط</option>
-                @foreach(['pending_review','documents_required','approved','rejected','suspended'] as $option)
-                    <option value="{{ $option }}" @selected($status === $option)>{{ $option }}</option>
+                @foreach(\App\Support\MerchantStatusLabels::verification() as $option => $label)
+                    @if($option !== 'not_requested')
+                        <option value="{{ $option }}" @selected($status === $option)>{{ $label }}</option>
+                    @endif
                 @endforeach
             </select>
         </form>
@@ -34,8 +36,8 @@
                     <tr>
                         <td class="px-4 py-3">{{ $profile->workspace?->name ?? ('#'.$profile->workspace_id) }}</td>
                         <td class="px-4 py-3">{{ $profile->workspace?->owner?->email ?? '-' }}</td>
-                        <td class="px-4 py-3">{{ $profile->verification_status }}</td>
-                        <td class="px-4 py-3">{{ $profile->provider_onboarding_status }}</td>
+                        <td class="px-4 py-3">{{ \App\Support\MerchantStatusLabels::verificationLabel($profile->verification_status) }}</td>
+                        <td class="px-4 py-3">{{ \App\Support\MerchantStatusLabels::providerLabel($profile->provider_onboarding_status) }}</td>
                         <td class="px-4 py-3">{{ $profile->submitted_at?->format('Y-m-d H:i') ?? '-' }}</td>
                         <td class="px-4 py-3">
                             <a href="{{ route('platform.merchant-verifications.show', $profile->id) }}" class="text-blue-600">عرض</a>

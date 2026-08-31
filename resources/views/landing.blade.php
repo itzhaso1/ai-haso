@@ -96,23 +96,22 @@
             <section id="pricing" class="py-16">
                 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <div class="mx-auto max-w-3xl text-center">
-                        <h2 class="text-3xl font-bold text-gray-900">نموذج الاشتراكات</h2>
-                        <p class="mt-4 text-gray-600">باقات فعلية من قاعدة البيانات، جاهزة لرحلة: اختيار باقة ← دفع ← تفعيل.</p>
+                        <h2 class="text-3xl font-bold text-gray-900">الباقات الرسمية</h2>
+                        <p class="mt-4 text-gray-600">أربع باقات فقط: المبتدئة · الاحترافية · الأعمال · المؤسسات</p>
                     </div>
                     @php
-                        $plansByType = $plansByType ?? collect();
-                        $flattenPlans = $plansByType->flatten(1);
+                        $officialPlans = $officialPlans ?? collect();
                     @endphp
-                    @if($flattenPlans->count() > 0)
-                        <div class="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-                            @foreach($flattenPlans as $plan)
-                                <article class="rounded-2xl border {{ $loop->index === 1 ? 'border-2 border-[#06C2A4] bg-[#E8FAF6]' : 'border-gray-200 bg-white' }} p-6">
-                                    <p class="text-sm font-semibold {{ $loop->index === 1 ? 'text-[#069c83]' : 'text-gray-500' }}">{{ strtoupper($plan->workspace_type ?? 'general') }}</p>
-                                    <h3 class="mt-2 text-xl font-bold text-gray-900">{{ $plan->name }}</h3>
+                    @if($officialPlans->count() > 0)
+                        <div class="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+                            @foreach($officialPlans as $plan)
+                                <article class="rounded-2xl border {{ $plan->code === 'pro' ? 'border-2 border-[#06C2A4] bg-[#E8FAF6]' : 'border-gray-200 bg-white' }} p-6">
+                                    <p class="text-sm font-semibold {{ $plan->code === 'pro' ? 'text-[#069c83]' : 'text-gray-500' }}">{{ strtoupper($plan->code) }}</p>
+                                    <h3 class="mt-2 text-xl font-bold text-gray-900">{{ $plan->display_name_ar ?: $plan->name }}</h3>
                                     <p class="mt-2 text-2xl font-extrabold text-[#06C2A4]">
                                         {{ number_format((float) $plan->price, 2) }} <span class="text-sm text-gray-600">{{ $plan->currency }}</span>
                                     </p>
-                                    <p class="mt-1 text-xs text-gray-500">الفترة: {{ $plan->billing_period }}</p>
+                                    <p class="mt-1 text-xs text-gray-500">الفترة: {{ $plan->billing_period === 'yearly' ? 'سنوي' : ($plan->billing_period === 'monthly' ? 'شهري' : $plan->billing_period) }}</p>
                                     <div class="mt-3 flex flex-wrap gap-1">
                                         @foreach(array_slice($plan->features ?? [], 0, 4) as $feature)
                                             <span class="rounded-md bg-white/80 px-2 py-1 text-[11px] text-gray-700">{{ $feature }}</span>

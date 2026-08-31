@@ -91,15 +91,24 @@ Route::get('/', function () {
 
     $plans = collect();
     if (Schema::hasTable('plans')) {
-        $plans = \App\Models\Plan::query()
-            ->where('is_active', true)
-            ->orderBy('workspace_type')
-            ->orderBy('price')
-            ->get();
+        $plansQuery = \App\Models\Plan::query()->where('is_active', true);
+
+        if (Schema::hasColumn('plans', 'is_public')) {
+            $plansQuery->where('is_public', true);
+        }
+
+        if (Schema::hasColumn('plans', 'is_official')) {
+            $plansQuery->where('is_official', true);
+        } else {
+            $plansQuery->whereIn('code', ['starter', 'pro', 'business', 'enterprise']);
+        }
+
+        $order = ['starter' => 1, 'pro' => 2, 'business' => 3, 'enterprise' => 4];
+        $plans = $plansQuery->get()->sortBy(fn ($plan) => $order[$plan->code] ?? 99)->values();
     }
 
     return view('landing', [
-        'plansByType' => $plans->groupBy('workspace_type'),
+        'officialPlans' => $plans,
     ]);
 });
 

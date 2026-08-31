@@ -3,6 +3,11 @@
         <h2 class="text-xl font-semibold text-gray-900">مدفوعات التاجر والتوثيق</h2>
     </x-slot>
 
+    @php
+        $verificationLabel = \App\Support\MerchantStatusLabels::verificationLabel($profile->verification_status);
+        $providerLabel = \App\Support\MerchantStatusLabels::providerLabel($profile->provider_onboarding_status);
+    @endphp
+
     <div class="mx-auto max-w-5xl space-y-6 py-8 px-4" dir="rtl">
         @include('workspace.partials.nav')
         @include('partials.flash')
@@ -13,7 +18,7 @@
                 @if($eligibility['eligible'])
                     يمكنك استقبال مدفوعات العملاء.
                 @else
-                    غير مؤهل حالياً.
+                    غير مؤهل حالياً لاستقبال أموال العملاء.
                 @endif
             </p>
             @if(!empty($eligibility['blockers']))
@@ -25,22 +30,27 @@
             @endif
             <div class="mt-4 grid gap-2 text-sm text-gray-700 sm:grid-cols-3">
                 <p><span class="font-semibold">ميزة الباقة:</span> {{ $eligibility['plan_feature'] ? 'متاحة' : 'غير متاحة' }}</p>
-                <p><span class="font-semibold">التوثيق:</span> {{ $profile->verification_status }}</p>
-                <p><span class="font-semibold">بوابة التسوية:</span> {{ $profile->provider_onboarding_status }}</p>
+                <p><span class="font-semibold">التوثيق:</span> {{ $verificationLabel }}</p>
+                <p><span class="font-semibold">بوابة التسوية:</span> {{ $providerLabel }}</p>
             </div>
+            <p class="mt-3 text-xs text-gray-500">
+                اشتراك الباقة منفصل عن أهلية استقبال أموال العملاء. موافقة التوثيق + تفعيل المزوّد مطلوبان معاً.
+            </p>
         </div>
 
         <div class="rounded-2xl border bg-white p-5 space-y-4">
-            <h3 class="font-semibold text-gray-900">طلب التوثيق</h3>
+            <h3 class="font-semibold text-gray-900">تفعيل استقبال المدفوعات</h3>
             @if($profile->verification_status === 'not_requested')
+                <p class="text-sm text-gray-700">لتفعيل استقبال المدفوعات، يجب توثيق نشاطك التجاري.</p>
+                <p class="text-sm text-gray-600">الحالة: <strong>غير موثق</strong></p>
                 <form method="POST" action="{{ route('workspace.payments.merchant.request') }}">
                     @csrf
-                    <button class="rounded-lg bg-[#06C2A4] px-4 py-2 text-sm font-semibold text-white">بدء التوثيق</button>
+                    <button class="rounded-lg bg-[#06C2A4] px-4 py-2 text-sm font-semibold text-white">ابدأ توثيق النشاط</button>
                 </form>
             @else
-                <p class="text-sm text-gray-600">الحالة الحالية: <strong>{{ $profile->verification_status }}</strong></p>
+                <p class="text-sm text-gray-600">الحالة الحالية: <strong>{{ $verificationLabel }}</strong></p>
                 @if($profile->rejection_reason)
-                    <p class="text-sm text-red-700">السبب: {{ $profile->rejection_reason }}</p>
+                    <p class="text-sm text-red-700">سبب الرفض: {{ $profile->rejection_reason }}</p>
                 @endif
             @endif
         </div>
@@ -68,6 +78,7 @@
                 <div>
                     <label class="mb-1 block text-sm font-semibold">الملف (PDF / JPEG / PNG / WEBP — حتى 8MB)</label>
                     <input type="file" name="document" required accept=".pdf,.jpg,.jpeg,.png,.webp" class="w-full text-sm">
+                    <p class="mt-1 text-xs text-gray-500">المستندات خاصة وغير عامة. لا تُعرض كروابط عامة.</p>
                 </div>
                 <button class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">رفع المستند</button>
             </form>
@@ -96,9 +107,9 @@
                     <tbody class="divide-y">
                         @forelse($documents as $document)
                             <tr>
-                                <td class="px-3 py-2">{{ $document->document_type_code }}</td>
+                                <td class="px-3 py-2">{{ $documentTypes->firstWhere('code', $document->document_type_code)?->name_ar ?? $document->document_type_code }}</td>
                                 <td class="px-3 py-2">{{ $document->original_name }}</td>
-                                <td class="px-3 py-2">{{ $document->status }}</td>
+                                <td class="px-3 py-2">{{ \App\Support\MerchantStatusLabels::documentLabel($document->status) }}</td>
                                 <td class="px-3 py-2">
                                     <a class="text-blue-600" href="{{ route('workspace.payments.merchant.documents.download', $document->id) }}">تحميل</a>
                                 </td>
