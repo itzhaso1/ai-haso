@@ -62,6 +62,8 @@ use App\Http\Controllers\Workspace\WhatsAppAccountController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 
+$publicWebsiteRateLimiter = 'throttle:'.(string) config('website.public_rate_limit', '60,1');
+
 Route::get('/', function () {
     if (Schema::hasTable('websites') && Schema::hasTable('website_domains')) {
         $website = app(\App\Services\Website\WebsiteResolverService::class)
@@ -94,7 +96,7 @@ Route::get('/', function () {
     ]);
 });
 
-Route::middleware(['public.website.resolve', 'throttle:60,1'])->group(function (): void {
+Route::middleware(['public.website.resolve', $publicWebsiteRateLimiter])->group(function (): void {
     Route::get('/booking', [PublicWebsiteController::class, 'showResolved'])->defaults('page', 'booking')->name('public.website.host.booking');
     Route::get('/contact', [PublicWebsiteController::class, 'showResolved'])->defaults('page', 'contact')->name('public.website.host.contact');
     Route::get('/robots.txt', [PublicWebsiteController::class, 'robotsResolved'])->name('public.website.host.robots');
@@ -147,7 +149,7 @@ Route::middleware('throttle:30,1')->group(function (): void {
         ->name('public.website.preview');
 });
 
-Route::middleware(['public.website.resolve', 'throttle:60,1'])
+Route::middleware(['public.website.resolve', $publicWebsiteRateLimiter])
     ->prefix('public/{website}')
     ->group(function (): void {
         Route::get('/', [PublicWebsiteController::class, 'showBySlug'])->name('public.website.show');
