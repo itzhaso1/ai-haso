@@ -2,33 +2,38 @@
 
 ## Source of truth
 
-- Commercial matrix: `config/plans.php` (`feature_matrix`, meters, comparison rows).
-- Workspace type defaults: `config/workspace.php` → `features_by_type`.
-- Runtime checks: `App\Services\Feature\FeatureAccessService`.
-- Middleware: `workspace.feature:{key}` (`EnsureFeatureAccess`).
+Runtime access is decided by:
 
-## Decision order
+1. `plans` table (`features`, `limits`, `tier`, …) — edited in **Platform Dashboard → Plans**
+2. `workspace_feature_flags` overrides
+3. Active `workspace_addons` grants
+4. Workspace type allow-list (`config/workspace.php`)
 
-1. Active membership in the workspace.
-2. Per-workspace `workspace_feature_flags` override (if present).
-3. Feature must appear in `features_by_type` for the workspace type.
-4. Active/trialing/past_due subscription plan must include the feature (with appointments→website compatibility aliases).
+`FeatureAccessService` combines these.  
+`config/plans.php` holds **labels + seed defaults only** — changing Platform plans does **not** require code changes.
 
-## Notable feature keys
+## Commercial matrix (Starter / Pro / Business / Enterprise)
 
-| Key | Notes |
-|-----|-------|
-| `analytics` | Workspace analytics UI |
-| `api` | API keys management UI |
-| `website_builder` / `custom_domains` / `public_booking` | Website stack |
-| `whatsapp` | WhatsApp accounts + outbound |
-| `ai` | AI settings / assistant entitlements |
+| Feature | Starter | Pro | Business | Enterprise |
+|---|---|---|---|---|
+| Appointments | ✓ | ✓ | ✓ | ✓ |
+| Website | ✓ | ✓ | ✓ | ✓ |
+| Custom domain | — | ✓ | ✓ | ✓ |
+| AI | ✓ | ✓ | ✓ | ✓ |
+| WhatsApp | — | ✓ | ✓ | ✓ |
+| POS | — | ✓ | ✓ | ✓ |
+| Finance | — | ✓ | ✓ | ✓ |
+| Email | — | ✓ | ✓ | ✓ |
+| API | — | — | ✓ | ✓ |
+| Analytics | — | ✓ | ✓ | ✓ |
+| Advanced customers | — | — | ✓ | ✓ |
 
-## Limits / meters
+Seeded into `company_*` / `store_*` plan rows. Legacy codes (`company_basic`, …) keep working via `tier` + `legacy_code_tier_map`.
 
-Meters such as `ai_usage`, `whatsapp_messages`, `api_calls`, `bookings`, `orders` are defined in `config/plans.php`. Usage is tracked in `workspace_usage_meters`.
+## Platform Dashboard
 
-## Honest gaps
+Existing `/platform/plans` UI shows the matrix from DB and edits features/limits/trial/status without a second plans system.
 
-- Seeded legacy plan rows in `FoundationSeeder` may lag the newer `feature_matrix` until re-seeded.
-- Paid plan upgrades go through the **local** billing provider unless a real provider is bound.
+## Enforcement
+
+Route middleware `workspace.feature:*` + service asserts. Missing feature → Arabic upgrade redirect / JSON 402.
