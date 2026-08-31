@@ -15,6 +15,7 @@ class ProcessIncomingWhatsAppMessage implements ShouldQueue
     use Queueable;
 
     public int $tries = 3;
+
     public int $timeout = 120;
 
     /**
@@ -24,14 +25,16 @@ class ProcessIncomingWhatsAppMessage implements ShouldQueue
         public readonly int $workspaceId,
         public readonly array $messageData,
         public readonly int $webhookEventId,
+        public readonly ?string $phoneNumberId = null,
     ) {}
 
-    /**
-     * Execute the job.
-     */
     public function handle(WhatsAppService $whatsAppService): void
     {
-        $message = $whatsAppService->storeIncomingMessage($this->workspaceId, $this->messageData);
+        $message = $whatsAppService->storeIncomingMessage(
+            $this->workspaceId,
+            $this->messageData,
+            $this->phoneNumberId,
+        );
 
         WebhookEvent::withoutGlobalScopes()
             ->whereKey($this->webhookEventId)

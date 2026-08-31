@@ -64,6 +64,7 @@ use App\Observers\FinanceInvoicePaymentObserver;
 use App\Observers\WebsiteResolverObserver;
 use App\Observers\WorkspaceAuditObserver;
 use App\Notifications\Channels\CentralMailChannel;
+use App\Policies\AppointmentBookingPolicy;
 use App\Policies\CategoryPolicy;
 use App\Policies\ConversationPolicy;
 use App\Policies\CustomerPolicy;
@@ -80,6 +81,8 @@ use App\Policies\WebsitePolicy;
 use App\Policies\WorkspacePolicy;
 use App\Services\Domain\Contracts\DomainRegistrarInterface;
 use App\Services\Domain\NamecheapRegistrar;
+use App\Services\Subscription\Contracts\SubscriptionBillingProviderInterface;
+use App\Services\Subscription\LocalSubscriptionBillingProvider;
 use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
@@ -94,6 +97,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->singleton(WorkspaceContext::class);
         $this->app->bind(DomainRegistrarInterface::class, NamecheapRegistrar::class);
+        $this->app->bind(SubscriptionBillingProviderInterface::class, LocalSubscriptionBillingProvider::class);
     }
 
     /**
@@ -117,6 +121,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Subscription::class, SubscriptionPolicy::class);
         Gate::policy(Website::class, WebsitePolicy::class);
         Gate::policy(WebsiteDomain::class, WebsiteDomainPolicy::class);
+        Gate::policy(AppointmentBooking::class, AppointmentBookingPolicy::class);
 
         Product::observe(WorkspaceAuditObserver::class);
         Category::observe(WorkspaceAuditObserver::class);

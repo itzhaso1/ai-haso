@@ -251,12 +251,15 @@ class PublicBookingService
      */
     public function bookingReference(Website $website, string $reference): ?array
     {
+        // Opaque public_token only — sequential booking_number must not be enumerable publicly.
+        $reference = trim($reference);
+        if ($reference === '' || strlen($reference) < 16) {
+            return null;
+        }
+
         $booking = AppointmentBooking::withoutGlobalScopes()
             ->where('workspace_id', $website->workspace_id)
-            ->where(function ($query) use ($reference): void {
-                $query->where('booking_number', $reference)
-                    ->orWhere('public_token', $reference);
-            })
+            ->where('public_token', $reference)
             ->first();
 
         if (! $booking) {
@@ -265,6 +268,7 @@ class PublicBookingService
 
         return [
             'booking_number' => $booking->booking_number,
+            'public_token' => $booking->public_token,
             'appointment_status' => $booking->appointment_status,
             'payment_status' => $booking->payment_status,
             'starts_at' => optional($booking->starts_at)->toIso8601String(),

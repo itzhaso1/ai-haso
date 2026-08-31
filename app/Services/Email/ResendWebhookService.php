@@ -8,6 +8,83 @@ use App\Models\EmailWebhookEvent;
 class ResendWebhookService
 {
     /**
+     * Verify Resend (Svix) webhook signature.
+     *
+     * @param  array{svix-id?:string,svix-timestamp?:string,svix-signature?:string}  $headers
+     * @return array{verified:bool,reason:?string}
+     */
+    public function verifySignature(array $headers, string $rawBody): array
+    {
+        $secret = (string) config('services.resend.webhook_secret', '');
+        if ($secret === '') {
+            return [
+                'verified' => false,
+                'reason' => 'Resend webhook secret is not configured.',
+            ];
+        }
+
+        $msgId = trim((string) ($headers['svix-id'] ?? ''));
+        $timestamp = trim((string) ($headers['svix-timestamp'] ?? ''));
+        $signatureHeader = trim((string) ($headers['svix-signature'] ?? ''));
+
+        if ($msgId === '' || $timestamp === '' || $signatureHeader === '') {
+            return [
+                'verified' => false,
+                'reason' => 'Missing Svix signature headers.',
+            ];
+        }
+
+        if (! ctype_digit($timestamp)) {
+            return [
+                'verified' => false,
+                'reason' => 'Invalid Svix timestamp.',
+            ];
+        }
+
+        $tolerance = (int) config('services.resend.webhook_tolerance_seconds', 300);
+        if (abs(time() - (int) $timestamp) > $tolerance) {
+            return [
+                'verified' => false,
+                'reason' => 'Svix timestamp outside tolerance window.',
+            ];
+        }
+
+        $key = $this->decodeSigningKey($secret);
+        if ($key === null) {
+            return [
+                'verified' => false,
+                'reason' => 'Invalid Resend webhook secret format.',
+            ];
+        }
+
+        $signedContent = $msgId.'.'.$timestamp.'.'.$rawBody;
+        $expected = base64_encode(hash_hmac('sha256', $signedContent, $key, true));
+
+        $candidates = [];
+        foreach (preg_split('/\s+/', $signatureHeader) ?: [] as $part) {
+            if (str_starts_with($part, 'v1,')) {
+                $candidates[] = substr($part, 3);
+            } elseif ($part !== '') {
+                $candidates[] = $part;
+            }
+        }
+
+        foreach ($candidates as $candidate) {
+            if (hash_equals($expected, $candidate)) {
+                return [
+                    'verified' => true,
+                    'reason' => null,
+                ];
+            }
+        }
+
+        return [
+            'verified' => false,
+            'reason' => 'Svix signature mismatch.',
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      */
     public function handle(array $payload): EmailWebhookEvent
@@ -50,6 +127,20 @@ class ResendWebhookService
         }
 
         return $event;
+    }
+
+    private function decodeSigningKey(string $secret): ?string
+    {
+        if (str_starts_with($secret, 'whsec_')) {
+            $decoded = base64_decode(substr($secret, 6), true);
+            if ($decoded === false || $decoded === '') {
+                return null;
+            }
+
+            return $decoded;
+        }
+
+        return $secret;
     }
 
     /**

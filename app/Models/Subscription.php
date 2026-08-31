@@ -17,6 +17,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'current_period_end',
     'ends_at',
     'cancelled_at',
+    'paused_at',
+    'grace_ends_at',
+    'failed_payment_count',
     'provider',
     'provider_customer_id',
     'provider_subscription_id',
@@ -25,6 +28,18 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Subscription extends WorkspaceScopedModel
 {
     use BelongsToWorkspace, SoftDeletes;
+
+    public const STATUS_TRIALING = 'trialing';
+
+    public const STATUS_ACTIVE = 'active';
+
+    public const STATUS_PAST_DUE = 'past_due';
+
+    public const STATUS_PAUSED = 'paused';
+
+    public const STATUS_CANCELLED = 'cancelled';
+
+    public const STATUS_EXPIRED = 'expired';
 
     protected function casts(): array
     {
@@ -35,6 +50,9 @@ class Subscription extends WorkspaceScopedModel
             'current_period_end' => 'datetime',
             'ends_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'paused_at' => 'datetime',
+            'grace_ends_at' => 'datetime',
+            'failed_payment_count' => 'integer',
             'metadata' => 'array',
         ];
     }

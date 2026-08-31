@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\Models\Appointment\AppointmentBooking;
 use App\Models\Concerns\BelongsToWorkspace;
 use App\Models\Finance\FinanceInvoice;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -56,5 +58,27 @@ class Customer extends WorkspaceScopedModel
     public function financeInvoices(): HasMany
     {
         return $this->hasMany(FinanceInvoice::class);
+    }
+
+    public function bookings(): HasMany
+    {
+        return $this->hasMany(AppointmentBooking::class);
+    }
+
+    public function tags(): BelongsToMany
+    {
+        return $this->belongsToMany(CustomerTag::class, 'customer_tag_customer')
+            ->withTimestamps();
+    }
+
+    public function groups(): BelongsToMany
+    {
+        return $this->belongsToMany(CustomerGroup::class, 'customer_group_customer')
+            ->withTimestamps();
+    }
+
+    public function notes(): HasMany
+    {
+        return $this->hasMany(CustomerNote::class);
     }
 }

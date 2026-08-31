@@ -2,19 +2,36 @@
 
 namespace App\Services\AI;
 
+use App\Exceptions\FeatureNotAvailableException;
+use App\Jobs\UpdateAIUsage;
 use App\Models\AiLog;
 use App\Models\AiSetting;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Models\Workspace;
+use App\Services\Feature\FeatureAccessService;
 
 class AIService
 {
-    public function __construct(private readonly AiProviderManager $providerManager) {}
+    public function __construct(
+        private readonly AiProviderManager $providerManager,
+        private readonly FeatureAccessService $featureAccess,
+    ) {}
 
     public function generateReply(Conversation $conversation, Message $message): string
     {
+        $workspace = Workspace::query()->find($conversation->workspace_id)
+            ?? Workspace::withoutGlobalScopes()->find($conversation->workspace_id);
+
+        if ($workspace) {
+            $this->assertAiFeature($workspace);
+            // Soft pre-check: block when already over hard limit (estimate 1 unit / ~256 tokens).
+            $this->featureAccess->assertWithinLimit($workspace, 'ai_usage', 1);
+            $this->featureAccess->assertWithinLimit($workspace, 'ai_tokens', 256);
+        }
+
         $setting = AiSetting::query()
             ->where('workspace_id', $conversation->workspace_id)
             ->first() ?? new AiSetting([
@@ -77,6 +94,8 @@ class AIService
                 maxTokens: (int) ($setting->max_tokens ?: $this->defaultMaxTokens($providerName)),
             );
 
+            $tokensUsed = (int) ($result['tokens_used'] ?? 0);
+
             AiLog::query()->create([
                 'workspace_id' => $conversation->workspace_id,
                 'conversation_id' => $conversation->id,
@@ -84,11 +103,22 @@ class AIService
                 'type' => 'reply',
                 'input_payload' => ['messages' => $messages],
                 'output_payload' => $result['raw'],
-                'tokens_used' => $result['tokens_used'],
+                'tokens_used' => $tokensUsed,
                 'status' => 'success',
             ]);
 
+            if ($workspace) {
+                $this->featureAccess->consumeUsage($workspace, 'ai_usage', 1, enforce: true);
+                if ($tokensUsed > 0) {
+                    $this->featureAccess->consumeUsage($workspace, 'ai_tokens', $tokensUsed, enforce: true);
+                }
+                // Cache sync only — usage already consumed above. Pass 0 tokens to avoid double-count.
+                UpdateAIUsage::dispatch($workspace->id, 0);
+            }
+
             return $result['content'] ?: 'تعذر إنشاء رد مناسب حالياً.';
+        } catch (FeatureNotAvailableException|\App\Exceptions\UsageLimitExceededException $exception) {
+            throw $exception;
         } catch (\Throwable $exception) {
             AiLog::query()->create([
                 'workspace_id' => $conversation->workspace_id,
@@ -101,6 +131,25 @@ class AIService
             ]);
 
             return 'تعذر إنشاء الرد الآن. حاول مرة أخرى لاحقًا.';
+        }
+    }
+
+    private function assertAiFeature(Workspace $workspace): void
+    {
+        $user = auth()->user();
+
+        if ($user) {
+            $this->featureAccess->assertFeature($user, $workspace, 'ai');
+
+            return;
+        }
+
+        if (! $this->featureAccess->workspaceHasFeature($workspace, 'ai')) {
+            throw new FeatureNotAvailableException(
+                feature: 'ai',
+                requiredPlan: $this->featureAccess->suggestedPlanForFeature('ai'),
+                message: __('ميزة الذكاء الاصطناعي غير متاحة في باقتك الحالية.'),
+            );
         }
     }
 

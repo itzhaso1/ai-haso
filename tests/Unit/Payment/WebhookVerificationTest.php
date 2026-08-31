@@ -70,4 +70,27 @@ class WebhookVerificationTest extends TestCase
         ], $payload, $rawBody);
         $this->assertFalse($invalid['verified']);
     }
+
+    public function test_local_webhook_rejects_when_secret_is_empty(): void
+    {
+        config()->set('payment.providers.local.webhook_secret', '');
+        config()->set('payment.providers.local.webhook_tolerance_seconds', 300);
+
+        $payload = [
+            'event_id' => 'local_evt_empty_secret',
+            'status' => 'paid',
+            'reference' => 'APT-ORD-00000099',
+        ];
+        $rawBody = json_encode($payload, JSON_UNESCAPED_SLASHES);
+        $timestamp = time();
+
+        $gateway = new LocalPaymentGateway();
+        $result = $gateway->verifyWebhook([
+            'x-webhook-timestamp' => (string) $timestamp,
+            'x-webhook-signature' => 'anything',
+        ], $payload, $rawBody);
+
+        $this->assertFalse($result['verified']);
+        $this->assertSame('Local payment webhook secret is not configured.', $result['reason']);
+    }
 }

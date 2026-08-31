@@ -27,42 +27,54 @@ class LocalPaymentGateway implements PaymentGatewayInterface
     public function verifyWebhook(array $headers, array $payload, ?string $rawBody = null): array
     {
         $secret = (string) config('payment.providers.local.webhook_secret', '');
-        if ($secret !== '') {
-            $timestamp = (int) ($headers['x-webhook-timestamp'] ?? 0);
-            $signature = (string) ($headers['x-webhook-signature'] ?? '');
-            $tolerance = (int) config('payment.providers.local.webhook_tolerance_seconds', 300);
+        $eventId = (string) ($payload['event_id'] ?? Str::uuid()->toString());
 
-            if ($timestamp <= 0 || abs(time() - $timestamp) > $tolerance) {
-                return [
-                    'verified' => false,
-                    'event_id' => (string) ($payload['event_id'] ?? Str::uuid()->toString()),
-                    'status' => $payload['status'] ?? null,
-                    'reference' => $payload['reference'] ?? null,
-                    'payload' => $payload,
-                    'reason' => 'Webhook timestamp is outside allowed tolerance window.',
-                ];
-            }
+        // Never treat unsigned local webhooks as verified — empty secret is a misconfiguration.
+        if ($secret === '') {
+            return [
+                'verified' => false,
+                'event_id' => $eventId,
+                'status' => $payload['status'] ?? null,
+                'reference' => $payload['reference'] ?? null,
+                'payload' => $payload,
+                'reason' => 'Local payment webhook secret is not configured.',
+            ];
+        }
 
-            $rawBody = $rawBody ?? json_encode($payload);
-            if (! is_string($rawBody)) {
-                $rawBody = '';
-            }
-            $expected = hash_hmac('sha256', $timestamp.'.'.$rawBody, $secret);
-            if (! hash_equals($expected, $signature)) {
-                return [
-                    'verified' => false,
-                    'event_id' => (string) ($payload['event_id'] ?? Str::uuid()->toString()),
-                    'status' => $payload['status'] ?? null,
-                    'reference' => $payload['reference'] ?? null,
-                    'payload' => $payload,
-                    'reason' => 'Webhook signature mismatch.',
-                ];
-            }
+        $timestamp = (int) ($headers['x-webhook-timestamp'] ?? 0);
+        $signature = (string) ($headers['x-webhook-signature'] ?? '');
+        $tolerance = (int) config('payment.providers.local.webhook_tolerance_seconds', 300);
+
+        if ($timestamp <= 0 || abs(time() - $timestamp) > $tolerance) {
+            return [
+                'verified' => false,
+                'event_id' => $eventId,
+                'status' => $payload['status'] ?? null,
+                'reference' => $payload['reference'] ?? null,
+                'payload' => $payload,
+                'reason' => 'Webhook timestamp is outside allowed tolerance window.',
+            ];
+        }
+
+        $rawBody = $rawBody ?? json_encode($payload);
+        if (! is_string($rawBody)) {
+            $rawBody = '';
+        }
+        $expected = hash_hmac('sha256', $timestamp.'.'.$rawBody, $secret);
+        if (! hash_equals($expected, $signature)) {
+            return [
+                'verified' => false,
+                'event_id' => $eventId,
+                'status' => $payload['status'] ?? null,
+                'reference' => $payload['reference'] ?? null,
+                'payload' => $payload,
+                'reason' => 'Webhook signature mismatch.',
+            ];
         }
 
         return [
             'verified' => true,
-            'event_id' => (string) ($payload['event_id'] ?? Str::uuid()->toString()),
+            'event_id' => $eventId,
             'status' => $payload['status'] ?? null,
             'reference' => $payload['reference'] ?? null,
             'payload' => $payload,

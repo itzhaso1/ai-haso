@@ -215,6 +215,11 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
         Route::resource('categories', CategoryController::class)->except(['show']);
         Route::resource('products', ProductController::class)->except(['show']);
         Route::resource('customers', CustomerController::class)->except(['show']);
+        Route::post('customers/{customer}/notes', [CustomerController::class, 'storeNote'])->name('customers.notes.store');
+        Route::post('customers/{customer}/tags', [CustomerController::class, 'attachTag'])->name('customers.tags.attach');
+        Route::delete('customers/{customer}/tags/{tag}', [CustomerController::class, 'detachTag'])->name('customers.tags.detach');
+        Route::post('customers/{customer}/groups', [CustomerController::class, 'attachGroup'])->name('customers.groups.attach');
+        Route::delete('customers/{customer}/groups/{group}', [CustomerController::class, 'detachGroup'])->name('customers.groups.detach');
         Route::resource('orders', OrderController::class)->except(['show']);
         Route::get('contracts', [WorkspaceContractController::class, 'index'])->name('contracts.index');
         Route::get('contracts/create', [WorkspaceContractController::class, 'create'])->name('contracts.create');

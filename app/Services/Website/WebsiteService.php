@@ -173,9 +173,14 @@ class WebsiteService
 
     public function storeAsset(Website $website, string $assetType, UploadedFile $file): WebsiteAsset
     {
-        $allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
+        // SVG is intentionally blocked to prevent stored XSS via uploaded assets.
+        $allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
         if (! in_array((string) $file->getMimeType(), $allowed, true)) {
-            throw new RuntimeException('Unsupported asset file type.');
+            throw new RuntimeException('نوع الملف غير مدعوم. يُسمح فقط بصور JPEG وPNG وWebP وGIF.');
+        }
+
+        if ($file->getSize() > 5 * 1024 * 1024) {
+            throw new RuntimeException('حجم الصورة يجب ألا يتجاوز 5 ميجابايت.');
         }
 
         $path = $file->store("website-assets/{$website->id}", 'public');

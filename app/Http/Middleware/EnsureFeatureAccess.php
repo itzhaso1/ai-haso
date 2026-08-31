@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Exceptions\FeatureNotAvailableException;
 use App\Services\Feature\FeatureAccessService;
 use App\Support\Tenancy\WorkspaceContext;
 use Closure;
@@ -21,11 +22,15 @@ class EnsureFeatureAccess
         $workspace = $this->workspaceContext->workspace();
 
         if (! $user || ! $workspace) {
-            abort(Response::HTTP_FORBIDDEN, 'Workspace context is required.');
+            abort(Response::HTTP_FORBIDDEN, __('سياق مساحة العمل مطلوب.'));
         }
 
         if (! $this->featureAccessService->hasFeature($user, $workspace, $feature)) {
-            abort(Response::HTTP_FORBIDDEN, 'Feature is not available in this workspace.');
+            throw new FeatureNotAvailableException(
+                feature: $feature,
+                requiredPlan: $this->featureAccessService->suggestedPlanForFeature($feature),
+                message: __('هذه الميزة غير متاحة في باقتك الحالية. قم بالترقية للمتابعة.'),
+            );
         }
 
         return $next($request);

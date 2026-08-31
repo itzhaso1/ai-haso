@@ -53,13 +53,18 @@ class WhatsAppService
             return;
         }
 
-        ProcessIncomingWhatsAppMessage::dispatch($phone->workspace_id, $messageData, $event->id);
+        ProcessIncomingWhatsAppMessage::dispatch(
+            $phone->workspace_id,
+            $messageData,
+            $event->id,
+            (string) $phoneNumberId,
+        );
     }
 
     /**
      * @param  array<string, mixed>  $messageData
      */
-    public function storeIncomingMessage(int $workspaceId, array $messageData): Message
+    public function storeIncomingMessage(int $workspaceId, array $messageData, ?string $phoneNumberId = null): Message
     {
         $customerPhone = $messageData['from'] ?? 'unknown';
         $content = $messageData['text']['body'] ?? null;
@@ -76,6 +81,14 @@ class WhatsAppService
             ]
         );
 
+        $initialMetadata = [
+            'channel_source' => 'whatsapp',
+            'unread_count' => 0,
+        ];
+        if (is_string($phoneNumberId) && $phoneNumberId !== '') {
+            $initialMetadata['phone_number_id'] = $phoneNumberId;
+        }
+
         $conversation = Conversation::withoutGlobalScopes()->firstOrCreate(
             [
                 'workspace_id' => $workspaceId,
@@ -87,10 +100,7 @@ class WhatsAppService
                 'status' => 'open',
                 'ai_enabled' => true,
                 'last_message_at' => now(),
-                'metadata' => [
-                    'channel_source' => 'whatsapp',
-                    'unread_count' => 0,
-                ],
+                'metadata' => $initialMetadata,
             ]
         );
 
@@ -108,9 +118,13 @@ class WhatsAppService
         $conversationMetadata = is_array($conversation->metadata) ? $conversation->metadata : [];
         $conversationMetadata['channel_source'] = 'whatsapp';
         $conversationMetadata['unread_count'] = (int) ($conversationMetadata['unread_count'] ?? 0) + 1;
+        if (is_string($phoneNumberId) && $phoneNumberId !== '') {
+            $conversationMetadata['phone_number_id'] = $phoneNumberId;
+        }
 
         $conversation->update([
             'customer_id' => $conversation->customer_id ?: $customer->id,
+            'channel' => 'whatsapp',
             'last_message_at' => $message->created_at,
             'metadata' => $conversationMetadata,
         ]);
