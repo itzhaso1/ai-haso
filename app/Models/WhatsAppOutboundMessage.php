@@ -29,6 +29,8 @@ class WhatsAppOutboundMessage extends WorkspaceScopedModel
 {
     use BelongsToWorkspace;
 
+    protected $table = 'whatsapp_outbound_messages';
+
     public const STATUS_QUEUED = 'queued';
 
     public const STATUS_SENDING = 'sending';

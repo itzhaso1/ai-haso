@@ -149,34 +149,47 @@ class FeatureAccessService
 
             $periodStart = $this->periodStart($workspace) ?? now()->startOfMonth();
             $periodEnd = $this->periodEnd($workspace) ?? now()->endOfMonth();
+            $periodStartDate = $periodStart->toDateString();
+            $periodEndDate = $periodEnd->toDateString();
 
-            /** @var WorkspaceUsageMeter $row */
+            /** @var WorkspaceUsageMeter|null $row */
             $row = WorkspaceUsageMeter::withoutGlobalScopes()
                 ->where('workspace_id', $workspace->id)
                 ->where('meter_key', $meter)
-                ->where('period_start', $periodStart->toDateString())
+                ->whereDate('period_start', $periodStartDate)
                 ->lockForUpdate()
                 ->first();
 
             if (! $row) {
-                $row = WorkspaceUsageMeter::withoutGlobalScopes()->create([
-                    'workspace_id' => $workspace->id,
-                    'meter_key' => $meter,
-                    'period_start' => $periodStart->toDateString(),
-                    'period_end' => $periodEnd->toDateString(),
-                    'used' => 0,
-                    'metadata' => [],
-                ]);
+                try {
+                    $row = WorkspaceUsageMeter::withoutGlobalScopes()->create([
+                        'workspace_id' => $workspace->id,
+                        'meter_key' => $meter,
+                        'period_start' => $periodStartDate,
+                        'period_end' => $periodEndDate,
+                        'used' => 0,
+                        'metadata' => [],
+                    ]);
+                } catch (\Illuminate\Database\UniqueConstraintViolationException) {
+                    $row = WorkspaceUsageMeter::withoutGlobalScopes()
+                        ->where('workspace_id', $workspace->id)
+                        ->where('meter_key', $meter)
+                        ->whereDate('period_start', $periodStartDate)
+                        ->lockForUpdate()
+                        ->firstOrFail();
+                }
+
                 $row = WorkspaceUsageMeter::withoutGlobalScopes()
                     ->whereKey($row->id)
                     ->lockForUpdate()
                     ->firstOrFail();
             }
 
-            $row->used = (float) $row->used + (float) $amount;
-            $row->save();
+            $row->forceFill([
+                'used' => (float) $row->used + (float) $amount,
+            ])->save();
 
-            return $row->refresh();
+            return WorkspaceUsageMeter::withoutGlobalScopes()->findOrFail($row->id);
         });
     }
 
@@ -311,7 +324,7 @@ class FeatureAccessService
         $row = WorkspaceUsageMeter::withoutGlobalScopes()
             ->where('workspace_id', $workspace->id)
             ->where('meter_key', $meter)
-            ->where('period_start', $periodStart->toDateString())
+            ->whereDate('period_start', $periodStart->toDateString())
             ->first();
 
         if ($row) {

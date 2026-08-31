@@ -41,7 +41,7 @@ class WhatsAppOutboundTest extends TestCase
             'phone_number_id' => 'pnid_123',
             'display_phone_number' => '+966500000000',
             'verified_name' => 'Test',
-            'status' => 'active',
+            'status' => 'connected',
         ]);
 
         Queue::fake();

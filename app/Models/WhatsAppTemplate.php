@@ -21,6 +21,8 @@ class WhatsAppTemplate extends WorkspaceScopedModel
 {
     use BelongsToWorkspace;
 
+    protected $table = 'whatsapp_templates';
+
     protected function casts(): array
     {
         return [
