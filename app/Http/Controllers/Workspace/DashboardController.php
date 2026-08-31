@@ -12,11 +12,14 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Models\Product;
 use App\Models\Subscription;
+use App\Services\Feature\FeatureAccessService;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
     use InteractsWithWorkspace;
+
+    public function __construct(private readonly FeatureAccessService $featureAccessService) {}
 
     public function index(): View
     {
@@ -73,6 +76,7 @@ class DashboardController extends Controller
             'workspace' => $workspace,
             'isCommercial' => $isCommercial,
             'stats' => $stats,
+            'entitlements' => $this->featureAccessService->entitlementsSnapshot($workspace),
             'subscriptionUsage' => [
                 'plan_name' => $currentSubscription?->plan?->name,
                 'status' => $subscriptionStatus,

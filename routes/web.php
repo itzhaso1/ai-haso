@@ -235,10 +235,12 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
         });
         Route::resource('customers', CustomerController::class)->except(['show']);
         Route::post('customers/{customer}/notes', [CustomerController::class, 'storeNote'])->name('customers.notes.store');
-        Route::post('customers/{customer}/tags', [CustomerController::class, 'attachTag'])->name('customers.tags.attach');
-        Route::delete('customers/{customer}/tags/{tag}', [CustomerController::class, 'detachTag'])->name('customers.tags.detach');
-        Route::post('customers/{customer}/groups', [CustomerController::class, 'attachGroup'])->name('customers.groups.attach');
-        Route::delete('customers/{customer}/groups/{group}', [CustomerController::class, 'detachGroup'])->name('customers.groups.detach');
+        Route::middleware('workspace.feature:advanced_customers')->group(function (): void {
+            Route::post('customers/{customer}/tags', [CustomerController::class, 'attachTag'])->name('customers.tags.attach');
+            Route::delete('customers/{customer}/tags/{tag}', [CustomerController::class, 'detachTag'])->name('customers.tags.detach');
+            Route::post('customers/{customer}/groups', [CustomerController::class, 'attachGroup'])->name('customers.groups.attach');
+            Route::delete('customers/{customer}/groups/{group}', [CustomerController::class, 'detachGroup'])->name('customers.groups.detach');
+        });
         Route::middleware('workspace.feature:orders')->group(function (): void {
             Route::resource('orders', OrderController::class)->except(['show']);
         });

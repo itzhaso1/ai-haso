@@ -171,6 +171,34 @@
                 @endif
             </div>
 
+            @if(!empty($entitlements['comparison']))
+                <section class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" dir="rtl">
+                    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <h3 class="text-base font-bold text-slate-900">مزايا الباقة الحالية</h3>
+                            <p class="text-xs text-slate-500">
+                                الباقة:
+                                {{ $entitlements['plan']['name'] ?? '—' }}
+                                @if(!empty($entitlements['plan']['tier']))
+                                    ({{ strtoupper($entitlements['plan']['tier']) }})
+                                @endif
+                            </p>
+                        </div>
+                        <a href="{{ route('workspace.subscriptions.index') }}" class="text-sm font-semibold text-[#067e6b] underline">إدارة الاشتراك</a>
+                    </div>
+                    <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        @foreach($entitlements['comparison'] as $row)
+                            <div class="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm">
+                                <span class="text-slate-700">{{ $row['label'] }}</span>
+                                <span class="{{ !empty($row['enabled']) ? 'text-emerald-600' : 'text-slate-300' }} font-bold">
+                                    {{ !empty($row['enabled']) ? '✅' : '❌' }}
+                                </span>
+                            </div>
+                        @endforeach
+                    </div>
+                </section>
+            @endif
+
             <section class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <div>

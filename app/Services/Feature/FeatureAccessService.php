@@ -8,6 +8,7 @@ use App\Models\Plan;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Models\WorkspaceAddon;
 use App\Models\WorkspaceFeatureFlag;
 use App\Models\WorkspaceUsageMeter;
 use Carbon\CarbonInterface;
@@ -49,47 +50,75 @@ class FeatureAccessService
 
     public function workspaceHasFeature(Workspace $workspace, string $feature): bool
     {
-        $override = WorkspaceFeatureFlag::withoutGlobalScopes()
-            ->where('workspace_id', $workspace->id)
-            ->where('feature_key', $feature)
-            ->first();
+        $featureKeys = $this->featureKeyCandidates($feature);
 
-        if ($override) {
-            return (bool) $override->enabled;
+        foreach ($featureKeys as $featureKey) {
+            $override = WorkspaceFeatureFlag::withoutGlobalScopes()
+                ->where('workspace_id', $workspace->id)
+                ->where('feature_key', $featureKey)
+                ->first();
+
+            if ($override) {
+                return (bool) $override->enabled;
+            }
         }
 
         $typeDefaults = config("workspace.features_by_type.{$workspace->type}", []);
-        if (! in_array($feature, $typeDefaults, true)) {
+        $allowedByType = false;
+        foreach ($featureKeys as $featureKey) {
+            if (in_array($featureKey, $typeDefaults, true)) {
+                $allowedByType = true;
+                break;
+            }
+        }
+        if (! $allowedByType) {
             return false;
         }
 
+        $enabledFeatures = $this->enabledFeatureSet($workspace);
+        foreach ($featureKeys as $featureKey) {
+            if (in_array($featureKey, $enabledFeatures, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Final feature set = plan features + add-on grants (+ legacy appointments compat).
+     *
+     * @return array<int, string>
+     */
+    public function enabledFeatureSet(Workspace $workspace): array
+    {
         $plan = $this->plan($workspace);
         if (! $plan) {
-            return false;
+            return [];
         }
 
-        $planFeatures = is_array($plan->features) ? $plan->features : [];
+        $original = is_array($plan->features) ? array_map('strval', $plan->features) : [];
+        $features = $original;
 
-        if (in_array($feature, self::APPOINTMENTS_COMPATIBILITY_FEATURES, true)
-            && ! in_array($feature, $planFeatures, true)
-            && in_array('appointments', $planFeatures, true)
-        ) {
-            // Curated modern plans (e.g. starter) may include website_builder but omit
-            // custom_domains on purpose — do not re-grant via legacy appointments compat.
-            if ($feature === 'custom_domains') {
-                $explicitTier = $plan->tier;
-                $isStarterCode = in_array((string) $plan->code, self::TIER_PLAN_CODES['starter'], true);
-                $hasWebsiteBuilder = in_array('website_builder', $planFeatures, true);
-
-                if ($hasWebsiteBuilder || $explicitTier === 'starter' || $isStarterCode) {
-                    return false;
-                }
+        // Add-on grants (features listed in plan_addons.grants.features).
+        foreach ($this->activeAddonGrants($workspace) as $grant) {
+            $grantedFeatures = $grant['features'] ?? [];
+            if (is_array($grantedFeatures)) {
+                $features = array_merge($features, array_map('strval', $grantedFeatures));
             }
-
-            return true;
         }
 
-        return in_array($feature, $planFeatures, true);
+        // Legacy appointments-only plans (no website_builder listed) unlock website stack.
+        if (in_array('appointments', $original, true) && ! in_array('website_builder', $original, true)) {
+            $features = array_merge($features, ['website_builder', 'public_booking', 'custom_domains']);
+        } elseif (in_array('appointments', $original, true)
+            && in_array('website_builder', $original, true)
+            && ! in_array('public_booking', $original, true)
+        ) {
+            $features[] = 'public_booking';
+        }
+
+        return array_values(array_unique($features));
     }
 
     public function canUse(User $user, Workspace $workspace, string $feature, ?string $meter = null, int|float $amount = 1): bool
@@ -241,7 +270,7 @@ class FeatureAccessService
     public function entitlementsSnapshot(Workspace $workspace): array
     {
         $plan = $this->plan($workspace);
-        $features = is_array($plan?->features) ? $plan->features : [];
+        $features = $this->enabledFeatureSet($workspace);
         $limits = is_array($plan?->limits) ? $plan->limits : [];
         $meters = [];
 
@@ -249,17 +278,28 @@ class FeatureAccessService
             $meters[$meter] = $this->checkLimit($workspace, $meter);
         }
 
+        $comparison = [];
+        foreach (config('plans.comparison_rows', []) as $row) {
+            $key = (string) ($row['key'] ?? '');
+            $comparison[] = [
+                'key' => $key,
+                'label' => (string) ($row['label'] ?? $key),
+                'enabled' => $key !== '' && $this->workspaceHasFeature($workspace, $key),
+            ];
+        }
+
         return [
             'plan' => $plan ? [
                 'id' => $plan->id,
                 'code' => $plan->code,
                 'name' => $plan->name,
-                'tier' => $plan->tier ?? $this->inferTier($plan->code),
+                'tier' => $this->resolveTier($plan),
                 'billing_period' => $plan->billing_period,
                 'price' => $plan->price,
                 'currency' => $plan->currency,
             ] : null,
             'features' => $features,
+            'comparison' => $comparison,
             'limits' => $limits,
             'overrides' => $this->overrides($workspace),
             'meters' => $meters,
@@ -304,26 +344,37 @@ class FeatureAccessService
         $plan = $this->plan($workspace);
         $limits = is_array($plan?->limits) ? $plan->limits : [];
 
-        if (! array_key_exists($meter, $limits)) {
-            // Fall back to alias keys used by older seeds.
+        $base = null;
+        if (array_key_exists($meter, $limits)) {
+            $value = $limits[$meter];
+            $base = ($value === null || $value === '' || $value === -1) ? null : (float) $value;
+        } else {
             $aliases = config("plans.meter_aliases.{$meter}", []);
             foreach ($aliases as $alias) {
                 if (array_key_exists($alias, $limits)) {
                     $value = $limits[$alias];
-
-                    return $value === null || $value === '' ? null : (float) $value;
+                    $base = ($value === null || $value === '' || $value === -1) ? null : (float) $value;
+                    break;
                 }
             }
+        }
 
+        $addonBoost = 0.0;
+        foreach ($this->activeAddonGrants($workspace) as $grant) {
+            $limitGrants = $grant['limits'] ?? [];
+            if (is_array($limitGrants) && array_key_exists($meter, $limitGrants)) {
+                $addonBoost += (float) $limitGrants[$meter] * max(1, (int) ($grant['quantity'] ?? 1));
+            }
+            if (($grant['meter_key'] ?? null) === $meter) {
+                $addonBoost += (float) ($grant['meter_quantity'] ?? 0) * max(1, (int) ($grant['quantity'] ?? 1));
+            }
+        }
+
+        if ($base === null && $addonBoost <= 0) {
             return null;
         }
 
-        $value = $limits[$meter];
-        if ($value === null || $value === '' || $value === -1) {
-            return null;
-        }
-
-        return (float) $value;
+        return (float) ($base ?? 0) + $addonBoost;
     }
 
     public function currentUsage(Workspace $workspace, string $meter): float
@@ -380,15 +431,101 @@ class FeatureAccessService
 
     public function suggestedPlanForFeature(string $feature): ?string
     {
+        $candidates = $this->featureKeyCandidates($feature);
+
+        foreach (['starter', 'pro', 'business', 'enterprise'] as $tier) {
+            $plan = Plan::query()
+                ->where('is_active', true)
+                ->where(function ($query) use ($tier): void {
+                    $query->where('tier', $tier)
+                        ->orWhereIn('code', self::TIER_PLAN_CODES[$tier] ?? []);
+                })
+                ->orderBy('sort_order')
+                ->orderBy('price')
+                ->first();
+
+            if (! $plan) {
+                continue;
+            }
+
+            $features = is_array($plan->features) ? $plan->features : [];
+            foreach ($candidates as $candidate) {
+                if (in_array($candidate, $features, true)) {
+                    return strtoupper($tier);
+                }
+            }
+        }
+
+        // Fallback to seed defaults only if DB has no matching plan yet.
         $matrix = config('plans.feature_matrix', []);
         foreach (['starter', 'pro', 'business', 'enterprise'] as $tier) {
             $features = $matrix[$tier]['features'] ?? [];
-            if (in_array($feature, $features, true)) {
-                return strtoupper($tier);
+            foreach ($candidates as $candidate) {
+                if (in_array($candidate, $features, true)) {
+                    return strtoupper($tier);
+                }
             }
         }
 
         return 'PRO';
+    }
+
+    public function resolveTier(Plan $plan): string
+    {
+        if (filled($plan->tier)) {
+            return (string) $plan->tier;
+        }
+
+        $map = config('plans.legacy_code_tier_map', []);
+        if (isset($map[$plan->code])) {
+            return (string) $map[$plan->code];
+        }
+
+        return $this->inferTier((string) $plan->code);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function featureKeyCandidates(string $feature): array
+    {
+        $keys = [$feature];
+        $aliases = config("plans.feature_aliases.{$feature}", []);
+        if (is_array($aliases)) {
+            foreach ($aliases as $alias) {
+                $keys[] = (string) $alias;
+            }
+        }
+
+        return array_values(array_unique($keys));
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function activeAddonGrants(Workspace $workspace): array
+    {
+        if (! class_exists(WorkspaceAddon::class)) {
+            return [];
+        }
+
+        return WorkspaceAddon::withoutGlobalScopes()
+            ->with('addon')
+            ->where('workspace_id', $workspace->id)
+            ->where('status', 'active')
+            ->get()
+            ->map(function (WorkspaceAddon $row): array {
+                $grants = is_array($row->addon?->grants) ? $row->addon->grants : [];
+
+                return [
+                    'features' => $grants['features'] ?? [],
+                    'limits' => $grants['limits'] ?? [],
+                    'quantity' => (int) $row->quantity,
+                    'meter_key' => $row->addon?->meter_key,
+                    'meter_quantity' => (int) ($row->addon?->quantity ?? 0),
+                ];
+            })
+            ->all();
     }
 
     private function isActiveMember(User $user, Workspace $workspace): bool
@@ -401,6 +538,11 @@ class FeatureAccessService
 
     private function inferTier(string $code): string
     {
+        $map = config('plans.legacy_code_tier_map', []);
+        if (isset($map[$code])) {
+            return (string) $map[$code];
+        }
+
         foreach (self::TIER_PLAN_CODES as $tier => $codes) {
             if (in_array($code, $codes, true) || str_contains($code, $tier)) {
                 return $tier;

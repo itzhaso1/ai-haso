@@ -1,11 +1,69 @@
 <?php
 
 /**
- * Commercial plan matrix — source of truth for seeders and entitlement UX.
- * Legacy codes (company_basic, store_pro, …) map onto these tiers.
+ * Plan catalog helpers for seeding + Platform UI labels.
+ *
+ * IMPORTANT: Runtime entitlement decisions come from the `plans` table
+ * (features/limits JSON) via FeatureAccessService — not from this file.
+ * Editing a plan in Platform Dashboard changes access without code changes.
  */
 return [
     'currency' => env('PLAN_CURRENCY', 'SAR'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Commercial feature catalog (labels for Platform Dashboard)
+    |--------------------------------------------------------------------------
+    */
+    'commercial_features' => [
+        'appointments' => 'الحجوزات والمواعيد',
+        'website_builder' => 'الموقع الإلكتروني',
+        'public_booking' => 'الحجز العام',
+        'custom_domains' => 'النطاق المخصص',
+        'ai' => 'الذكاء الاصطناعي',
+        'whatsapp' => 'واتساب',
+        'pos' => 'نقطة البيع',
+        'qr_menu' => 'قائمة QR',
+        'finance' => 'المالية والفواتير',
+        'email' => 'البريد الاحترافي',
+        'api' => 'واجهة البرمجة API',
+        'analytics' => 'التحليلات',
+        'advanced_customers' => 'إدارة العملاء المتقدمة',
+        'customers' => 'العملاء (أساسي)',
+        'products' => 'المنتجات',
+        'categories' => 'التصنيفات',
+        'inventory' => 'المخزون',
+        'orders' => 'الطلبات',
+        'payments' => 'المدفوعات',
+        'payment_gateway' => 'بوابة الدفع',
+        'employees' => 'الموظفون',
+        'roles_permissions' => 'الأدوار والصلاحيات',
+        'conversations' => 'المحادثات',
+        'messages' => 'الرسائل',
+        'smart_replies' => 'الردود الذكية',
+        'dashboard' => 'لوحة التحكم',
+        'subscription' => 'الاشتراكات',
+        'usage' => 'الاستخدام',
+        'white_label' => 'العلامة البيضاء',
+        'audit' => 'التدقيق',
+        'feature_overrides' => 'تجاوزات الميزات',
+    ],
+
+    'limit_fields' => [
+        'team_members' => 'أعضاء الفريق',
+        'users' => 'المستخدمون',
+        'bookings' => 'الحجوزات / شهر',
+        'customers' => 'العملاء',
+        'products' => 'المنتجات',
+        'orders' => 'الطلبات',
+        'ai_usage' => 'رموز / استخدام الذكاء الاصطناعي',
+        'whatsapp_messages' => 'رسائل واتساب',
+        'email_sends' => 'رسائل البريد',
+        'storage_mb' => 'التخزين (ميجابايت)',
+        'domains' => 'النطاقات',
+        'websites' => 'المواقع',
+        'api_calls' => 'طلبات API',
+    ],
 
     'meters' => [
         'ai_tokens' => ['overage' => 'hard_block', 'label' => 'رموز الذكاء الاصطناعي'],
@@ -33,6 +91,21 @@ return [
         'bookings_per_month' => ['bookings'],
     ],
 
+    'feature_aliases' => [
+        'advanced_customers' => ['crm'],
+        'crm' => ['advanced_customers'],
+        'website' => ['website_builder'],
+        'website_builder' => ['website'],
+        'custom_domain' => ['custom_domains'],
+        'custom_domains' => ['custom_domain'],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Default seed matrix (copied into plans.features / plans.limits on seed)
+    | After seeding, Platform Dashboard edits win.
+    |--------------------------------------------------------------------------
+    */
     'feature_matrix' => [
         'starter' => [
             'features' => [
@@ -88,7 +161,8 @@ return [
                 'conversations', 'messages', 'smart_replies', 'ai', 'payments',
                 'payment_gateway', 'pos', 'qr_menu', 'finance', 'products',
                 'categories', 'inventory', 'orders', 'email', 'analytics',
-                'employees', 'whatsapp', 'roles_permissions', 'api', 'crm',
+                'employees', 'whatsapp', 'roles_permissions', 'api',
+                'advanced_customers', 'crm',
             ],
             'limits' => [
                 'ai_usage' => 200000,
@@ -113,8 +187,8 @@ return [
                 'conversations', 'messages', 'smart_replies', 'ai', 'payments',
                 'payment_gateway', 'pos', 'qr_menu', 'finance', 'products',
                 'categories', 'inventory', 'orders', 'email', 'analytics',
-                'employees', 'whatsapp', 'roles_permissions', 'api', 'crm',
-                'white_label', 'audit', 'feature_overrides',
+                'employees', 'whatsapp', 'roles_permissions', 'api',
+                'advanced_customers', 'crm', 'white_label', 'audit', 'feature_overrides',
             ],
             'limits' => [
                 'ai_usage' => 1000000,
@@ -134,6 +208,10 @@ return [
         ],
     ],
 
+    /*
+    | Matrix rows shown in Platform + Workspace comparison UIs.
+    | Values are resolved from Plan.features in the database.
+    */
     'comparison_rows' => [
         ['key' => 'appointments', 'label' => 'الحجوزات والمواعيد'],
         ['key' => 'website_builder', 'label' => 'الموقع الإلكتروني'],
@@ -145,6 +223,21 @@ return [
         ['key' => 'email', 'label' => 'البريد الاحترافي'],
         ['key' => 'api', 'label' => 'واجهة البرمجة API'],
         ['key' => 'analytics', 'label' => 'التحليلات'],
-        ['key' => 'crm', 'label' => 'إدارة العملاء المتقدمة'],
+        ['key' => 'advanced_customers', 'label' => 'إدارة العملاء المتقدمة'],
+    ],
+
+    'legacy_code_tier_map' => [
+        'individual_free' => 'starter',
+        'individual_pro' => 'pro',
+        'company_basic' => 'starter',
+        'store_basic' => 'starter',
+        'company_starter' => 'starter',
+        'store_starter' => 'starter',
+        'company_pro' => 'pro',
+        'store_pro' => 'pro',
+        'company_business' => 'business',
+        'store_business' => 'business',
+        'company_enterprise' => 'enterprise',
+        'store_enterprise' => 'enterprise',
     ],
 ];
