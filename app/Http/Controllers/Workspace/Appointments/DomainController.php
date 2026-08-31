@@ -174,11 +174,7 @@ class DomainController extends AppointmentsBaseController
             return back()->with('error', 'لا يمكن حذف Platform subdomain الافتراضي.');
         }
 
-        $domain->update([
-            'status' => 'cancelled',
-            'is_primary' => false,
-        ]);
-        $domain->delete();
+        $this->domainService->cancelDomain($domain);
 
         return back()->with('success', 'تم إلغاء ربط الدومين من الموقع.');
     }

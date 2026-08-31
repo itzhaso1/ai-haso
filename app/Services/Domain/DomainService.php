@@ -13,6 +13,7 @@ use App\Models\Website\WebsiteDomain;
 use App\Models\Website\WebsiteDomainContact;
 use App\Models\Website\WebsiteDomainOperation;
 use App\Services\Domain\Contracts\DomainRegistrarInterface;
+use App\Services\Website\WebsiteResolverService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -22,6 +23,7 @@ class DomainService
 {
     public function __construct(
         private readonly DomainRegistrarInterface $registrar,
+        private readonly WebsiteResolverService $websiteResolverService,
     ) {}
 
     /**
@@ -113,6 +115,7 @@ class DomainService
         });
 
         RegisterDomainJob::dispatch($websiteDomain->id, max(1, min(10, $years)), $contacts, $actorUserId);
+        $this->websiteResolverService->invalidateForWebsite($website);
 
         return $websiteDomain->refresh();
     }
@@ -208,6 +211,11 @@ class DomainService
                 ]);
             });
 
+            $website = $websiteDomain->website()->withoutGlobalScopes()->first();
+            if ($website) {
+                $this->websiteResolverService->invalidateForWebsite($website);
+            }
+
             ConfigureDomainDnsJob::dispatch($websiteDomain->id, $actorUserId);
         } catch (\Throwable $exception) {
             $operation->update([
@@ -254,6 +262,7 @@ class DomainService
 
             $website = $domain->website()->withoutGlobalScopes()->firstOrFail();
             $website->update(['primary_domain_id' => $domain->id]);
+            $this->websiteResolverService->invalidateForWebsite($website);
         });
 
         return $domain->refresh();
@@ -288,6 +297,11 @@ class DomainService
 
         if ($verified) {
             ProvisionSslJob::dispatch($websiteDomain->id);
+        }
+
+        $website = $websiteDomain->website()->withoutGlobalScopes()->first();
+        if ($website) {
+            $this->websiteResolverService->invalidateForWebsite($website);
         }
 
         return $websiteDomain->refresh();
@@ -332,12 +346,34 @@ class DomainService
             'processed_at' => now(),
         ]);
 
+        $website = $websiteDomain->website()->withoutGlobalScopes()->first();
+        if ($website) {
+            $this->websiteResolverService->invalidateForWebsite($website);
+        }
+
         return $websiteDomain->refresh();
     }
 
     public function syncDomainStatus(WebsiteDomain $websiteDomain): WebsiteDomain
     {
         SyncDomainStatusJob::dispatch($websiteDomain->id);
+
+        return $websiteDomain;
+    }
+
+    public function cancelDomain(WebsiteDomain $websiteDomain): WebsiteDomain
+    {
+        $website = $websiteDomain->website()->withoutGlobalScopes()->first();
+
+        $websiteDomain->update([
+            'status' => 'cancelled',
+            'is_primary' => false,
+        ]);
+        $websiteDomain->delete();
+
+        if ($website) {
+            $this->websiteResolverService->invalidateForWebsite($website);
+        }
 
         return $websiteDomain;
     }
@@ -368,6 +404,11 @@ class DomainService
             'response_payload' => $info,
             'processed_at' => now(),
         ]);
+
+        $website = $websiteDomain->website()->withoutGlobalScopes()->first();
+        if ($website) {
+            $this->websiteResolverService->invalidateForWebsite($website);
+        }
 
         return $websiteDomain->refresh();
     }

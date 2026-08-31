@@ -9,6 +9,7 @@ use App\Services\Website\WebsiteService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use RuntimeException;
 
@@ -169,9 +170,12 @@ class WebsiteController extends AppointmentsBaseController
             $decodedConfig = [];
             if (array_key_exists('config', $section) && is_string($section['config']) && trim($section['config']) !== '') {
                 $candidate = json_decode($section['config'], true);
-                if (is_array($candidate)) {
-                    $decodedConfig = $candidate;
+                if (! is_array($candidate)) {
+                    throw ValidationException::withMessages([
+                        'sections' => 'صيغة JSON غير صالحة في إعدادات أحد الأقسام.',
+                    ]);
                 }
+                $decodedConfig = $candidate;
             }
 
             return [

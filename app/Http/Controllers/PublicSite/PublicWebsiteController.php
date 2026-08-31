@@ -67,7 +67,7 @@ class PublicWebsiteController extends Controller
         $website = $request->attributes->get('website');
         abort_unless($website, 404);
 
-        return $this->robotsResponse($website);
+        return $this->robotsResponse($website, true);
     }
 
     public function sitemapResolved(Request $request): Response
@@ -76,7 +76,7 @@ class PublicWebsiteController extends Controller
         $website = $request->attributes->get('website');
         abort_unless($website, 404);
 
-        return $this->sitemapResponse($website);
+        return $this->sitemapResponse($website, true);
     }
 
     public function robotsBySlug(string $website): Response
@@ -86,7 +86,7 @@ class PublicWebsiteController extends Controller
             ->whereNull('deleted_at')
             ->firstOrFail();
 
-        return $this->robotsResponse($resolved);
+        return $this->robotsResponse($resolved, false);
     }
 
     public function sitemapBySlug(string $website): Response
@@ -96,7 +96,7 @@ class PublicWebsiteController extends Controller
             ->whereNull('deleted_at')
             ->firstOrFail();
 
-        return $this->sitemapResponse($resolved);
+        return $this->sitemapResponse($resolved, false);
     }
 
     private function normalizePage(?string $page): string
@@ -110,22 +110,23 @@ class PublicWebsiteController extends Controller
         return in_array($page, ['home', 'booking', 'contact'], true) ? $page : 'home';
     }
 
-    private function robotsResponse(Website $website): Response
+    private function robotsResponse(Website $website, bool $hostResolved): Response
     {
+        $sitemapUrl = $hostResolved ? url('/sitemap.xml') : url('/public/'.$website->slug.'/sitemap.xml');
         $robots = $website->status === 'published'
-            ? "User-agent: *\nAllow: /\nSitemap: ".url('/sitemap.xml')
+            ? "User-agent: *\nAllow: /\nSitemap: ".$sitemapUrl
             : "User-agent: *\nDisallow: /";
 
         return response($robots, 200, ['Content-Type' => 'text/plain; charset=UTF-8']);
     }
 
-    private function sitemapResponse(Website $website): Response
+    private function sitemapResponse(Website $website, bool $hostResolved): Response
     {
         if ($website->status !== 'published') {
             return response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>', 200, ['Content-Type' => 'application/xml; charset=UTF-8']);
         }
 
-        $base = url('/public/'.$website->slug);
+        $base = $hostResolved ? url('/') : url('/public/'.$website->slug);
         $urls = [
             $base,
             $base.'/booking',

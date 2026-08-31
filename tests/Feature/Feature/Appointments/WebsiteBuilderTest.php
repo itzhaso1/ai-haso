@@ -9,7 +9,9 @@ use App\Models\Website\Website;
 use App\Models\Website\WebsiteDomain;
 use App\Models\Workspace;
 use App\Services\Website\TemplateService;
+use App\Services\Website\WebsiteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use RuntimeException;
 use Tests\TestCase;
 
 class WebsiteBuilderTest extends TestCase
@@ -19,7 +21,7 @@ class WebsiteBuilderTest extends TestCase
     public function test_workspace_owner_can_create_customize_and_publish_website(): void
     {
         config()->set('website.platform_domain', 'platform.test');
-        [$owner, $workspace] = $this->createWorkspaceOwnerWithWebsiteFeatures('company');
+        [, $workspace] = $this->createWorkspaceOwnerWithWebsiteFeatures('company');
 
         $this->actingAs($owner)
             ->withSession(['current_workspace_id' => $workspace->id])
@@ -97,6 +99,27 @@ class WebsiteBuilderTest extends TestCase
             ->withSession(['current_workspace_id' => $workspaceB->id])
             ->get(route('workspace.appointments.website.customize', $website))
             ->assertNotFound();
+    }
+
+    public function test_publish_requires_active_or_verified_domain_when_platform_subdomain_not_configured(): void
+    {
+        config()->set('website.platform_domain', '');
+        [$owner, $workspace] = $this->createWorkspaceOwnerWithWebsiteFeatures('company');
+
+        /** @var WebsiteService $websiteService */
+        $websiteService = app(WebsiteService::class);
+        $website = $websiteService->createWebsite($workspace, [
+            'name' => 'No Domain Website',
+            'slug' => 'no-domain-site',
+        ]);
+        $template = app(TemplateService::class)->listTemplates()->firstOrFail();
+        $websiteService->selectTemplate($website, $template->id);
+        $websiteService->updateSettings($website, ['business_name' => 'No Domain Business']);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('At least one verified or active domain is required for publishing.');
+
+        $websiteService->publish($website->fresh());
     }
 
     /**
