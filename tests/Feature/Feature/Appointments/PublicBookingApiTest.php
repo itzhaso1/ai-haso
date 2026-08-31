@@ -76,6 +76,60 @@ class PublicBookingApiTest extends TestCase
         $this->assertSame('paid', $booking->payment_status);
     }
 
+    public function test_public_booking_rejects_second_concurrent_unstaffed_booking_for_same_slot(): void
+    {
+        config()->set('website.platform_domain', 'platform.test');
+        config()->set('cache.default', 'array');
+        [$workspace] = $this->createWorkspaceWithSubscription('company');
+        $website = $this->createPublishedWebsite($workspace);
+
+        $service = AppointmentService::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Any Staff Service',
+            'description' => 'Capacity test',
+            'duration_minutes' => 30,
+            'price' => 50,
+            'is_active' => true,
+            'requires_confirmation' => false,
+            'requires_payment' => false,
+            'payment_mode' => 'postpaid',
+            'approval_required' => false,
+            'metadata' => [],
+        ]);
+
+        // No staff rows => capacity falls back to 1 for unstaffed bookings.
+        $date = Carbon::now('Asia/Riyadh')->next(Carbon::MONDAY)->toDateString();
+        $availabilityResponse = $this->getJson(route('public.api.availability', [
+            'website' => $website->slug,
+            'service_id' => $service->id,
+            'date' => $date,
+        ]));
+        $availabilityResponse->assertOk();
+        $firstSlot = data_get($availabilityResponse->json(), 'data.slots.0.starts_at');
+        $this->assertNotNull($firstSlot);
+
+        $first = $this->postJson(route('public.api.booking.store', ['website' => $website->slug]), [
+            'service_id' => $service->id,
+            'starts_at' => $firstSlot,
+            'customer_name' => 'Customer A',
+            'customer_phone' => '0501111111',
+        ]);
+        $first->assertCreated();
+
+        $second = $this->postJson(route('public.api.booking.store', ['website' => $website->slug]), [
+            'service_id' => $service->id,
+            'starts_at' => $firstSlot,
+            'customer_name' => 'Customer B',
+            'customer_phone' => '0502222222',
+        ]);
+        $second->assertStatus(422);
+
+        $this->assertSame(1, AppointmentBooking::withoutGlobalScopes()
+            ->where('workspace_id', $workspace->id)
+            ->where('service_id', $service->id)
+            ->count());
+    }
+
     public function test_public_booking_rejects_past_slots_and_cross_workspace_service_ids(): void
     {
         config()->set('website.platform_domain', 'platform.test');

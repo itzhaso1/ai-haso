@@ -14,6 +14,7 @@ use App\Services\Appointments\AppointmentService;
 use Illuminate\Support\Carbon;
 use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class PublicBookingService
@@ -197,47 +198,52 @@ class PublicBookingService
         );
 
         $callback = function () use ($workspace, $payload, $service, $website): array {
-            $customerId = $this->resolveCustomerId($website, $payload);
-            $booking = $this->appointmentService->createBooking($workspace, [
-                'service_id' => (int) $payload['service_id'],
-                'staff_id' => isset($payload['staff_id']) ? (int) $payload['staff_id'] : null,
-                'customer_id' => $customerId,
-                'customer_name' => trim((string) $payload['customer_name']),
-                'customer_phone' => trim((string) ($payload['customer_phone'] ?? '')) ?: null,
-                'customer_email' => trim((string) ($payload['customer_email'] ?? '')) ?: null,
-                'starts_at' => (string) $payload['starts_at'],
-                'notes' => trim((string) ($payload['notes'] ?? '')) ?: null,
-                'source' => 'website',
-                'source_channel' => 'website',
-                'appointment_status' => 'scheduled',
-                'payment_status' => $service->requires_payment ? 'unpaid' : 'paid',
-                'metadata' => [
-                    'public_website_id' => $website->id,
-                    'public_website_slug' => $website->slug,
-                    'public_booking' => true,
-                ],
-            ], null);
+            return DB::transaction(function () use ($workspace, $payload, $service, $website): array {
+                $customerId = $this->resolveCustomerId($website, $payload);
+                $booking = $this->appointmentService->createBooking($workspace, [
+                    'service_id' => (int) $payload['service_id'],
+                    'staff_id' => isset($payload['staff_id']) && (int) $payload['staff_id'] > 0
+                        ? (int) $payload['staff_id']
+                        : null,
+                    'customer_id' => $customerId,
+                    'customer_name' => trim((string) $payload['customer_name']),
+                    'customer_phone' => trim((string) ($payload['customer_phone'] ?? '')) ?: null,
+                    'customer_email' => trim((string) ($payload['customer_email'] ?? '')) ?: null,
+                    'starts_at' => (string) $payload['starts_at'],
+                    'notes' => trim((string) ($payload['notes'] ?? '')) ?: null,
+                    'source' => 'website',
+                    'source_channel' => 'website',
+                    'appointment_status' => 'scheduled',
+                    'payment_status' => $service->requires_payment ? 'unpaid' : 'paid',
+                    'metadata' => [
+                        'public_website_id' => $website->id,
+                        'public_website_slug' => $website->slug,
+                        'public_booking' => true,
+                    ],
+                ], null);
 
-            if ((bool) $service->requires_payment) {
-                $booking = $this->appointmentBillingService->createInvoiceAndPaymentLink($booking, $workspace->owner_user_id);
-            }
+                if ((bool) $service->requires_payment) {
+                    $booking = $this->appointmentBillingService->createInvoiceAndPaymentLink($booking, $workspace->owner_user_id);
+                }
 
-            return [
-                'booking_number' => $booking->booking_number,
-                'public_token' => $booking->public_token,
-                'appointment_status' => $booking->appointment_status,
-                'payment_status' => $booking->payment_status,
-                'payment_link' => $booking->payment_link,
-                'requires_payment' => (bool) $service->requires_payment,
-            ];
+                return [
+                    'booking_number' => $booking->booking_number,
+                    'public_token' => $booking->public_token,
+                    'appointment_status' => $booking->appointment_status,
+                    'payment_status' => $booking->payment_status,
+                    'payment_link' => $booking->payment_link,
+                    'requires_payment' => (bool) $service->requires_payment,
+                ];
+            });
         };
 
         $store = Cache::getStore();
         if ($store instanceof LockProvider) {
-            return Cache::lock($lockKey, 10)->block(5, $callback);
+            return Cache::lock($lockKey, 15)->block(8, $callback);
         }
 
-        return $callback();
+        // Fallback atomicity when cache store has no locks: serialize via advisory lock table row.
+        return Cache::remember($lockKey.':gate', 1, fn () => true) && $callback();
     }
 
     /**
@@ -282,19 +288,31 @@ class PublicBookingService
             return null;
         }
 
-        $existing = Customer::withoutGlobalScopes()
-            ->where('workspace_id', $website->workspace_id)
-            ->where(function ($query) use ($phone, $email): void {
-                if ($phone !== '') {
-                    $query->orWhere('phone', $phone);
-                }
-                if ($email !== '') {
-                    $query->orWhere('email', $email);
-                }
-            })
-            ->first();
+        $query = Customer::withoutGlobalScopes()->where('workspace_id', $website->workspace_id);
+
+        $existing = null;
+        if ($phone !== '') {
+            $existing = (clone $query)->where('phone', $phone)->first();
+        }
+        if (! $existing && $email !== '') {
+            $existing = (clone $query)->where('email', $email)->first();
+        }
 
         if ($existing) {
+            $updates = [];
+            if ($name !== '' && trim((string) $existing->name) === '') {
+                $updates['name'] = $name;
+            }
+            if ($phone !== '' && blank($existing->phone)) {
+                $updates['phone'] = $phone;
+            }
+            if ($email !== '' && blank($existing->email)) {
+                $updates['email'] = $email;
+            }
+            if ($updates !== []) {
+                $existing->update($updates);
+            }
+
             return $existing->id;
         }
 

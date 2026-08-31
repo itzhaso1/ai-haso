@@ -161,4 +161,7 @@ DNS verification retries:
 
 ## Notes on SSL
 
-`SslService` is currently an abstraction entry point that marks provisioning lifecycle state and stores metadata. Final certificate issuance is infrastructure-dependent and must be connected to your reverse-proxy/certificate automation pipeline.
+`SslService` provisions real certificates via Certbot when `WEBSITE_SSL_ENABLED=true`.
+It inspects `/etc/letsencrypt/live/{domain}` and sets `ssl_status=active` **only** after OpenSSL validates the certificate host + expiry.
+With SSL disabled, status remains honest `pending` (never fake-active).
+See `docs/website-deployment.md` for Linux/Nginx requirements.

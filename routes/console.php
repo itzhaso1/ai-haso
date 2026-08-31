@@ -69,7 +69,7 @@ Schedule::command('finance:invoices:refresh-payment-status')->hourly();
 Artisan::command('domains:sync-status', function () {
     $count = 0;
     WebsiteDomain::withoutGlobalScopes()
-        ->whereIn('status', ['registered', 'dns_pending', 'dns_configured', 'verifying', 'verified', 'ssl_pending', 'active'])
+        ->whereIn('status', ['registered', 'dns_pending', 'dns_configured', 'verifying', 'verified', 'ssl_pending', 'active', 'recovery_required'])
         ->chunkById(100, function ($domains) use (&$count): void {
             foreach ($domains as $domain) {
                 SyncDomainStatusJob::dispatch($domain->id);
@@ -80,4 +80,22 @@ Artisan::command('domains:sync-status', function () {
     $this->info("Queued {$count} domains for status sync.");
 })->purpose('Queue provider status sync for website domains');
 
+Artisan::command('domains:auto-renew', function (\App\Services\Domain\DomainService $domainService) {
+    $count = $domainService->processDueAutoRenewals();
+    $this->info("Queued {$count} auto-renewal jobs.");
+})->purpose('Queue auto renewals for domains nearing expiration');
+
+Artisan::command('domains:expiration-reminders', function (\App\Services\Domain\DomainService $domainService) {
+    $count = $domainService->processExpirationReminders();
+    $this->info("Sent {$count} domain expiration reminders.");
+})->purpose('Send domain expiration reminders without duplicates');
+
+Artisan::command('domains:ssl-maintain', function (\App\Services\Domain\DomainService $domainService) {
+    $count = $domainService->processSslMaintenance();
+    $this->info("Processed SSL maintenance for {$count} domains.");
+})->purpose('Provision/renew/sync SSL certificates for website domains');
+
 Schedule::command('domains:sync-status')->dailyAt('02:10');
+Schedule::command('domains:expiration-reminders')->dailyAt('08:15');
+Schedule::command('domains:auto-renew')->dailyAt('03:20');
+Schedule::command('domains:ssl-maintain')->dailyAt('04:05');

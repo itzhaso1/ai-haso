@@ -426,6 +426,7 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
                 Route::post('website/{website}/domains/{domain}/verify', [AppointmentsDomainController::class, 'verify'])->name('website.domains.verify');
                 Route::post('website/{website}/domains/{domain}/renew', [AppointmentsDomainController::class, 'renew'])->name('website.domains.renew');
                 Route::post('website/{website}/domains/{domain}/sync', [AppointmentsDomainController::class, 'sync'])->name('website.domains.sync');
+                Route::post('website/{website}/domains/{domain}/auto-renew', [AppointmentsDomainController::class, 'toggleAutoRenew'])->name('website.domains.auto-renew');
                 Route::delete('website/{website}/domains/{domain}', [AppointmentsDomainController::class, 'remove'])->name('website.domains.remove');
             });
         });

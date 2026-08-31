@@ -127,11 +127,25 @@ class WebsiteController extends AppointmentsBaseController
             'font' => ['nullable', 'string', 'max:100'],
             'direction' => ['nullable', 'in:rtl,ltr'],
             'social_links' => ['nullable', 'array'],
-            'social_links.*' => ['nullable', 'url', 'max:255'],
+            'social_links.instagram' => ['nullable', 'url', 'max:255'],
+            'social_links.facebook' => ['nullable', 'url', 'max:255'],
+            'social_links.whatsapp' => ['nullable', 'url', 'max:255'],
+            'social_links.x' => ['nullable', 'url', 'max:255'],
+            'social_links.twitter' => ['nullable', 'url', 'max:255'],
+            'social_links.linkedin' => ['nullable', 'url', 'max:255'],
+            'social_links.youtube' => ['nullable', 'url', 'max:255'],
+            'social_links.tiktok' => ['nullable', 'url', 'max:255'],
             'logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp,gif', 'max:4096'],
             'hero_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp,gif', 'max:8192'],
             'favicon' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp,ico', 'max:2048'],
         ]);
+
+        if (isset($validated['social_links']) && is_array($validated['social_links'])) {
+            $validated['social_links'] = collect($validated['social_links'])
+                ->map(fn ($url) => is_string($url) ? trim($url) : '')
+                ->filter(fn (string $url) => $url !== '')
+                ->all();
+        }
 
         $website = $this->websiteService->updateSettings($website, $validated);
         $settings = is_array($website->settings) ? $website->settings : [];
@@ -164,11 +178,75 @@ class WebsiteController extends AppointmentsBaseController
             'sections.*.position' => ['nullable', 'integer', 'min:0', 'max:1000'],
             'sections.*.is_enabled' => ['nullable', 'boolean'],
             'sections.*.config' => ['nullable', 'string'],
+            'sections.*.structured' => ['nullable', 'array'],
         ]);
 
-        $sections = collect($validated['sections'])->map(function (array $section): array {
+        $existingSections = $website->sections()->get()->keyBy('id');
+
+        $sections = collect($validated['sections'])->map(function (array $section) use ($existingSections): array {
+            $existing = $existingSections->get((int) $section['id']);
+            $component = $existing?->component_key;
             $decodedConfig = [];
-            if (array_key_exists('config', $section) && is_string($section['config']) && trim($section['config']) !== '') {
+
+            if (is_array($section['structured'] ?? null) && in_array($component, ['testimonials', 'faq', 'gallery'], true)) {
+                $structured = $section['structured'];
+                if ($component === 'testimonials') {
+                    $items = collect($structured['items'] ?? [])
+                        ->filter(fn ($item) => is_array($item) && trim((string) ($item['content'] ?? $item['text'] ?? '')) !== '')
+                        ->map(function (array $item): array {
+                            return [
+                                'name' => trim((string) ($item['name'] ?? '')),
+                                'role' => trim((string) ($item['role'] ?? '')) ?: null,
+                                'content' => trim((string) ($item['content'] ?? $item['text'] ?? '')),
+                                'rating' => isset($item['rating']) && $item['rating'] !== '' ? max(1, min(5, (int) $item['rating'])) : null,
+                                'image' => trim((string) ($item['image'] ?? '')) ?: null,
+                                // Backward compatible keys for existing public partials.
+                                'author' => trim((string) ($item['name'] ?? '')),
+                                'text' => trim((string) ($item['content'] ?? $item['text'] ?? '')),
+                            ];
+                        })
+                        ->values()
+                        ->all();
+                    $decodedConfig = [
+                        'title' => trim((string) ($structured['title'] ?? 'آراء العملاء')),
+                        'items' => $items,
+                    ];
+                } elseif ($component === 'faq') {
+                    $items = collect($structured['items'] ?? [])
+                        ->filter(fn ($item) => is_array($item) && trim((string) ($item['question'] ?? '')) !== '')
+                        ->map(function (array $item, int $idx): array {
+                            return [
+                                'question' => trim((string) ($item['question'] ?? '')),
+                                'answer' => trim((string) ($item['answer'] ?? '')),
+                                'ordering' => isset($item['ordering']) ? (int) $item['ordering'] : $idx,
+                            ];
+                        })
+                        ->sortBy('ordering')
+                        ->values()
+                        ->all();
+                    $decodedConfig = [
+                        'title' => trim((string) ($structured['title'] ?? 'الأسئلة الشائعة')),
+                        'items' => $items,
+                    ];
+                } else {
+                    $images = collect($structured['images'] ?? [])
+                        ->filter(fn ($item) => is_array($item) && trim((string) ($item['image'] ?? $item['url'] ?? '')) !== '')
+                        ->map(function (array $item, int $idx): array {
+                            return [
+                                'image' => trim((string) ($item['image'] ?? $item['url'] ?? '')),
+                                'caption' => trim((string) ($item['caption'] ?? '')) ?: null,
+                                'ordering' => isset($item['ordering']) ? (int) $item['ordering'] : $idx,
+                            ];
+                        })
+                        ->sortBy('ordering')
+                        ->values()
+                        ->all();
+                    $decodedConfig = [
+                        'title' => trim((string) ($structured['title'] ?? 'معرض الصور')),
+                        'images' => $images,
+                    ];
+                }
+            } elseif (array_key_exists('config', $section) && is_string($section['config']) && trim($section['config']) !== '') {
                 $candidate = json_decode($section['config'], true);
                 if (! is_array($candidate)) {
                     throw ValidationException::withMessages([

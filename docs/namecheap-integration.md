@@ -16,13 +16,39 @@ Error type:
 
 ## Supported API Commands
 
-- `namecheap.domains.check`
+- `namecheap.domains.check` (availability + premium prices)
+- `namecheap.users.getPricing` (standard TLD registration/renewal/transfer prices)
 - `namecheap.domains.create`
 - `namecheap.domains.getInfo`
 - `namecheap.domains.getList`
 - `namecheap.domains.dns.getHosts`
 - `namecheap.domains.dns.setHosts`
 - `namecheap.domains.renew`
+
+## Pricing behavior
+
+`domains.check` only returns premium prices for premium names.
+Non-premium retail prices are loaded via `namecheap.users.getPricing`, cached
+(`WEBSITE_DOMAIN_PRICING_CACHE_SECONDS`), then merged in `DomainService::searchDomains`
+with optional `WEBSITE_DOMAIN_MARKUP_PERCENT`.
+
+## Purchase idempotency / recovery
+
+Registration uses stable idempotency keys:
+
+`register:{normalized_domain}:{years}`
+
+If Namecheap succeeds but local persistence fails, status becomes `recovery_required`.
+Retries call `getInfo` and reconcile instead of creating the domain twice.
+Provider `DomainID` / `OrderID` / `TransactionID` are persisted on `website_domains`.
+
+## Security notes
+
+- API credentials are server-side only (`config/services.php` / env)
+- Request logs never include ApiKey
+- HTTP timeouts + limited retries are configured
+- Sandbox vs production via `NAMECHEAP_ENV`
+- Whitelist the server outbound IP in Namecheap API settings (`NAMECHEAP_CLIENT_IP`)
 
 ## Configuration
 

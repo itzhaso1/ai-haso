@@ -23,6 +23,7 @@ class PublicWebsiteModuleTest extends TestCase
         [$owner, $workspace] = $this->createWorkspaceOwner('company');
         $this->enableWebsiteFeatures($workspace);
         config()->set('website.platform_domain', 'example.test');
+        app(\App\Services\Website\TemplateService::class)->ensureDefaultTemplates();
 
         $this->actingAs($owner)
             ->withSession(['current_workspace_id' => $workspace->id])

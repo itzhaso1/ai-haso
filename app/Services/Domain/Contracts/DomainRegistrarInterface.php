@@ -44,4 +44,12 @@ interface DomainRegistrarInterface
      * @return array<string, mixed>
      */
     public function renew(string $domain, int $years, array $options = []): array;
+
+    /**
+     * Fetch TLD retail pricing via namecheap.users.getPricing.
+     *
+     * @param  array<int, string>  $tlds
+     * @return array<string, array{registration:?float,renewal:?float,transfer:?float,currency:?string}>
+     */
+    public function getTldPricing(array $tlds, int $years = 1): array;
 }

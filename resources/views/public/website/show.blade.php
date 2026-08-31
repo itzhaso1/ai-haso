@@ -59,14 +59,23 @@
 </head>
 <body class="min-h-screen bg-slate-50 text-slate-900">
     <header class="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-            <a href="{{ $homeUrl }}" class="text-base font-bold ws-accent">
-                {{ $settings['business_name'] ?? $website->name }}
+        <div class="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
+            <a href="{{ $homeUrl }}" class="flex min-w-0 items-center gap-3 text-base font-bold ws-accent">
+                @if(!empty($settings['logo_url']))
+                    <img
+                        src="{{ $settings['logo_url'] }}"
+                        alt="{{ $settings['business_name'] ?? $website->name }}"
+                        class="h-9 w-auto max-w-[140px] object-contain sm:h-10 sm:max-w-[180px]"
+                    >
+                @endif
+                <span class="truncate {{ !empty($settings['logo_url']) ? 'hidden sm:inline' : '' }}">
+                    {{ $settings['business_name'] ?? $website->name }}
+                </span>
             </a>
-            <nav class="flex items-center gap-2 text-sm">
-                <a href="{{ $homeUrl }}" class="rounded-lg px-3 py-1.5 {{ $pageSlug === 'home' ? 'ws-bg-soft ws-accent font-semibold' : 'text-slate-600 hover:bg-slate-100' }}">Home</a>
-                <a href="{{ $bookingUrl }}" class="rounded-lg px-3 py-1.5 {{ $pageSlug === 'booking' ? 'ws-bg-soft ws-accent font-semibold' : 'text-slate-600 hover:bg-slate-100' }}">Booking</a>
-                <a href="{{ $contactUrl }}" class="rounded-lg px-3 py-1.5 {{ $pageSlug === 'contact' ? 'ws-bg-soft ws-accent font-semibold' : 'text-slate-600 hover:bg-slate-100' }}">Contact</a>
+            <nav class="flex shrink-0 items-center gap-1 text-sm sm:gap-2">
+                <a href="{{ $homeUrl }}" class="rounded-lg px-2 py-1.5 sm:px-3 {{ $pageSlug === 'home' ? 'ws-bg-soft ws-accent font-semibold' : 'text-slate-600 hover:bg-slate-100' }}">Home</a>
+                <a href="{{ $bookingUrl }}" class="rounded-lg px-2 py-1.5 sm:px-3 {{ $pageSlug === 'booking' ? 'ws-bg-soft ws-accent font-semibold' : 'text-slate-600 hover:bg-slate-100' }}">Booking</a>
+                <a href="{{ $contactUrl }}" class="rounded-lg px-2 py-1.5 sm:px-3 {{ $pageSlug === 'contact' ? 'ws-bg-soft ws-accent font-semibold' : 'text-slate-600 hover:bg-slate-100' }}">Contact</a>
             </nav>
         </div>
     </header>
@@ -84,11 +93,14 @@
             @include('public.website.sections.contact_page')
         @else
             @foreach($sections as $section)
+                @continue(($section->component_key ?? '') === 'footer')
                 @php($sectionConfig = is_array($section->config) ? $section->config : [])
                 @includeIf('public.website.sections.'.$section->component_key, ['sectionConfig' => $sectionConfig])
             @endforeach
         @endif
     </main>
+
+    @include('public.website.sections.footer')
 
     <script>
         window.PublicBookingConfig = {

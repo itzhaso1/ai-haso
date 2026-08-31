@@ -34,6 +34,12 @@ abstract class WorkspaceScopedModel extends Model
 
             if ($workspaceId === null) {
                 if (! $incomingWorkspaceId) {
+                    // audit_logs.workspace_id is intentionally nullable for system/global entities
+                    // (e.g. website templates) that are still audit-worthy.
+                    if ($model instanceof AuditLog) {
+                        return;
+                    }
+
                     throw new RuntimeException('Workspace context is required for creating workspace scoped records.');
                 }
 

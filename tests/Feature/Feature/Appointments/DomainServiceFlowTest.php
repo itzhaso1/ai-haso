@@ -45,6 +45,7 @@ class DomainServiceFlowTest extends TestCase
             public function getDnsRecords(string $domain): array { return []; }
             public function setDnsRecords(string $domain, array $records, ?string $emailType = null): array { return []; }
             public function renew(string $domain, int $years, array $options = []): array { return []; }
+            public function getTldPricing(array $tlds, int $years = 1): array { return []; }
         });
 
         /** @var DomainService $service */

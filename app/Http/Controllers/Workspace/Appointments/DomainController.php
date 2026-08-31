@@ -164,6 +164,21 @@ class DomainController extends AppointmentsBaseController
         return back()->with('success', 'تم إرسال طلب مزامنة حالة الدومين.');
     }
 
+    public function toggleAutoRenew(Request $request, Website $website, WebsiteDomain $domain): RedirectResponse
+    {
+        $this->authorizeAppointments($request, 'appointments.settings.manage');
+        $this->ensureDomainBelongsToWebsite($website, $domain);
+        $this->authorize('update', $domain);
+
+        $validated = $request->validate([
+            'auto_renew' => ['required', 'boolean'],
+        ]);
+
+        $this->domainService->setAutoRenew($domain, (bool) $validated['auto_renew']);
+
+        return back()->with('success', $validated['auto_renew'] ? 'تم تفعيل التجديد التلقائي.' : 'تم إيقاف التجديد التلقائي.');
+    }
+
     public function remove(Request $request, Website $website, WebsiteDomain $domain): RedirectResponse
     {
         $this->authorizeAppointments($request, 'appointments.settings.manage');

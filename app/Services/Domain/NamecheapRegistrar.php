@@ -268,6 +268,92 @@ class NamecheapRegistrar implements DomainRegistrarInterface
         ];
     }
 
+    public function getTldPricing(array $tlds, int $years = 1): array
+    {
+        $years = max(1, min(10, $years));
+        $normalizedTlds = collect($tlds)
+            ->map(fn ($tld) => strtolower(trim((string) $tld)))
+            ->filter(fn (string $tld) => $tld !== '')
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($normalizedTlds === []) {
+            return [];
+        }
+
+        $pricing = [];
+        $response = $this->request('namecheap.users.getPricing', [
+            'ProductType' => 'DOMAIN',
+        ]);
+
+        $productType = data_get($response, 'command_response.UserGetPricingResult.ProductType', []);
+        $categories = data_get($productType, 'ProductCategory', []);
+        $categoryRows = array_is_list($categories) ? $categories : ($categories === [] ? [] : [$categories]);
+
+        foreach ($categoryRows as $category) {
+            if (! is_array($category)) {
+                continue;
+            }
+
+            $action = strtoupper((string) ($category['Name'] ?? ''));
+            $priceKey = match ($action) {
+                'REGISTER' => 'registration',
+                'RENEW' => 'renewal',
+                'TRANSFER' => 'transfer',
+                default => null,
+            };
+            if ($priceKey === null) {
+                continue;
+            }
+
+            $products = $category['Product'] ?? [];
+            $productRows = array_is_list($products) ? $products : ($products === [] ? [] : [$products]);
+
+            foreach ($productRows as $product) {
+                if (! is_array($product)) {
+                    continue;
+                }
+
+                $tld = strtolower((string) ($product['Name'] ?? ''));
+                if ($tld === '' || ! in_array($tld, $normalizedTlds, true)) {
+                    continue;
+                }
+
+                $prices = $product['Price'] ?? [];
+                $priceRows = array_is_list($prices) ? $prices : ($prices === [] ? [] : [$prices]);
+                $matched = null;
+                foreach ($priceRows as $priceRow) {
+                    if (! is_array($priceRow)) {
+                        continue;
+                    }
+                    if ((int) ($priceRow['Duration'] ?? 0) === $years) {
+                        $matched = $priceRow;
+                        break;
+                    }
+                }
+                if ($matched === null && isset($priceRows[0]) && is_array($priceRows[0])) {
+                    $matched = $priceRows[0];
+                }
+                if ($matched === null) {
+                    continue;
+                }
+
+                $amount = (float) ($matched['YourPrice'] ?? $matched['Price'] ?? 0);
+                $pricing[$tld] ??= [
+                    'registration' => null,
+                    'renewal' => null,
+                    'transfer' => null,
+                    'currency' => (string) ($matched['Currency'] ?? 'USD'),
+                ];
+                $pricing[$tld][$priceKey] = $amount > 0 ? $amount : null;
+                $pricing[$tld]['currency'] = (string) ($matched['Currency'] ?? $pricing[$tld]['currency'] ?? 'USD');
+            }
+        }
+
+        return $pricing;
+    }
+
     /**
      * @param  array<string, mixed>  payload
      * @return array<string, mixed>
@@ -314,10 +400,12 @@ class NamecheapRegistrar implements DomainRegistrarInterface
         }
 
         $parsed = $this->xmlParser->parse((string) $response->body());
+        // Never log ApiKey / raw credential-bearing payloads.
         Log::info('namecheap.request', [
             'command' => $command,
             'status' => $parsed['status'] ?? 'unknown',
             'error_count' => count($parsed['errors'] ?? []),
+            'attempt' => $attempt,
         ]);
 
         if (($parsed['status'] ?? 'ERROR') !== 'OK') {

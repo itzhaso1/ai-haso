@@ -116,6 +116,8 @@
                         <th class="px-3 py-2 text-right font-semibold text-slate-600">DNS</th>
                         <th class="px-3 py-2 text-right font-semibold text-slate-600">SSL</th>
                         <th class="px-3 py-2 text-right font-semibold text-slate-600">Expires</th>
+                        <th class="px-3 py-2 text-right font-semibold text-slate-600">Auto Renew</th>
+                        <th class="px-3 py-2 text-right font-semibold text-slate-600">Provider</th>
                         <th class="px-3 py-2 text-right font-semibold text-slate-600">Actions</th>
                     </tr>
                     </thead>
@@ -131,8 +133,20 @@
                             <td class="px-3 py-2">{{ $domain->type }}</td>
                             <td class="px-3 py-2">{{ $domain->status }}</td>
                             <td class="px-3 py-2">{{ $domain->dns_status }}</td>
-                            <td class="px-3 py-2">{{ $domain->ssl_status }}</td>
+                            <td class="px-3 py-2">
+                                {{ $domain->ssl_status }}
+                                @if($domain->ssl_expires_at)
+                                    <div class="text-[10px] text-slate-400">SSL exp {{ $domain->ssl_expires_at->format('Y-m-d') }}</div>
+                                @endif
+                            </td>
                             <td class="px-3 py-2">{{ $domain->expires_at?->format('Y-m-d') ?? '-' }}</td>
+                            <td class="px-3 py-2">{{ $domain->auto_renew ? 'On' : 'Off' }}</td>
+                            <td class="px-3 py-2 text-[11px] text-slate-500">
+                                {{ $domain->provider }}
+                                @if($domain->provider_domain_id)
+                                    <div>ID: {{ $domain->provider_domain_id }}</div>
+                                @endif
+                            </td>
                             <td class="px-3 py-2">
                                 <div class="flex flex-wrap gap-1">
                                     <form method="POST" action="{{ route('workspace.appointments.website.domains.set-primary', [$website, $domain]) }}">
@@ -152,10 +166,17 @@
                                         <button type="submit" class="rounded-lg border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-700">Sync</button>
                                     </form>
                                     @if($domain->type !== 'platform_subdomain')
-                                        <form method="POST" action="{{ route('workspace.appointments.website.domains.remove', [$website, $domain]) }}" onsubmit="return confirm('Remove this domain?');">
+                                        <form method="POST" action="{{ route('workspace.appointments.website.domains.auto-renew', [$website, $domain]) }}">
+                                            @csrf
+                                            <input type="hidden" name="auto_renew" value="{{ $domain->auto_renew ? 0 : 1 }}">
+                                            <button type="submit" class="rounded-lg border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-700">
+                                                {{ $domain->auto_renew ? 'Disable Auto Renew' : 'Enable Auto Renew' }}
+                                            </button>
+                                        </form>
+                                        <form method="POST" action="{{ route('workspace.appointments.website.domains.remove', [$website, $domain]) }}" onsubmit="return confirm('Disconnect this domain?');">
                                             @csrf
                                             @method('DELETE')
-                                            <button type="submit" class="rounded-lg border border-rose-200 px-2 py-1 text-[11px] font-semibold text-rose-700">Remove</button>
+                                            <button type="submit" class="rounded-lg border border-rose-200 px-2 py-1 text-[11px] font-semibold text-rose-700">Disconnect</button>
                                         </form>
                                     @endif
                                 </div>
@@ -163,7 +184,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="px-3 py-6 text-center text-sm text-slate-500">No connected domains yet.</td>
+                            <td colspan="9" class="px-3 py-6 text-center text-sm text-slate-500">No connected domains yet.</td>
                         </tr>
                     @endforelse
                     </tbody>

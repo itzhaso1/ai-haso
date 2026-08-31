@@ -58,9 +58,7 @@ class WebsiteResolverTest extends TestCase
         $workspace = $this->createWorkspaceWithWebsiteFeatures('company');
         $website = $this->createPublishedWebsite($workspace);
 
-        $this->withServerVariables([
-            'HTTP_HOST' => $website->slug.'.platform.test',
-        ])->get('/booking')
+        $this->get('http://'.$website->slug.'.platform.test/booking')
             ->assertOk()
             ->assertSee('Book Appointment', false);
     }

@@ -38,6 +38,10 @@ Reused core:
 - service and staff are constrained by website workspace
 - booking total is never trusted from frontend
 - booking is created from server-side service price/rules
+- past slots are always rejected (even when min notice is 0)
+- concurrent bookings use cache locks when available plus DB transactions/`lockForUpdate`
+- unstaffed ("any staff") bookings enforce service capacity against overlapping active bookings
+- guest customers are matched by phone then email within the same workspace before create
 - booking dates in the past are rejected
 - public writes are throttled
 

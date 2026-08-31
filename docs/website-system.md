@@ -199,3 +199,12 @@ Draft/unpublished websites return restrictive robots behavior.
 ## Caching
 
 `WebsiteResolverService` caches host and slug lookups and invalidates on website/domain changes.
+
+## Production hardening notes
+
+- Logo renders in the public header (with text fallback).
+- Social links are editable in the dashboard and rendered in the footer (`target=_blank`, `rel=noopener noreferrer`).
+- Testimonials / FAQ / Gallery use structured dashboard editors (not raw JSON for end users).
+- Public booking rejects past slots and enforces concurrency/capacity for unstaffed bookings.
+- Domain lifecycle includes purchase recovery (`recovery_required`), auto-renew, expiration reminders, and real Certbot SSL verification (never fake-active).
+- External/BYO DNS-provider connect is not implemented; Namecheap-registered domains are supported.

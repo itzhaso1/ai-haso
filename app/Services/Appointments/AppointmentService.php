@@ -283,6 +283,7 @@ class AppointmentService
             staffId: $staff?->id,
             resourceIds: $resourceIds,
             bufferMinutes: (int) ($rules['buffer_minutes'] ?? 0),
+            serviceId: $service->id,
         );
 
         $customerName = trim((string) ($payload['customer_name'] ?? ''));
@@ -368,6 +369,7 @@ class AppointmentService
                 staffId: $staff?->id,
                 resourceIds: $resourceIds,
                 bufferMinutes: (int) ($rules['buffer_minutes'] ?? 0),
+                serviceId: $service->id,
                 lockForUpdate: true,
             );
 
@@ -596,6 +598,7 @@ class AppointmentService
             resourceIds: $resourceIds,
             bufferMinutes: (int) ($rules['buffer_minutes'] ?? 0),
             ignoreBookingId: $booking->id,
+            serviceId: $service?->id,
         );
 
         $this->ensureNoDuplicateBooking(
@@ -629,6 +632,7 @@ class AppointmentService
                 resourceIds: $resourceIds,
                 bufferMinutes: (int) ($rules['buffer_minutes'] ?? 0),
                 ignoreBookingId: $booking->id,
+                serviceId: $service?->id,
                 lockForUpdate: true,
             );
 
@@ -958,6 +962,7 @@ class AppointmentService
         int $bufferMinutes = 0,
         ?int $ignoreBookingId = null,
         bool $lockForUpdate = false,
+        ?int $serviceId = null,
     ): void {
         $buffer = max(0, $bufferMinutes);
         $windowStart = $startsAt->copy()->subMinutes($buffer);
@@ -980,12 +985,48 @@ class AppointmentService
             ? (clone $baseQuery)->where('staff_id', $staffId)->exists()
             : false;
 
+        // When staff is unspecified ("any staff"), enforce service capacity based on active staff.
+        $capacityOverlap = false;
+        if ($staffId === null && $serviceId !== null) {
+            $service = AppointmentServiceModel::withoutGlobalScopes()
+                ->where('workspace_id', $workspaceId)
+                ->whereKey($serviceId)
+                ->first();
+
+            $staffCapacity = 1;
+            if ($service) {
+                $assignedIds = $service->staffMembers()->pluck('appointment_staff.id')->all();
+                if ($assignedIds !== []) {
+                    $staffCapacity = max(1, AppointmentStaff::withoutGlobalScopes()
+                        ->where('workspace_id', $workspaceId)
+                        ->whereIn('id', $assignedIds)
+                        ->where('is_active', true)
+                        ->count());
+                } else {
+                    $staffCapacity = max(1, AppointmentStaff::withoutGlobalScopes()
+                        ->where('workspace_id', $workspaceId)
+                        ->where('is_active', true)
+                        ->count());
+                }
+            }
+
+            $overlappingCount = (clone $baseQuery)
+                ->where('service_id', $serviceId)
+                ->count();
+
+            $capacityOverlap = $overlappingCount >= $staffCapacity;
+        }
+
         $resourceOverlap = $resourceIds !== []
             ? (clone $baseQuery)->whereHas('resources', fn ($query) => $query->whereIn('appointment_resources.id', $resourceIds))->exists()
             : false;
 
         if ($staffOverlap) {
             throw new RuntimeException('يوجد تعارض: هذا الوقت محجوز بالفعل لنفس الطاقم.');
+        }
+
+        if ($capacityOverlap) {
+            throw new RuntimeException('يوجد تعارض: لا توجد سعة متاحة لهذه الخدمة في نفس التوقيت.');
         }
 
         if ($resourceOverlap) {
@@ -1045,6 +1086,12 @@ class AppointmentService
         $raw = trim((string) $value);
         if ($raw === '') {
             throw new RuntimeException('تاريخ الموعد غير صالح.');
+        }
+
+        // ISO-8601 values with an explicit offset/Z are absolute instants.
+        // Parse them first, then convert into the workspace timezone.
+        if (preg_match('/(?:Z|[+-]\d{2}:?\d{2})$/i', $raw) === 1) {
+            return Carbon::parse($raw)->timezone($timezone);
         }
 
         return Carbon::parse($raw, $timezone);
