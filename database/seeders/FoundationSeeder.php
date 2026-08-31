@@ -7,6 +7,7 @@ use App\Models\PlatformAdmin;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\PermissionRegistrar;
 use Spatie\Permission\Models\Role;
 
 class FoundationSeeder extends Seeder
@@ -16,6 +17,8 @@ class FoundationSeeder extends Seeder
      */
     public function run(): void
     {
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
         $permissions = [
             'workspace.view',
             'workspace.manage',
@@ -70,12 +73,18 @@ class FoundationSeeder extends Seeder
             'appointments.domains.manage',
         ];
 
-        foreach ($permissions as $permission) {
-            Permission::findOrCreate($permission, 'web');
+        foreach (array_values(array_unique($permissions)) as $permission) {
+            Permission::query()->firstOrCreate([
+                'name' => $permission,
+                'guard_name' => 'web',
+            ]);
         }
 
         foreach (['owner', 'admin', 'manager', 'agent', 'receptionist', 'staff_doctor', 'accountant'] as $roleName) {
-            Role::findOrCreate($roleName, 'web');
+            Role::query()->firstOrCreate([
+                'name' => $roleName,
+                'guard_name' => 'web',
+            ]);
         }
 
         $ownerRole = Role::findByName('owner', 'web');
@@ -295,5 +304,7 @@ class FoundationSeeder extends Seeder
                 'email_verified_at' => now(),
             ]
         );
+
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
     }
 }
