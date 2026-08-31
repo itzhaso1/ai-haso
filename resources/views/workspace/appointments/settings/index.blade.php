@@ -205,7 +205,16 @@
                         </div>
                         <div>
                             <label class="mb-1 block text-xs font-semibold text-slate-600">Reminder Offsets (minutes)</label>
-                            <input type="text" name="reminder_offsets" value="{{ old('reminder_offsets', implode(',', $setting?->reminder_offsets ?? [1440, 120])) }}" class="w-full rounded-lg border-slate-300 text-sm" placeholder="1440,120">
+                            @php
+                                $reminderOffsetsValue = old('reminder_offsets');
+                                if ($reminderOffsetsValue === null) {
+                                    $offsets = $setting?->reminder_offsets;
+                                    $reminderOffsetsValue = is_array($offsets)
+                                        ? implode(',', $offsets)
+                                        : (is_string($offsets) && $offsets !== '' ? $offsets : '1440,120');
+                                }
+                            @endphp
+                            <input type="text" name="reminder_offsets" value="{{ $reminderOffsetsValue }}" class="w-full rounded-lg border-slate-300 text-sm" placeholder="1440,120">
                         </div>
                     </div>
                     <div class="rounded-xl border border-slate-200 p-3">
