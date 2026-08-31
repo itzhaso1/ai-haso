@@ -53,4 +53,45 @@ class FeatureAccessServiceTest extends TestCase
         $this->assertTrue($service->hasFeature($user, $workspace, 'ai'));
         $this->assertFalse($service->hasFeature($user, $workspace, 'products'));
     }
+
+    public function test_company_plan_with_appointments_keeps_website_features_enabled_for_compatibility(): void
+    {
+        $service = app(FeatureAccessService::class);
+
+        $user = User::factory()->create();
+        $workspace = Workspace::factory()->create([
+            'owner_user_id' => $user->id,
+            'type' => 'company',
+        ]);
+        $workspace->users()->attach($user->id, [
+            'membership_role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $plan = Plan::query()->create([
+            'code' => 'company_legacy',
+            'name' => 'Company Legacy',
+            'workspace_type' => 'company',
+            'billing_period' => 'monthly',
+            'currency' => 'USD',
+            'price' => 49,
+            'is_active' => true,
+            'features' => ['appointments', 'dashboard'],
+            'limits' => [],
+        ]);
+
+        Subscription::query()->create([
+            'workspace_id' => $workspace->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'starts_at' => now(),
+            'current_period_start' => now(),
+            'current_period_end' => now()->addMonth(),
+        ]);
+
+        $this->assertTrue($service->hasFeature($user, $workspace, 'website_builder'));
+        $this->assertTrue($service->hasFeature($user, $workspace, 'custom_domains'));
+        $this->assertTrue($service->hasFeature($user, $workspace, 'public_booking'));
+    }
 }

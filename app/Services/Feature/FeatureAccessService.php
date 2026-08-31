@@ -8,6 +8,18 @@ use App\Models\WorkspaceFeatureFlag;
 
 class FeatureAccessService
 {
+    /**
+     * Legacy compatibility: older plans only had "appointments".
+     * Treat these newer website capabilities as part of appointments unless explicitly overridden.
+     *
+     * @var array<int, string>
+     */
+    private const APPOINTMENTS_COMPATIBILITY_FEATURES = [
+        'website_builder',
+        'custom_domains',
+        'public_booking',
+    ];
+
     public function hasFeature(User $user, Workspace $workspace, string $feature): bool
     {
         $membershipExists = $workspace->users()
@@ -42,7 +54,14 @@ class FeatureAccessService
             return false;
         }
 
-        $planFeatures = $subscription->plan?->features ?? [];
+        $planFeatures = is_array($subscription->plan?->features) ? $subscription->plan->features : [];
+
+        if (in_array($feature, self::APPOINTMENTS_COMPATIBILITY_FEATURES, true)
+            && ! in_array($feature, $planFeatures, true)
+            && in_array('appointments', $planFeatures, true)
+        ) {
+            return true;
+        }
 
         return in_array($feature, $planFeatures, true);
     }
