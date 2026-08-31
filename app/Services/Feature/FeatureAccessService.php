@@ -76,13 +76,14 @@ class FeatureAccessService
         ) {
             // Curated modern plans (e.g. starter) may include website_builder but omit
             // custom_domains on purpose — do not re-grant via legacy appointments compat.
-            if ($feature === 'custom_domains' && in_array('website_builder', $planFeatures, true)) {
-                return false;
-            }
+            if ($feature === 'custom_domains') {
+                $explicitTier = $plan->tier;
+                $isStarterCode = in_array((string) $plan->code, self::TIER_PLAN_CODES['starter'], true);
+                $hasWebsiteBuilder = in_array('website_builder', $planFeatures, true);
 
-            $tier = $plan->tier ?? $this->inferTier((string) $plan->code);
-            if ($feature === 'custom_domains' && $tier === 'starter') {
-                return false;
+                if ($hasWebsiteBuilder || $explicitTier === 'starter' || $isStarterCode) {
+                    return false;
+                }
             }
 
             return true;

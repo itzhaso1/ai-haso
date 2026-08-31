@@ -998,6 +998,27 @@ class FinancialCoreTest extends TestCase
             'joined_at' => now(),
         ]);
 
+        $plan = \App\Models\Plan::query()
+            ->where('workspace_type', $workspaceType)
+            ->where('code', $workspaceType.'_pro')
+            ->first()
+            ?? \App\Models\Plan::query()
+                ->where('workspace_type', $workspaceType)
+                ->where('is_active', true)
+                ->orderByDesc('price')
+                ->first();
+
+        if ($plan) {
+            \App\Models\Subscription::withoutGlobalScopes()->create([
+                'workspace_id' => $workspace->id,
+                'plan_id' => $plan->id,
+                'status' => 'active',
+                'starts_at' => now(),
+                'current_period_start' => now(),
+                'current_period_end' => now()->addMonth(),
+            ]);
+        }
+
         return [$user, $workspace];
     }
 }

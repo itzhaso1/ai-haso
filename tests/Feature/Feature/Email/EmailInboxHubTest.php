@@ -469,6 +469,28 @@ class EmailInboxHubTest extends TestCase
             'joined_at' => now(),
         ]);
 
+        $plan = \App\Models\Plan::query()->create([
+            'code' => $workspaceType.'_email_test_'.uniqid(),
+            'name' => 'Email Test Plan',
+            'tier' => 'pro',
+            'workspace_type' => $workspaceType,
+            'billing_period' => 'monthly',
+            'currency' => 'SAR',
+            'price' => 0,
+            'is_active' => true,
+            'features' => ['email', 'dashboard', 'subscription'],
+            'limits' => ['email_sends' => 1000],
+        ]);
+
+        \App\Models\Subscription::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'starts_at' => now(),
+            'current_period_start' => now(),
+            'current_period_end' => now()->addMonth(),
+        ]);
+
         return [$user, $workspace];
     }
 }
