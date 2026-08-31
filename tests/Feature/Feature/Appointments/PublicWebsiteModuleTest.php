@@ -214,6 +214,58 @@ class PublicWebsiteModuleTest extends TestCase
         $response->assertStatus(422);
     }
 
+    public function test_slug_mode_home_links_to_slug_booking_page_and_booking_route_works(): void
+    {
+        config()->set('website.platform_domain', 'platform.test');
+        [$owner, $workspace] = $this->createWorkspaceOwner('company');
+        $this->enableWebsiteFeatures($workspace);
+
+        /** @var \App\Services\Website\WebsiteService $websiteService */
+        $websiteService = app(\App\Services\Website\WebsiteService::class);
+        /** @var \App\Services\Website\TemplateService $templateService */
+        $templateService = app(\App\Services\Website\TemplateService::class);
+
+        $website = $websiteService->createWebsite($workspace, [
+            'name' => 'Slug Booking Site',
+            'slug' => 'hsn-khald-hsn-alhsynat',
+        ]);
+        $template = $templateService->listTemplates()->firstOrFail();
+        $websiteService->selectTemplate($website, $template->id);
+        $websiteService->updateSettings($website, [
+            'business_name' => 'Slug Booking Site',
+            'hero_title' => 'Book now',
+        ]);
+        $website = $websiteService->publish($website->refresh());
+
+        $home = $this->get('/public/'.$website->slug);
+        $home->assertOk();
+        $home->assertSee('/public/'.$website->slug.'/booking', false);
+        $home->assertDontSee('href="'.url('/booking').'"', false);
+
+        $booking = $this->get('/public/'.$website->slug.'/booking');
+        $booking->assertOk();
+        $booking->assertSee('Book Appointment', false);
+    }
+
+    public function test_unpublished_slug_booking_page_returns_not_found(): void
+    {
+        [$owner, $workspace] = $this->createWorkspaceOwner('company');
+        $this->enableWebsiteFeatures($workspace);
+
+        $website = Website::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Draft Site',
+            'slug' => 'draft-booking-site',
+            'status' => 'draft',
+            'preview_token' => 'draftpreviewtoken',
+            'settings' => ['business_name' => 'Draft Site'],
+            'theme' => ['direction' => 'rtl'],
+            'metadata' => [],
+        ]);
+
+        $this->get('/public/'.$website->slug.'/booking')->assertNotFound();
+    }
+
     /**
      * @return array{0: User, 1: Workspace}
      */

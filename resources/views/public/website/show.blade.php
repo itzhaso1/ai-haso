@@ -5,17 +5,48 @@
     $secondaryColor = $theme['secondary_color'] ?? '#14b8a6';
     $fontFamily = $theme['font'] ?? 'Cairo';
     $pageSlug = $current_page?->slug ?? 'home';
-    $isHostedMode = request()->attributes->has('website');
-    $homeUrl = $isHostedMode ? url('/') : route('public.website.show', $website->slug);
-    $bookingUrl = $isHostedMode ? url('/booking') : route('public.website.page', [$website->slug, 'booking']);
-    $contactUrl = $isHostedMode ? url('/contact') : route('public.website.page', [$website->slug, 'contact']);
-    $servicesApi = $isHostedMode ? url('/api/public/services') : route('public.api.services', $website->slug);
-    $serviceStaffApiTemplate = $isHostedMode
-        ? url('/api/public/services/__SERVICE__/staff')
-        : route('public.api.services.staff', [$website->slug, '__SERVICE__']);
-    $availabilityApi = $isHostedMode ? url('/api/public/availability') : route('public.api.availability', $website->slug);
-    $validateApi = $isHostedMode ? url('/api/public/booking/validate') : route('public.api.booking.validate', $website->slug);
-    $storeApi = $isHostedMode ? url('/api/public/booking') : route('public.api.booking.store', $website->slug);
+    $isPreviewMode = ! empty($isPreview);
+    $requestPath = trim((string) request()->path(), '/');
+    $isSlugPublicMode = str_starts_with($requestPath, 'public/');
+    $isPreviewRoute = str_starts_with($requestPath, 'public-preview/');
+    // Only custom-domain / platform-subdomain hosting uses root paths like /booking.
+    // Slug mode (/public/{slug}) and preview must keep prefixed URLs.
+    $isHostedMode = ! $isSlugPublicMode
+        && ! $isPreviewRoute
+        && ! $isPreviewMode
+        && request()->attributes->has('website')
+        && ! str_contains((string) request()->getHost(), '127.0.0.1')
+        && ! str_contains((string) request()->getHost(), 'localhost');
+
+    if ($isPreviewMode || $isPreviewRoute) {
+        $previewToken = (string) $website->preview_token;
+        $homeUrl = route('public.website.preview', [$previewToken]);
+        $bookingUrl = route('public.website.preview', [$previewToken, 'booking']);
+        $contactUrl = route('public.website.preview', [$previewToken, 'contact']);
+        $servicesApi = route('public.api.services', $website->slug);
+        $serviceStaffApiTemplate = route('public.api.services.staff', [$website->slug, '__SERVICE__']);
+        $availabilityApi = route('public.api.availability', $website->slug);
+        $validateApi = route('public.api.booking.validate', $website->slug);
+        $storeApi = route('public.api.booking.store', $website->slug);
+    } elseif ($isHostedMode) {
+        $homeUrl = url('/');
+        $bookingUrl = url('/booking');
+        $contactUrl = url('/contact');
+        $servicesApi = url('/api/public/services');
+        $serviceStaffApiTemplate = url('/api/public/services/__SERVICE__/staff');
+        $availabilityApi = url('/api/public/availability');
+        $validateApi = url('/api/public/booking/validate');
+        $storeApi = url('/api/public/booking');
+    } else {
+        $homeUrl = route('public.website.show', $website->slug);
+        $bookingUrl = route('public.website.page', [$website->slug, 'booking']);
+        $contactUrl = route('public.website.page', [$website->slug, 'contact']);
+        $servicesApi = route('public.api.services', $website->slug);
+        $serviceStaffApiTemplate = route('public.api.services.staff', [$website->slug, '__SERVICE__']);
+        $availabilityApi = route('public.api.availability', $website->slug);
+        $validateApi = route('public.api.booking.validate', $website->slug);
+        $storeApi = route('public.api.booking.store', $website->slug);
+    }
 @endphp
 <!DOCTYPE html>
 <html lang="{{ $isRtl ? 'ar' : 'en' }}" dir="{{ $direction }}">

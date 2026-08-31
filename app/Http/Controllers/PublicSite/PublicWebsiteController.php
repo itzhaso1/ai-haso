@@ -39,7 +39,7 @@ class PublicWebsiteController extends Controller
             ->firstOrFail();
 
         if ($resolved->status !== 'published') {
-            abort(404);
+            abort(404, 'Website is not published yet. Publish it from the dashboard before sharing public booking links.');
         }
 
         return view('public.website.show', $this->publicWebsiteService->buildWebsiteViewData(
