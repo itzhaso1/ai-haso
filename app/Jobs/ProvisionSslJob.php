@@ -31,7 +31,7 @@ class ProvisionSslJob implements ShouldQueue
             'workspace_id' => $domain->workspace_id,
             'website_id' => $domain->website_id,
             'website_domain_id' => $domain->id,
-            'operation_type' => 'verify',
+            'operation_type' => 'provision_ssl',
             'provider' => 'ssl',
             'status' => 'succeeded',
             'idempotency_key' => 'ssl:'.$domain->normalized_domain.':'.Str::uuid(),

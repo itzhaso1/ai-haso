@@ -28,8 +28,6 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: [
             'webhooks/resend',
             'whatsapp-webhook',
-            'public/*/api/booking',
-            'public/*/api/booking/validate',
         ]);
 
         $middleware->alias([

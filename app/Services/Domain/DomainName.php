@@ -20,8 +20,8 @@ class DomainName
             throw new RuntimeException('Invalid domain name.');
         }
 
-        $tld = array_pop($parts);
-        $sld = array_pop($parts);
+        $sld = array_shift($parts);
+        $tld = implode('.', $parts);
         if ($sld === null || $tld === null || $sld === '' || $tld === '') {
             throw new RuntimeException('Invalid domain name.');
         }

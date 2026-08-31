@@ -9,6 +9,13 @@
     $homeUrl = $isHostedMode ? url('/') : route('public.website.show', $website->slug);
     $bookingUrl = $isHostedMode ? url('/booking') : route('public.website.page', [$website->slug, 'booking']);
     $contactUrl = $isHostedMode ? url('/contact') : route('public.website.page', [$website->slug, 'contact']);
+    $servicesApi = $isHostedMode ? url('/api/public/services') : route('public.api.services', $website->slug);
+    $serviceStaffApiTemplate = $isHostedMode
+        ? url('/api/public/services/__SERVICE__/staff')
+        : route('public.api.services.staff', [$website->slug, '__SERVICE__']);
+    $availabilityApi = $isHostedMode ? url('/api/public/availability') : route('public.api.availability', $website->slug);
+    $validateApi = $isHostedMode ? url('/api/public/booking/validate') : route('public.api.booking.validate', $website->slug);
+    $storeApi = $isHostedMode ? url('/api/public/booking') : route('public.api.booking.store', $website->slug);
 @endphp
 <!DOCTYPE html>
 <html lang="{{ $isRtl ? 'ar' : 'en' }}" dir="{{ $direction }}">
@@ -87,11 +94,11 @@
         window.PublicBookingConfig = {
             websiteSlug: @json($website->slug),
             routes: {
-                services: @json(route('public.api.services', $website->slug)),
-                serviceStaff: @json(route('public.api.services.staff', [$website->slug, '__SERVICE__'])),
-                availability: @json(route('public.api.availability', $website->slug)),
-                validate: @json(route('public.api.booking.validate', $website->slug)),
-                store: @json(route('public.api.booking.store', $website->slug)),
+                services: @json($servicesApi),
+                serviceStaff: @json($serviceStaffApiTemplate),
+                availability: @json($availabilityApi),
+                validate: @json($validateApi),
+                store: @json($storeApi),
             },
             timezone: @json($timezone ?? config('app.timezone')),
             requiresPaymentLabel: @json(__('Requires payment')),

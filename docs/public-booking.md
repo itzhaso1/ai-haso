@@ -15,6 +15,15 @@ Under `/public/{website}/api`:
 - `POST /booking`
 - `GET /booking/{reference}`
 
+Under host-resolved mode (custom domain / platform subdomain):
+
+- `GET /api/public/services`
+- `GET /api/public/services/{service}/staff`
+- `GET /api/public/availability`
+- `POST /api/public/booking/validate`
+- `POST /api/public/booking`
+- `GET /api/public/booking/{reference}`
+
 Controllers:
 
 - `App\Http\Controllers\PublicSite\PublicBookingApiController`

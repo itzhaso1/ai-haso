@@ -155,7 +155,7 @@ return new class extends Migration
             $table->foreignId('workspace_id')->constrained()->cascadeOnDelete();
             $table->foreignId('website_id')->nullable()->constrained('websites')->nullOnDelete();
             $table->foreignId('website_domain_id')->nullable()->constrained('website_domains')->nullOnDelete();
-            $table->enum('operation_type', ['search', 'purchase', 'configure_dns', 'verify', 'renew', 'set_primary', 'remove', 'sync_status']);
+            $table->enum('operation_type', ['search', 'purchase', 'configure_dns', 'verify', 'provision_ssl', 'renew', 'set_primary', 'remove', 'sync_status']);
             $table->string('provider', 40)->default('namecheap');
             $table->enum('status', ['pending', 'processing', 'succeeded', 'failed'])->default('pending');
             $table->string('idempotency_key')->nullable();

@@ -169,6 +169,7 @@ class DomainService
                         is_array($websiteDomain->metadata) ? $websiteDomain->metadata : [],
                         [
                             'registration' => $registration,
+                            'verification_attempts' => 0,
                         ]
                     ),
                 ]);
@@ -244,6 +245,10 @@ class DomainService
         $websiteDomain->update([
             'status' => 'dns_pending',
             'dns_status' => 'pending',
+            'metadata' => array_merge(
+                is_array($websiteDomain->metadata) ? $websiteDomain->metadata : [],
+                ['verification_attempts' => 0]
+            ),
         ]);
 
         VerifyDomainJob::dispatch($websiteDomain->id, $actorUserId)->delay(now()->addSeconds(5));
@@ -270,33 +275,110 @@ class DomainService
 
     public function verifyDomain(WebsiteDomain $websiteDomain): WebsiteDomain
     {
+        $operation = WebsiteDomainOperation::withoutGlobalScopes()->create([
+            'workspace_id' => $websiteDomain->workspace_id,
+            'website_id' => $websiteDomain->website_id,
+            'website_domain_id' => $websiteDomain->id,
+            'operation_type' => 'verify',
+            'provider' => 'namecheap',
+            'status' => 'processing',
+            'idempotency_key' => 'verify:'.$websiteDomain->normalized_domain.':'.Str::uuid(),
+            'request_payload' => [
+                'domain' => $websiteDomain->domain,
+                'target' => config('website.dns_target'),
+                'target_type' => config('website.dns_target_type', 'A'),
+            ],
+        ]);
+
         $websiteDomain->update([
             'status' => 'verifying',
             'verification_status' => 'verifying',
         ]);
 
-        $dns = $this->registrar->getDnsRecords($websiteDomain->domain);
-        $target = trim((string) config('website.dns_target'));
-        $targetType = strtoupper((string) config('website.dns_target_type', 'A'));
+        try {
+            $dns = $this->registrar->getDnsRecords($websiteDomain->domain);
+            $target = trim((string) config('website.dns_target'));
+            $targetType = strtoupper((string) config('website.dns_target_type', 'A'));
 
-        $verified = collect($dns['records'] ?? [])->contains(function ($record) use ($target, $targetType): bool {
-            if (! is_array($record)) {
-                return false;
+            $verified = collect($dns['records'] ?? [])->contains(function ($record) use ($target, $targetType): bool {
+                if (! is_array($record)) {
+                    return false;
+                }
+
+                return strtolower((string) ($record['name'] ?? '')) === '@'
+                    && strtoupper((string) ($record['type'] ?? '')) === $targetType
+                    && (string) ($record['address'] ?? '') === $target;
+            });
+
+            $metadata = is_array($websiteDomain->metadata) ? $websiteDomain->metadata : [];
+            $attempts = max(0, (int) ($metadata['verification_attempts'] ?? 0)) + 1;
+            $metadata['verification_attempts'] = $attempts;
+
+            if ($verified) {
+                $websiteDomain->update([
+                    'status' => 'verified',
+                    'verification_status' => 'verified',
+                    'dns_status' => 'configured',
+                    'metadata' => $metadata,
+                ]);
+                $operation->update([
+                    'status' => 'succeeded',
+                    'response_payload' => ['records' => $dns['records'] ?? [], 'verified' => true, 'attempt' => $attempts],
+                    'processed_at' => now(),
+                ]);
+                ProvisionSslJob::dispatch($websiteDomain->id);
+            } else {
+                $maxAttempts = max(1, (int) config('website.domain_verification_max_attempts', 12));
+                if ($attempts >= $maxAttempts) {
+                    $websiteDomain->update([
+                        'status' => 'failed',
+                        'verification_status' => 'failed',
+                        'dns_status' => 'failed',
+                        'metadata' => array_merge($metadata, [
+                            'last_error' => 'DNS verification attempts exceeded limit.',
+                        ]),
+                    ]);
+                    $operation->update([
+                        'status' => 'failed',
+                        'error_message' => 'DNS verification attempts exceeded limit.',
+                        'response_payload' => ['records' => $dns['records'] ?? [], 'verified' => false, 'attempt' => $attempts],
+                        'processed_at' => now(),
+                    ]);
+                } else {
+                    $websiteDomain->update([
+                        'status' => 'dns_pending',
+                        'verification_status' => 'verifying',
+                        'dns_status' => 'pending',
+                        'metadata' => $metadata,
+                    ]);
+                    $operation->update([
+                        'status' => 'succeeded',
+                        'response_payload' => ['records' => $dns['records'] ?? [], 'verified' => false, 'attempt' => $attempts],
+                        'processed_at' => now(),
+                    ]);
+
+                    $retryDelay = max(30, (int) config('website.domain_verification_retry_seconds', 600));
+                    VerifyDomainJob::dispatch($websiteDomain->id)->delay(now()->addSeconds($retryDelay));
+                }
             }
 
-            return strtolower((string) ($record['name'] ?? '')) === '@'
-                && strtoupper((string) ($record['type'] ?? '')) === $targetType
-                && (string) ($record['address'] ?? '') === $target;
-        });
+        } catch (\Throwable $exception) {
+            $websiteDomain->update([
+                'status' => 'failed',
+                'verification_status' => 'failed',
+                'dns_status' => 'failed',
+                'metadata' => array_merge(
+                    is_array($websiteDomain->metadata) ? $websiteDomain->metadata : [],
+                    ['last_error' => $exception->getMessage()]
+                ),
+            ]);
+            $operation->update([
+                'status' => 'failed',
+                'error_message' => $exception->getMessage(),
+                'processed_at' => now(),
+            ]);
 
-        $websiteDomain->update([
-            'status' => $verified ? 'verified' : 'failed',
-            'verification_status' => $verified ? 'verified' : 'failed',
-            'dns_status' => $verified ? 'configured' : 'failed',
-        ]);
-
-        if ($verified) {
-            ProvisionSslJob::dispatch($websiteDomain->id);
+            throw $exception;
         }
 
         $website = $websiteDomain->website()->withoutGlobalScopes()->first();

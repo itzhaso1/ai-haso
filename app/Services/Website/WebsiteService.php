@@ -227,6 +227,11 @@ class WebsiteService
 
     public function publish(Website $website): Website
     {
+        $workspace = $website->workspace()->withoutGlobalScopes()->first();
+        if (! $workspace || $workspace->status !== 'active') {
+            throw new RuntimeException('Workspace must be active before publishing website.');
+        }
+
         if (! $website->template_id) {
             throw new RuntimeException('Template must be selected before publishing.');
         }

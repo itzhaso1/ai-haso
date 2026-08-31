@@ -66,6 +66,14 @@ Route::get('/', function () {
     $website = app(\App\Services\Website\WebsiteResolverService::class)
         ->resolveByHost((string) request()->getHost());
     if ($website && $website->status === 'published') {
+        $primary = $website->primaryDomain()->withoutGlobalScopes()->first();
+        if ($primary && ! str_contains((string) request()->getHost(), 'localhost')) {
+            $currentHost = \App\Services\Domain\DomainName::normalize((string) request()->getHost());
+            if ($currentHost !== '' && $currentHost !== (string) $primary->normalized_domain) {
+                return redirect()->to('https://'.$primary->normalized_domain.request()->getRequestUri(), 301);
+            }
+        }
+
         return view('public.website.show', app(\App\Services\Website\PublicWebsiteService::class)
             ->buildWebsiteViewData($website, 'home'));
     }
@@ -89,6 +97,19 @@ Route::middleware(['public.website.resolve', 'throttle:60,1'])->group(function (
     Route::get('/contact', [PublicWebsiteController::class, 'showResolved'])->defaults('page', 'contact')->name('public.website.host.contact');
     Route::get('/robots.txt', [PublicWebsiteController::class, 'robotsResolved'])->name('public.website.host.robots');
     Route::get('/sitemap.xml', [PublicWebsiteController::class, 'sitemapResolved'])->name('public.website.host.sitemap');
+
+    Route::prefix('api/public')->group(function (): void {
+        Route::get('/services', [PublicBookingApiController::class, 'servicesResolved'])->name('public.host.api.services');
+        Route::get('/services/{service}/staff', [PublicBookingApiController::class, 'staffResolved'])->name('public.host.api.services.staff');
+        Route::get('/availability', [PublicBookingApiController::class, 'availabilityResolved'])->name('public.host.api.availability');
+        Route::post('/booking/validate', [PublicBookingApiController::class, 'validateBookingResolved'])
+            ->middleware('throttle:20,1')
+            ->name('public.host.api.booking.validate');
+        Route::post('/booking', [PublicBookingApiController::class, 'storeBookingResolved'])
+            ->middleware('throttle:15,1')
+            ->name('public.host.api.booking.store');
+        Route::get('/booking/{reference}', [PublicBookingApiController::class, 'showBookingResolved'])->name('public.host.api.booking.show');
+    });
 });
 
 Route::post('/assistant/chat', [AssistantController::class, 'chat'])

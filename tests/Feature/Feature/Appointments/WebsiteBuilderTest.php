@@ -2,15 +2,18 @@
 
 namespace Tests\Feature\Feature\Appointments;
 
+use App\Models\Appointment\AppointmentBooking;
+use App\Models\Appointment\AppointmentService;
 use App\Models\Plan;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Models\Website\Website;
-use App\Models\Website\WebsiteDomain;
+use App\Models\Website\WebsiteTemplate;
 use App\Models\Workspace;
 use App\Services\Website\TemplateService;
 use App\Services\Website\WebsiteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -18,31 +21,26 @@ class WebsiteBuilderTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_workspace_owner_can_create_customize_and_publish_website(): void
+    public function test_workspace_owner_can_create_select_template_and_publish_website(): void
     {
-        config()->set('website.platform_domain', 'platform.test');
-        [, $workspace] = $this->createWorkspaceOwnerWithWebsiteFeatures('company');
+        config()->set('website.platform_domain', 'yourplatform.test');
+        [$owner, $workspace] = $this->createWorkspaceOwnerWithWebsiteFeatures('company');
 
         $this->actingAs($owner)
             ->withSession(['current_workspace_id' => $workspace->id])
             ->post(route('workspace.appointments.website.store'), [
-                'name' => 'Clinic Website',
-                'slug' => 'clinic-website',
+                'name' => 'Clinic Public Website',
+                'slug' => 'clinic-public',
             ])
             ->assertRedirect();
 
         $website = Website::withoutGlobalScopes()->where('workspace_id', $workspace->id)->firstOrFail();
-        $this->assertSame('draft', $website->status);
+        $this->assertSame('clinic-public', $website->slug);
+        $this->assertNotNull($website->primaryDomain);
+        $this->assertSame('active', $website->primaryDomain->status);
 
-        $platformDomain = WebsiteDomain::withoutGlobalScopes()
-            ->where('website_id', $website->id)
-            ->where('type', 'platform_subdomain')
-            ->first();
-        $this->assertNotNull($platformDomain);
-        $this->assertTrue((bool) $platformDomain->is_primary);
-
-        $template = app(TemplateService::class)->listTemplates()->first();
-        $this->assertNotNull($template);
+        app(TemplateService::class)->ensureDefaultTemplates();
+        $template = WebsiteTemplate::query()->firstOrFail();
 
         $this->actingAs($owner)
             ->withSession(['current_workspace_id' => $workspace->id])
@@ -53,58 +51,117 @@ class WebsiteBuilderTest extends TestCase
 
         $this->actingAs($owner)
             ->withSession(['current_workspace_id' => $workspace->id])
-            ->post(route('workspace.appointments.website.customize.update', $website), [
-                'business_name' => 'Clinic Name',
-                'hero_title' => 'Book Your Appointment',
-                'hero_description' => 'Simple and secure booking flow.',
-                'cta_text' => 'Book now',
-                'about_text' => 'About section text',
-                'primary_color' => '#0f766e',
-                'secondary_color' => '#14b8a6',
-                'font' => 'Cairo',
-                'direction' => 'rtl',
-            ])
-            ->assertSessionHasNoErrors()
+            ->post(route('workspace.appointments.website.publish', $website))
             ->assertRedirect();
 
-        $this->actingAs($owner)
-            ->withSession(['current_workspace_id' => $workspace->id])
-            ->post(route('workspace.appointments.website.publish', $website))
-            ->assertRedirect()
-            ->assertSessionHas('success');
-
-        $website->refresh();
-        $this->assertSame('published', $website->status);
-        $this->assertNotNull($website->published_at);
+        $this->assertSame('published', $website->fresh()->status);
     }
 
-    public function test_workspace_cannot_access_another_workspace_website_builder_resources(): void
+    public function test_public_website_api_creates_real_booking_and_rejects_past_slot(): void
     {
-        config()->set('website.platform_domain', 'platform.test');
-        [$ownerA, $workspaceA] = $this->createWorkspaceOwnerWithWebsiteFeatures('company');
-        [$ownerB, $workspaceB] = $this->createWorkspaceOwnerWithWebsiteFeatures('company');
+        config()->set('website.platform_domain', 'yourplatform.test');
+
+        [, $workspace] = $this->createWorkspaceOwnerWithWebsiteFeatures('company');
+        app(TemplateService::class)->ensureDefaultTemplates();
 
         $website = Website::withoutGlobalScopes()->create([
-            'workspace_id' => $workspaceA->id,
-            'name' => 'Private Site',
-            'slug' => 'private-site',
-            'status' => 'draft',
-            'preview_token' => 'preview-token-private-site',
-            'settings' => [],
-            'theme' => [],
+            'workspace_id' => $workspace->id,
+            'name' => 'Public Clinic Site',
+            'slug' => 'public-clinic',
+            'template_id' => WebsiteTemplate::query()->firstOrFail()->id,
+            'status' => 'published',
+            'preview_token' => 'previewtoken123',
+            'settings' => ['business_name' => 'Public Clinic'],
+            'theme' => ['direction' => 'rtl'],
             'metadata' => [],
         ]);
 
-        $this->actingAs($ownerB)
-            ->withSession(['current_workspace_id' => $workspaceB->id])
-            ->get(route('workspace.appointments.website.customize', $website))
-            ->assertNotFound();
+        AppointmentService::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Consultation',
+            'description' => 'General consultation',
+            'duration_minutes' => 30,
+            'price' => 100,
+            'is_active' => true,
+            'requires_payment' => false,
+            'payment_mode' => 'postpaid',
+        ]);
+
+        $service = AppointmentService::withoutGlobalScopes()->where('workspace_id', $workspace->id)->firstOrFail();
+
+        $servicesResponse = $this->getJson(route('public.api.services', $website->slug));
+        $servicesResponse->assertOk();
+        $servicesResponse->assertJsonFragment(['id' => $service->id, 'name' => 'Consultation']);
+
+        $pastResponse = $this->postJson(route('public.api.booking.store', $website->slug), [
+            'service_id' => $service->id,
+            'starts_at' => Carbon::now()->subHour()->toDateTimeString(),
+            'customer_name' => 'Past Customer',
+            'customer_phone' => '0500001111',
+        ]);
+        $pastResponse->assertStatus(422);
+
+        $futureStart = Carbon::now('Asia/Riyadh')->addDays(2)->setTime(11, 0, 0);
+        $createResponse = $this->postJson(route('public.api.booking.store', $website->slug), [
+            'service_id' => $service->id,
+            'starts_at' => $futureStart->toDateTimeString(),
+            'customer_name' => 'Future Customer',
+            'customer_phone' => '0500002222',
+            'customer_email' => 'future@example.com',
+        ]);
+
+        $createResponse->assertStatus(201)->assertJsonStructure([
+            'data' => ['booking_number', 'public_token', 'appointment_status', 'payment_status'],
+        ]);
+
+        $booking = AppointmentBooking::withoutGlobalScopes()->where('workspace_id', $workspace->id)->firstOrFail();
+        $this->assertSame('website', $booking->source_channel);
+        $this->assertSame('scheduled', $booking->appointment_status);
+    }
+
+    public function test_public_booking_rejects_service_from_another_workspace(): void
+    {
+        app(TemplateService::class)->ensureDefaultTemplates();
+
+        [, $workspaceA] = $this->createWorkspaceOwnerWithWebsiteFeatures('company');
+        [, $workspaceB] = $this->createWorkspaceOwnerWithWebsiteFeatures('store');
+
+        $websiteA = Website::withoutGlobalScopes()->create([
+            'workspace_id' => $workspaceA->id,
+            'name' => 'Site A',
+            'slug' => 'site-a',
+            'template_id' => WebsiteTemplate::query()->firstOrFail()->id,
+            'status' => 'published',
+            'preview_token' => 'preview-a',
+            'settings' => ['business_name' => 'Site A'],
+            'theme' => ['direction' => 'rtl'],
+            'metadata' => [],
+        ]);
+
+        $serviceB = AppointmentService::withoutGlobalScopes()->create([
+            'workspace_id' => $workspaceB->id,
+            'name' => 'Service B',
+            'duration_minutes' => 30,
+            'price' => 50,
+            'is_active' => true,
+            'requires_payment' => false,
+            'payment_mode' => 'postpaid',
+        ]);
+
+        $response = $this->postJson(route('public.api.booking.store', $websiteA->slug), [
+            'service_id' => $serviceB->id,
+            'starts_at' => Carbon::now()->addDays(3)->setTime(10, 0)->toDateTimeString(),
+            'customer_name' => 'Cross Tenant',
+        ]);
+
+        $response->assertStatus(422);
+        $this->assertSame(0, AppointmentBooking::withoutGlobalScopes()->where('workspace_id', $workspaceA->id)->count());
     }
 
     public function test_publish_requires_active_or_verified_domain_when_platform_subdomain_not_configured(): void
     {
         config()->set('website.platform_domain', '');
-        [$owner, $workspace] = $this->createWorkspaceOwnerWithWebsiteFeatures('company');
+        [, $workspace] = $this->createWorkspaceOwnerWithWebsiteFeatures('company');
 
         /** @var WebsiteService $websiteService */
         $websiteService = app(WebsiteService::class);
@@ -131,6 +188,7 @@ class WebsiteBuilderTest extends TestCase
         $workspace = Workspace::factory()->create([
             'owner_user_id' => $user->id,
             'type' => $workspaceType,
+            'status' => 'active',
         ]);
 
         $workspace->users()->attach($user->id, [

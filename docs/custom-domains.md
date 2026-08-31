@@ -56,6 +56,12 @@ Scheduled sync command:
 
 - `domains:sync-status` (scheduled daily)
 
+DNS verification retries:
+
+- If verification does not pass immediately, the system keeps domain status in `dns_pending`.
+- Retries are queued every `WEBSITE_DOMAIN_VERIFICATION_RETRY_SECONDS` (default 600).
+- After `WEBSITE_DOMAIN_VERIFICATION_MAX_ATTEMPTS` (default 12), status is marked `failed`.
+
 ## Security/authorization
 
 - Domain management routes require dashboard auth/workspace membership.

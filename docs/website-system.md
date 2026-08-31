@@ -72,6 +72,7 @@ Website and domain routes are guarded by:
   - `/` (home)
   - `/booking`
   - `/contact`
+  - `/api/public/*` (public booking API on resolved host)
 - Slug mode:
   - `/public/{website}`
   - `/public/{website}/{page}`

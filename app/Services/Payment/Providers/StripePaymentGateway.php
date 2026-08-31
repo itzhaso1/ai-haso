@@ -5,7 +5,6 @@ namespace App\Services\Payment\Providers;
 use App\Services\Payment\Contracts\PaymentGatewayInterface;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
-use RuntimeException;
 
 class StripePaymentGateway implements PaymentGatewayInterface
 {
@@ -40,7 +39,14 @@ class StripePaymentGateway implements PaymentGatewayInterface
     {
         $secret = (string) (config('payment.providers.stripe.webhook_secret') ?: config('services.stripe.webhook_secret'));
         if ($secret === '') {
-            throw new RuntimeException('Stripe webhook secret is not configured.');
+            return [
+                'verified' => false,
+                'event_id' => (string) ($payload['id'] ?? null),
+                'status' => null,
+                'reference' => null,
+                'payload' => $payload,
+                'reason' => 'Stripe webhook secret is not configured.',
+            ];
         }
 
         $signatureHeader = (string) ($headers['stripe-signature'] ?? '');

@@ -11,4 +11,6 @@ return [
     'public_rate_limit' => env('WEBSITE_PUBLIC_RATE_LIMIT', '60,1'),
     'domain_search_tlds' => array_filter(array_map('trim', explode(',', (string) env('WEBSITE_DOMAIN_SEARCH_TLDS', 'com,net,org,clinic,care,health,law,pro')))),
     'domain_markup_percent' => (float) env('WEBSITE_DOMAIN_MARKUP_PERCENT', 0),
+    'domain_verification_retry_seconds' => (int) env('WEBSITE_DOMAIN_VERIFICATION_RETRY_SECONDS', 600),
+    'domain_verification_max_attempts' => (int) env('WEBSITE_DOMAIN_VERIFICATION_MAX_ATTEMPTS', 12),
 ];
