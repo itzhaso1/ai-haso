@@ -28,7 +28,13 @@ class AppointmentReminderService
             ->where('workspace_id', $booking->workspace_id)
             ->first();
 
-        $offsetValues = collect($offsets ?? ($setting?->reminder_offsets ?? [1440, 120]))
+        $rawOffsets = $offsets ?? ($setting?->reminder_offsets ?? [1440, 120]);
+        if (is_string($rawOffsets)) {
+            $decoded = json_decode($rawOffsets, true);
+            $rawOffsets = is_array($decoded) ? $decoded : explode(',', $rawOffsets);
+        }
+
+        $offsetValues = collect(is_array($rawOffsets) ? $rawOffsets : [1440, 120])
             ->map(fn ($value) => max(1, (int) $value))
             ->filter(fn (int $value): bool => $value > 0)
             ->unique()
