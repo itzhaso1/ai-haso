@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hasim/core/models/models.dart';
 import 'package:hasim/features/appointments/presentation/appointment_detail_screen.dart';
 import 'package:hasim/features/appointments/presentation/appointments_screen.dart';
 import 'package:hasim/features/auth/presentation/forgot_password_screen.dart';
@@ -19,8 +20,9 @@ import 'package:hasim/features/email/presentation/campaign_status_screen.dart';
 import 'package:hasim/features/email/presentation/email_compose_screen.dart';
 import 'package:hasim/features/email/presentation/email_detail_screen.dart';
 import 'package:hasim/features/email/presentation/email_list_screen.dart';
-import 'package:hasim/core/models/models.dart';
 import 'package:hasim/features/home/presentation/home_screen.dart';
+import 'package:hasim/features/more/presentation/more_screen.dart';
+import 'package:hasim/features/more/presentation/security_sessions_screen.dart';
 import 'package:hasim/features/notifications/presentation/notifications_screen.dart';
 import 'package:hasim/features/settings/presentation/channels_screen.dart';
 import 'package:hasim/features/settings/presentation/notification_preferences_screen.dart';
@@ -52,11 +54,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       if (loc == '/splash') return null;
       if (auth.bootstrapping) return '/splash';
 
+      // Legacy dashboard route → conversations (messaging-first)
+      if (loc == '/home') return '/conversations';
+
       if (!auth.isAuthenticated) {
         return publicAuth ? null : '/login';
       }
       if (auth.isAuthenticated && (loc == '/login' || loc == '/forgot-password' || loc == '/reset-password')) {
-        return auth.workspace == null ? '/workspaces' : '/home';
+        return auth.workspace == null ? '/workspaces' : '/conversations';
       }
       if (auth.isAuthenticated && auth.workspace == null && loc != '/workspaces') {
         return '/workspaces';
@@ -79,6 +84,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/plans', builder: (context, state) => const PlansScreen()),
       GoRoute(path: '/channels', builder: (context, state) => const ChannelsScreen()),
       GoRoute(path: '/notification-preferences', builder: (context, state) => const NotificationPreferencesScreen()),
+      GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
+      GoRoute(path: '/more/security', builder: (context, state) => const SecuritySessionsScreen()),
+      GoRoute(path: '/activity', builder: (context, state) => const HomeScreen()),
       GoRoute(
         path: '/customers/:id',
         builder: (context, state) => CustomerProfileScreen(customerId: int.parse(state.pathParameters['id']!)),
@@ -137,11 +145,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => AppShell(navigationShell: navigationShell),
         branches: [
-          StatefulShellBranch(routes: [GoRoute(path: '/home', builder: (context, state) => const HomeScreen())]),
           StatefulShellBranch(routes: [GoRoute(path: '/conversations', builder: (context, state) => const ConversationsScreen())]),
           StatefulShellBranch(routes: [GoRoute(path: '/email', builder: (context, state) => const EmailListScreen())]),
           StatefulShellBranch(routes: [GoRoute(path: '/appointments', builder: (context, state) => const AppointmentsScreen())]),
-          StatefulShellBranch(routes: [GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen())]),
+          StatefulShellBranch(routes: [GoRoute(path: '/more', builder: (context, state) => const MoreScreen())]),
         ],
       ),
     ],

@@ -41,7 +41,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     } else if (next.workspace == null) {
       context.go('/workspaces');
     } else {
-      context.go('/home');
+      context.go('/conversations');
     }
   }
 

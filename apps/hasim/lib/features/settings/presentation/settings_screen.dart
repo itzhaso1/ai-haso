@@ -3,32 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hasim/core/config/app_config.dart';
 import 'package:hasim/core/di/providers.dart';
-import 'package:hasim/core/models/models.dart';
 import 'package:hasim/core/theme/theme_mode_controller.dart';
 import 'package:hasim/features/auth/providers/auth_controller.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 
-class SettingsScreen extends ConsumerStatefulWidget {
+/// إعدادات تفصيلية — تُفتح من «المزيد». الحساب/القنوات/الباقة في شاشة المزيد.
+class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
-  @override
-  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
-}
-
-class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  List<DeviceSessionModel> _sessions = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadSessions();
-  }
-
-  Future<void> _loadSessions() async {
-    try {
-      final sessions = await ref.read(sessionRepositoryProvider).list();
-      if (mounted) setState(() => _sessions = sessions);
-    } catch (_) {}
-  }
 
   String _themeLabel(ThemeMode mode) {
     return switch (mode) {
@@ -39,55 +19,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final auth = ref.watch(authControllerProvider);
+  Widget build(BuildContext context, WidgetRef ref) {
     final push = ref.watch(pushServiceProvider);
     final themeMode = ref.watch(themeModeControllerProvider);
-    final user = auth.user;
 
     return Scaffold(
       appBar: AppBar(title: const Text('الإعدادات')),
       body: ListView(
         children: [
           ListTile(
-            title: Text(user?.name ?? 'مستخدم'),
-            subtitle: Text(user?.email ?? user?.phone ?? ''),
-            leading: CircleAvatar(
-              backgroundImage: user?.avatarUrl != null ? CachedNetworkImageProvider(user!.avatarUrl!) : null,
-              child: user?.avatarUrl == null ? const Icon(Icons.person) : null,
-            ),
+            leading: const Icon(Icons.person_outline),
+            title: const Text('حسابي'),
             trailing: const Icon(Icons.chevron_left),
             onTap: () => context.push('/profile'),
           ),
           ListTile(
-            title: const Text('مساحة العمل'),
-            subtitle: Text(auth.workspace?.name ?? 'غير محددة'),
+            leading: const Icon(Icons.security_outlined),
+            title: const Text('الأمان والجلسات'),
             trailing: const Icon(Icons.chevron_left),
-            onTap: () => context.push('/workspaces'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.workspace_premium_outlined),
-            title: const Text('الباقات والاستخدام'),
-            trailing: const Icon(Icons.chevron_left),
-            onTap: () => context.push('/plans'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.hub_outlined),
-            title: const Text('القنوات'),
-            trailing: const Icon(Icons.chevron_left),
-            onTap: () => context.push('/channels'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.contacts_outlined),
-            title: const Text('جهات الاتصال'),
-            trailing: const Icon(Icons.chevron_left),
-            onTap: () => context.push('/contacts'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.groups_outlined),
-            title: const Text('مجموعات جهات الاتصال'),
-            trailing: const Icon(Icons.chevron_left),
-            onTap: () => context.push('/contact-groups'),
+            onTap: () => context.push('/more/security'),
           ),
           ListTile(
             leading: const Icon(Icons.notifications_active_outlined),
@@ -109,6 +59,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onSelectionChanged: (s) => ref.read(themeModeControllerProvider.notifier).setMode(s.first),
             ),
           ),
+          const Divider(),
           ListTile(
             title: const Text('عنوان API'),
             subtitle: Text(AppConfig.apiBase, textDirection: TextDirection.ltr),
@@ -118,35 +69,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             subtitle: Text(push.statusLabel),
           ),
           const Divider(),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: Text('الجلسات / الأجهزة', style: TextStyle(fontWeight: FontWeight.w700)),
-          ),
-          for (final s in _sessions)
-            ListTile(
-              title: Text(s.deviceName ?? s.name),
-              subtitle: Text(s.deviceType ?? 'جهاز'),
-              trailing: s.isCurrent
-                  ? const Text('الحالية')
-                  : IconButton(
-                      icon: const Icon(Icons.logout),
-                      onPressed: () async {
-                        await ref.read(sessionRepositoryProvider).revoke(s.id);
-                        await _loadSessions();
-                      },
-                    ),
-            ),
-          TextButton(
-            onPressed: () async {
-              await ref.read(sessionRepositoryProvider).revokeOthers();
-              await _loadSessions();
-            },
-            child: const Text('إنهاء الجلسات الأخرى'),
-          ),
-          const Divider(),
           ListTile(
-            leading: const Icon(Icons.logout, color: Colors.red),
-            title: const Text('تسجيل الخروج', style: TextStyle(color: Colors.red)),
+            leading: Icon(Icons.logout, color: Theme.of(context).colorScheme.error),
+            title: Text('تسجيل الخروج', style: TextStyle(color: Theme.of(context).colorScheme.error)),
             onTap: () async {
               await ref.read(authControllerProvider.notifier).logout();
               if (context.mounted) context.go('/login');

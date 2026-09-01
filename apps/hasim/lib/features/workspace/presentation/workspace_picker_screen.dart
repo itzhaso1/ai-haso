@@ -69,7 +69,7 @@ class _WorkspacePickerScreenState extends ConsumerState<WorkspacePickerScreen> {
                       : null,
                   onTap: () async {
                     await ref.read(authControllerProvider.notifier).switchWorkspace(ws);
-                    if (context.mounted) context.go('/home');
+                    if (context.mounted) context.go('/conversations');
                   },
                 );
               },

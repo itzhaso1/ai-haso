@@ -6,7 +6,6 @@ import 'package:hasim/core/utils/relative_time.dart';
 import 'package:hasim/core/widgets/skeleton_list.dart';
 import 'package:hasim/features/auth/providers/auth_controller.dart';
 import 'package:hasim/features/home/providers/home_controller.dart';
-import 'package:hasim/features/stories/presentation/stories_strip.dart';
 import 'package:hasim/features/stories/providers/stories_controller.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 
@@ -22,18 +21,7 @@ class HomeScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(auth.workspace?.name ?? 'حاسم'),
-        actions: [
-          IconButton(onPressed: () => context.push('/workspaces'), icon: const Icon(Icons.swap_horiz)),
-          IconButton(
-            onPressed: () => context.push('/notifications'),
-            icon: Badge(
-              isLabelVisible: (snap?.unreadNotifications ?? 0) > 0,
-              label: Text('${snap?.unreadNotifications ?? 0}'),
-              child: const Icon(Icons.notifications_outlined),
-            ),
-          ),
-        ],
+        title: const Text('نشاط اليوم'),
       ),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -50,14 +38,15 @@ class HomeScreen extends ConsumerWidget {
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Text(home.error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
                     ),
-                  const StoriesStrip(),
-                  const SizedBox(height: 12),
                   Text(
                     '$greeting ${auth.user?.name ?? ''}',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 4),
-                  Text('نظرة سريعة على نشاط اليوم', style: TextStyle(color: Colors.grey.shade700)),
+                  Text(
+                    auth.workspace?.name ?? 'حاسم',
+                    style: TextStyle(color: Colors.grey.shade700),
+                  ),
                   const SizedBox(height: 16),
                   Wrap(
                     spacing: 10,

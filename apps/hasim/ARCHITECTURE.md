@@ -44,7 +44,11 @@ RealtimeService + PushService (abstract)
 
 ## 5) Navigation
 
-`initialLocation: /splash` → `/login` or `/home` after bootstrap.
+`initialLocation: /splash` → `/login` or `/conversations` after bootstrap (messaging-first).
+
+Bottom tabs: المحادثات · البريد · الحجوزات · المزيد
+
+Legacy `/home` redirects to `/conversations`. Activity stats remain at `/activity` via More.
 
 Tabs: الرئيسية · المحادثات · البريد · الحجوزات · المزيد
 

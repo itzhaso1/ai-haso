@@ -21,11 +21,6 @@ class AppShell extends ConsumerWidget {
         selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: _go,
         destinations: [
-          const NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'الرئيسية',
-          ),
           NavigationDestination(
             icon: Badge(
               isLabelVisible: chatBadge > 0,
@@ -58,8 +53,8 @@ class AppShell extends ConsumerWidget {
             label: 'الحجوزات',
           ),
           const NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
+            icon: Icon(Icons.more_horiz),
+            selectedIcon: Icon(Icons.more_horiz),
             label: 'المزيد',
           ),
         ],

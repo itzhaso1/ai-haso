@@ -38,7 +38,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (auth.workspace == null) {
         context.go('/workspaces');
       } else {
-        context.go('/home');
+        context.go('/conversations');
       }
     }
   }
@@ -73,7 +73,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (!mounted) return;
       if (ok) {
         final state = ref.read(authControllerProvider);
-        context.go(state.workspace == null ? '/workspaces' : '/home');
+        context.go(state.workspace == null ? '/workspaces' : '/conversations');
       }
     } catch (e) {
       if (!mounted) return;
