@@ -2,225 +2,112 @@
 
 @section('content')
     @php($workspace = request()->attributes->get('workspace'))
-
-    <div
-        x-data="tablesBoard({
-            tables: @js($tablesPayload),
-            csrf: @js(csrf_token()),
-        })"
-        class="grid gap-3 lg:grid-cols-12"
-    >
-        {{-- LEFT (RTL start): selected table order details --}}
-        <aside class="order-1 rounded-xl border border-slate-200 bg-white p-3 shadow-sm lg:col-span-3">
-            <h2 class="text-sm font-bold text-slate-900">تفاصيل الطلب</h2>
-
-            <template x-if="!selected">
-                <p class="mt-6 text-center text-xs text-slate-400">اختر طاولة لعرض تفاصيل طلباتها.</p>
-            </template>
-
-            <template x-if="selected">
-                <div class="mt-3 space-y-3">
-                    <div class="rounded-lg border border-slate-100 bg-white p-2.5">
-                        <div class="flex items-center justify-between gap-2">
-                            <h3 class="text-sm font-bold text-slate-900" x-text="selected.name"></h3>
-                            <span
-                                class="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                                :class="selected.status === 'occupied' ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'"
-                                x-text="selected.status === 'occupied' ? 'مشغولة' : 'متاحة'"
-                            ></span>
-                        </div>
-                        <p class="mt-1 text-xs text-slate-500" x-show="selected.customer_name">
-                            العميل: <span class="font-semibold text-slate-700" x-text="selected.customer_name"></span>
-                        </p>
-                        <p class="mt-1 text-xs text-slate-500" x-show="selected.opened_at" data-live-timer x-text="formatDuration(selected.opened_at)"></p>
-                    </div>
-
-                    <div class="max-h-72 space-y-1.5 overflow-y-auto rounded-lg border border-slate-100 p-2">
-                        <template x-if="!selected.lines.length">
-                            <p class="py-4 text-center text-xs text-slate-400">لا توجد عناصر في هذه الجلسة.</p>
-                        </template>
-                        <template x-for="(line, idx) in selected.lines" :key="idx">
-                            <div class="flex items-center justify-between rounded-md bg-slate-50 px-2 py-1.5 text-xs">
-                                <span class="font-semibold text-slate-800">
-                                    <span x-text="line.name"></span>
-                                    <span class="text-slate-400">×</span>
-                                    <span x-text="line.quantity"></span>
-                                </span>
-                                <span class="font-semibold text-slate-700" x-text="Number(line.total || 0).toFixed(2)"></span>
-                            </div>
-                        </template>
-                    </div>
-
-                    <div class="flex items-center justify-between border-t border-slate-100 pt-2 text-sm font-bold text-slate-900">
-                        <span>الإجمالي</span>
-                        <span x-text="Number(selected.total || 0).toFixed(2)"></span>
-                    </div>
-
-                    <div class="grid gap-2">
-                        <a :href="selected.show_url" class="rounded-lg bg-[var(--hs-brand,#06C2A4)] px-3 py-2 text-center text-sm font-bold text-white">الحساب</a>
-                        <button
-                            type="button"
-                            x-show="selected.close_session_url"
-                            @click="confirmClose(selected)"
-                            class="rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"
-                        >إغلاق الطاولة</button>
-                        <a :href="selected.show_url" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50">عرض الطلب</a>
-                    </div>
-                </div>
-            </template>
-        </aside>
-
-        {{-- CENTER: tables grid --}}
-        <section class="order-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm lg:col-span-6">
-            <div class="mb-3 flex items-center justify-between gap-2">
-                <h2 class="text-sm font-bold text-slate-900">الطاولات</h2>
-                <a href="{{ route('workspace.pos.cashier.index') }}" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">فتح الكاشير</a>
+    <section class="grid gap-4 lg:grid-cols-3">
+        <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2">
+            <div class="mb-4 flex items-center justify-between">
+                <h2 class="text-base font-bold text-slate-900">الطاولات</h2>
+                <a href="{{ route('workspace.pos.cashier.index') }}" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                    فتح الكاشير
+                </a>
             </div>
 
-            <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                <template x-for="table in tables" :key="table.id">
-                    <article
-                        @click="selectTable(table)"
-                        :class="selected?.id === table.id ? 'border-[var(--hs-brand,#06C2A4)] ring-1 ring-[var(--hs-brand,#06C2A4)]' : 'border-slate-200 hover:border-slate-300'"
-                        class="relative cursor-pointer rounded-xl border bg-white p-3 transition"
-                    >
+            <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                @forelse($tables as $table)
+                    @php($openSession = $table->sessions->first())
+                    @php($menuUrl = route('menu.table', ['workspace' => $workspace->slug, 'token' => $table->qr_token]))
+                    <article class="rounded-xl border border-slate-200 bg-slate-50 p-3">
                         <div class="flex items-start justify-between gap-2">
                             <div>
-                                <h3 class="text-sm font-bold text-slate-900" x-text="table.name"></h3>
-                                <p
-                                    class="mt-1 text-[11px] font-semibold"
-                                    :class="table.status === 'occupied' ? 'text-rose-600' : 'text-emerald-600'"
-                                    x-text="table.status === 'occupied' ? '🟢 مشغولة' : '⚪ متاحة'"
-                                ></p>
+                                <h3 class="text-sm font-bold text-slate-900">{{ $table->name }}</h3>
+                                <p class="mt-1 text-xs {{ $table->status === 'occupied' ? 'text-rose-600' : 'text-emerald-600' }}">
+                                    {{ $table->status === 'occupied' ? '🔴 Occupied' : '🟢 Available' }}
+                                </p>
+                                @if($openSession)
+                                    <p class="mt-1 text-xs text-slate-600" data-opened-at="{{ optional($openSession->opened_at)->toIso8601String() }}">
+                                        00:00:00
+                                    </p>
+                                @endif
+                            </div>
+                            <a href="{{ route('workspace.pos.tables.show', $table) }}" class="text-xs font-semibold text-slate-600 hover:text-slate-900">تفاصيل</a>
+                        </div>
+
+                        <div class="mt-3 space-y-2">
+                            <div class="rounded-lg bg-white p-2 text-[11px] text-slate-600">
+                                طلبات نشطة: {{ $table->open_orders_count }} / إجمالي: {{ $table->orders_count }}
                             </div>
 
-                            <div class="relative" @click.stop>
-                                <button
-                                    type="button"
-                                    @click="toggleMenu(table.id)"
-                                    class="rounded-lg border border-slate-200 px-2 py-1 text-sm font-bold text-slate-600 hover:bg-slate-50"
-                                    aria-label="منيو الطاولة"
-                                >⋯</button>
-                                <div
-                                    x-show="openMenuId === table.id"
-                                    x-cloak
-                                    @click.outside="openMenuId = null"
-                                    class="absolute left-0 z-20 mt-1 w-44 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 text-xs shadow-lg"
-                                >
-                                    <a :href="table.show_url" class="block px-3 py-2 text-slate-700 hover:bg-slate-50">عرض الطلب</a>
-                                    <a :href="table.show_url" class="block px-3 py-2 text-slate-700 hover:bg-slate-50">الحساب</a>
-                                    <button
-                                        type="button"
-                                        x-show="table.close_session_url"
-                                        @click="confirmClose(table); openMenuId = null"
-                                        class="block w-full px-3 py-2 text-right text-rose-700 hover:bg-rose-50"
-                                    >إغلاق الطاولة</button>
-                                    <form :action="table.open_session_url" method="POST" x-show="!table.session_id">
-                                        <input type="hidden" name="_token" :value="csrf">
-                                        <button class="block w-full px-3 py-2 text-right text-slate-700 hover:bg-slate-50">فتح جلسة</button>
+                            <div class="grid grid-cols-2 gap-2">
+                                @if($openSession)
+                                    <form method="POST" action="{{ route('workspace.pos.tables.sessions.close', ['table' => $table, 'session' => $openSession]) }}">
+                                        @csrf
+                                        <button class="w-full rounded-lg bg-rose-600 px-2 py-2 text-[11px] font-semibold text-white">إغلاق الجلسة</button>
                                     </form>
-                                    <form :action="table.qr_regen_url" method="POST">
-                                        <input type="hidden" name="_token" :value="csrf">
-                                        <button class="block w-full px-3 py-2 text-right text-slate-700 hover:bg-slate-50">تجديد QR</button>
+                                @else
+                                    <form method="POST" action="{{ route('workspace.pos.tables.sessions.open', $table) }}">
+                                        @csrf
+                                        <button class="w-full rounded-lg bg-slate-900 px-2 py-2 text-[11px] font-semibold text-white">فتح جلسة</button>
                                     </form>
-                                </div>
+                                @endif
+                                <form method="POST" action="{{ route('workspace.pos.tables.qr.regenerate', $table) }}">
+                                    @csrf
+                                    <button class="w-full rounded-lg border border-slate-300 px-2 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-100">تجديد QR</button>
+                                </form>
                             </div>
                         </div>
 
-                        <div class="mt-3 space-y-1 text-[11px] text-slate-600">
-                            <p>الطلبات النشطة: <span class="font-semibold" x-text="table.open_orders_count"></span></p>
-                            <p x-show="table.opened_at">المدة: <span data-live-timer :data-opened-at="table.opened_at" x-text="formatDuration(table.opened_at)"></span></p>
-                            <p x-show="table.total > 0">الإجمالي: <span class="font-semibold" x-text="Number(table.total).toFixed(2)"></span></p>
+                        <div class="mt-3 rounded-lg border border-slate-200 bg-white p-2">
+                            <img
+                                src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data={{ urlencode($menuUrl) }}"
+                                alt="QR {{ $table->name }}"
+                                class="mx-auto h-28 w-28 rounded"
+                            />
+                            <p class="mt-2 truncate text-center text-[10px] text-slate-500">{{ $menuUrl }}</p>
                         </div>
                     </article>
-                </template>
+                @empty
+                    <p class="text-sm text-slate-500">لا توجد طاولات حتى الآن.</p>
+                @endforelse
             </div>
-
-            @if($tables->isEmpty())
-                <p class="text-sm text-slate-500">لا توجد طاولات حتى الآن.</p>
-            @endif
-
             <div class="mt-4">
                 {{ $tables->links() }}
             </div>
-        </section>
+        </article>
 
-        {{-- RIGHT: create table / links --}}
-        <aside class="order-3 space-y-3 lg:col-span-3">
-            <article class="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-                <h2 class="text-sm font-bold text-slate-900">إضافة طاولة</h2>
-                <form method="POST" action="{{ route('workspace.pos.tables.store') }}" class="mt-3 space-y-3">
-                    @csrf
-                    <div>
-                        <label class="mb-1 block text-[11px] font-semibold text-slate-500">اسم/رقم الطاولة</label>
-                        <input name="name" required class="w-full rounded-lg border-slate-200 bg-white text-sm" placeholder="طاولة 1" />
-                    </div>
-                    <button class="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white">إنشاء</button>
-                </form>
-                <div class="mt-4 rounded-lg border border-slate-100 bg-white p-2 text-xs text-slate-600">
-                    <p>المنيو العام:
-                        <a class="font-semibold text-slate-800 underline" href="{{ route('menu.general', ['workspace' => $workspace->slug]) }}" target="_blank" rel="noopener">فتح الرابط</a>
-                    </p>
+        <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 class="text-base font-bold text-slate-900">إضافة طاولة</h2>
+            <form method="POST" action="{{ route('workspace.pos.tables.store') }}" class="mt-3 space-y-3">
+                @csrf
+                <div>
+                    <label class="mb-1 block text-xs font-semibold text-slate-600">اسم/رقم الطاولة</label>
+                    <input name="name" required class="w-full rounded-lg border-slate-300 text-sm" placeholder="Table 1" />
                 </div>
-            </article>
-        </aside>
-
-        {{-- Close confirmation --}}
-        <div x-show="closeConfirmOpen" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-            <div class="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-xl" @click.outside="closeConfirmOpen = false">
-                <h3 class="text-base font-bold text-slate-900">هل أنت متأكد من إغلاق الطاولة؟</h3>
-                <p class="mt-1 text-sm text-slate-500" x-text="pendingClose?.name"></p>
-                <div class="mt-5 grid grid-cols-2 gap-2">
-                    <button type="button" @click="closeConfirmOpen = false" class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">إلغاء</button>
-                    <form :action="pendingClose?.close_session_url" method="POST">
-                        <input type="hidden" name="_token" :value="csrf">
-                        <button class="w-full rounded-lg bg-rose-600 px-3 py-2 text-sm font-bold text-white">إغلاق الطاولة</button>
-                    </form>
-                </div>
+                <button class="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white">إنشاء</button>
+            </form>
+            <div class="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
+                <p>المنيو العام: <a class="font-semibold text-slate-800" href="{{ route('menu.general', ['workspace' => $workspace->slug]) }}" target="_blank" rel="noopener">فتح الرابط</a></p>
             </div>
-        </div>
-    </div>
+        </article>
+    </section>
 
     <script>
-        function tablesBoard({ tables, csrf }) {
-            return {
-                tables,
-                csrf,
-                selected: null,
-                openMenuId: null,
-                closeConfirmOpen: false,
-                pendingClose: null,
-                selectTable(table) {
-                    this.selected = table;
-                    this.openMenuId = null;
-                },
-                toggleMenu(id) {
-                    this.openMenuId = this.openMenuId === id ? null : id;
-                },
-                confirmClose(table) {
-                    if (!table?.close_session_url) return;
-                    this.pendingClose = table;
-                    this.closeConfirmOpen = true;
-                },
-                formatDuration(openedAt) {
-                    if (!openedAt) return '';
-                    const start = new Date(openedAt).getTime();
-                    if (Number.isNaN(start)) return '00:00:00';
-                    const diff = Math.max(0, Math.floor((Date.now() - start) / 1000));
-                    const hours = String(Math.floor(diff / 3600)).padStart(2, '0');
-                    const minutes = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
-                    const seconds = String(diff % 60).padStart(2, '0');
-                    return `${hours}:${minutes}:${seconds}`;
-                },
-                init() {
-                    setInterval(() => {
-                        document.querySelectorAll('[data-live-timer]').forEach((node) => {
-                            const opened = node.getAttribute('data-opened-at') || (this.selected?.opened_at);
-                            if (opened) node.textContent = this.formatDuration(opened);
-                        });
-                    }, 1000);
-                },
-            };
-        }
+        const formatDuration = (openedAt) => {
+            const start = new Date(openedAt).getTime();
+            if (Number.isNaN(start)) return '00:00:00';
+            const diff = Math.max(0, Math.floor((Date.now() - start) / 1000));
+            const hours = String(Math.floor(diff / 3600)).padStart(2, '0');
+            const minutes = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
+            const seconds = String(diff % 60).padStart(2, '0');
+            return `${hours}:${minutes}:${seconds}`;
+        };
+
+        const timerNodes = document.querySelectorAll('[data-opened-at]');
+        const tick = () => {
+            timerNodes.forEach((node) => {
+                node.textContent = formatDuration(node.dataset.openedAt);
+            });
+        };
+
+        tick();
+        setInterval(tick, 1000);
     </script>
 @endsection

@@ -28,18 +28,7 @@ class TableController extends PosBaseController
         $this->authorizePos($request, 'tables.manage');
 
         $tables = DiningTable::query()
-            ->with([
-                'sessions' => fn ($query) => $query
-                    ->where('status', 'open')
-                    ->latest('id')
-                    ->limit(1)
-                    ->with([
-                        'orders' => fn ($orders) => $orders
-                            ->whereIn('source', ['pos', 'qr_menu'])
-                            ->with(['items', 'customer:id,name'])
-                            ->latest('id'),
-                    ]),
-            ])
+            ->with(['sessions' => fn ($query) => $query->where('status', 'open')->latest('id')])
             ->withCount([
                 'orders as orders_count' => fn ($query) => $query->whereIn('source', ['pos', 'qr_menu']),
                 'orders as open_orders_count' => fn ($query) => $query
@@ -49,40 +38,8 @@ class TableController extends PosBaseController
             ->orderBy('name')
             ->paginate(30);
 
-        $workspace = $this->currentWorkspace();
-        $tablesPayload = $tables->getCollection()->map(function (DiningTable $table) use ($workspace) {
-            $openSession = $table->sessions->first();
-            $orders = $openSession?->orders ?? collect();
-            $lines = $orders->flatMap(fn ($order) => $order->items->map(fn ($item) => [
-                'name' => $item->product_name ?? $item->variant_name ?? 'صنف',
-                'quantity' => (int) $item->quantity,
-                'total' => (float) ($item->total_amount ?? 0),
-            ]));
-
-            return [
-                'id' => $table->id,
-                'name' => $table->name,
-                'status' => $table->status,
-                'open_orders_count' => (int) $table->open_orders_count,
-                'orders_count' => (int) $table->orders_count,
-                'opened_at' => optional($openSession?->opened_at)?->toIso8601String(),
-                'session_id' => $openSession?->id,
-                'show_url' => route('workspace.pos.tables.show', $table),
-                'open_session_url' => route('workspace.pos.tables.sessions.open', $table),
-                'close_session_url' => $openSession
-                    ? route('workspace.pos.tables.sessions.close', ['table' => $table, 'session' => $openSession])
-                    : null,
-                'qr_regen_url' => route('workspace.pos.tables.qr.regenerate', $table),
-                'menu_url' => route('menu.table', ['workspace' => $workspace->slug, 'token' => $table->qr_token]),
-                'customer_name' => optional($orders->first()?->customer)->name,
-                'lines' => $lines->values(),
-                'total' => (float) $lines->sum('total'),
-            ];
-        })->values();
-
         return view('workspace.pos.tables.index', [
             'tables' => $tables,
-            'tablesPayload' => $tablesPayload,
             'posStatuses' => $this->posStatusLabels(),
         ]);
     }
