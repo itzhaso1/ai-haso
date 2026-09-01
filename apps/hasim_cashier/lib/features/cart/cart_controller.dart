@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
+import '../../core/offline/offline_store.dart';
 
 @immutable
 class CartLine {
@@ -184,33 +185,43 @@ final cartControllerProvider =
     StateNotifierProvider<CartController, CartState>((ref) => CartController());
 
 final catalogItemsProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final api = ref.watch(cashierApiProvider);
   try {
     final data = await api.get('/catalog/items', query: {'per_page': 100});
     final items = data['items'];
     if (items is List) {
-      return items
+      final list = items
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
+      await OfflineStore.instance.cacheCatalog(list);
+      return list;
     }
   } catch (_) {
-    // Offline fallback handled by screen via OfflineStore.
+    final offline = OfflineStore.instance.readCatalog();
+    if (offline.isNotEmpty) return offline;
   }
-  return const [];
+  return OfflineStore.instance.readCatalog();
 });
 
 final categoriesProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+    FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final api = ref.watch(cashierApiProvider);
-  final data = await api.get('/catalog/categories');
-  final categories = data['categories'];
-  if (categories is List) {
-    return categories
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
-        .toList();
+  try {
+    final data = await api.get('/catalog/categories');
+    final categories = data['categories'];
+    if (categories is List) {
+      final list = categories
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+      await OfflineStore.instance.cacheCategories(list);
+      return list;
+    }
+  } catch (_) {
+    final offline = OfflineStore.instance.readCategories();
+    if (offline.isNotEmpty) return offline;
   }
-  return const [];
+  return OfflineStore.instance.readCategories();
 });

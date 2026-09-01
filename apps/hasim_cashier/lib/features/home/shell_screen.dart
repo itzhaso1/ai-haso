@@ -1,6 +1,5 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
@@ -9,6 +8,8 @@ import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/offline/offline_store.dart';
 import '../../core/offline/sync_engine.dart';
+import '../../core/permissions/cashier_permissions.dart';
+import '../../core/permissions/permissions_provider.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
 import '../../core/theme/hasim_spacing.dart';
@@ -18,6 +19,7 @@ import '../cart/cart_controller.dart';
 import '../customers/customers_panel.dart';
 import '../invoices/invoices_list.dart';
 import '../kitchen/kitchen_board.dart';
+import '../offline/sync_queue_panel.dart';
 import '../orders/menu_orders_feed.dart';
 import '../orders/orders_list.dart';
 import '../settings/settings_panel.dart';
@@ -33,6 +35,7 @@ enum _PosSection {
   customers,
   items,
   reports,
+  sync,
   settings,
 }
 
@@ -117,9 +120,18 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
             ? Map<String, dynamic>.from(data['channel_stats'] as Map)
             : {};
       });
+      if (data['permissions'] is Map) {
+        ref.read(cashierPermissionsProvider.notifier).state =
+            Map<String, dynamic>.from(data['permissions'] as Map);
+      }
       await ref.read(syncEngineProvider).flushPendingOrders();
       _refreshPending();
     } on ApiException catch (e) {
+      if (e.statusCode == 401) {
+        await ref.read(authControllerProvider.notifier).logout();
+        if (mounted) context.go('/login');
+        return;
+      }
       if (e.statusCode == 403) {
         if (mounted) context.go('/pos-blocked');
         return;
@@ -200,6 +212,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
                     _PosSection.customers => const CustomersPanel(),
                     _PosSection.items => const ItemsAdminPanel(),
                     _PosSection.reports => const DailyReportsPanel(),
+                    _PosSection.sync => const SyncQueuePanel(),
                     _PosSection.settings => const SettingsPanel(),
                   },
           ),
@@ -242,6 +255,13 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
   Future<void> _checkout() async {
     final cart = ref.read(cartControllerProvider);
     if (cart.lines.isEmpty) return;
+    final perms = ref.read(cashierPermissionsProvider);
+    if (!CashierPermissions.canCreateOrders(perms) && perms.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا تملك صلاحية إنشاء طلبات.')),
+      );
+      return;
+    }
     if (cart.channel == OrderChannel.table && cart.tableId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('اختر طاولة لطلب الطاولة.')),
@@ -437,14 +457,14 @@ class _TopHeader extends StatelessWidget {
   }
 }
 
-class _TopNav extends StatelessWidget {
+class _TopNav extends ConsumerWidget {
   const _TopNav({required this.section, required this.onSelect});
 
   final _PosSection section;
   final ValueChanged<_PosSection> onSelect;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final items = <(_PosSection, String)>[
       (_PosSection.cashier, 'الكاشير'),
       (_PosSection.tables, 'الطاولات'),
@@ -455,8 +475,10 @@ class _TopNav extends StatelessWidget {
       (_PosSection.items, 'إدارة الأصناف'),
       (_PosSection.reports, 'التقارير اليومية'),
       (_PosSection.customers, 'العملاء'),
+      (_PosSection.sync, 'المزامنة'),
       (_PosSection.settings, 'الإعدادات'),
     ];
+    final menuBadge = ref.watch(menuNewOrdersCountProvider);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
@@ -469,10 +491,38 @@ class _TopNav extends StatelessWidget {
         child: Row(
           children: [
             for (final item in items) ...[
-              HsNavPill(
-                label: item.$2,
-                selected: section == item.$1,
-                onTap: () => onSelect(item.$1),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  HsNavPill(
+                    label: item.$2,
+                    selected: section == item.$1,
+                    onTap: () => onSelect(item.$1),
+                  ),
+                  if (item.$1 == _PosSection.menu && menuBadge > 0)
+                    Positioned(
+                      top: -4,
+                      left: -2,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: HasimColors.warning,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: Text(
+                          '$menuBadge',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(width: 6),
             ],
@@ -669,10 +719,12 @@ class _CashierHome extends ConsumerWidget {
             ),
           )
         else ...[
+          // Mobile categories: sticky horizontal strip (not dropdown), large touch targets
           categories.when(
-            data: (list) => SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
+            data: (list) => SizedBox(
+              height: 52,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
                 children: [
                   _chip('الكل', selectedCategoryId == 0, () => onCategory(0)),
                   for (final cat in list)
@@ -685,16 +737,44 @@ class _CashierHome extends ConsumerWidget {
               ),
             ),
             loading: () => const LinearProgressIndicator(),
-            error: (e, _) => Text('$e'),
+            error: (e, _) {
+              final offline = OfflineStore.instance.readCategories();
+              if (offline.isEmpty) {
+                return HsEmpty(
+                  title: 'تعذر تحميل التصنيفات',
+                  subtitle: '$e',
+                  actionLabel: 'إعادة',
+                  onAction: () => ref.invalidate(categoriesProvider),
+                );
+              }
+              return SizedBox(
+                height: 52,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    _chip('الكل', selectedCategoryId == 0, () => onCategory(0)),
+                    for (final cat in offline)
+                      _chip(
+                        (cat['name'] as String?) ?? '',
+                        selectedCategoryId == (cat['id'] as num?)?.toInt(),
+                        () => onCategory((cat['id'] as num).toInt()),
+                      ),
+                  ],
+                ),
+              );
+            },
           ),
           const SizedBox(height: 8),
           HsCard(
-            child: _ProductsPanel(
-              search: search,
-              selectedCategoryId: selectedCategoryId,
-              onCategory: onCategory,
-              onSearchChanged: onSearchChanged,
-              showMobileCategories: false,
+            child: SizedBox(
+              height: MediaQuery.sizeOf(context).height - 280,
+              child: _ProductsPanel(
+                search: search,
+                selectedCategoryId: selectedCategoryId,
+                onCategory: onCategory,
+                onSearchChanged: onSearchChanged,
+                showMobileCategories: false,
+              ),
             ),
           ),
         ],
@@ -704,17 +784,19 @@ class _CashierHome extends ConsumerWidget {
 
   Widget _chip(String label, bool selected, VoidCallback onTap) {
     return Padding(
-      padding: const EdgeInsetsDirectional.only(end: 6),
+      padding: const EdgeInsetsDirectional.only(end: 8),
       child: Material(
         color: selected ? HasimColors.brand : HasimColors.surface,
-        borderRadius: BorderRadius.circular(HasimRadius.sm),
+        borderRadius: BorderRadius.circular(HasimRadius.md),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(HasimRadius.sm),
+          borderRadius: BorderRadius.circular(HasimRadius.md),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            constraints: const BoxConstraints(minHeight: 44, minWidth: 64),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(HasimRadius.sm),
+              borderRadius: BorderRadius.circular(HasimRadius.md),
               border: Border.all(
                 color: selected ? HasimColors.brand : HasimColors.border,
               ),
@@ -722,8 +804,8 @@ class _CashierHome extends ConsumerWidget {
             child: Text(
               label,
               style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
                 color: selected ? Colors.white : HasimColors.ink,
               ),
             ),
@@ -866,7 +948,7 @@ class _ProductsPanel extends ConsumerWidget {
                   unitPrice: price,
                 );
           },
-        ).animate().fadeIn(duration: 160.ms);
+        );
       },
     );
   }
@@ -913,12 +995,23 @@ class _CartPanel extends ConsumerWidget {
           ),
           const SizedBox(height: 10),
           TextField(
-            decoration: const InputDecoration(
-              labelText: 'الخصم (مبلغ)',
+            enabled: CashierPermissions.canDiscount(
+              ref.watch(cashierPermissionsProvider),
+            ),
+            decoration: InputDecoration(
+              labelText: CashierPermissions.canDiscount(
+                ref.watch(cashierPermissionsProvider),
+              )
+                  ? 'الخصم (مبلغ)'
+                  : 'الخصم (غير مسموح)',
               isDense: true,
             ),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            onChanged: (v) => notifier.setDiscount(double.tryParse(v) ?? 0),
+            onChanged: CashierPermissions.canDiscount(
+              ref.watch(cashierPermissionsProvider),
+            )
+                ? (v) => notifier.setDiscount(double.tryParse(v) ?? 0)
+                : null,
           ),
           const SizedBox(height: 10),
           Expanded(
@@ -1069,15 +1162,24 @@ class _CartPanel extends ConsumerWidget {
   }
 
   Widget _qtyBtn(String label, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          border: Border.all(color: HasimColors.border),
-          borderRadius: BorderRadius.circular(4),
+    return Material(
+      color: HasimColors.surface,
+      borderRadius: BorderRadius.circular(HasimRadius.sm),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(HasimRadius.sm),
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            border: Border.all(color: HasimColors.border),
+            borderRadius: BorderRadius.circular(HasimRadius.sm),
+          ),
+          child: Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+          ),
         ),
-        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
       ),
     );
   }

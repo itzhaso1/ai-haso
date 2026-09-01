@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/hasim_colors.dart';
@@ -198,7 +199,7 @@ class HsNavPill extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(HasimRadius.sm),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Text(
             label,
             style: TextStyle(
@@ -323,7 +324,20 @@ class ProductCard extends StatelessWidget {
                             color: Color(0xFFCBD5E1),
                           ),
                         )
-                      : Image.network(imageUrl!, fit: BoxFit.cover),
+                      : CachedNetworkImage(
+                          imageUrl: imageUrl!,
+                          fit: BoxFit.cover,
+                          placeholder: (_, _) => Container(
+                            color: HasimColors.surfaceSoft,
+                          ),
+                          errorWidget: (_, _, _) => Container(
+                            color: HasimColors.surfaceSoft,
+                            child: const Icon(
+                              Icons.broken_image_outlined,
+                              color: Color(0xFFCBD5E1),
+                            ),
+                          ),
+                        ),
                 ),
               ),
               Padding(
@@ -374,8 +388,8 @@ class ProductCard extends StatelessWidget {
                       child: const Text(
                         '+ إضافة',
                         style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
                           color: HasimColors.ctaDark,
                         ),
                       ),

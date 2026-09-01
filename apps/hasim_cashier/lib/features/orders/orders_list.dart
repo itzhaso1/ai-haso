@@ -7,7 +7,7 @@ import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
 import '../../core/widgets/hasim_widgets.dart';
 
-/// Running POS orders — mirrors `workspace/pos/orders/running`.
+/// Running POS orders — mirrors web running orders with filters/search.
 class OrdersList extends ConsumerStatefulWidget {
   const OrdersList({super.key});
 
@@ -19,6 +19,8 @@ class _OrdersListState extends ConsumerState<OrdersList> {
   List<Map<String, dynamic>> _orders = const [];
   var _loading = true;
   String? _error;
+  final _search = TextEditingController();
+  String _filter = 'all';
 
   static const _statusOptions = [
     'new',
@@ -36,6 +38,12 @@ class _OrdersListState extends ConsumerState<OrdersList> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -44,7 +52,7 @@ class _OrdersListState extends ConsumerState<OrdersList> {
     try {
       final data = await ref
           .read(cashierApiProvider)
-          .get('/orders', query: {'status': 'running'});
+          .get('/orders', query: {'status': 'running', 'per_page': 50});
       final list = <Map<String, dynamic>>[];
       if (data['orders'] is List) {
         for (final item in data['orders'] as List) {
@@ -84,6 +92,24 @@ class _OrdersListState extends ConsumerState<OrdersList> {
     }
   }
 
+  List<Map<String, dynamic>> get _filtered {
+    final q = _search.text.trim().toLowerCase();
+    return _orders.where((order) {
+      final status = order['pos_status'] as String? ?? '';
+      if (_filter == 'open' &&
+          (order['payment_status'] == 'paid' || status == 'cancelled')) {
+        return false;
+      }
+      if (_filter == 'paid' && order['payment_status'] != 'paid') return false;
+      if (_filter == 'cancelled' && status != 'cancelled') return false;
+      if (q.isEmpty) return true;
+      final hay =
+          '${order['order_number']}|${order['table']?['name']}|${order['customer']?['name']}|${order['pos_status']}'
+              .toLowerCase();
+      return hay.contains(q);
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -100,135 +126,213 @@ class _OrdersListState extends ConsumerState<OrdersList> {
         ),
       );
     }
-    if (_orders.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(16),
-        child: HsEmpty(title: 'لا توجد طلبات جارية حاليًا.'),
-      );
-    }
 
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView.separated(
-        padding: const EdgeInsets.all(12),
-        itemCount: _orders.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 8),
-        itemBuilder: (context, index) {
-          final order = _orders[index];
-          final items = order['items'] is List
-              ? (order['items'] as List).whereType<Map>()
-              : const Iterable<Map>.empty();
-          final current = order['pos_status'] as String? ?? 'new';
-          final paid = order['payment_status'] == 'paid';
+    final filtered = _filtered;
 
-          return HsCard(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'طلبات POS / QR الجارية',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _search,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  hintText: 'ابحث برقم الطلب / الطاولة / العميل…',
+                  isDense: true,
+                  prefixIcon: Icon(Icons.search, size: 18),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
                   children: [
-                    Expanded(
-                      child: Text(
-                        '#${order['order_number'] ?? order['id']}',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
+                    for (final f in [
+                      ('all', 'الكل'),
+                      ('open', 'مفتوحة'),
+                      ('paid', 'مدفوعة'),
+                      ('cancelled', 'ملغية'),
+                    ])
+                      Padding(
+                        padding: const EdgeInsetsDirectional.only(end: 6),
+                        child: FilterChip(
+                          label: Text(f.$2),
+                          selected: _filter == f.$1,
+                          onSelected: (_) => setState(() => _filter = f.$1),
                         ),
                       ),
-                    ),
-                    HsBadge(
-                      label: PosLabels.status(current),
-                      background: HasimColors.navIdleBg,
-                      foreground: HasimColors.ink,
-                    ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  '${PosLabels.orderType(order['order_type'] as String?)}'
-                  ' · ${order['table']?['name'] ?? '—'}'
-                  ' · ${paid ? 'مدفوع' : 'غير مدفوع'}'
-                  ' · ${(order['source'] as String?)?.toUpperCase() ?? ''}',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: HasimColors.muted,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (items.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  for (final item in items)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 2),
-                      child: Text(
-                        '${item['product_name']}'
-                        '${item['variant_name'] != null ? ' - ${item['variant_name']}' : ''}'
-                        ' × ${item['quantity']}'
-                        ' = ${((item['total_amount'] as num?) ?? 0).toStringAsFixed(2)}',
-                        style: const TextStyle(fontSize: 12, color: HasimColors.muted),
-                      ),
-                    ),
-                ],
-                if (order['notes'] != null &&
-                    (order['notes'] as String).isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    'ملاحظات: ${order['notes']}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: HasimColors.border),
-                          borderRadius: BorderRadius.circular(HasimRadius.sm),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            isExpanded: true,
-                            value: _statusOptions.contains(current)
-                                ? current
-                                : 'new',
-                            items: [
-                              for (final s in _statusOptions)
-                                DropdownMenuItem(
-                                  value: s,
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: filtered.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: HsEmpty(title: 'لا توجد طلبات جارية حاليًا.'),
+                )
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final order = filtered[index];
+                      final items = order['items'] is List
+                          ? (order['items'] as List).whereType<Map>()
+                          : const Iterable<Map>.empty();
+                      final current = order['pos_status'] as String? ?? 'new';
+                      final paid = order['payment_status'] == 'paid';
+
+                      return HsCard(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
                                   child: Text(
-                                    PosLabels.status(s),
+                                    '#${order['order_number'] ?? order['id']}',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
+                                HsBadge(
+                                  label: PosLabels.status(current),
+                                  background: HasimColors.ctaSoft,
+                                  foreground: HasimColors.ctaDark,
+                                ),
+                                const SizedBox(width: 6),
+                                HsBadge(
+                                  label: paid ? 'مدفوع' : 'غير مدفوع',
+                                  background: paid
+                                      ? HasimColors.navIdleBg
+                                      : HasimColors.warningSoft,
+                                  foreground: paid
+                                      ? HasimColors.ink
+                                      : HasimColors.warning,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              '${PosLabels.orderType(order['order_type'] as String?)}'
+                              ' · الطاولة: ${order['table']?['name'] ?? '—'}'
+                              ' · العميل: ${order['customer']?['name'] ?? '—'}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: HasimColors.muted,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              'الوقت: ${order['created_at'] ?? '—'} · المصدر: ${(order['source'] as String?)?.toUpperCase() ?? '—'}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: HasimColors.muted,
+                              ),
+                            ),
+                            if (items.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              for (final item in items)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 2),
+                                  child: Text(
+                                    '${item['product_name']}'
+                                    '${item['variant_name'] != null ? ' - ${item['variant_name']}' : ''}'
+                                    ' × ${item['quantity']}'
+                                    ' = ${((item['total_amount'] as num?) ?? 0).toStringAsFixed(2)}',
                                     style: const TextStyle(fontSize: 12),
                                   ),
                                 ),
                             ],
-                            onChanged: (v) {
-                              if (v != null) _updateStatus(order, v);
-                            },
-                          ),
+                            if (order['notes'] != null &&
+                                (order['notes'] as String).isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                'ملاحظات: ${order['notes']}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      border: Border.all(
+                                        color: HasimColors.border,
+                                      ),
+                                      borderRadius: BorderRadius.circular(
+                                        HasimRadius.sm,
+                                      ),
+                                    ),
+                                    child: DropdownButtonHideUnderline(
+                                      child: DropdownButton<String>(
+                                        isExpanded: true,
+                                        value: _statusOptions.contains(current)
+                                            ? current
+                                            : 'new',
+                                        items: [
+                                          for (final s in _statusOptions)
+                                            DropdownMenuItem(
+                                              value: s,
+                                              child: Text(
+                                                PosLabels.status(s),
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                        onChanged: (v) {
+                                          if (v != null) {
+                                            _updateStatus(order, v);
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  ((order['total_amount'] as num?) ?? 0)
+                                      .toStringAsFixed(2),
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      ((order['total_amount'] as num?) ?? 0).toStringAsFixed(2),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ],
+                      );
+                    },
+                  ),
                 ),
-              ],
-            ),
-          );
-        },
-      ),
+        ),
+      ],
     );
   }
 }

@@ -2,11 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
+import '../../core/auth/auth_controller.dart';
+import '../../core/offline/conflict_strategy.dart';
+import '../../core/permissions/cashier_permissions.dart';
+import '../../core/permissions/permissions_provider.dart';
 import '../../core/pos/pos_labels.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
 import '../../core/widgets/hasim_widgets.dart';
 import '../cart/cart_controller.dart';
+import 'table_action_wizards.dart';
 
 /// Tables board matching Laravel `workspace/pos/tables/index` + `show` actions.
 class TablesBoard extends ConsumerStatefulWidget {
@@ -137,26 +142,37 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
     }
   }
 
+  bool get _canManageTables {
+    final perms = ref.read(cashierPermissionsProvider);
+    if (perms.isNotEmpty) {
+      return CashierPermissions.canManageTables(perms);
+    }
+    final session = ref.read(authControllerProvider).valueOrNull;
+    return CashierPermissions.canManageTables(session?.permissions);
+  }
+
+  Future<void> _ensureOnlineForTableAction() async {
+    if (ConflictStrategy.forDomain('table_action') ==
+        ConflictPolicy.requireOnline) {
+      // Table mutations are online-only by policy (Laravel SoT).
+    }
+  }
+
   Future<void> _closeSession() async {
     final tableId = _tableId;
     final sessionId = _sessionId;
     if (tableId == null || sessionId == null) return;
+    if (!_canManageTables) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا تملك صلاحية إدارة الطاولات.')),
+      );
+      return;
+    }
+    await _ensureOnlineForTableAction();
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('هل أنت متأكد من إغلاق الطاولة؟'),
-        content: Text('${_selected?['name'] ?? ''}'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('إلغاء'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: HasimColors.danger),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('إغلاق الطاولة'),
-          ),
-        ],
+      builder: (ctx) => CloseTableWizard(
+        tableName: '${_selected?['name'] ?? ''}',
       ),
     );
     if (ok != true) return;
@@ -216,51 +232,28 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
     final tableId = _tableId;
     final sessionId = _sessionId;
     if (tableId == null || sessionId == null) return;
+    if (!_canManageTables) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا تملك صلاحية إدارة الطاولات.')),
+      );
+      return;
+    }
     final others = _tables
         .where((t) => t['id'] != tableId)
         .map((t) => Map<String, dynamic>.from(t))
         .toList();
-    if (others.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('لا توجد طاولات أخرى متاحة.')),
-      );
-      return;
-    }
+    final isMerge = title.contains('دمج');
     final targetId = await showDialog<int>(
       context: context,
-      builder: (ctx) => SimpleDialog(
-        title: Text(title),
-        children: [
-          for (final t in others)
-            SimpleDialogOption(
-              onPressed: () =>
-                  Navigator.pop(ctx, (t['id'] as num).toInt()),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${t['name']}',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  Text(
-                    PosLabels.tableStatus(t['status'] as String?),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: t['status'] == 'occupied'
-                          ? HasimColors.occupied
-                          : HasimColors.available,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
+      builder: (ctx) => TableTransferWizard(
+        title: isMerge ? 'دمج الطاولات' : 'نقل الطاولة',
+        currentTableName: '${_selected?['name'] ?? ''}',
+        candidates: others,
+        confirmLabel: isMerge ? 'تأكيد الدمج' : 'تأكيد النقل',
       ),
     );
     if (targetId == null) return;
-    final path = title.contains('دمج') ? 'merge' : 'transfer';
+    final path = isMerge ? 'merge' : 'transfer';
     try {
       await ref.read(cashierApiProvider).post(
         '/tables/$tableId/sessions/$sessionId/$path',
@@ -268,7 +261,7 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(title.contains('دمج') ? 'تم الدمج.' : 'تم النقل.')),
+        SnackBar(content: Text(isMerge ? 'تم الدمج.' : 'تم النقل.')),
       );
       await _load();
     } on ApiException catch (e) {
@@ -282,6 +275,12 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
     final tableId = _tableId;
     final sessionId = _sessionId;
     if (tableId == null || sessionId == null) return;
+    if (!_canManageTables) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا تملك صلاحية إدارة الطاولات.')),
+      );
+      return;
+    }
     final items = _splitItems;
     if (items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -289,9 +288,13 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
       );
       return;
     }
+    final total = ((_detail?['total'] as num?) ??
+            (_selected?['total'] as num?) ??
+            0)
+        .toDouble();
     final selected = await showDialog<List<Map<String, dynamic>>>(
       context: context,
-      builder: (ctx) => _SplitBillDialog(items: items),
+      builder: (ctx) => SplitBillWizard(items: items, sessionTotal: total),
     );
     if (selected == null || selected.isEmpty) return;
     try {
@@ -386,6 +389,14 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
   }
 
   Widget _actionsPanel() {
+    if (!_canManageTables) {
+      return const HsCard(
+        child: Text(
+          'لا تملك صلاحية إدارة الطاولات (tables.manage).',
+          style: TextStyle(fontSize: 12, color: HasimColors.muted),
+        ),
+      );
+    }
     final hasSession = _sessionId != null;
     return HsCard(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
@@ -948,113 +959,6 @@ class _ActionTile extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _SplitBillDialog extends StatefulWidget {
-  const _SplitBillDialog({required this.items});
-
-  final List<Map<String, dynamic>> items;
-
-  @override
-  State<_SplitBillDialog> createState() => _SplitBillDialogState();
-}
-
-class _SplitBillDialogState extends State<_SplitBillDialog> {
-  late final List<Map<String, dynamic>> _items;
-
-  @override
-  void initState() {
-    super.initState();
-    _items = widget.items
-        .map((e) => Map<String, dynamic>.from(e)..['selected_qty'] = 0)
-        .toList();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('تقسيم الحساب'),
-      content: SizedBox(
-        width: 360,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'حدد الكميات التي تريد فصلها في فاتورة جديدة.',
-              style: TextStyle(fontSize: 12, color: HasimColors.muted),
-            ),
-            const SizedBox(height: 12),
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: _items.length,
-                itemBuilder: (context, index) {
-                  final item = _items[index];
-                  final max = (item['quantity'] as num).toInt();
-                  final qty = (item['selected_qty'] as num).toInt();
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      '${item['name']}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    subtitle: Text('المتاح: $max'),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          onPressed: qty <= 0
-                              ? null
-                              : () => setState(
-                                    () => item['selected_qty'] = qty - 1,
-                                  ),
-                          icon: const Icon(Icons.remove_circle_outline),
-                        ),
-                        Text('$qty', style: const TextStyle(fontWeight: FontWeight.w800)),
-                        IconButton(
-                          onPressed: qty >= max
-                              ? null
-                              : () => setState(
-                                    () => item['selected_qty'] = qty + 1,
-                                  ),
-                          icon: const Icon(Icons.add_circle_outline),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('إلغاء'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final selected = _items
-                .where((e) => ((e['selected_qty'] as num?) ?? 0) > 0)
-                .map(
-                  (e) => {
-                    'order_item_id': e['order_item_id'],
-                    'quantity': e['selected_qty'],
-                  },
-                )
-                .toList();
-            if (selected.isEmpty) return;
-            Navigator.pop(context, selected);
-          },
-          child: const Text('تقسيم'),
-        ),
-      ],
     );
   }
 }

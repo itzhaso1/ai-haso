@@ -3,10 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api/cashier_api.dart';
+import '../../core/printing/printer_service.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/widgets/hasim_widgets.dart';
 
-/// Closed cashier invoices — mirrors `workspace/pos/invoices/index`.
+/// Closed cashier invoices + full invoice detail / print / reprint.
 class InvoicesList extends ConsumerStatefulWidget {
   const InvoicesList({super.key});
 
@@ -20,6 +21,7 @@ class _InvoicesListState extends ConsumerState<InvoicesList> {
   String? _error;
   late DateTime _date;
   Map<String, dynamic>? _selected;
+  String? _workspaceName;
 
   @override
   void initState() {
@@ -37,6 +39,7 @@ class _InvoicesListState extends ConsumerState<InvoicesList> {
       _selected = null;
     });
     try {
+      final boot = await ref.read(cashierApiProvider).get('/bootstrap');
       final data = await ref.read(cashierApiProvider).get(
         '/invoices',
         query: {'date': _dateQuery},
@@ -50,6 +53,9 @@ class _InvoicesListState extends ConsumerState<InvoicesList> {
       setState(() {
         _invoices = list;
         _loading = false;
+        _workspaceName = boot['workspace'] is Map
+            ? (boot['workspace']['name'] as String?)
+            : null;
       });
     } on ApiException catch (e) {
       setState(() {
@@ -82,14 +88,35 @@ class _InvoicesListState extends ConsumerState<InvoicesList> {
     try {
       final data = await ref.read(cashierApiProvider).get('/invoices/$id');
       if (!mounted) return;
-      setState(() => _selected = data['invoice'] is Map
+      final inv = data['invoice'] is Map
           ? Map<String, dynamic>.from(data['invoice'] as Map)
-          : data);
+          : data;
+      inv['store_name'] = _workspaceName ?? 'كاشير حاسم';
+      setState(() => _selected = inv);
     } on ApiException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(e.message)));
     }
+  }
+
+  Future<void> _printSelected({required bool reprint}) async {
+    final inv = _selected;
+    if (inv == null) return;
+    final printer = await ref.read(printerServiceFutureProvider.future);
+    final result = await printer.printInvoice(inv);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          reprint
+              ? (result.success
+                  ? 'تمت إعادة الطباعة.'
+                  : result.message)
+              : result.message,
+        ),
+      ),
+    );
   }
 
   @override
@@ -158,45 +185,50 @@ class _InvoicesListState extends ConsumerState<InvoicesList> {
                               return HsCard(
                                 child: InkWell(
                                   onTap: () => _openInvoice(inv),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              '${inv['invoice_number']}',
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w800,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 4,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                '${inv['invoice_number']}',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w800,
+                                                ),
                                               ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              'الطاولة: ${inv['table']?['name'] ?? '—'}'
-                                              ' · ${inv['closer']?['name'] ?? '—'}',
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                                color: HasimColors.muted,
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                'الطاولة: ${inv['table']?['name'] ?? '—'}'
+                                                ' · ${inv['closer']?['name'] ?? '—'}',
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: HasimColors.muted,
+                                                ),
                                               ),
-                                            ),
-                                            Text(
-                                              '${inv['closed_at'] ?? ''}',
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                                color: HasimColors.muted,
+                                              Text(
+                                                '${inv['closed_at'] ?? ''}',
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: HasimColors.muted,
+                                                ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                      Text(
-                                        '${((inv['total_amount'] as num?) ?? 0).toStringAsFixed(2)} ${inv['currency'] ?? ''}',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w900,
+                                        Text(
+                                          '${((inv['total_amount'] as num?) ?? 0).toStringAsFixed(2)} ${inv['currency'] ?? ''}',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w900,
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
                               );
@@ -206,17 +238,19 @@ class _InvoicesListState extends ConsumerState<InvoicesList> {
         ),
         if (_selected != null)
           Material(
-            elevation: 8,
+            elevation: 10,
             color: Colors.white,
             child: SafeArea(
               top: false,
               child: ConstrainedBox(
                 constraints: BoxConstraints(
-                  maxHeight: MediaQuery.sizeOf(context).height * 0.45,
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.55,
                 ),
                 child: _InvoiceDetail(
                   invoice: _selected!,
                   onClose: () => setState(() => _selected = null),
+                  onPrint: () => _printSelected(reprint: false),
+                  onReprint: () => _printSelected(reprint: true),
                 ),
               ),
             ),
@@ -227,16 +261,26 @@ class _InvoicesListState extends ConsumerState<InvoicesList> {
 }
 
 class _InvoiceDetail extends StatelessWidget {
-  const _InvoiceDetail({required this.invoice, required this.onClose});
+  const _InvoiceDetail({
+    required this.invoice,
+    required this.onClose,
+    required this.onPrint,
+    required this.onReprint,
+  });
 
   final Map<String, dynamic> invoice;
   final VoidCallback onClose;
+  final VoidCallback onPrint;
+  final VoidCallback onReprint;
 
   @override
   Widget build(BuildContext context) {
     final items = invoice['items'] is List
         ? (invoice['items'] as List).whereType<Map>()
         : const Iterable<Map>.empty();
+    final tax = invoice['tax_amount'];
+    final payment = invoice['payment_method'];
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -245,16 +289,33 @@ class _InvoiceDetail extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  'فاتورة ${invoice['invoice_number']}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${invoice['store_name'] ?? 'كاشير حاسم'}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: HasimColors.brandDark,
+                      ),
+                    ),
+                    Text(
+                      'فاتورة ${invoice['invoice_number']}',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               IconButton(onPressed: onClose, icon: const Icon(Icons.close)),
             ],
+          ),
+          Text(
+            'التاريخ: ${invoice['closed_at'] ?? '—'}',
+            style: const TextStyle(fontSize: 12, color: HasimColors.muted),
           ),
           Text(
             'الطاولة: ${invoice['table']?['name'] ?? '—'}',
@@ -271,14 +332,22 @@ class _InvoiceDetail extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            '${item['product_name'] ?? item['name'] ?? 'صنف'} × ${item['quantity'] ?? 1}',
+                            '${item['item_name'] ?? item['product_name'] ?? 'صنف'}'
+                            '${item['size_label'] != null ? ' (${item['size_label']})' : ''}'
+                            ' × ${item['quantity'] ?? 1}',
                             style: const TextStyle(fontSize: 12),
                           ),
                         ),
                         Text(
-                          ((item['total_amount'] as num?) ??
-                                  (item['total'] as num?) ??
-                                  0)
+                          ((item['unit_price'] as num?) ?? 0).toStringAsFixed(2),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: HasimColors.muted,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          ((item['total_amount'] as num?) ?? 0)
                               .toStringAsFixed(2),
                           style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
@@ -289,15 +358,63 @@ class _InvoiceDetail extends StatelessWidget {
             ),
           ),
           const Divider(),
+          _row('المجموع الفرعي', invoice['subtotal']),
+          _row('الخصم', invoice['discount_amount']),
+          if (tax != null) _row('الضريبة', tax),
+          _row('الإجمالي', invoice['total_amount'], bold: true),
+          if (payment != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'طريقة الدفع: $payment',
+                style: const TextStyle(fontSize: 12),
+              ),
+            )
+          else
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: Text(
+                'طريقة الدفع: غير مُرجَعة من API الفاتورة الحالية',
+                style: TextStyle(fontSize: 11, color: HasimColors.muted),
+              ),
+            ),
+          const SizedBox(height: 10),
           Row(
             children: [
-              const Text('الإجمالي', style: TextStyle(fontWeight: FontWeight.w900)),
-              const Spacer(),
-              Text(
-                ((invoice['total_amount'] as num?) ?? 0).toStringAsFixed(2),
-                style: const TextStyle(fontWeight: FontWeight.w900),
+              Expanded(
+                child: HsPrimaryButton(label: 'طباعة', onPressed: onPrint),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: HsOutlineButton(
+                  label: 'إعادة طباعة',
+                  onPressed: onReprint,
+                ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(String label, Object? value, {bool bold = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: bold ? FontWeight.w900 : FontWeight.w600,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            ((value as num?) ?? 0).toStringAsFixed(2),
+            style: TextStyle(
+              fontWeight: bold ? FontWeight.w900 : FontWeight.w700,
+            ),
           ),
         ],
       ),

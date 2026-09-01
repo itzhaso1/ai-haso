@@ -158,7 +158,13 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
                 ? Map<String, dynamic>.from(me['workspace'] as Map)
                 : restored.workspace,
             workspaces: workspaces,
-            posEnabled: true,
+            permissions: me['permissions'] is Map
+                ? Map<String, dynamic>.from(me['permissions'] as Map)
+                : {},
+            posEnabled: me['pos_enabled'] == true,
+            entitlements: me['entitlements'] is Map
+                ? Map<String, dynamic>.from(me['entitlements'] as Map)
+                : null,
           ),
         );
       } catch (_) {
