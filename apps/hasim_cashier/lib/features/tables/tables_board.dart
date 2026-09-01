@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/config/app_config.dart';
+import '../../core/network/cashier_link.dart';
+import '../../core/offline/offline_store.dart';
 import '../../core/pos/pos_labels.dart';
 import '../../core/realtime/pos_event_source.dart';
 import '../../core/theme/hasim_colors.dart';
@@ -43,6 +45,7 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
     _source?.dispose();
     _source = PollingPosEventSource(
       interval: Duration(seconds: AppConfig.tablesPollSeconds),
+      enabled: () => ref.read(cashierLinkProvider).isOnline,
       poll: () async {
         // Skip while a table detail is open — detail owns its own refresh.
         if (!mounted || ref.read(openTableIdProvider) != null) {
@@ -71,6 +74,7 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
         }
       }
       if (!mounted) return;
+      await OfflineStore.instance.cacheTables(list);
       if (silent && _sameBoardSnapshot(_tables, list)) {
         return;
       }
@@ -81,6 +85,15 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
       });
     } on ApiException catch (e) {
       if (!mounted) return;
+      final cached = OfflineStore.instance.readTables();
+      if (cached.isNotEmpty && _tables.isEmpty) {
+        setState(() {
+          _tables = cached;
+          _loading = false;
+          _error = silent ? null : e.message;
+        });
+        return;
+      }
       if (silent) return;
       setState(() {
         _loading = false;
@@ -124,8 +137,10 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
       return TableDetailScreen(key: ValueKey('table-$openId'), tableId: openId);
     }
 
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) {
+    if (_loading && _tables.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null && _tables.isEmpty) {
       return Padding(
         padding: const EdgeInsets.all(16),
         child: HsEmpty(

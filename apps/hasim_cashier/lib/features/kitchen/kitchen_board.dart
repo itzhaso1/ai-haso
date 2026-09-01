@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/config/app_config.dart';
+import '../../core/network/cashier_link.dart';
+import '../../core/offline/offline_store.dart';
 import '../../core/pos/pos_labels.dart';
 import '../../core/realtime/pos_event_source.dart';
 import '../../core/theme/hasim_colors.dart';
@@ -49,6 +51,7 @@ class _KitchenBoardState extends ConsumerState<KitchenBoard> {
   Future<void> _startPolling() async {
     _source = PollingPosEventSource(
       interval: Duration(seconds: AppConfig.kitchenPollSeconds),
+      enabled: () => ref.read(cashierLinkProvider).isOnline,
       poll: () async {
         await _load(silent: true);
         return const <PosEvent>[];
@@ -73,13 +76,24 @@ class _KitchenBoardState extends ConsumerState<KitchenBoard> {
         }
       }
       if (!mounted) return;
+      await OfflineStore.instance.cacheKitchen(list);
       setState(() {
         _orders = list;
         _loading = false;
         _error = null;
       });
     } on ApiException catch (e) {
-      if (!mounted || silent) return;
+      if (!mounted) return;
+      final cached = OfflineStore.instance.readKitchen();
+      if (cached.isNotEmpty && _orders.isEmpty) {
+        setState(() {
+          _orders = cached;
+          _loading = false;
+          _error = silent ? null : e.message;
+        });
+        return;
+      }
+      if (silent) return;
       setState(() {
         _loading = false;
         _error = e.message;
@@ -109,8 +123,10 @@ class _KitchenBoardState extends ConsumerState<KitchenBoard> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) {
+    if (_loading && _orders.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null && _orders.isEmpty) {
       return Padding(
         padding: const EdgeInsets.all(16),
         child: HsEmpty(

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../api/cashier_api.dart';
+import '../offline/offline_store.dart';
 
 const _tokenKey = 'cashier_token';
 const _workspaceKey = 'cashier_workspace_id';
@@ -181,36 +182,25 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
       if (wid is int) {
         _ref.read(workspaceIdProvider.notifier).state = wid;
       }
-      // Refresh profile
+      final cached = _sessionFromCache(restored.token, restored.workspace);
+      // Leave splash immediately — never block startup on /auth/me.
+      state = AsyncValue.data(cached ?? restored);
       try {
         final me = await _ref.read(cashierApiProvider).get('/auth/me');
-        final workspaces = <Map<String, dynamic>>[];
-        if (me['workspaces'] is List) {
-          for (final item in me['workspaces'] as List) {
-            if (item is Map) workspaces.add(Map<String, dynamic>.from(item));
-          }
+        final session = _sessionFromMe(restored.token, restored.workspace, me);
+        await OfflineStore.instance.cacheSession(_sessionToCache(session));
+        state = AsyncValue.data(session);
+      } on ApiException catch (e) {
+        if (e.isUnauthorized) {
+          await _ref.read(authRepositoryProvider).logout();
+          _ref.read(authTokenProvider.notifier).state = null;
+          _ref.read(workspaceIdProvider.notifier).state = null;
+          state = const AsyncValue.data(null);
+          return;
         }
-        state = AsyncValue.data(
-          AuthSession(
-            token: restored.token,
-            user: me['user'] is Map
-                ? Map<String, dynamic>.from(me['user'] as Map)
-                : {},
-            workspace: me['workspace'] is Map
-                ? Map<String, dynamic>.from(me['workspace'] as Map)
-                : restored.workspace,
-            workspaces: workspaces,
-            permissions: me['permissions'] is Map
-                ? Map<String, dynamic>.from(me['permissions'] as Map)
-                : {},
-            posEnabled: me['pos_enabled'] == true,
-            entitlements: me['entitlements'] is Map
-                ? Map<String, dynamic>.from(me['entitlements'] as Map)
-                : null,
-          ),
-        );
+        // Timeout / DNS / 5xx: keep local session. Network ≠ logout.
       } catch (_) {
-        state = AsyncValue.data(restored);
+        // Keep hydrated local session.
       }
     } catch (e, st) {
       state = AsyncValue.error(e, st);
@@ -223,8 +213,79 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
     if (wid is int) {
       _ref.read(workspaceIdProvider.notifier).state = wid;
     }
+    await OfflineStore.instance.cacheSession(_sessionToCache(session));
     state = AsyncValue.data(session);
   }
+
+  AuthSession _sessionFromMe(
+    String token,
+    Map<String, dynamic>? fallbackWorkspace,
+    Map<String, dynamic> me,
+  ) {
+    final workspaces = <Map<String, dynamic>>[];
+    if (me['workspaces'] is List) {
+      for (final item in me['workspaces'] as List) {
+        if (item is Map) workspaces.add(Map<String, dynamic>.from(item));
+      }
+    }
+    return AuthSession(
+      token: token,
+      user: me['user'] is Map
+          ? Map<String, dynamic>.from(me['user'] as Map)
+          : {},
+      workspace: me['workspace'] is Map
+          ? Map<String, dynamic>.from(me['workspace'] as Map)
+          : fallbackWorkspace,
+      workspaces: workspaces,
+      permissions: me['permissions'] is Map
+          ? Map<String, dynamic>.from(me['permissions'] as Map)
+          : {},
+      posEnabled: me['pos_enabled'] == true,
+      entitlements: me['entitlements'] is Map
+          ? Map<String, dynamic>.from(me['entitlements'] as Map)
+          : null,
+    );
+  }
+
+  AuthSession? _sessionFromCache(
+    String token,
+    Map<String, dynamic>? fallbackWorkspace,
+  ) {
+    final cached = OfflineStore.instance.readSession();
+    if (cached == null) return null;
+    final workspaces = <Map<String, dynamic>>[];
+    if (cached['workspaces'] is List) {
+      for (final item in cached['workspaces'] as List) {
+        if (item is Map) workspaces.add(Map<String, dynamic>.from(item));
+      }
+    }
+    return AuthSession(
+      token: token,
+      user: cached['user'] is Map
+          ? Map<String, dynamic>.from(cached['user'] as Map)
+          : {},
+      workspace: cached['workspace'] is Map
+          ? Map<String, dynamic>.from(cached['workspace'] as Map)
+          : fallbackWorkspace,
+      workspaces: workspaces,
+      permissions: cached['permissions'] is Map
+          ? Map<String, dynamic>.from(cached['permissions'] as Map)
+          : {},
+      posEnabled: cached['pos_enabled'] == true,
+      entitlements: cached['entitlements'] is Map
+          ? Map<String, dynamic>.from(cached['entitlements'] as Map)
+          : null,
+    );
+  }
+
+  Map<String, dynamic> _sessionToCache(AuthSession session) => {
+        'user': session.user,
+        'workspace': session.workspace,
+        'workspaces': session.workspaces,
+        'permissions': session.permissions,
+        'pos_enabled': session.posEnabled,
+        'entitlements': session.entitlements,
+      };
 
   Future<void> login(String emailOrPhone, String password) async {
     // Keep previous session visible during login attempt — avoid splash remount loop.
@@ -367,17 +428,17 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
       return;
     }
 
-    state = AsyncValue.data(
-      AuthSession(
-        token: current.token,
-        user: current.user,
-        workspace: nextWorkspace,
-        workspaces: current.workspaces,
-        permissions: nextPerms,
-        posEnabled: nextPos,
-        entitlements: nextEntitlements,
-      ),
+    final next = AuthSession(
+      token: current.token,
+      user: current.user,
+      workspace: nextWorkspace,
+      workspaces: current.workspaces,
+      permissions: nextPerms,
+      posEnabled: nextPos,
+      entitlements: nextEntitlements,
     );
+    OfflineStore.instance.cacheSession(_sessionToCache(next));
+    state = AsyncValue.data(next);
   }
 
   bool _sameWorkspaceId(Map<String, dynamic>? a, Map<String, dynamic>? b) {

@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../network/link_policy.dart';
 import '../theme/hasim_colors.dart';
 import '../theme/hasim_radius.dart';
 import '../theme/hasim_spacing.dart';
@@ -451,31 +452,43 @@ class ProductCard extends StatelessWidget {
 class ConnectionBanner extends StatelessWidget {
   const ConnectionBanner({
     super.key,
-    required this.online,
+    required this.link,
     this.pendingCount = 0,
+    this.onRetry,
   });
 
-  final bool online;
+  final CashierLink link;
   final int pendingCount;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
-    if (online && pendingCount == 0) {
+    if (link == CashierLink.online && pendingCount == 0) {
       return const SizedBox.shrink();
     }
+    final offline = link != CashierLink.online;
     return Container(
       width: double.infinity,
-      color: online ? HasimColors.brandSoft : HasimColors.warningSoft,
+      color: offline ? HasimColors.warningSoft : HasimColors.brandSoft,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Text(
-        online
-            ? '$pendingCount عمليات بانتظار المزامنة'
-            : 'لا يوجد اتصال — سيتم حفظ العملية ومزامنتها لاحقًا.',
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: online ? HasimColors.brandDark : HasimColors.warning,
-        ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              LinkPolicy.bannerMessage(link, pendingCount: pendingCount),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: offline ? HasimColors.warning : HasimColors.brandDark,
+              ),
+            ),
+          ),
+          if (offline && onRetry != null)
+            TextButton(
+              onPressed: onRetry,
+              child: const Text('إعادة المحاولة'),
+            ),
+        ],
       ),
     );
   }

@@ -55,6 +55,63 @@ class OfflineStore {
 
   String? catalogCachedAt() => _catalog.get('cached_at') as String?;
 
+  Future<void> cacheJson(String key, Map<String, dynamic> value) async {
+    await _catalog.put(key, jsonEncode(value));
+    await _catalog.put('${key}_at', DateTime.now().toIso8601String());
+  }
+
+  Map<String, dynamic>? readJson(String key) {
+    final raw = _catalog.get(key);
+    if (raw is! String || raw.isEmpty) return null;
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map) return null;
+    return Map<String, dynamic>.from(decoded);
+  }
+
+  String? jsonCachedAt(String key) => _catalog.get('${key}_at') as String?;
+
+  Future<void> cacheList(String key, List<Map<String, dynamic>> value) async {
+    await _catalog.put(key, jsonEncode(value));
+    await _catalog.put('${key}_at', DateTime.now().toIso8601String());
+  }
+
+  List<Map<String, dynamic>> readList(String key) {
+    final raw = _catalog.get(key);
+    if (raw is! String || raw.isEmpty) return const [];
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) return const [];
+    return decoded
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  Future<void> cacheBootstrap(Map<String, dynamic> data) =>
+      cacheJson('bootstrap', data);
+
+  Map<String, dynamic>? readBootstrap() => readJson('bootstrap');
+
+  Future<void> cacheSession(Map<String, dynamic> data) =>
+      cacheJson('session', data);
+
+  Map<String, dynamic>? readSession() => readJson('session');
+
+  Future<void> cacheTables(List<Map<String, dynamic>> tables) =>
+      cacheList('tables', tables);
+
+  List<Map<String, dynamic>> readTables() => readList('tables');
+
+  Future<void> cacheKitchen(List<Map<String, dynamic>> orders) =>
+      cacheList('kitchen', orders);
+
+  List<Map<String, dynamic>> readKitchen() => readList('kitchen');
+
+  Future<void> cacheDailyReport(String date, Map<String, dynamic> data) =>
+      cacheJson('report_$date', data);
+
+  Map<String, dynamic>? readDailyReport(String date) =>
+      readJson('report_$date');
+
   Future<String> enqueueOrder(Map<String, dynamic> payload) async {
     final id = _uuid.v4();
     final clientReference = payload['client_reference'] as String? ?? id;

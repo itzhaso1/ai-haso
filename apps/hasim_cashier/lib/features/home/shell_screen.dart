@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/navigation/pos_shell_nav.dart';
+import '../../core/network/cashier_link.dart';
 import '../../core/offline/offline_store.dart';
 import '../../core/offline/sync_engine.dart';
 import '../../core/permissions/cashier_permissions.dart';
@@ -55,10 +56,9 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
   var _selectedCategoryId = 0;
   final _search = TextEditingController();
   Map<String, dynamic>? _bootstrap;
-  var _online = true;
-  var _pendingSync = 0;
   String? _bootstrapError;
   var _bootstrapInFlight = false;
+  var _pendingSync = 0;
 
   @override
   void initState() {
@@ -76,10 +76,14 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
 
   Future<void> _watchConnectivity() async {
     final result = await Connectivity().checkConnectivity();
-    _setOnline(!_isOffline(result));
+    final deviceOnline = !_isOffline(result);
+    ref.read(cashierLinkProvider.notifier).setDeviceOnline(deviceOnline);
     Connectivity().onConnectivityChanged.listen((event) {
-      _setOnline(!_isOffline(event));
-      if (_online) {
+      final nowOnline = !_isOffline(event);
+      final wasOffline = !ref.read(cashierLinkProvider).deviceOnline;
+      ref.read(cashierLinkProvider.notifier).setDeviceOnline(nowOnline);
+      if (nowOnline && wasOffline) {
+        _loadBootstrap();
         ref.read(syncEngineProvider).flushPendingOrders().then((_) {
           _refreshPending();
         });
@@ -90,11 +94,6 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
   bool _isOffline(List<ConnectivityResult> results) {
     return results.isEmpty ||
         results.every((r) => r == ConnectivityResult.none);
-  }
-
-  void _setOnline(bool value) {
-    if (!mounted) return;
-    setState(() => _online = value);
   }
 
   void _refreshPending() {
@@ -117,6 +116,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       ref.read(cashierPermissionsProvider.notifier).state =
           Map<String, dynamic>.from(sessionPerms);
     }
+    final cached = OfflineStore.instance.readBootstrap();
     try {
       final data = await ref.read(cashierApiProvider).get('/bootstrap');
       if (!mounted) return;
@@ -124,55 +124,69 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
         context.go('/pos-blocked');
         return;
       }
-      final settings = data['settings'];
-      if (settings is Map && settings['tax_rate'] != null) {
-        ref
-            .read(cartControllerProvider.notifier)
-            .setTaxRate((settings['tax_rate'] as num).toDouble());
-      }
-      setState(() {
-        _bootstrap = data;
-        _bootstrapError = null;
-        // channel_stats remain available via Reports (/orders/channel-stats
-        // + /reports/daily) — not shown on the operational cashier home.
-      });
-      if (data['permissions'] is Map) {
-        final perms = Map<String, dynamic>.from(data['permissions'] as Map);
-        ref.read(cashierPermissionsProvider.notifier).state = perms;
-        // Keep auth session permissions in sync so nav/reports fallbacks stay fresh.
-        // applyBootstrapSnapshot is a no-op when unchanged (avoids router churn).
-        ref.read(authControllerProvider.notifier).applyBootstrapSnapshot(
-              permissions: perms,
-              workspace: data['workspace'] is Map
-                  ? Map<String, dynamic>.from(data['workspace'] as Map)
-                  : null,
-              entitlements: data['entitlements'] is Map
-                  ? Map<String, dynamic>.from(data['entitlements'] as Map)
-                  : null,
-              posEnabled: data['pos_enabled'] == true ? true : null,
-            );
-      }
+      await OfflineStore.instance.cacheBootstrap(data);
+      _applyBootstrapPayload(data, fromCache: false);
       await ref.read(syncEngineProvider).flushPendingOrders();
       _refreshPending();
     } on ApiException catch (e) {
-      if (e.statusCode == 401) {
+      if (e.isUnauthorized) {
         ref.read(cashierPermissionsProvider.notifier).state = {};
         await ref.read(authControllerProvider.notifier).logout();
         if (mounted) context.go('/login');
         return;
       }
-      if (e.statusCode == 403) {
+      if (e.isForbidden && !e.isUnavailable) {
         if (mounted) context.go('/pos-blocked');
         return;
       }
       if (!mounted) return;
-      setState(() => _bootstrapError = e.message);
+      if (cached != null && _bootstrap == null) {
+        _applyBootstrapPayload(cached, fromCache: true);
+      }
+      setState(() {
+        _bootstrapError = e.message;
+      });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _bootstrapError = e.toString());
+      if (cached != null && _bootstrap == null) {
+        _applyBootstrapPayload(cached, fromCache: true);
+      }
+      setState(() {
+        _bootstrapError = e.toString();
+      });
     } finally {
       _bootstrapInFlight = false;
     }
+  }
+
+  void _applyBootstrapPayload(
+    Map<String, dynamic> data, {
+    required bool fromCache,
+  }) {
+    final settings = data['settings'];
+    if (settings is Map && settings['tax_rate'] != null) {
+      ref
+          .read(cartControllerProvider.notifier)
+          .setTaxRate((settings['tax_rate'] as num).toDouble());
+    }
+    if (data['permissions'] is Map) {
+      final perms = Map<String, dynamic>.from(data['permissions'] as Map);
+      ref.read(cashierPermissionsProvider.notifier).state = perms;
+      ref.read(authControllerProvider.notifier).applyBootstrapSnapshot(
+            permissions: perms,
+            workspace: data['workspace'] is Map
+                ? Map<String, dynamic>.from(data['workspace'] as Map)
+                : null,
+            entitlements: data['entitlements'] is Map
+                ? Map<String, dynamic>.from(data['entitlements'] as Map)
+                : null,
+            posEnabled: data['pos_enabled'] == true ? true : null,
+          );
+    }
+    setState(() {
+      _bootstrap = data;
+      _bootstrapError = fromCache ? _bootstrapError : null;
+    });
   }
 
   @override
@@ -204,6 +218,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     final isTablet = width >= 800 && width < 1100;
     final cart = ref.watch(cartControllerProvider);
     final session = ref.watch(authControllerProvider).valueOrNull;
+    final link = ref.watch(cashierLinkProvider);
     final workspaceName =
         (session?.workspace?['name'] as String?) ?? 'مساحة العمل';
 
@@ -213,7 +228,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           _TopHeader(
             workspaceName: workspaceName,
             cartCount: cart.lines.fold<int>(0, (s, l) => s + l.quantity),
-            online: _online,
+            online: link.isOnline,
             onCart: isDesktop
                 ? null
                 : () => _openCartSheet(context),
@@ -222,6 +237,14 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
               if (context.mounted) context.go('/login');
             },
             onSync: () async {
+              if (!link.allowMutations) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('المزامنة تتطلب اتصالًا بالخادم.'),
+                  ),
+                );
+                return;
+              }
               final n =
                   await ref.read(syncEngineProvider).flushPendingOrders();
               _refreshPending();
@@ -235,18 +258,13 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
             section: _section,
             onSelect: (s) => setState(() => _section = s),
           ),
-          ConnectionBanner(online: _online, pendingCount: _pendingSync),
+          ConnectionBanner(
+            link: link.link,
+            pendingCount: _pendingSync,
+            onRetry: _loadBootstrap,
+          ),
           Expanded(
-            child: _bootstrapError != null && _bootstrap == null
-                ? Center(
-                    child: HsEmpty(
-                      title: 'تعذر تحميل الكاشير',
-                      subtitle: _bootstrapError,
-                      actionLabel: 'إعادة المحاولة',
-                      onAction: _loadBootstrap,
-                    ),
-                  )
-                : switch (_section) {
+            child: switch (_section) {
                     _PosSection.cashier => _CashierHome(
                         isDesktop: isDesktop,
                         isTablet: isTablet,
@@ -324,6 +342,17 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     }
 
     final wasTable = cart.channel == OrderChannel.table;
+    if (wasTable && !ref.read(cashierLinkProvider).allowMutations) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'عمليات الطاولات تتطلب اتصالًا بالخادم. لا يمكن حفظ الطلب محليًا.',
+          ),
+        ),
+      );
+      return;
+    }
+
     final tableId = cart.tableId;
     final clientRef = const Uuid().v4();
     final payload = ref.read(cartControllerProvider.notifier).toOrderPayload(
@@ -409,7 +438,20 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
         ),
       );
     } on ApiException catch (e) {
-      if (e.statusCode == 0) {
+      if (wasTable) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.isUnavailable
+                  ? 'عمليات الطاولات تتطلب اتصالًا بالخادم.'
+                  : e.message,
+            ),
+          ),
+        );
+        return;
+      }
+      if (e.isUnavailable) {
         await OfflineStore.instance.enqueueOrder(payload);
         ref.read(cartControllerProvider.notifier).clear();
         _refreshPending();

@@ -1,4 +1,3 @@
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/offline/conflict_strategy.dart';
+import '../../core/network/cashier_link.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
 import '../../core/pos/pos_labels.dart';
@@ -128,15 +128,13 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
         ConflictPolicy.requireOnline) {
       return true;
     }
-    final result = await Connectivity().checkConnectivity();
-    final offline = result.isEmpty ||
-        result.every((r) => r == ConnectivityResult.none);
-    if (offline) {
+    final link = ref.read(cashierLinkProvider);
+    if (!link.allowMutations) {
       if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'عمليات الطاولات تتطلب اتصالًا بالإنترنت (Laravel مصدر الحقيقة).',
+            'عمليات الطاولات تتطلب اتصالًا بالخادم (Laravel مصدر الحقيقة).',
           ),
         ),
       );

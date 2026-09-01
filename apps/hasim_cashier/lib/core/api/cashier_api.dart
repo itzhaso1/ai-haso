@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../config/app_config.dart';
+import '../network/cashier_link.dart';
 
 final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
   return const FlutterSecureStorage(
@@ -39,10 +40,23 @@ final dioProvider = Provider<Dio>((ref) {
         }
         handler.next(options);
       },
+      onResponse: (response, handler) {
+        ref.read(cashierLinkProvider.notifier).onApiSuccess();
+        handler.next(response);
+      },
       onError: (error, handler) {
-        if (error.response?.statusCode == 401) {
+        final status = error.response?.statusCode ??
+            ((error.type == DioExceptionType.connectionError ||
+                    error.type == DioExceptionType.connectionTimeout ||
+                    error.type == DioExceptionType.receiveTimeout ||
+                    (error.type == DioExceptionType.unknown &&
+                        error.response == null))
+                ? 0
+                : null);
+        if (status == 401) {
           ref.read(authTokenProvider.notifier).state = null;
         }
+        ref.read(cashierLinkProvider.notifier).onApiFailure(statusCode: status);
         handler.next(error);
       },
     ),
@@ -57,6 +71,12 @@ class ApiException implements Exception {
   final String message;
   final int? statusCode;
   final Map<String, dynamic>? errors;
+
+  bool get isUnauthorized => statusCode == 401;
+  bool get isForbidden => statusCode == 403;
+  bool get isNetwork => statusCode == 0;
+  bool get isServer => statusCode != null && statusCode! >= 500;
+  bool get isUnavailable => isNetwork || isServer;
 
   @override
   String toString() => message;
@@ -235,7 +255,8 @@ class CashierApiClient {
 
     if (e.type == DioExceptionType.connectionError ||
         e.type == DioExceptionType.connectionTimeout ||
-        e.type == DioExceptionType.receiveTimeout) {
+        e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.unknown && e.response == null) {
       return ApiException(
         'تعذر الاتصال بالخادم. تحقق من الإنترنت وحاول مجددًا.',
         statusCode: 0,

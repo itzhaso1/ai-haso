@@ -43,10 +43,12 @@ class PollingPosEventSource implements PosEventSource {
   PollingPosEventSource({
     required this.poll,
     this.interval = const Duration(seconds: 5),
+    this.enabled,
   });
 
   final Future<List<PosEvent>> Function() poll;
   final Duration interval;
+  final bool Function()? enabled;
 
   final _controller = StreamController<PosEvent>.broadcast();
   Timer? _timer;
@@ -69,6 +71,7 @@ class PollingPosEventSource implements PosEventSource {
 
   Future<void> _tick() async {
     if (!_running || _tickInFlight) return;
+    if (enabled != null && !enabled!()) return;
     _tickInFlight = true;
     try {
       final batch = await poll();

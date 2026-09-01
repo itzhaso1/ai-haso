@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
+import '../../core/network/cashier_link.dart';
+import '../../core/offline/offline_store.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
 import '../../core/theme/hasim_colors.dart';
@@ -22,6 +24,7 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
   var _loading = true;
   String? _error;
   var _forbidden = false;
+  var _stale = false;
   late DateTime _date;
 
   @override
@@ -47,38 +50,60 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
       final api = ref.read(cashierApiProvider);
       final data = await api.get('/reports/daily', query: {'date': _q});
       Map<String, dynamic> live = const {};
-      try {
-        final channel = await api.get('/orders/channel-stats');
-        if (channel['stats'] is Map) {
-          live = Map<String, dynamic>.from(channel['stats'] as Map);
-        } else if (channel['channel_stats'] is Map) {
-          live = Map<String, dynamic>.from(channel['channel_stats'] as Map);
+      if (ref.read(cashierLinkProvider).isOnline) {
+        try {
+          final channel = await api.get('/orders/channel-stats');
+          if (channel['stats'] is Map) {
+            live = Map<String, dynamic>.from(channel['stats'] as Map);
+          } else if (channel['channel_stats'] is Map) {
+            live = Map<String, dynamic>.from(channel['channel_stats'] as Map);
+          }
+        } catch (_) {
+          // Daily report still usable without live open-counts.
         }
-      } catch (_) {
-        // Daily report still usable without live open-counts.
       }
       if (!mounted) return;
+      await OfflineStore.instance.cacheDailyReport(_q, data);
       setState(() {
         _data = data;
         _liveChannelStats = live;
         _loading = false;
         _error = null;
         _forbidden = false;
+        _stale = false;
       });
     } on ApiException catch (e) {
       if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _forbidden = e.statusCode == 403;
-        _error = e.message;
-        if (_forbidden) _data = null;
-      });
-    } catch (e) {
-      if (!mounted) return;
+      if (e.isForbidden) {
+        setState(() {
+          _loading = false;
+          _forbidden = true;
+          _error = e.message;
+          _data = null;
+        });
+        return;
+      }
+      final cached = OfflineStore.instance.readDailyReport(_q);
       setState(() {
         _loading = false;
         _forbidden = false;
-        _error = e.toString();
+        _error = cached == null ? e.message : null;
+        if (cached != null) {
+          _data = cached;
+          _stale = true;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      final cached = OfflineStore.instance.readDailyReport(_q);
+      setState(() {
+        _loading = false;
+        _forbidden = false;
+        _error = cached == null ? e.toString() : null;
+        if (cached != null) {
+          _data = cached;
+          _stale = true;
+        }
       });
     }
   }
@@ -104,7 +129,7 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
       }
     });
 
-    if (_loading) {
+    if (_loading && _data == null) {
       return const Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -191,18 +216,23 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'التقارير اليومية',
                       style:
                           TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
                     ),
                     Text(
-                      'بيانات حقيقية من Laravel — نفس مصدر لوحة الويب',
-                      style: TextStyle(fontSize: 11, color: HasimColors.muted),
+                      _stale
+                          ? 'آخر نسخة محفوظة — غير متصل بالخادم'
+                          : 'بيانات حقيقية من Laravel — نفس مصدر لوحة الويب',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: HasimColors.muted,
+                      ),
                     ),
                   ],
                 ),

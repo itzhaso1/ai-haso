@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/cashier_api.dart';
 import '../../core/audio/menu_sound_service.dart';
 import '../../core/config/app_config.dart';
+import '../../core/network/cashier_link.dart';
 import '../../core/pos/pos_labels.dart';
 import '../../core/realtime/pos_event_source.dart';
 import '../../core/theme/hasim_colors.dart';
@@ -67,6 +68,7 @@ class _MenuOrdersFeedState extends ConsumerState<MenuOrdersFeed> {
   Future<void> _startRealtime() async {
     _source = PollingPosEventSource(
       interval: Duration(seconds: AppConfig.menuPollSeconds),
+      enabled: () => ref.read(cashierLinkProvider).isOnline,
       poll: () async {
         await _fetch(silent: true);
         return const <PosEvent>[];

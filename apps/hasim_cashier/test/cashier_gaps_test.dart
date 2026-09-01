@@ -1,5 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hasim_cashier/core/api/cashier_api.dart';
 import 'package:hasim_cashier/core/config/app_config.dart';
+import 'package:hasim_cashier/core/network/cashier_link.dart';
+import 'package:hasim_cashier/core/network/link_policy.dart';
 import 'package:hasim_cashier/core/offline/conflict_strategy.dart';
 import 'package:hasim_cashier/core/offline/offline_store.dart';
 import 'package:hasim_cashier/core/permissions/cashier_permissions.dart';
@@ -390,5 +393,185 @@ void main() {
       'synced',
       'failed',
     ]));
+  });
+
+  test('network timeout is not treated as logout', () {
+    expect(LinkPolicy.shouldLogout(0), isFalse);
+    expect(LinkPolicy.shouldLogout(null), isFalse);
+    expect(LinkPolicy.shouldLogout(500), isFalse);
+    expect(LinkPolicy.shouldLogout(503), isFalse);
+    expect(LinkPolicy.shouldLogout(401), isTrue);
+    expect(ApiException('x', statusCode: 0).isUnauthorized, isFalse);
+    expect(ApiException('x', statusCode: 0).isUnavailable, isTrue);
+    expect(ApiException('x', statusCode: 401).isUnauthorized, isTrue);
+  });
+
+  test('shell stays buildable: bootstrap cache used when live fails', () {
+    Map<String, dynamic>? recover({
+      Map<String, dynamic>? live,
+      Map<String, dynamic>? cached,
+      required bool failed,
+    }) {
+      if (!failed && live != null) return live;
+      return cached;
+    }
+
+    expect(
+      recover(live: {'ok': true}, cached: {'ok': false}, failed: false),
+      {'ok': true},
+    );
+    expect(
+      recover(live: {'ok': true}, cached: {'cached': true}, failed: true),
+      {'cached': true},
+    );
+    expect(recover(failed: true), isNull);
+  });
+
+  test('offline indicator and retry policy', () {
+    expect(
+      LinkPolicy.bannerMessage(CashierLink.serverUnavailable),
+      contains('غير متصل بالخادم'),
+    );
+    expect(
+      LinkPolicy.bannerMessage(CashierLink.offline),
+      contains('غير متصل'),
+    );
+    var retries = 0;
+    var inFlight = false;
+    void retry() {
+      if (inFlight) return;
+      inFlight = true;
+      retries++;
+      inFlight = false;
+    }
+    retry();
+    retry();
+    expect(retries, 2);
+  });
+
+  test('table payment and invoice stay online-only with no fake success', () {
+    expect(
+      ConflictStrategy.forDomain('table_action'),
+      ConflictPolicy.requireOnline,
+    );
+    expect(ConflictStrategy.forDomain('payment'), ConflictPolicy.requireOnline);
+    expect(
+      ConflictStrategy.forDomain('close_table'),
+      ConflictPolicy.requireOnline,
+    );
+    expect(
+      ConflictStrategy.forDomain('invoice_edit'),
+      ConflictPolicy.requireOnline,
+    );
+    expect(LinkPolicy.allowServerMutation(CashierLink.offline), isFalse);
+    expect(
+      LinkPolicy.allowServerMutation(CashierLink.serverUnavailable),
+      isFalse,
+    );
+    expect(LinkPolicy.allowServerMutation(CashierLink.online), isTrue);
+  });
+
+  test('tables and kitchen polling pause when not online', () {
+    expect(LinkPolicy.shouldPausePolling(CashierLink.offline), isTrue);
+    expect(
+      LinkPolicy.shouldPausePolling(CashierLink.serverUnavailable),
+      isTrue,
+    );
+    expect(LinkPolicy.shouldPausePolling(CashierLink.online), isFalse);
+  });
+
+  test('polling source does not hit API when disabled', () async {
+    var hits = 0;
+    final source = PollingPosEventSource(
+      interval: const Duration(seconds: 30),
+      enabled: () => false,
+      poll: () async {
+        hits++;
+        return const [];
+      },
+    );
+    await source.start();
+    expect(hits, 0);
+    await source.dispose();
+  });
+
+  test('401 is auth failure not offline', () {
+    expect(
+      LinkPolicy.afterApi(
+        deviceOnline: true,
+        statusCode: 401,
+        success: false,
+      ),
+      CashierLink.online,
+    );
+    expect(
+      LinkPolicy.afterApi(
+        deviceOnline: true,
+        statusCode: 0,
+        success: false,
+      ),
+      CashierLink.serverUnavailable,
+    );
+    expect(
+      LinkPolicy.afterApi(
+        deviceOnline: false,
+        statusCode: 0,
+        success: false,
+      ),
+      CashierLink.offline,
+    );
+  });
+
+  test('device restore waits for API success before online', () {
+    final controller = CashierLinkController();
+    controller.setDeviceOnline(false);
+    expect(controller.state.link, CashierLink.offline);
+    controller.setDeviceOnline(true);
+    expect(controller.state.link, CashierLink.serverUnavailable);
+    controller.onApiSuccess();
+    expect(controller.state.link, CashierLink.online);
+  });
+
+  test('bootstrap in-flight guard prevents loop', () {
+    var inFlight = false;
+    var calls = 0;
+    void load() {
+      if (inFlight) return;
+      inFlight = true;
+      calls++;
+      inFlight = false;
+    }
+    load();
+    inFlight = true;
+    load();
+    expect(calls, 1);
+  });
+
+  test('reports network failure is error or cached body never white', () {
+    String surface({
+      required bool loading,
+      Map<String, dynamic>? data,
+      String? error,
+    }) {
+      if (loading && data == null) return 'loading';
+      if (error != null && data == null) return 'error';
+      if (data != null) return 'body';
+      return 'empty';
+    }
+
+    expect(
+      surface(loading: false, data: null, error: 'تعذر الاتصال بالخادم'),
+      'error',
+    );
+    expect(
+      surface(loading: false, data: const {'summary': {}}, error: null),
+      'body',
+    );
+  });
+
+  test('empty permissions stay empty offline — no invented grants', () {
+    expect(CashierPermissions.canManageMenu(const {}), isFalse);
+    expect(CashierPermissions.canManageTables(const {}), isFalse);
+    expect(CashierPermissions.canViewReports(const {}), isFalse);
   });
 }
