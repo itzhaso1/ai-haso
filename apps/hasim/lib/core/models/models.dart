@@ -562,17 +562,32 @@ class LoginResult {
     final rawList = json['workspaces'];
     if (rawList is List) {
       for (final item in rawList) {
-        if (item is Map<String, dynamic>) {
-          workspaces.add(WorkspaceModel.fromJson(item));
+        if (item is Map) {
+          workspaces.add(
+            WorkspaceModel.fromJson(
+              item is Map<String, dynamic> ? item : Map<String, dynamic>.from(item),
+            ),
+          );
         }
       }
     }
 
+    final userRaw = json['user'];
+    if (userRaw is! Map) {
+      throw const FormatException('login response missing user object');
+    }
+
     return LoginResult(
       token: json['token']?.toString() ?? '',
-      user: UserModel.fromJson(json['user'] as Map<String, dynamic>),
-      workspace: json['workspace'] is Map<String, dynamic>
-          ? WorkspaceModel.fromJson(json['workspace'] as Map<String, dynamic>)
+      user: UserModel.fromJson(
+        userRaw is Map<String, dynamic> ? userRaw : Map<String, dynamic>.from(userRaw),
+      ),
+      workspace: json['workspace'] is Map
+          ? WorkspaceModel.fromJson(
+              json['workspace'] is Map<String, dynamic>
+                  ? json['workspace'] as Map<String, dynamic>
+                  : Map<String, dynamic>.from(json['workspace'] as Map),
+            )
           : null,
       workspaces: workspaces,
     );
@@ -581,25 +596,32 @@ class LoginResult {
 
 List<Map<String, dynamic>> asMapList(dynamic raw) {
   if (raw is List) {
-    return raw.whereType<Map<String, dynamic>>().toList();
+    return [
+      for (final item in raw)
+        if (item is Map) (item is Map<String, dynamic> ? item : Map<String, dynamic>.from(item)),
+    ];
   }
-  if (raw is Map<String, dynamic>) {
+  if (raw is Map) {
+    final map = raw is Map<String, dynamic> ? raw : Map<String, dynamic>.from(raw);
     // Laravel Resource::collection sometimes wraps
-    if (raw['data'] is List) {
-      return (raw['data'] as List).whereType<Map<String, dynamic>>().toList();
+    if (map['data'] is List) {
+      return [
+        for (final item in map['data'] as List)
+          if (item is Map) (item is Map<String, dynamic> ? item : Map<String, dynamic>.from(item)),
+      ];
     }
   }
   return const [];
 }
 
 Map<String, dynamic>? asMap(dynamic raw) {
-  if (raw is Map<String, dynamic>) {
-    if (raw.containsKey('data') && raw['data'] is Map<String, dynamic>) {
-      return raw['data'] as Map<String, dynamic>;
-    }
-    return raw;
+  if (raw is! Map) return null;
+  final map = raw is Map<String, dynamic> ? raw : Map<String, dynamic>.from(raw);
+  final nested = map['data'];
+  if (nested is Map) {
+    return nested is Map<String, dynamic> ? nested : Map<String, dynamic>.from(nested);
   }
-  return null;
+  return map;
 }
 
 class EmailAccountModel extends Equatable {

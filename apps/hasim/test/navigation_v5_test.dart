@@ -112,7 +112,7 @@ void main() {
   });
 
   group('RTL header semantics', () {
-    testWidgets('account is leading (right in RTL) and more is action (left in RTL)', (tester) async {
+    testWidgets('brand text is on the right and more is on the left in RTL', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           builder: (context, child) => Directionality(
@@ -122,11 +122,6 @@ void main() {
           home: Scaffold(
             appBar: AppBar(
               automaticallyImplyLeading: false,
-              leading: IconButton(
-                key: const Key('account-btn'),
-                onPressed: () {},
-                icon: const Icon(Icons.person),
-              ),
               title: const Text('حاسم'),
               actions: [
                 IconButton(
@@ -140,14 +135,14 @@ void main() {
         ),
       );
 
-      expect(find.byKey(const Key('account-btn')), findsOneWidget);
-      expect(find.byKey(const Key('more-btn')), findsOneWidget);
       expect(find.text('حاسم'), findsOneWidget);
+      expect(find.byKey(const Key('more-btn')), findsOneWidget);
+      expect(find.byType(CircleAvatar), findsNothing);
 
-      final account = tester.getCenter(find.byKey(const Key('account-btn')));
+      final brand = tester.getCenter(find.text('حاسم'));
       final more = tester.getCenter(find.byKey(const Key('more-btn')));
-      // RTL: leading (account) على اليمين، actions (more) على اليسار
-      expect(account.dx, greaterThan(more.dx));
+      // RTL: title (حاسم) على اليمين، actions (more) على اليسار
+      expect(brand.dx, greaterThan(more.dx));
     });
   });
 
