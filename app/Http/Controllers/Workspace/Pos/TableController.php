@@ -114,11 +114,17 @@ class TableController extends PosBaseController
             ->orderBy('name')
             ->get(['id', 'pos_item_category_id', 'name', 'item_type', 'size_label', 'description', 'price', 'currency', 'image_path']);
 
+        $otherTables = DiningTable::query()
+            ->whereKeyNot($table->id)
+            ->orderBy('name')
+            ->get(['id', 'name', 'status']);
+
         return view('workspace.pos.tables.show', [
             'table' => $table,
             'currentSession' => $currentSession,
             'sessionOrders' => $sessionOrders,
             'menuItems' => $menuItems,
+            'otherTables' => $otherTables,
             'posStatuses' => $this->posStatusLabels(),
         ]);
     }
@@ -254,6 +260,95 @@ class TableController extends PosBaseController
         }
 
         return back()->with('success', 'تمت إضافة الطلب للطاولة بنجاح.');
+    }
+
+    public function transferSession(Request $request, DiningTable $table, TableSession $session): RedirectResponse
+    {
+        $this->authorizePos($request, 'tables.manage');
+        $this->authorize('update', $table);
+        abort_unless((int) $session->dining_table_id === (int) $table->id, 404);
+
+        $validated = $request->validate([
+            'target_table_id' => ['required', 'integer'],
+        ]);
+
+        $target = DiningTable::query()->whereKey((int) $validated['target_table_id'])->firstOrFail();
+        $this->assertSameWorkspace($target->workspace_id);
+
+        try {
+            $this->posOrderService->transferSession($session, $target);
+        } catch (RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return redirect()
+            ->route('workspace.pos.tables.show', $target)
+            ->with('success', 'تم نقل الطاولة وطلباتها بنجاح.');
+    }
+
+    public function mergeSession(Request $request, DiningTable $table, TableSession $session): RedirectResponse
+    {
+        $this->authorizePos($request, 'tables.manage');
+        $this->authorize('update', $table);
+        abort_unless((int) $session->dining_table_id === (int) $table->id, 404);
+
+        $validated = $request->validate([
+            'target_table_id' => ['required', 'integer'],
+        ]);
+
+        $target = DiningTable::query()->whereKey((int) $validated['target_table_id'])->firstOrFail();
+        $this->assertSameWorkspace($target->workspace_id);
+
+        try {
+            $this->posOrderService->mergeSessions($session, $target);
+        } catch (RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return redirect()
+            ->route('workspace.pos.tables.show', $target)
+            ->with('success', 'تم دمج الطاولة دون فقدان الطلبات.');
+    }
+
+    public function splitSession(Request $request, DiningTable $table, TableSession $session): RedirectResponse
+    {
+        $this->authorizePos($request, 'orders.manage');
+        $this->authorize('update', $table);
+        abort_unless((int) $session->dining_table_id === (int) $table->id, 404);
+
+        $validated = $request->validate([
+            'groups' => ['required', 'array', 'min:2'],
+            'groups.*.items' => ['required', 'array', 'min:1'],
+            'groups.*.items.*.order_item_id' => ['required', 'integer'],
+            'groups.*.items.*.quantity' => ['required', 'integer', 'min:0'],
+        ]);
+
+        try {
+            $this->posOrderService->splitSessionByItems($session, $validated['groups'], $request->user());
+        } catch (RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return back()->with('success', 'تم تقسيم الحساب مع الحفاظ على الإجماليات.');
+    }
+
+    public function updateSessionNote(Request $request, DiningTable $table, TableSession $session): RedirectResponse
+    {
+        $this->authorizePos($request, 'orders.manage');
+        $this->authorize('update', $table);
+        abort_unless((int) $session->dining_table_id === (int) $table->id, 404);
+
+        $validated = $request->validate([
+            'notes' => ['required', 'string', 'max:2000'],
+        ]);
+
+        try {
+            $this->posOrderService->applySessionNote($session, $validated['notes']);
+        } catch (RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return back()->with('success', 'تم حفظ الملاحظة.');
     }
 
     public function regenerateQr(Request $request, DiningTable $table): RedirectResponse

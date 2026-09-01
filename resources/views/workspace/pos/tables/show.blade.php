@@ -5,225 +5,479 @@
     @php($defaultCategory = (string) ($menuGroups->keys()->first() ?? ''))
     @php($hasCurrentSession = (bool) $currentSession)
     @php($openedAtIso = $currentSession?->opened_at?->toIso8601String())
-    @php($tableStatusLabel = $table->status === 'occupied' ? 'مشغولة' : 'متاحة')
+    @php($tableOpenLabel = $hasCurrentSession ? 'مفتوحة' : 'مغلقة')
     @php($billableOrders = $sessionOrders->reject(fn ($order) => $order->pos_status === 'cancelled'))
     @php($sessionSubtotal = (float) $billableOrders->sum('subtotal'))
     @php($sessionDiscount = (float) $billableOrders->sum('discount_amount'))
     @php($sessionTotal = (float) $billableOrders->sum('total_amount'))
-    @php($onlinePaidCount = $billableOrders->filter(fn ($order) => $order->payment_status === 'paid' && ((data_get($order->metadata, 'payment_method') === 'pay_now') || $order->payments->contains(fn ($payment) => $payment->status === 'paid')))->count())
-    @php($sessionPaymentStatus = $billableOrders->isNotEmpty() && $billableOrders->every(fn ($order) => $order->payment_status === 'paid') ? ($onlinePaidCount > 0 ? 'paid_online' : 'paid') : 'unpaid')
+    @php($ordersCount = $billableOrders->count())
+    @php($itemsCount = (int) $billableOrders->sum(fn ($order) => $order->items->sum('quantity')))
+    @php($sessionNote = (string) ($billableOrders->firstWhere(fn ($o) => filled($o->notes))?->notes ?? ''))
+    @php($splitItems = $billableOrders->flatMap(fn ($order) => $order->items->map(fn ($item) => [
+        'id' => $item->id,
+        'name' => $item->product_name.($item->variant_name ? ' - '.$item->variant_name : ''),
+        'quantity' => (int) $item->quantity,
+        'unit_price' => (float) $item->unit_price,
+        'total' => (float) $item->total_amount,
+    ]))->values())
+    @php($otherTablesJson = $otherTables->map(fn ($t) => ['id' => $t->id, 'name' => $t->name, 'status' => $t->status])->values())
 
-    <section class="grid gap-4 xl:grid-cols-12">
-        <div class="space-y-4 xl:col-span-7 xl:order-2">
-            <article class="rounded-2xl border border-slate-700 bg-slate-800 p-4 text-slate-100 shadow-xl">
-                <div class="mb-3 flex items-start justify-between gap-3">
-                    <div>
-                        <h2 class="text-lg font-extrabold">الحساب والإغلاق</h2>
-                        <p class="mt-1 text-xs text-slate-300">ملخص كامل للجلسة الحالية على مستوى الطاولة</p>
-                    </div>
-                    <a href="{{ route('workspace.pos.tables.index') }}" class="rounded-lg border border-slate-500 px-3 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-700">
-                        رجوع
-                    </a>
-                </div>
+    <div
+        class="pb-28"
+        x-data="tableShowBoard({
+            defaultCategory: @js($defaultCategory),
+            splitItems: @js($splitItems),
+            otherTables: @js($otherTablesJson),
+            sessionNote: @js($sessionNote),
+            hasSession: @js($hasCurrentSession),
+        })"
+    >
+        <div class="mb-3 flex items-center justify-between gap-2">
+            <a href="{{ route('workspace.pos.tables.index') }}" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">← رجوع للطاولات</a>
+            <h1 class="text-sm font-bold text-slate-900">{{ $table->name }}</h1>
+        </div>
 
-                <div class="grid gap-2 sm:grid-cols-4">
-                    <div class="rounded-lg border border-slate-600 bg-slate-900/70 p-2 text-center">
-                        <p class="text-[11px] text-slate-400">الطاولة</p>
-                        <p class="mt-1 text-sm font-bold">{{ $table->name }}</p>
+        {{-- RTL: first column = RIGHT = table info --}}
+        <section class="grid gap-3 xl:grid-cols-12">
+            {{-- RIGHT: معلومات الطاولة + خيارات --}}
+            <aside class="space-y-3 xl:col-span-4 xl:order-1">
+                <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <h2 class="text-sm font-bold text-slate-900">معلومات الطاولة</h2>
+                    <div class="mt-3 flex flex-wrap items-center gap-2">
+                        <p class="text-2xl font-extrabold text-slate-900">{{ $table->name }}</p>
+                        <span class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold {{ $hasCurrentSession ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600' }}">
+                            <span class="h-1.5 w-1.5 rounded-full {{ $hasCurrentSession ? 'bg-emerald-500' : 'bg-slate-400' }}"></span>
+                            {{ $tableOpenLabel }}
+                        </span>
                     </div>
-                    <div class="rounded-lg border border-slate-600 bg-slate-900/70 p-2 text-center">
-                        <p class="text-[11px] text-slate-400">الحالة</p>
-                        <p class="mt-1 text-sm font-bold {{ $table->status === 'occupied' ? 'text-rose-300' : 'text-emerald-300' }}">{{ $tableStatusLabel }}</p>
-                    </div>
-                    <div class="rounded-lg border border-slate-600 bg-slate-900/70 p-2 text-center">
-                        <p class="text-[11px] text-slate-400">مدة الجلسة</p>
-                        <p class="mt-1 text-sm font-bold" data-opened-at="{{ $openedAtIso }}">00:00:00</p>
-                    </div>
-                    <div class="rounded-lg border border-slate-600 bg-slate-900/70 p-2 text-center">
-                        <p class="text-[11px] text-slate-400">حالة الدفع</p>
-                        <p class="mt-1 text-sm font-bold {{ in_array($sessionPaymentStatus, ['paid', 'paid_online'], true) ? 'text-emerald-300' : 'text-amber-300' }}">
-                            @if($sessionPaymentStatus === 'paid_online')
-                                مدفوع عبر الإنترنت
-                            @elseif($sessionPaymentStatus === 'paid')
-                                تم الدفع
-                            @else
-                                غير مدفوع
-                            @endif
-                        </p>
-                    </div>
-                </div>
+                    <p class="mt-2 text-xs text-slate-500">
+                        @if($hasCurrentSession)
+                            المدة: <span class="font-semibold text-slate-700" data-opened-at="{{ $openedAtIso }}">00:00:00</span>
+                        @else
+                            لا توجد جلسة نشطة
+                        @endif
+                    </p>
 
-                <div class="mt-3 grid gap-2 sm:grid-cols-3">
-                    <div class="rounded-lg border border-slate-700 bg-slate-900/50 p-2">
-                        <p class="text-[11px] text-slate-400">المجموع</p>
-                        <p class="mt-1 text-sm font-bold">{{ number_format($sessionSubtotal, 2) }}</p>
-                    </div>
-                    <div class="rounded-lg border border-slate-700 bg-slate-900/50 p-2">
-                        <p class="text-[11px] text-slate-400">الخصم</p>
-                        <p class="mt-1 text-sm font-bold">{{ number_format($sessionDiscount, 2) }}</p>
-                    </div>
-                    <div class="rounded-lg border border-slate-700 bg-slate-900/50 p-2">
-                        <p class="text-[11px] text-slate-400">الإجمالي النهائي</p>
-                        <p class="mt-1 text-sm font-bold text-emerald-300">{{ number_format($sessionTotal, 2) }}</p>
-                    </div>
-                </div>
-
-                @if($currentSession)
-                    <form method="POST" action="{{ route('workspace.pos.tables.sessions.discount', ['table' => $table, 'session' => $currentSession]) }}" class="mt-3 rounded-lg border border-slate-700 bg-slate-900/70 p-2">
-                        @csrf
-                        <label class="mb-1 block text-[11px] text-slate-300">خصم الطاولة (على كامل الجلسة)</label>
-                        <div class="flex items-center gap-2">
-                            <input
-                                type="number"
-                                name="discount_amount"
-                                step="0.01"
-                                min="0"
-                                value="{{ number_format($sessionDiscount, 2, '.', '') }}"
-                                class="w-full rounded-lg border-slate-600 bg-slate-950 text-sm text-white"
-                            />
-                            <button class="rounded-lg bg-amber-400 px-3 py-2 text-xs font-bold text-amber-950">تطبيق الخصم</button>
+                    <div class="mt-4 grid grid-cols-3 gap-2 text-center">
+                        <div class="rounded-xl border border-slate-100 bg-slate-50 px-2 py-2">
+                            <p class="text-sm font-bold text-slate-900">{{ $ordersCount }}</p>
+                            <p class="text-[10px] text-slate-500">طلبات</p>
                         </div>
-                    </form>
-                @endif
+                        <div class="rounded-xl border border-slate-100 bg-slate-50 px-2 py-2">
+                            <p class="text-sm font-bold text-slate-900">{{ $itemsCount }}</p>
+                            <p class="text-[10px] text-slate-500">أصناف</p>
+                        </div>
+                        <div class="rounded-xl border border-slate-100 bg-slate-50 px-2 py-2">
+                            <p class="text-sm font-bold text-emerald-700">{{ number_format($sessionTotal, 2) }}</p>
+                            <p class="text-[10px] text-slate-500">الإجمالي</p>
+                        </div>
+                    </div>
 
-                <div class="mt-3 flex flex-wrap items-center gap-2">
-                    <button type="button" onclick="window.print()" class="rounded-lg border border-slate-500 px-3 py-2 text-xs font-semibold hover:bg-slate-700">
-                        طباعة
-                    </button>
-                    <span class="rounded-lg border border-slate-600 bg-slate-900/70 px-3 py-2 text-xs">
-                        {{ $hasCurrentSession ? 'الجلسة مفتوحة' : 'لا توجد جلسة نشطة' }}
-                    </span>
-                </div>
+                    <div class="mt-4 grid gap-2">
+                        <button type="button" @click="panel = 'addItem'" :disabled="!hasSession" class="rounded-xl border border-emerald-600 bg-white px-3 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">+ إضافة صنف</button>
+                        <button type="button" @click="panel = 'addOrder'" :disabled="!hasSession" class="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50">+ إضافة طلب</button>
+                    </div>
+                </article>
 
-                @if($currentSession)
-                    <form method="POST" action="{{ route('workspace.pos.tables.sessions.close', ['table' => $table, 'session' => $currentSession]) }}" class="mt-3">
-                        @csrf
-                        <button class="w-full rounded-lg bg-emerald-500 px-3 py-2 text-sm font-bold text-emerald-950">
-                            إغلاق الجلسة
+                <article class="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <h3 class="px-1 text-sm font-bold text-slate-900">خيارات الطاولة</h3>
+                    <div class="mt-2 divide-y divide-slate-100">
+                        <button type="button" @click="panel = 'transfer'" :disabled="!hasSession" class="flex w-full items-center justify-between gap-2 px-2 py-2.5 text-right text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-40">
+                            <span>نقل الطاولة</span>
+                            <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
                         </button>
-                    </form>
-                    <form method="POST" action="{{ route('workspace.pos.tables.sessions.cancel', ['table' => $table, 'session' => $currentSession]) }}" class="mt-2" onsubmit="return confirm('سيتم إلغاء الجلسة وإلغاء الطلبات غير المفوترة. هل أنت متأكد؟')">
-                        @csrf
-                        <button class="w-full rounded-lg bg-rose-500 px-3 py-2 text-sm font-bold text-white">إلغاء الطاولة / الجلسة</button>
-                    </form>
-                @else
-                    <form method="POST" action="{{ route('workspace.pos.tables.sessions.open', $table) }}" class="mt-3">
-                        @csrf
-                        <button class="w-full rounded-lg bg-blue-500 px-3 py-2 text-sm font-bold text-blue-950">فتح جلسة جديدة</button>
-                    </form>
-                @endif
-            </article>
-
-            <article class="rounded-2xl border border-slate-700 bg-slate-800 p-4 text-slate-100 shadow-xl">
-                <h3 class="mb-3 text-sm font-extrabold">تفاصيل طلبات الطاولة</h3>
-                <div class="space-y-3">
-                    @forelse($sessionOrders as $order)
-                        @php($paymentMethodKey = (string) data_get($order->metadata, 'payment_method', 'pay_later'))
-                        @php($isOnlinePaid = $order->payment_status === 'paid' && ((data_get($order->metadata, 'payment_method') === 'pay_now') || $order->payments->contains(fn ($payment) => $payment->status === 'paid')))
-                        @php($paymentStatusLabel = $isOnlinePaid ? 'مدفوع عبر الإنترنت' : ($order->payment_status === 'paid' ? 'تم الدفع' : 'غير مدفوع'))
-                        @php($paymentMethodLabel = $paymentMethodKey === 'pay_now' ? 'دفع إلكتروني' : ($paymentMethodKey === 'cashier' ? 'كاشير مباشر' : 'الدفع عند الخروج'))
-                        <article class="rounded-xl border border-slate-700 bg-slate-900/50 p-3">
-                            <div class="mb-2 flex items-start justify-between gap-2">
-                                <div>
-                                    <p class="text-sm font-semibold text-white">#{{ $order->order_number }}</p>
-                                    <p class="text-xs text-slate-300">
-                                        الحالة: {{ $posStatuses[$order->pos_status] ?? $order->pos_status }} •
-                                        الدفع: {{ $paymentStatusLabel }} •
-                                        الطريقة: {{ $paymentMethodLabel }}
-                                    </p>
-                                </div>
-                                <p class="text-xs text-slate-400">{{ optional($order->created_at)->format('H:i') }}</p>
-                            </div>
-
-                            <ul class="space-y-1 text-xs text-slate-300">
-                                @foreach($order->items as $item)
-                                    <li class="flex items-center justify-between gap-2">
-                                        <span>{{ $item->product_name }}{{ $item->variant_name ? ' - '.$item->variant_name : '' }} × {{ $item->quantity }}</span>
-                                        <span>{{ number_format((float) $item->total_amount, 2) }}</span>
-                                    </li>
-                                @endforeach
-                            </ul>
-
-                            <div class="mt-2 border-t border-slate-700 pt-2 text-xs">
-                                <p class="flex items-center justify-between text-slate-300">
-                                    <span>المجموع الفرعي</span>
-                                    <span>{{ number_format((float) $order->subtotal, 2) }}</span>
-                                </p>
-                                <p class="mt-1 flex items-center justify-between text-slate-300">
-                                    <span>الخصم</span>
-                                    <span>{{ number_format((float) $order->discount_amount, 2) }}</span>
-                                </p>
-                                <p class="mt-1 flex items-center justify-between text-sm font-bold text-emerald-300">
-                                    <span>الإجمالي</span>
-                                    <span>{{ number_format((float) $order->total_amount, 2) }} {{ $order->currency }}</span>
-                                </p>
-                            </div>
-                        </article>
-                    @empty
-                        <p class="text-sm text-slate-300">لا توجد طلبات جارية في هذه الجلسة.</p>
-                    @endforelse
-                </div>
-            </article>
-        </div>
-
-        <div class="space-y-4 xl:col-span-5 xl:order-1" x-data="tableQuickMenu({ defaultCategory: @js($defaultCategory) })">
-            <article class="rounded-2xl border border-slate-700 bg-slate-800 p-4 text-slate-100 shadow-xl">
-                <h3 class="text-sm font-extrabold">منيو الطاولة</h3>
-                <p class="mt-1 text-[11px] text-slate-300">اضغط مباشرة على الصنف لإضافته للطلب</p>
-
-                @if($currentSession)
-                    <form method="POST" action="{{ route('workspace.pos.tables.orders.store', $table) }}" x-ref="quickAddForm" class="mt-3 space-y-3">
-                        @csrf
-                        <input type="hidden" name="items[0][pos_menu_item_id]" x-model="selectedItemId" />
-                        <input type="hidden" name="items[0][quantity]" value="1" />
-                        <textarea name="notes" rows="2" class="w-full rounded-lg border-slate-600 bg-slate-950 text-sm text-white placeholder:text-slate-500" placeholder="ملاحظة سريعة (اختياري)"></textarea>
-                    </form>
-
-                    <div class="mt-3 flex gap-2 overflow-x-auto pb-1">
-                        @foreach($menuGroups as $categoryName => $groupItems)
-                            <button
-                                type="button"
-                                @click="selectedCategory = @js($categoryName)"
-                                class="whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-semibold transition"
-                                :class="selectedCategory === @js($categoryName) ? 'border-cyan-300 bg-cyan-300 text-cyan-950' : 'border-slate-600 bg-slate-900 text-slate-200 hover:bg-slate-700'"
-                            >
-                                {{ $categoryName }} ({{ $groupItems->count() }})
+                        <button type="button" @click="panel = 'split'" :disabled="!hasSession || splitItems.length === 0" class="flex w-full items-center justify-between gap-2 px-2 py-2.5 text-right text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-40">
+                            <span>تقسيم الحساب</span>
+                            <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 6h7v7H4V6zm9 0h7v7h-7V6zM4 15h7v5H4v-5zm9 0h7v5h-7v-5z"/></svg>
+                        </button>
+                        <button type="button" @click="panel = 'merge'" :disabled="!hasSession" class="flex w-full items-center justify-between gap-2 px-2 py-2.5 text-right text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-40">
+                            <span>دمج طاولة</span>
+                            <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 7h4v4H7V7zm6 0h4v4h-4V7zM7 13h4v4H7v-4zm6 0h4v4h-4v-4z"/></svg>
+                        </button>
+                        <button type="button" @click="panel = 'addOrder'" :disabled="!hasSession" class="flex w-full items-center justify-between gap-2 px-2 py-2.5 text-right text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-40">
+                            <span>إضافة طلب</span>
+                            <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        </button>
+                        <button type="button" @click="panel = 'note'" :disabled="!hasSession" class="flex w-full items-center justify-between gap-2 px-2 py-2.5 text-right text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-40">
+                            <span>إضافة ملاحظة</span>
+                            <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15.232 5.232l3.536 3.536M4 20h4.586a1 1 0 00.707-.293l9.414-9.414a2 2 0 000-2.828l-2.172-2.172a2 2 0 00-2.828 0L4.293 14.707A1 1 0 004 15.414V20z"/></svg>
+                        </button>
+                        <button type="button" onclick="window.print()" class="flex w-full items-center justify-between gap-2 px-2 py-2.5 text-right text-sm text-slate-700 hover:bg-slate-50">
+                            <span>طباعة الحساب</span>
+                            <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 9V4h12v5M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v6H6v-6z"/></svg>
+                        </button>
+                        @if($currentSession)
+                            <button type="button" @click="panel = 'closeConfirm'" class="flex w-full items-center justify-between gap-2 px-2 py-2.5 text-right text-sm text-slate-700 hover:bg-slate-50">
+                                <span>إغلاق الطاولة</span>
+                                <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                             </button>
-                        @endforeach
+                            <button type="button" @click="panel = 'cancelConfirm'" class="flex w-full items-center justify-between gap-2 px-2 py-2.5 text-right text-sm font-semibold text-rose-600 hover:bg-rose-50">
+                                <span>إلغاء الطاولة</span>
+                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3M4 7h16"/></svg>
+                            </button>
+                        @else
+                            <form method="POST" action="{{ route('workspace.pos.tables.sessions.open', $table) }}">
+                                @csrf
+                                <button class="flex w-full items-center justify-between gap-2 px-2 py-2.5 text-right text-sm font-semibold text-emerald-700 hover:bg-emerald-50">
+                                    <span>فتح جلسة</span>
+                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 11V7a4 4 0 118 0v4m-9 0h10a2 2 0 012 2v6a2 2 0 01-2 2H7a2 2 0 01-2-2v-6a2 2 0 012-2z"/></svg>
+                                </button>
+                            </form>
+                        @endif
                     </div>
+                </article>
+            </aside>
 
-                    <div class="mt-3 max-h-[560px] overflow-y-auto">
-                        @foreach($menuGroups as $categoryName => $groupItems)
-                            <section x-show="selectedCategory === @js($categoryName)" x-cloak class="space-y-2">
-                                @foreach($groupItems as $item)
-                                    <button
-                                        type="button"
-                                        @click="addItem({{ $item->id }})"
-                                        class="w-full rounded-xl border border-slate-700 bg-slate-900/70 p-3 text-right transition hover:border-cyan-300 hover:bg-slate-900"
-                                    >
-                                        <p class="text-sm font-semibold text-slate-100">{{ $item->name }}{{ $item->size_label ? ' - '.$item->size_label : '' }}</p>
-                                        <p class="mt-1 text-xs text-slate-400">{{ $item->description ?: 'بدون وصف' }}</p>
-                                        <p class="mt-2 text-sm font-bold text-cyan-300">{{ number_format((float) $item->price, 2) }} {{ $item->currency }}</p>
-                                    </button>
-                                @endforeach
-                            </section>
-                        @endforeach
+            {{-- LEFT: تفاصيل الطلبات --}}
+            <section class="xl:col-span-8 xl:order-2">
+                <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <h2 class="text-sm font-bold text-slate-900">تفاصيل طلبات الطاولة</h2>
+                        <div class="flex flex-wrap gap-1.5">
+                            <button type="button" @click="filter = 'all'" :class="filter === 'all' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200'" class="rounded-full border px-3 py-1 text-[11px] font-semibold">الكل ({{ $sessionOrders->count() }})</button>
+                            <button type="button" @click="filter = 'open'" :class="filter === 'open' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200'" class="rounded-full border px-3 py-1 text-[11px] font-semibold">مفتوحة ({{ $billableOrders->reject(fn($o) => $o->payment_status === 'paid')->count() }})</button>
+                            <button type="button" @click="filter = 'paid'" :class="filter === 'paid' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200'" class="rounded-full border px-3 py-1 text-[11px] font-semibold">مدفوعة ({{ $billableOrders->where('payment_status', 'paid')->count() }})</button>
+                            <button type="button" @click="filter = 'cancelled'" :class="filter === 'cancelled' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200'" class="rounded-full border px-3 py-1 text-[11px] font-semibold">ملغية ({{ $sessionOrders->where('pos_status', 'cancelled')->count() }})</button>
+                        </div>
                     </div>
-                @else
-                    <p class="mt-3 text-xs text-slate-300">افتح جلسة أولاً ثم أضف الأصناف بالضغط المباشر.</p>
-                @endif
-            </article>
+                    <input x-model="search" type="search" placeholder="ابحث في الطلبات..." class="mt-3 w-full rounded-xl border-slate-200 text-sm" />
+
+                    <div class="mt-4 space-y-3">
+                        @forelse($sessionOrders as $order)
+                            @php($cashierName = (string) data_get($order->metadata, 'created_by_name', data_get($order->metadata, 'payment_method') === 'cashier' ? 'كاشير مباشر' : 'طلب'))
+                            @php($statusKey = $order->pos_status === 'cancelled' ? 'cancelled' : ($order->payment_status === 'paid' ? 'paid' : 'open'))
+                            <article
+                                class="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
+                                data-order-card
+                                data-status="{{ $statusKey }}"
+                                data-search="{{ strtolower($order->order_number.' '.$cashierName) }}"
+                                x-show="matchesOrder(@js($statusKey), @js(strtolower($order->order_number.' '.$cashierName)))"
+                            >
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700">#{{ $order->order_number }}</span>
+                                        <span class="rounded-full px-2 py-0.5 text-[10px] font-semibold {{ $order->pos_status === 'cancelled' ? 'bg-rose-50 text-rose-700' : ($order->payment_status === 'paid' ? 'bg-slate-100 text-slate-700' : 'bg-emerald-50 text-emerald-700') }}">
+                                            {{ $posStatuses[$order->pos_status] ?? $order->pos_status }}
+                                        </span>
+                                        <span class="text-[11px] text-slate-500">{{ $cashierName }} · {{ optional($order->created_at)->format('H:i') }}</span>
+                                    </div>
+                                    <div class="relative" x-data="{ open: false }">
+                                        <button type="button" @click="open = !open" class="rounded-lg border border-slate-200 px-2 py-1 text-sm font-bold text-slate-500">⋯</button>
+                                        <div x-show="open" @click.outside="open = false" x-cloak class="absolute left-0 z-20 mt-1 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 text-xs shadow-lg">
+                                            <a href="{{ route('workspace.pos.orders.print', $order) }}" target="_blank" class="block px-3 py-2 text-slate-700 hover:bg-slate-50">طباعة الطلب</a>
+                                            <button type="button" @click="open = false; panel = 'note'" class="block w-full px-3 py-2 text-right text-slate-700 hover:bg-slate-50">إضافة ملاحظة</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-3 overflow-x-auto">
+                                    <table class="min-w-full text-xs">
+                                        <thead>
+                                            <tr class="text-slate-400">
+                                                <th class="pb-2 text-right font-semibold">الصنف</th>
+                                                <th class="pb-2 text-center font-semibold">الكمية</th>
+                                                <th class="pb-2 text-center font-semibold">السعر</th>
+                                                <th class="pb-2 text-left font-semibold">الإجمالي</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-slate-100">
+                                            @foreach($order->items as $item)
+                                                <tr>
+                                                    <td class="py-1.5 font-semibold text-slate-800">{{ $item->product_name }}{{ $item->variant_name ? ' - '.$item->variant_name : '' }}</td>
+                                                    <td class="py-1.5 text-center text-slate-600">x {{ $item->quantity }}</td>
+                                                    <td class="py-1.5 text-center text-slate-600">{{ number_format((float) $item->unit_price, 2) }}</td>
+                                                    <td class="py-1.5 text-left font-semibold text-slate-800">{{ number_format((float) $item->total_amount, 2) }}</td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div class="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 text-[11px] text-slate-500 sm:grid-cols-4">
+                                    <div>المجموع الفرعي <span class="font-semibold text-slate-800">{{ number_format((float) $order->subtotal, 2) }}</span></div>
+                                    <div>ض.ق.م <span class="font-semibold text-slate-800">0.00</span></div>
+                                    <div>الخصم <span class="font-semibold text-slate-800">{{ number_format((float) $order->discount_amount, 2) }}</span></div>
+                                    <div class="font-bold text-emerald-700">الإجمالي {{ number_format((float) $order->total_amount, 2) }} {{ $order->currency }}</div>
+                                </div>
+                            </article>
+                        @empty
+                            <p class="py-10 text-center text-sm text-slate-400">لا توجد طلبات في هذه الجلسة.</p>
+                        @endforelse
+                    </div>
+                </article>
+            </section>
+        </section>
+
+        {{-- Bottom sticky bar --}}
+        <div class="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur">
+            <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <div class="flex flex-wrap items-center gap-4">
+                    <div>
+                        <p class="text-[11px] text-slate-500">الإجمالي الكلي</p>
+                        <p class="text-lg font-extrabold text-emerald-700">{{ number_format($sessionTotal, 2) }}</p>
+                    </div>
+                    <div class="text-xs text-slate-600">الخصم: <span class="font-semibold">{{ number_format($sessionDiscount, 2) }}</span></div>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button type="button" @click="panel = 'discount'" :disabled="!hasSession" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">الخصم</button>
+                    <button type="button" @click="panel = 'note'" :disabled="!hasSession" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">ملاحظة</button>
+                    <button type="button" onclick="window.print()" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">طباعة</button>
+                    <a href="#bill-anchor" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">الحساب</a>
+                    @if($currentSession)
+                        <button type="button" @click="panel = 'closeConfirm'" class="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700">إغلاق الطاولة</button>
+                    @endif
+                </div>
+            </div>
         </div>
-    </section>
+        <div id="bill-anchor" class="sr-only">الحساب</div>
+
+        {{-- Panels / dialogs --}}
+        <div x-show="panel" x-cloak class="fixed inset-0 z-40 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center" @keydown.escape.window="panel = null">
+            <div class="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-xl" @click.outside="panel = null">
+                {{-- Add item (quick menu) --}}
+                <div x-show="panel === 'addItem'">
+                    <div class="mb-3 flex items-center justify-between">
+                        <h3 class="text-sm font-bold text-slate-900">إضافة صنف</h3>
+                        <button type="button" @click="panel = null" class="text-slate-400">✕</button>
+                    </div>
+                    @if($currentSession)
+                        <form method="POST" action="{{ route('workspace.pos.tables.orders.store', $table) }}" x-ref="quickAddForm" class="space-y-3">
+                            @csrf
+                            <input type="hidden" name="items[0][pos_menu_item_id]" x-model="selectedItemId" />
+                            <input type="hidden" name="items[0][quantity]" value="1" />
+                        </form>
+                        <div class="flex gap-2 overflow-x-auto pb-2">
+                            @foreach($menuGroups as $categoryName => $groupItems)
+                                <button type="button" @click="selectedCategory = @js($categoryName)" :class="selectedCategory === @js($categoryName) ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-200'" class="shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold">{{ $categoryName }}</button>
+                            @endforeach
+                        </div>
+                        <div class="mt-2 max-h-80 space-y-2 overflow-y-auto">
+                            @foreach($menuGroups as $categoryName => $groupItems)
+                                <div x-show="selectedCategory === @js($categoryName)" class="space-y-2">
+                                    @foreach($groupItems as $item)
+                                        <button type="button" @click="addItem({{ $item->id }})" class="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-right hover:border-emerald-500">
+                                            <span class="text-sm font-semibold text-slate-800">{{ $item->name }}{{ $item->size_label ? ' - '.$item->size_label : '' }}</span>
+                                            <span class="text-xs font-bold text-emerald-700">{{ number_format((float) $item->price, 2) }}</span>
+                                        </button>
+                                    @endforeach
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+
+                {{-- Add order (multi qty form simplified = same as add item with notes) --}}
+                <div x-show="panel === 'addOrder'">
+                    <div class="mb-3 flex items-center justify-between">
+                        <h3 class="text-sm font-bold text-slate-900">إضافة طلب</h3>
+                        <button type="button" @click="panel = null" class="text-slate-400">✕</button>
+                    </div>
+                    @if($currentSession)
+                        <form method="POST" action="{{ route('workspace.pos.tables.orders.store', $table) }}" class="space-y-3">
+                            @csrf
+                            <div>
+                                <label class="mb-1 block text-xs font-semibold text-slate-600">الصنف</label>
+                                <select name="items[0][pos_menu_item_id]" required class="w-full rounded-lg border-slate-200 text-sm">
+                                    <option value="">اختر صنفًا</option>
+                                    @foreach($menuItems as $item)
+                                        <option value="{{ $item->id }}">{{ $item->name }} — {{ number_format((float) $item->price, 2) }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div>
+                                <label class="mb-1 block text-xs font-semibold text-slate-600">الكمية</label>
+                                <input type="number" name="items[0][quantity]" min="1" value="1" class="w-full rounded-lg border-slate-200 text-sm" />
+                            </div>
+                            <div>
+                                <label class="mb-1 block text-xs font-semibold text-slate-600">ملاحظة</label>
+                                <textarea name="notes" rows="2" class="w-full rounded-lg border-slate-200 text-sm"></textarea>
+                            </div>
+                            <button class="w-full rounded-xl bg-emerald-600 px-3 py-2.5 text-sm font-bold text-white">إنشاء الطلب</button>
+                        </form>
+                    @endif
+                </div>
+
+                {{-- Transfer --}}
+                <div x-show="panel === 'transfer'">
+                    <div class="mb-3 flex items-center justify-between">
+                        <h3 class="text-sm font-bold text-slate-900">نقل الطاولة</h3>
+                        <button type="button" @click="panel = null" class="text-slate-400">✕</button>
+                    </div>
+                    <p class="mb-3 text-xs text-slate-500">نقل جميع الطلبات والحساب للطاولة الجديدة.</p>
+                    @if($currentSession)
+                        <form method="POST" action="{{ route('workspace.pos.tables.sessions.transfer', ['table' => $table, 'session' => $currentSession]) }}" class="space-y-3">
+                            @csrf
+                            <select name="target_table_id" required class="w-full rounded-lg border-slate-200 text-sm">
+                                <option value="">اختر الطاولة الجديدة</option>
+                                @foreach($otherTables as $t)
+                                    <option value="{{ $t->id }}">{{ $t->name }} — {{ $t->status === 'occupied' ? 'مشغولة' : 'متاحة' }}</option>
+                                @endforeach
+                            </select>
+                            <button class="w-full rounded-xl bg-emerald-600 px-3 py-2.5 text-sm font-bold text-white">تأكيد النقل</button>
+                        </form>
+                    @endif
+                </div>
+
+                {{-- Merge --}}
+                <div x-show="panel === 'merge'">
+                    <div class="mb-3 flex items-center justify-between">
+                        <h3 class="text-sm font-bold text-slate-900">دمج طاولة</h3>
+                        <button type="button" @click="panel = null" class="text-slate-400">✕</button>
+                    </div>
+                    <p class="mb-3 text-xs text-slate-500">دمج طلبات هذه الطاولة مع طاولة أخرى دون فقدان البيانات.</p>
+                    @if($currentSession)
+                        <form method="POST" action="{{ route('workspace.pos.tables.sessions.merge', ['table' => $table, 'session' => $currentSession]) }}" class="space-y-3">
+                            @csrf
+                            <select name="target_table_id" required class="w-full rounded-lg border-slate-200 text-sm">
+                                <option value="">اختر الطاولة</option>
+                                @foreach($otherTables as $t)
+                                    <option value="{{ $t->id }}">{{ $t->name }} — {{ $t->status === 'occupied' ? 'مشغولة' : 'متاحة' }}</option>
+                                @endforeach
+                            </select>
+                            <button class="w-full rounded-xl bg-emerald-600 px-3 py-2.5 text-sm font-bold text-white">تأكيد الدمج</button>
+                        </form>
+                    @endif
+                </div>
+
+                {{-- Split --}}
+                <div x-show="panel === 'split'">
+                    <div class="mb-3 flex items-center justify-between">
+                        <h3 class="text-sm font-bold text-slate-900">تقسيم الحساب</h3>
+                        <button type="button" @click="panel = null" class="text-slate-400">✕</button>
+                    </div>
+                    <p class="mb-2 text-xs text-slate-500">وزّع كل الأصناف على حسابين أو أكثر. يجب أن يساوي مجموع الأجزاء إجمالي الطاولة.</p>
+                    <p class="mb-3 text-xs font-semibold text-slate-700">إجمالي الأجزاء: <span x-text="splitAllocatedTotal().toFixed(2)"></span> / {{ number_format($sessionTotal, 2) }}</p>
+                    @if($currentSession)
+                        <form method="POST" action="{{ route('workspace.pos.tables.sessions.split', ['table' => $table, 'session' => $currentSession]) }}" class="space-y-4" @submit="if (!splitIsValid()) { $event.preventDefault(); alert('يجب توزيع كل الأصناف بالكامل على الحسابات.'); }">
+                            @csrf
+                            <template x-for="(group, gIndex) in splitGroups" :key="gIndex">
+                                <div class="rounded-xl border border-slate-200 p-3">
+                                    <p class="mb-2 text-xs font-bold text-slate-800">حساب <span x-text="gIndex + 1"></span></p>
+                                    <template x-for="(item, iIndex) in splitItems" :key="item.id">
+                                        <div class="mb-2 flex items-center justify-between gap-2 text-xs">
+                                            <span class="font-semibold text-slate-700" x-text="item.name + ' (متاح ' + item.quantity + ')'"></span>
+                                            <input type="hidden" :name="`groups[${gIndex}][items][${iIndex}][order_item_id]`" :value="item.id" />
+                                            <input type="number" min="0" :max="item.quantity" :name="`groups[${gIndex}][items][${iIndex}][quantity]`" x-model.number="group.qty[item.id]" class="w-20 rounded border-slate-200 text-sm" />
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                            <button type="button" @click="addSplitGroup()" class="text-xs font-semibold text-emerald-700 underline">+ إضافة حساب</button>
+                            <button class="w-full rounded-xl bg-emerald-600 px-3 py-2.5 text-sm font-bold text-white">تأكيد التقسيم</button>
+                        </form>
+                    @endif
+                </div>
+
+                {{-- Note --}}
+                <div x-show="panel === 'note'">
+                    <div class="mb-3 flex items-center justify-between">
+                        <h3 class="text-sm font-bold text-slate-900">إضافة ملاحظة</h3>
+                        <button type="button" @click="panel = null" class="text-slate-400">✕</button>
+                    </div>
+                    @if($currentSession)
+                        <form method="POST" action="{{ route('workspace.pos.tables.sessions.note', ['table' => $table, 'session' => $currentSession]) }}" class="space-y-3">
+                            @csrf
+                            <textarea name="notes" rows="4" required class="w-full rounded-lg border-slate-200 text-sm">{{ $sessionNote }}</textarea>
+                            <button class="w-full rounded-xl bg-emerald-600 px-3 py-2.5 text-sm font-bold text-white">حفظ الملاحظة</button>
+                        </form>
+                    @endif
+                </div>
+
+                {{-- Discount --}}
+                <div x-show="panel === 'discount'">
+                    <div class="mb-3 flex items-center justify-between">
+                        <h3 class="text-sm font-bold text-slate-900">خصم الطاولة</h3>
+                        <button type="button" @click="panel = null" class="text-slate-400">✕</button>
+                    </div>
+                    @if($currentSession)
+                        <form method="POST" action="{{ route('workspace.pos.tables.sessions.discount', ['table' => $table, 'session' => $currentSession]) }}" class="space-y-3">
+                            @csrf
+                            <input type="number" name="discount_amount" min="0" step="0.01" value="{{ number_format($sessionDiscount, 2, '.', '') }}" class="w-full rounded-lg border-slate-200 text-sm" />
+                            <button class="w-full rounded-xl bg-emerald-600 px-3 py-2.5 text-sm font-bold text-white">تطبيق الخصم</button>
+                        </form>
+                    @endif
+                </div>
+
+                {{-- Close confirm --}}
+                <div x-show="panel === 'closeConfirm'">
+                    <h3 class="text-base font-bold text-slate-900">هل أنت متأكد من إغلاق الطاولة؟</h3>
+                    <p class="mt-1 text-sm text-slate-500">سيتم إصدار فاتورة كاشير نهائية إن وُجدت طلبات.</p>
+                    <div class="mt-5 grid grid-cols-2 gap-2">
+                        <button type="button" @click="panel = null" class="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold">إلغاء</button>
+                        @if($currentSession)
+                            <form method="POST" action="{{ route('workspace.pos.tables.sessions.close', ['table' => $table, 'session' => $currentSession]) }}">
+                                @csrf
+                                <button class="w-full rounded-xl bg-rose-600 px-3 py-2 text-sm font-bold text-white">إغلاق الطاولة</button>
+                            </form>
+                        @endif
+                    </div>
+                </div>
+
+                {{-- Cancel confirm --}}
+                <div x-show="panel === 'cancelConfirm'">
+                    <h3 class="text-base font-bold text-rose-700">إلغاء الطاولة؟</h3>
+                    <p class="mt-1 text-sm text-slate-500">سيتم إلغاء الجلسة والطلبات غير المفوترة. لا يمكن التراجع.</p>
+                    <div class="mt-5 grid grid-cols-2 gap-2">
+                        <button type="button" @click="panel = null" class="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold">تراجع</button>
+                        @if($currentSession)
+                            <form method="POST" action="{{ route('workspace.pos.tables.sessions.cancel', ['table' => $table, 'session' => $currentSession]) }}">
+                                @csrf
+                                <button class="w-full rounded-xl bg-rose-600 px-3 py-2 text-sm font-bold text-white">تأكيد الإلغاء</button>
+                            </form>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script>
-        function tableQuickMenu({ defaultCategory }) {
+        function tableShowBoard({ defaultCategory, splitItems, otherTables, sessionNote, hasSession }) {
+            const emptyQty = () => Object.fromEntries(splitItems.map((item) => [item.id, 0]));
             return {
+                panel: null,
+                filter: 'all',
+                search: '',
                 selectedCategory: defaultCategory || '',
                 selectedItemId: '',
+                hasSession,
+                sessionNote,
+                otherTables,
+                splitItems,
+                splitGroups: [
+                    { qty: emptyQty() },
+                    { qty: emptyQty() },
+                ],
+                matchesOrder(status, haystack) {
+                    if (this.filter === 'open' && status !== 'open') return false;
+                    if (this.filter === 'paid' && status !== 'paid') return false;
+                    if (this.filter === 'cancelled' && status !== 'cancelled') return false;
+                    const term = this.search.trim().toLowerCase();
+                    if (!term) return true;
+                    return String(haystack || '').includes(term);
+                },
                 addItem(itemId) {
                     this.selectedItemId = String(itemId);
                     this.$nextTick(() => this.$refs.quickAddForm.submit());
+                },
+                addSplitGroup() {
+                    this.splitGroups.push({ qty: emptyQty() });
+                },
+                splitAllocatedTotal() {
+                    let total = 0;
+                    this.splitGroups.forEach((group) => {
+                        this.splitItems.forEach((item) => {
+                            const qty = Number(group.qty[item.id] || 0);
+                            total += qty * Number(item.unit_price || 0);
+                        });
+                    });
+                    return total;
+                },
+                splitIsValid() {
+                    return this.splitItems.every((item) => {
+                        const used = this.splitGroups.reduce((sum, group) => sum + Number(group.qty[item.id] || 0), 0);
+                        return used === Number(item.quantity);
+                    });
                 },
             };
         }
@@ -241,12 +495,7 @@
 
         const timerNodes = document.querySelectorAll('[data-opened-at]');
         if (timerNodes.length > 0) {
-            const tick = () => {
-                timerNodes.forEach((node) => {
-                    node.textContent = formatDuration(node.dataset.openedAt);
-                });
-            };
-
+            const tick = () => timerNodes.forEach((node) => { node.textContent = formatDuration(node.dataset.openedAt); });
             tick();
             setInterval(tick, 1000);
         }

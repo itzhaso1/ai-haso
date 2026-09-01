@@ -46,8 +46,8 @@ class PosCashierUxTest extends TestCase
         $this->assertStringContainsString('xl:col-span-7', $html); // wider products
         $this->assertStringContainsString('إنشاء الطلب', $html);
         $this->assertStringContainsString('طلب خارجي', $html);
-        $this->assertStringContainsString('إتمام + طباعة الفاتورة', $html);
-        $this->assertStringContainsString('إتمام بدون فاتورة', $html);
+        $this->assertStringContainsString('طباعة الفاتورة', $html);
+        $this->assertStringContainsString('متابعة بدون طباعة', $html);
         $this->assertStringNotContainsString('كل التصنيفات', $html);
         $this->assertStringNotContainsString('إتمام عبر سلة الجلسة', $html);
         $this->assertStringNotContainsString('إنشاء Order', $html);
@@ -156,6 +156,170 @@ class PosCashierUxTest extends TestCase
         $this->assertStringContainsString('إغلاق الطاولة', $html);
         $this->assertStringContainsString('confirmClose', $html);
         $this->assertStringNotContainsString('إغلاق الجلسة</button>', $html);
+    }
+
+    public function test_table_show_has_info_on_right_and_orders_on_left(): void
+    {
+        $this->seed(FoundationSeeder::class);
+        [$owner, $workspace] = $this->createWorkspaceOwner('store');
+
+        $table = \App\Models\DiningTable::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'طاولة 5',
+            'status' => 'available',
+            'qr_token' => 'table_show_ui_token',
+        ]);
+
+        $html = $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->get(route('workspace.pos.tables.show', $table))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('معلومات الطاولة', $html);
+        $this->assertStringContainsString('خيارات الطاولة', $html);
+        $this->assertStringContainsString('تفاصيل طلبات الطاولة', $html);
+        $this->assertStringContainsString('نقل الطاولة', $html);
+        $this->assertStringContainsString('تقسيم الحساب', $html);
+        $this->assertStringContainsString('دمج طاولة', $html);
+        $this->assertStringContainsString('إغلاق الطاولة', $html);
+        $this->assertStringContainsString('إلغاء الطاولة', $html);
+        $this->assertStringContainsString('الإجمالي الكلي', $html);
+    }
+
+    public function test_transfer_merge_and_split_preserve_orders(): void
+    {
+        $this->seed(FoundationSeeder::class);
+        [$owner, $workspace] = $this->createWorkspaceOwner('store');
+
+        $tableA = \App\Models\DiningTable::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'A',
+            'status' => 'available',
+            'qr_token' => 'transfer_a',
+        ]);
+        $tableB = \App\Models\DiningTable::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'B',
+            'status' => 'available',
+            'qr_token' => 'transfer_b',
+        ]);
+        $tableC = \App\Models\DiningTable::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'C',
+            'status' => 'available',
+            'qr_token' => 'transfer_c',
+        ]);
+
+        $item = PosMenuItem::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'شاي',
+            'price' => 10,
+            'currency' => 'SAR',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.pos.tables.orders.store', $tableA), [
+                'items' => [['pos_menu_item_id' => $item->id, 'quantity' => 2]],
+            ])->assertRedirect();
+
+        $sessionA = \App\Models\TableSession::query()
+            ->where('dining_table_id', $tableA->id)
+            ->where('status', 'open')
+            ->firstOrFail();
+
+        $order = \App\Models\Order::query()->where('table_session_id', $sessionA->id)->firstOrFail();
+        $this->assertSame(20.0, (float) $order->total_amount);
+
+        // Transfer A → B
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.pos.tables.sessions.transfer', ['table' => $tableA, 'session' => $sessionA]), [
+                'target_table_id' => $tableB->id,
+            ])->assertRedirect(route('workspace.pos.tables.show', $tableB));
+
+        $order->refresh();
+        $this->assertSame($tableB->id, (int) $order->dining_table_id);
+        $this->assertSame(20.0, (float) $order->total_amount);
+
+        $sessionB = \App\Models\TableSession::query()
+            ->where('dining_table_id', $tableB->id)
+            ->where('status', 'open')
+            ->firstOrFail();
+
+        // Create order on C then merge C → B
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.pos.tables.orders.store', $tableC), [
+                'items' => [['pos_menu_item_id' => $item->id, 'quantity' => 1]],
+            ])->assertRedirect();
+
+        $sessionC = \App\Models\TableSession::query()
+            ->where('dining_table_id', $tableC->id)
+            ->where('status', 'open')
+            ->firstOrFail();
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.pos.tables.sessions.merge', ['table' => $tableC, 'session' => $sessionC]), [
+                'target_table_id' => $tableB->id,
+            ])->assertRedirect(route('workspace.pos.tables.show', $tableB));
+
+        $ordersOnB = \App\Models\Order::query()
+            ->where('dining_table_id', $tableB->id)
+            ->where('pos_status', '!=', 'cancelled')
+            ->get();
+        $this->assertCount(2, $ordersOnB);
+        $this->assertEquals(30.0, (float) $ordersOnB->sum('total_amount'));
+
+        // Split one order with qty 2 into two checks of 1
+        $splitSource = $ordersOnB->firstWhere(fn ($o) => (int) $o->items->sum('quantity') === 2) ?? $ordersOnB->first();
+        $line = $splitSource->items->first();
+        $this->assertNotNull($line);
+
+        // Move other order aside conceptually — split only allocates the qty-2 line fully
+        // First ensure we only split that line: merge all items from B into one split of the qty-2 item
+        // Actually split requires ALL session items allocated. Collect all items.
+        $sessionB->refresh();
+        $allItems = \App\Models\Order::query()
+            ->where('table_session_id', $sessionB->id)
+            ->where('pos_status', '!=', 'cancelled')
+            ->with('items')
+            ->get()
+            ->flatMap->items;
+
+        $groups = [
+            ['items' => []],
+            ['items' => []],
+        ];
+        foreach ($allItems as $idx => $orderItem) {
+            // put first item unit into group0, rest into group1 if qty>1 else all in group0 half
+            $qty = (int) $orderItem->quantity;
+            if ($qty === 1) {
+                $groups[0]['items'][] = ['order_item_id' => $orderItem->id, 'quantity' => 1];
+                $groups[1]['items'][] = ['order_item_id' => $orderItem->id, 'quantity' => 0];
+            } else {
+                $groups[0]['items'][] = ['order_item_id' => $orderItem->id, 'quantity' => 1];
+                $groups[1]['items'][] = ['order_item_id' => $orderItem->id, 'quantity' => $qty - 1];
+            }
+        }
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->post(route('workspace.pos.tables.sessions.split', ['table' => $tableB, 'session' => $sessionB]), [
+                'groups' => $groups,
+            ])->assertRedirect();
+
+        $activeAfterSplit = \App\Models\Order::query()
+            ->where('dining_table_id', $tableB->id)
+            ->where('pos_status', '!=', 'cancelled')
+            ->with('items')
+            ->get();
+
+        $this->assertGreaterThanOrEqual(2, $activeAfterSplit->count());
+        $this->assertEquals(30.0, round((float) $activeAfterSplit->sum('total_amount'), 2));
     }
 
     /**

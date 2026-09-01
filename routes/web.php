@@ -524,6 +524,10 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::post('tables/{table}/sessions/{session}/close', [PosTableController::class, 'closeSession'])->name('tables.sessions.close');
             Route::post('tables/{table}/sessions/{session}/cancel', [PosTableController::class, 'cancelSession'])->name('tables.sessions.cancel');
             Route::post('tables/{table}/sessions/{session}/discount', [PosTableController::class, 'applyDiscount'])->name('tables.sessions.discount');
+            Route::post('tables/{table}/sessions/{session}/transfer', [PosTableController::class, 'transferSession'])->name('tables.sessions.transfer');
+            Route::post('tables/{table}/sessions/{session}/merge', [PosTableController::class, 'mergeSession'])->name('tables.sessions.merge');
+            Route::post('tables/{table}/sessions/{session}/split', [PosTableController::class, 'splitSession'])->name('tables.sessions.split');
+            Route::post('tables/{table}/sessions/{session}/note', [PosTableController::class, 'updateSessionNote'])->name('tables.sessions.note');
             Route::post('tables/{table}/qr/regenerate', [PosTableController::class, 'regenerateQr'])->name('tables.qr.regenerate');
 
             Route::get('items', [PosMenuItemController::class, 'index'])->name('items.index');

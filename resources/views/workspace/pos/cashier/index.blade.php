@@ -254,12 +254,12 @@
                         @click="closeSuccess(true)"
                         :disabled="!successPrintUrl"
                         class="rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
-                    >إتمام + طباعة الفاتورة</button>
+                    >طباعة الفاتورة</button>
                     <button
                         type="button"
                         @click="closeSuccess(false)"
                         class="rounded-lg border border-emerald-600 bg-white px-3 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
-                    >إتمام بدون فاتورة</button>
+                    >متابعة بدون طباعة</button>
                 </div>
             </div>
         </div>

@@ -343,6 +343,254 @@ class PosOrderService
         });
     }
 
+    /**
+     * Move an open session (and all its orders) to another table.
+     * If the target already has an open session, orders are attached to that session.
+     */
+    public function transferSession(TableSession $session, DiningTable $targetTable): void
+    {
+        if ($session->status !== 'open') {
+            throw new RuntimeException('يمكن نقل الجلسات المفتوحة فقط.');
+        }
+
+        if ((int) $session->workspace_id !== (int) $targetTable->workspace_id) {
+            throw new RuntimeException('الطاولة الهدف خارج نطاق مساحة العمل.');
+        }
+
+        if ((int) $session->dining_table_id === (int) $targetTable->id) {
+            throw new RuntimeException('الطاولة الهدف هي نفسها الطاولة الحالية.');
+        }
+
+        DB::transaction(function () use ($session, $targetTable): void {
+            $sourceTable = $session->table;
+            $targetSession = $this->ensureOpenSession($targetTable);
+
+            if ((int) $targetSession->id === (int) $session->id) {
+                return;
+            }
+
+            Order::query()
+                ->where('table_session_id', $session->id)
+                ->update([
+                    'dining_table_id' => $targetTable->id,
+                    'table_session_id' => $targetSession->id,
+                ]);
+
+            $session->update([
+                'status' => 'closed',
+                'closed_at' => now(),
+            ]);
+
+            $targetTable->update(['status' => 'occupied']);
+
+            if ($sourceTable) {
+                $this->refreshTableStatus($sourceTable, $session->id);
+            }
+        });
+    }
+
+    /**
+     * Merge source table open session into the target table open session.
+     */
+    public function mergeSessions(TableSession $sourceSession, DiningTable $targetTable): void
+    {
+        if ($sourceSession->status !== 'open') {
+            throw new RuntimeException('يمكن دمج الجلسات المفتوحة فقط.');
+        }
+
+        if ((int) $sourceSession->workspace_id !== (int) $targetTable->workspace_id) {
+            throw new RuntimeException('الطاولة الهدف خارج نطاق مساحة العمل.');
+        }
+
+        if ((int) $sourceSession->dining_table_id === (int) $targetTable->id) {
+            throw new RuntimeException('لا يمكن دمج الطاولة مع نفسها.');
+        }
+
+        DB::transaction(function () use ($sourceSession, $targetTable): void {
+            $sourceTable = $sourceSession->table;
+            $targetSession = $this->ensureOpenSession($targetTable);
+
+            Order::query()
+                ->where('table_session_id', $sourceSession->id)
+                ->update([
+                    'dining_table_id' => $targetTable->id,
+                    'table_session_id' => $targetSession->id,
+                ]);
+
+            $sourceSession->update([
+                'status' => 'closed',
+                'closed_at' => now(),
+            ]);
+
+            $targetTable->update(['status' => 'occupied']);
+
+            if ($sourceTable) {
+                $this->refreshTableStatus($sourceTable, $sourceSession->id);
+            }
+        });
+    }
+
+    /**
+     * Split open session items into multiple guest checks (orders) within the same session.
+     * Every billable line quantity must be fully allocated across the groups.
+     *
+     * @param  array<int,array{items:array<int,array{order_item_id:int|string,quantity:int|string}>}>  $groups
+     * @return Collection<int,Order>
+     */
+    public function splitSessionByItems(TableSession $session, array $groups, ?User $actor): Collection
+    {
+        if ($session->status !== 'open') {
+            throw new RuntimeException('يمكن تقسيم الحساب للجلسات المفتوحة فقط.');
+        }
+
+        if (count($groups) < 2) {
+            throw new RuntimeException('يجب إنشاء حسابين على الأقل لتقسيم الفاتورة.');
+        }
+
+        return DB::transaction(function () use ($session, $groups, $actor): Collection {
+            $orders = Order::query()
+                ->where('table_session_id', $session->id)
+                ->whereIn('source', ['pos', 'qr_menu'])
+                ->where('pos_status', '!=', 'cancelled')
+                ->whereNull('pos_cashier_invoice_id')
+                ->with('items')
+                ->lockForUpdate()
+                ->get();
+
+            if ($orders->isEmpty()) {
+                throw new RuntimeException('لا توجد طلبات قابلة للتقسيم في هذه الجلسة.');
+            }
+
+            $itemsById = $orders->flatMap->items->keyBy('id');
+            $remaining = $itemsById->mapWithKeys(fn (OrderItem $item) => [$item->id => (int) $item->quantity]);
+
+            $normalizedGroups = [];
+            foreach ($groups as $groupIndex => $group) {
+                $lines = collect($group['items'] ?? [])
+                    ->filter(fn ($line) => (int) ($line['quantity'] ?? 0) > 0)
+                    ->values();
+
+                if ($lines->isEmpty()) {
+                    throw new RuntimeException('كل حساب يجب أن يحتوي على صنف واحد على الأقل.');
+                }
+
+                $built = [];
+                foreach ($lines as $line) {
+                    $itemId = (int) ($line['order_item_id'] ?? 0);
+                    $qty = (int) ($line['quantity'] ?? 0);
+                    $sourceItem = $itemsById->get($itemId);
+                    if (! $sourceItem) {
+                        throw new RuntimeException('أحد أصناف التقسيم غير صالح.');
+                    }
+                    $left = (int) ($remaining[$itemId] ?? 0);
+                    if ($qty > $left) {
+                        throw new RuntimeException('كمية التقسيم أكبر من المتاح للصنف: '.$sourceItem->product_name);
+                    }
+                    $remaining[$itemId] = $left - $qty;
+                    $unit = (float) $sourceItem->unit_price;
+                    $built[] = [
+                        'source' => $sourceItem,
+                        'quantity' => $qty,
+                        'unit_price' => $unit,
+                        'total_amount' => round($qty * $unit, 2),
+                    ];
+                }
+                $normalizedGroups[$groupIndex] = $built;
+            }
+
+            $leftover = collect($remaining)->sum();
+            if ($leftover > 0) {
+                throw new RuntimeException('يجب توزيع كل أصناف الطاولة على الحسابات. الإجمالي المتبقي غير موزع.');
+            }
+
+            $workspace = Workspace::query()->findOrFail($session->workspace_id);
+            $table = $session->table;
+            $created = collect();
+
+            foreach ($normalizedGroups as $builtLines) {
+                $collection = collect($builtLines)->map(fn (array $line) => [
+                    'pos_menu_item_id' => $line['source']->pos_menu_item_id,
+                    'product_id' => $line['source']->product_id,
+                    'name' => $line['source']->product_name,
+                    'item_type' => $line['source']->item_type,
+                    'size_label' => $line['source']->variant_name,
+                    'quantity' => $line['quantity'],
+                    'unit_price' => $line['unit_price'],
+                    'total_amount' => $line['total_amount'],
+                    'currency' => 'USD',
+                ]);
+
+                // Prefer currency from source order when available.
+                $firstSourceOrder = $orders->firstWhere('id', $builtLines[0]['source']->order_id);
+                $currency = $firstSourceOrder?->currency ?: 'USD';
+
+                $order = $this->createOrderWithSnapshots(
+                    workspace: $workspace,
+                    customerId: $firstSourceOrder?->customer_id,
+                    source: 'pos',
+                    items: $collection->map(function (array $row) use ($currency) {
+                        $row['currency'] = $currency;
+
+                        return $row;
+                    }),
+                    table: $table,
+                    session: $session,
+                    discountAmount: 0,
+                    notes: null,
+                    metadata: [
+                        'channel' => 'cashier',
+                        'created_by_user_id' => $actor?->id,
+                        'created_by_name' => $actor?->name,
+                        'payment_method' => 'cashier',
+                        'split_from_session' => true,
+                    ],
+                    currency: $currency,
+                    syncInventory: false,
+                );
+
+                $created->push($order);
+            }
+
+            // Original orders become empty shells → cancel them (items already reallocated).
+            foreach ($orders as $order) {
+                OrderItem::query()->where('order_id', $order->id)->delete();
+                $this->orderService->cancel($order->fresh('items'), $actor);
+            }
+
+            return $created;
+        });
+    }
+
+    public function applySessionNote(TableSession $session, string $note): void
+    {
+        if ($session->status !== 'open') {
+            throw new RuntimeException('يمكن إضافة ملاحظة للجلسات المفتوحة فقط.');
+        }
+
+        $note = trim($note);
+        if ($note === '') {
+            throw new RuntimeException('الملاحظة فارغة.');
+        }
+
+        $order = Order::query()
+            ->where('table_session_id', $session->id)
+            ->whereIn('source', ['pos', 'qr_menu'])
+            ->where('pos_status', '!=', 'cancelled')
+            ->latest('id')
+            ->first();
+
+        if (! $order) {
+            throw new RuntimeException('لا يوجد طلب لإضافة الملاحظة عليه. أضف طلبًا أولًا.');
+        }
+
+        $metadata = (array) ($order->metadata ?? []);
+        $metadata['session_note'] = $note;
+        $order->update([
+            'notes' => $note,
+            'metadata' => $metadata,
+        ]);
+    }
+
     public function createInvoiceFromOrder(Order $order, int $actorUserId): PosCashierInvoice
     {
         if ($order->pos_cashier_invoice_id) {
@@ -502,7 +750,8 @@ class PosOrderService
         float $discountAmount,
         ?string $notes,
         ?array $metadata,
-        string $currency
+        string $currency,
+        bool $syncInventory = true,
     ): Order {
         $subtotal = round((float) $items->sum('total_amount'), 2);
         $discountAmount = max(0, round($discountAmount, 2));
@@ -547,7 +796,9 @@ class PosOrderService
                 'total_amount' => $item['total_amount'],
             ]);
 
-            $this->syncInventoryForPosLine($orderItem, $actorUserId = null);
+            if ($syncInventory) {
+                $this->syncInventoryForPosLine($orderItem, $actorUserId = null);
+            }
         }
 
         if ($customerId) {
