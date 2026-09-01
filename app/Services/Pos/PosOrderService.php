@@ -42,25 +42,41 @@ class PosOrderService
                 requireActive: true
             );
 
-            $order = $this->createOrderWithSnapshots(
-                workspace: $workspace,
-                customerId: isset($payload['customer_id']) ? (int) $payload['customer_id'] : null,
-                source: 'pos',
-                items: $items,
-                table: $table,
-                session: $session,
-                discountAmount: (float) ($payload['discount_amount'] ?? 0),
-                notes: $payload['notes'] ?? null,
-                metadata: [
-                    'channel' => 'cashier',
-                    'created_by_user_id' => $actor?->id,
-                    'created_by_name' => $actor?->name,
-                    'payment_method' => 'cashier',
-                ],
-                currency: $this->resolveOrderCurrency($items),
-            );
+            $metadata = [
+                'channel' => 'cashier',
+                'created_by_user_id' => $actor?->id,
+                'created_by_name' => $actor?->name,
+                'payment_method' => 'cashier',
+            ];
 
-            event(new \App\Events\OrderCreated($order));
+            if ($table && $session) {
+                $order = $this->mergeOrCreateSessionOrder(
+                    workspace: $workspace,
+                    table: $table,
+                    session: $session,
+                    items: $items,
+                    customerId: isset($payload['customer_id']) ? (int) $payload['customer_id'] : null,
+                    source: 'pos',
+                    discountAmount: (float) ($payload['discount_amount'] ?? 0),
+                    notes: $payload['notes'] ?? null,
+                    metadata: $metadata,
+                );
+            } else {
+                $order = $this->createOrderWithSnapshots(
+                    workspace: $workspace,
+                    customerId: isset($payload['customer_id']) ? (int) $payload['customer_id'] : null,
+                    source: 'pos',
+                    items: $items,
+                    table: $table,
+                    session: $session,
+                    discountAmount: (float) ($payload['discount_amount'] ?? 0),
+                    notes: $payload['notes'] ?? null,
+                    metadata: $metadata,
+                    currency: $this->resolveOrderCurrency($items),
+                );
+
+                event(new \App\Events\OrderCreated($order));
+            }
 
             return $order->fresh(['items', 'customer', 'table', 'tableSession']);
         });
@@ -93,8 +109,6 @@ class PosOrderService
                 if (! $session || $session->status !== 'open' || (int) $session->dining_table_id !== (int) $table->id) {
                     throw new RuntimeException('انتهت جلسة هذه الطاولة. يرجى بدء جلسة جديدة.');
                 }
-
-                $table->update(['status' => 'occupied']);
             }
 
             $customerId = $this->resolveWalkInCustomerId($workspace, $payload);
@@ -114,20 +128,34 @@ class PosOrderService
                 $metadata['pos_customer_session_id'] = $guestSession->id;
             }
 
-            $order = $this->createOrderWithSnapshots(
-                workspace: $workspace,
-                customerId: $customerId,
-                source: 'qr_menu',
-                items: $items,
-                table: $table,
-                session: $session,
-                discountAmount: 0,
-                notes: $payload['notes'] ?? null,
-                metadata: $metadata,
-                currency: $this->resolveOrderCurrency($items),
-            );
+            if ($table && $session) {
+                $order = $this->mergeOrCreateSessionOrder(
+                    workspace: $workspace,
+                    table: $table,
+                    session: $session,
+                    items: $items,
+                    customerId: $customerId,
+                    source: 'qr_menu',
+                    discountAmount: 0,
+                    notes: $payload['notes'] ?? null,
+                    metadata: $metadata,
+                );
+            } else {
+                $order = $this->createOrderWithSnapshots(
+                    workspace: $workspace,
+                    customerId: $customerId,
+                    source: 'qr_menu',
+                    items: $items,
+                    table: $table,
+                    session: $session,
+                    discountAmount: 0,
+                    notes: $payload['notes'] ?? null,
+                    metadata: $metadata,
+                    currency: $this->resolveOrderCurrency($items),
+                );
 
-            event(new \App\Events\OrderCreated($order));
+                event(new \App\Events\OrderCreated($order));
+            }
 
             return $order->fresh(['items', 'customer', 'table', 'tableSession']);
         });
@@ -151,7 +179,15 @@ class PosOrderService
     public function updatePosStatus(Order $order, string $status, ?User $actor): Order
     {
         if ($status === 'cancelled') {
-            return $this->orderService->cancel($order->load('items'), $actor);
+            $cancelled = $this->orderService->cancel($order->load('items'), $actor);
+            if ($cancelled->dining_table_id) {
+                $table = DiningTable::withoutGlobalScopes()->find($cancelled->dining_table_id);
+                if ($table) {
+                    $this->refreshTableStatus($table);
+                }
+            }
+
+            return $cancelled->fresh(['items', 'customer', 'table', 'tableSession']);
         }
 
         $attributes = ['pos_status' => $status];
@@ -221,7 +257,15 @@ class PosOrderService
 
             $itemCount = OrderItem::query()->where('order_id', $order->id)->count();
             if ($itemCount === 0) {
-                throw new RuntimeException('لا يمكن حفظ طلب بدون عناصر.');
+                $cancelled = $this->orderService->cancel($order->fresh(['items']), null);
+                if ($cancelled->dining_table_id) {
+                    $table = DiningTable::withoutGlobalScopes()->find($cancelled->dining_table_id);
+                    if ($table) {
+                        $this->refreshTableStatus($table);
+                    }
+                }
+
+                return $cancelled->fresh(['items', 'table', 'tableSession', 'customer']);
             }
 
             $subtotal = (float) OrderItem::query()->where('order_id', $order->id)->sum('total_amount');
@@ -766,9 +810,120 @@ class PosOrderService
         }
 
         $session = $this->ensureOpenSession($table);
-        $table->update(['status' => 'occupied']);
 
         return [$table, $session];
+    }
+
+    /**
+     * Merge matching lines into the current table session; create a new order only for leftovers.
+     *
+     * @param  Collection<int,array<string,mixed>>  $items
+     * @param  array<string,mixed>|null  $metadata
+     */
+    private function mergeOrCreateSessionOrder(
+        Workspace $workspace,
+        DiningTable $table,
+        TableSession $session,
+        Collection $items,
+        ?int $customerId,
+        string $source,
+        float $discountAmount,
+        ?string $notes,
+        ?array $metadata,
+    ): Order {
+        $remaining = collect();
+        $lastTouched = null;
+
+        foreach ($items as $item) {
+            $existingLine = $this->findMergeableSessionLine($session, $item);
+            if ($existingLine) {
+                $this->increaseOrderItemQuantity($existingLine, (int) $item['quantity']);
+                $lastTouched = $existingLine->order()->with(['items', 'customer', 'table', 'tableSession'])->first();
+                continue;
+            }
+
+            $remaining->push($item);
+        }
+
+        if ($remaining->isNotEmpty()) {
+            $lastTouched = $this->createOrderWithSnapshots(
+                workspace: $workspace,
+                customerId: $customerId,
+                source: $source,
+                items: $remaining,
+                table: $table,
+                session: $session,
+                discountAmount: $discountAmount,
+                notes: $notes,
+                metadata: $metadata,
+                currency: $this->resolveOrderCurrency($remaining),
+            );
+
+            event(new \App\Events\OrderCreated($lastTouched));
+        } elseif ($notes && $lastTouched && blank($lastTouched->notes)) {
+            $lastTouched->update(['notes' => $notes]);
+        }
+
+        if (! $lastTouched) {
+            throw new RuntimeException('لا يمكن إنشاء طلب بدون عناصر.');
+        }
+
+        $table->update(['status' => 'occupied']);
+
+        return $lastTouched->fresh(['items', 'customer', 'table', 'tableSession']);
+    }
+
+    /**
+     * @param  array<string,mixed>  $item
+     */
+    private function findMergeableSessionLine(TableSession $session, array $item): ?OrderItem
+    {
+        $variant = $item['size_label'] ?? null;
+
+        return OrderItem::query()
+            ->whereHas('order', function ($query) use ($session): void {
+                $query->where('table_session_id', $session->id)
+                    ->whereNotIn('pos_status', ['cancelled', 'completed'])
+                    ->whereNull('pos_cashier_invoice_id');
+            })
+            ->where('pos_menu_item_id', (int) $item['pos_menu_item_id'])
+            ->where('unit_price', (float) $item['unit_price'])
+            ->when(
+                filled($variant),
+                fn ($query) => $query->where('variant_name', $variant),
+                fn ($query) => $query->where(function ($inner): void {
+                    $inner->whereNull('variant_name')->orWhere('variant_name', '');
+                })
+            )
+            ->lockForUpdate()
+            ->latest('id')
+            ->first();
+    }
+
+    private function increaseOrderItemQuantity(OrderItem $line, int $quantityDelta): void
+    {
+        $quantityDelta = max(1, $quantityDelta);
+        $newQuantity = (int) $line->quantity + $quantityDelta;
+        $unitPrice = (float) $line->unit_price;
+        $discount = (float) $line->discount_amount;
+        $lineTotal = max(0, round(($newQuantity * $unitPrice) - $discount, 2));
+
+        $line->update([
+            'quantity' => $newQuantity,
+            'total_amount' => $lineTotal,
+        ]);
+
+        $deltaItem = $line->replicate();
+        $deltaItem->quantity = $quantityDelta;
+        $deltaItem->total_amount = round($quantityDelta * $unitPrice, 2);
+        $this->syncInventoryForPosLine($deltaItem);
+
+        $order = Order::withoutGlobalScopes()->whereKey($line->order_id)->lockForUpdate()->firstOrFail();
+        $subtotal = (float) OrderItem::query()->where('order_id', $order->id)->sum('total_amount');
+        $order->update([
+            'subtotal' => round($subtotal, 2),
+            'total_amount' => max(0, round($subtotal - (float) $order->discount_amount, 2)),
+        ]);
     }
 
     /**
@@ -1026,12 +1181,18 @@ class PosOrderService
 
     private function refreshTableStatus(DiningTable $table, ?int $ignoredSessionId = null): void
     {
-        $hasOpenSessions = $table->sessions()
+        $openSessionIds = $table->sessions()
             ->where('status', 'open')
             ->when($ignoredSessionId, fn ($query) => $query->where('id', '!=', $ignoredSessionId))
-            ->exists();
+            ->pluck('id');
 
-        $table->update(['status' => $hasOpenSessions ? 'occupied' : 'available']);
+        $hasBillableOrders = $openSessionIds->isNotEmpty()
+            && Order::withoutGlobalScopes()
+                ->whereIn('table_session_id', $openSessionIds)
+                ->where('pos_status', '!=', 'cancelled')
+                ->exists();
+
+        $table->update(['status' => $hasBillableOrders ? 'occupied' : 'available']);
     }
 
     /**

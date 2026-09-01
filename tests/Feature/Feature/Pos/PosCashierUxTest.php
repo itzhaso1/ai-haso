@@ -184,6 +184,8 @@ class PosCashierUxTest extends TestCase
         $this->assertStringContainsString('نقل الطاولة', $html);
         $this->assertStringContainsString('تقسيم الحساب', $html);
         $this->assertStringContainsString('دمج طاولة', $html);
+        $this->assertStringContainsString('إضافة طلب', $html);
+        $this->assertStringNotContainsString('إضافة صنف', $html);
         $this->assertStringContainsString('إغلاق الطاولة', $html);
         $this->assertStringContainsString('إلغاء الطاولة', $html);
         $this->assertStringContainsString('الإجمالي الكلي', $html);

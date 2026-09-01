@@ -21,7 +21,7 @@ class UpdateTableOrderRequest extends FormRequest
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.id' => ['required', 'integer'],
-            'items.*.quantity' => ['required', 'integer', 'min:1'],
+            'items.*.quantity' => ['required_unless:items.*.remove,1,true', 'integer', 'min:1'],
             'items.*.unit_price' => ['required', 'numeric', 'min:0'],
             'items.*.discount_amount' => ['nullable', 'numeric', 'min:0'],
             'items.*.remove' => ['nullable', 'boolean'],

@@ -140,16 +140,12 @@ class TableGuestSessionService
             return $session;
         }
 
-        $session = TableSession::query()->create([
+        return TableSession::query()->create([
             'workspace_id' => $lockedTable->workspace_id,
             'dining_table_id' => $lockedTable->id,
             'status' => 'open',
             'opened_at' => now(),
         ]);
-
-        $lockedTable->update(['status' => 'occupied']);
-
-        return $session;
     }
 
     private function createGuestSession(DiningTable $table, TableSession $tableSession): PosCustomerSession

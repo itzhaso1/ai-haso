@@ -26,7 +26,7 @@
                             <span
                                 class="rounded-full px-2 py-0.5 text-[10px] font-semibold"
                                 :class="selected.status === 'occupied' ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'"
-                                x-text="selected.status === 'occupied' ? 'مشغولة' : 'متاحة'"
+                                x-text="selected.status === 'occupied' ? 'مشغولة' : 'فارغة'"
                             ></span>
                         </div>
                         <p class="mt-1 text-xs text-slate-500" x-show="selected.customer_name">
@@ -80,7 +80,7 @@
                                 <p
                                     class="mt-1 text-[11px] font-semibold"
                                     :class="table.status === 'occupied' ? 'text-rose-600' : 'text-emerald-600'"
-                                    x-text="table.status === 'occupied' ? 'مشغولة' : 'متاحة'"
+                                    x-text="table.status === 'occupied' ? 'مشغولة' : 'فارغة'"
                                 ></p>
                             </div>
 

@@ -4,6 +4,7 @@ namespace Tests\Feature\Feature\Pos;
 
 use App\Models\DiningTable;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\PosCustomerSession;
 use App\Models\PosMenuItem;
 use App\Models\TableSession;
@@ -256,7 +257,8 @@ class PosTableQrSessionTest extends TestCase
 
         $this->assertSame(1, TableSession::query()->where('dining_table_id', $table->id)->where('status', 'open')->count());
         $this->assertSame(2, PosCustomerSession::query()->where('dining_table_id', $table->id)->where('status', 'active')->count());
-        $this->assertSame(2, Order::query()->where('dining_table_id', $table->id)->where('source', 'qr_menu')->count());
+        $this->assertSame(1, Order::query()->where('dining_table_id', $table->id)->where('source', 'qr_menu')->where('pos_status', '!=', 'cancelled')->count());
+        $this->assertSame(3, (int) OrderItem::query()->where('pos_menu_item_id', $item->id)->sum('quantity'));
         $this->assertSame((int) $guestA->table_session_id, (int) $guestB->fresh()->table_session_id);
     }
 
