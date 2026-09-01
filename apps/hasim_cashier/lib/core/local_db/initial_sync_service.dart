@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../api/cashier_api.dart';
 import 'app_database.dart';
+import 'local_ids.dart';
 import 'workspace_scope.dart';
 
 /// Downloads workspace POS baseline into SQLite using existing Cashier APIs.
@@ -89,11 +90,19 @@ class InitialSyncService {
             );
       }
 
+      // Drop legacy unscoped catalog rows for this workspace before rewrite.
+      await (_db.delete(_db.localCategories)
+            ..where((t) => t.workspaceId.equals(workspaceId)))
+          .go();
+      await (_db.delete(_db.localProducts)
+            ..where((t) => t.workspaceId.equals(workspaceId)))
+          .go();
+
       for (final cat in categories) {
         final serverId = (cat['id'] as num?)?.toInt();
         final localId = serverId != null
-            ? 'cat_$serverId'
-            : 'cat_${_uuid.v4()}';
+            ? LocalIds.category(workspaceId, serverId)
+            : 'w${workspaceId}_cat_${_uuid.v4()}';
         await _db.into(_db.localCategories).insertOnConflictUpdate(
               LocalCategoriesCompanion.insert(
                 localId: localId,
@@ -111,15 +120,19 @@ class InitialSyncService {
       for (final item in items) {
         final serverId = (item['id'] as num?)?.toInt();
         final catServerId = (item['pos_item_category_id'] as num?)?.toInt();
-        final localId =
-            serverId != null ? 'prod_$serverId' : 'prod_${_uuid.v4()}';
+        final localId = serverId != null
+            ? LocalIds.product(workspaceId, serverId)
+            : 'w${workspaceId}_prod_${_uuid.v4()}';
         await _db.into(_db.localProducts).insertOnConflictUpdate(
               LocalProductsCompanion.insert(
                 localId: localId,
                 workspaceId: workspaceId,
                 serverId: Value(serverId),
-                categoryLocalId:
-                    Value(catServerId != null ? 'cat_$catServerId' : null),
+                categoryLocalId: Value(
+                  catServerId != null
+                      ? LocalIds.category(workspaceId, catServerId)
+                      : null,
+                ),
                 categoryServerId: Value(catServerId),
                 name: '${item['name'] ?? ''}',
                 sku: Value(item['sku'] as String?),
@@ -137,7 +150,7 @@ class InitialSyncService {
       for (final table in tables) {
         final serverId = (table['id'] as num?)?.toInt();
         final localId = serverId != null
-            ? 'w${workspaceId}_table_$serverId'
+            ? LocalIds.table(workspaceId, serverId)
             : 'w${workspaceId}_table_${_uuid.v4()}';
         await _db.into(_db.localTables).insertOnConflictUpdate(
               LocalTablesCompanion.insert(

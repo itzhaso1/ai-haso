@@ -31,7 +31,18 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (m) async {
+          await m.createAll();
+        },
+        onUpgrade: (m, from, to) async {
+          // v2: catalog/table local_ids become workspace-scoped via Initial Sync
+          // rewrite and OrdersRepository writers — no destructive DDL required.
+        },
+      );
 
   /// Production/native opener — one SQLite file per app install.
   static AppDatabase open() {
@@ -44,4 +55,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// In-memory DB for unit tests.
   static AppDatabase memory() => AppDatabase(NativeDatabase.memory());
+
+  /// File-backed DB for restart / durability tests.
+  static AppDatabase file(File file) => AppDatabase(NativeDatabase(file));
 }

@@ -6,6 +6,7 @@ import '../local_db/app_database.dart';
 import '../local_db/initial_sync_service.dart';
 import '../local_db/workspace_scope.dart';
 import '../repositories/catalog_repository.dart';
+import '../repositories/orders_repository.dart';
 import '../repositories/sync_queue_repository.dart';
 import '../repositories/tables_repository.dart';
 
@@ -36,6 +37,13 @@ final tablesRepositoryProvider = Provider<TablesRepository>((ref) {
 
 final syncQueueRepositoryProvider = Provider<SyncQueueRepository>((ref) {
   return SyncQueueRepository(ref.watch(appDatabaseProvider));
+});
+
+final ordersRepositoryProvider = Provider<OrdersRepository>((ref) {
+  return OrdersRepository(
+    ref.watch(appDatabaseProvider),
+    ref.watch(syncQueueRepositoryProvider),
+  );
 });
 
 final initialSyncServiceProvider = Provider<InitialSyncService>((ref) {

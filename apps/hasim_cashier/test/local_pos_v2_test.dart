@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hasim_cashier/core/local_db/app_database.dart';
+import 'package:hasim_cashier/core/local_db/local_ids.dart';
 import 'package:hasim_cashier/core/local_db/workspace_scope.dart';
 import 'package:hasim_cashier/core/repositories/catalog_repository.dart';
 import 'package:hasim_cashier/core/repositories/sync_queue_repository.dart';
@@ -24,7 +25,7 @@ void main() {
     final now = DateTime.now();
     await db.into(db.localProducts).insert(
           LocalProductsCompanion.insert(
-            localId: 'prod_1',
+            localId: LocalIds.product(1, 10),
             workspaceId: 1,
             serverId: const Value(10),
             name: 'شاي أ',
@@ -34,9 +35,9 @@ void main() {
         );
     await db.into(db.localProducts).insert(
           LocalProductsCompanion.insert(
-            localId: 'prod_2',
+            localId: LocalIds.product(2, 10),
             workspaceId: 2,
-            serverId: const Value(20),
+            serverId: const Value(10),
             name: 'قهوة ب',
             price: const Value(8),
             updatedAt: now,

@@ -5,15 +5,15 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
-import '../../core/offline/conflict_strategy.dart';
-import '../../core/offline/offline_store.dart';
-import '../../core/offline/sync_engine.dart';
 import '../../core/local_db/local_db_providers.dart';
 import '../../core/network/cashier_link.dart';
+import '../../core/offline/conflict_strategy.dart';
+import '../../core/offline/offline_store.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
 import '../../core/pos/pos_labels.dart';
 import '../../core/printing/printer_service.dart';
+import '../../core/sync/pos_sync_coordinator.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
 import '../../core/widgets/hasim_widgets.dart';
@@ -35,6 +35,7 @@ class TableDetailScreen extends ConsumerStatefulWidget {
 class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
   Map<String, dynamic>? _detail;
   List<Map<String, dynamic>> _allTables = const [];
+  List<Map<String, dynamic>> _localPendingOrders = const [];
   var _loading = true;
   var _closing = false;
   var _syncingNow = false;
@@ -93,44 +94,40 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
 
   int? get _workspaceId => ref.read(workspaceIdProvider);
 
-  List<PendingOrder> _localOrdersForTable() {
+  Future<void> _refreshLocalOrders() async {
     final workspaceId = _workspaceId;
-    if (workspaceId == null) return const [];
-    return OfflineStore.instance
-        .allPendingOrders(workspaceId: workspaceId)
-        .where((order) => order.tableId == widget.tableId)
-        .toList();
+    if (workspaceId == null || workspaceId <= 0) {
+      if (mounted) setState(() => _localPendingOrders = const []);
+      return;
+    }
+    final orders = await ref.read(ordersRepositoryProvider).listUnsyncedForTable(
+          workspaceId: workspaceId,
+          tableId: widget.tableId,
+        );
+    if (!mounted) return;
+    setState(() => _localPendingOrders = orders);
   }
 
   List<Map<String, dynamic>> _mergePendingOrders(
     List<Map<String, dynamic>> server,
   ) {
-    final local = _localOrdersForTable();
-    if (local.isEmpty) return server;
+    if (_localPendingOrders.isEmpty) return server;
     final merged = [...server];
-    for (final order in local) {
-      final serverId = order.serverOrderId;
-      if (order.status == SyncStatus.synced &&
-          serverId != null &&
-          server.any((row) => (row['id'] as num?)?.toInt() == serverId)) {
+    for (final order in _localPendingOrders) {
+      final serverId = order['id'];
+      final isPending = order['is_local_pending'] == true;
+      if (!isPending &&
+          serverId is num &&
+          server.any((row) => (row['id'] as num?)?.toInt() == serverId.toInt())) {
         continue;
       }
-      if (order.status == SyncStatus.synced && serverId == null) {
-        continue;
-      }
-      merged.add(order.toDisplayOrder());
+      if (!isPending) continue;
+      merged.add(order);
     }
     return merged;
   }
 
-  int get _pendingSyncCount {
-    final workspaceId = _workspaceId;
-    if (workspaceId == null) return 0;
-    return OfflineStore.instance.unsyncedCountForTable(
-      widget.tableId,
-      workspaceId: workspaceId,
-    );
-  }
+  int get _pendingSyncCount => _localPendingOrders.length;
 
   bool _isLocalPending(Map<String, dynamic> order) =>
       order['is_local_pending'] == true;
@@ -219,6 +216,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
     // Local SQLite first — works fully offline.
     final localDetail = await repo.getTable(workspaceId, widget.tableId);
     final localBoard = await repo.listTables(workspaceId);
+    await _refreshLocalOrders();
     if (!mounted) return;
     if (localDetail != null) {
       setState(() {
@@ -232,6 +230,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
     // Repository best-effort remote refresh (no UI if-offline).
     final refreshed = await repo.loadTableDetail(workspaceId, widget.tableId);
     final board = await repo.listTables(workspaceId);
+    await _refreshLocalOrders();
     if (!mounted) return;
     if (refreshed != null) {
       setState(() {
@@ -251,12 +250,15 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       return;
     }
 
-    // Pending local orders can still open a minimal shell (Hive outbox).
-    final pending = OfflineStore.instance.unsyncedOrders(
-      tableId: widget.tableId,
-      workspaceId: workspaceId,
-    );
-    if (pending.isNotEmpty) {
+    // Pending local orders can still open a minimal shell (SQLite / Hive).
+    final hasSqlitePending = _localPendingOrders.isNotEmpty;
+    final hasHivePending = OfflineStore.instance
+        .unsyncedOrders(
+          tableId: widget.tableId,
+          workspaceId: workspaceId,
+        )
+        .isNotEmpty;
+    if (hasSqlitePending || hasHivePending) {
       setState(() {
         _detail = {
           'id': widget.tableId,
@@ -438,7 +440,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم حفظ الطلب — بانتظار الاتصال')),
       );
-      setState(() {});
+      await _refreshLocalOrders();
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(
@@ -475,17 +477,20 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
     if (!mounted) return;
     if (_isLocalPending(order) || updated['local_pending'] == true) {
       final localId = '${order['local_id']}';
+      final workspaceId = _workspaceId;
+      if (workspaceId == null) return;
       final items = (updated['items'] is List)
           ? (updated['items'] as List)
               .whereType<Map>()
               .map((e) => Map<String, dynamic>.from(e))
               .toList()
           : const <Map<String, dynamic>>[];
-      final saved = await OfflineStore.instance.updatePendingOrder(
-        localId,
-        items: items,
-        notes: updated['notes'] as String?,
-      );
+      final saved = await ref.read(ordersRepositoryProvider).updateLocalOrder(
+            workspaceId: workspaceId,
+            localId: localId,
+            items: items,
+            notes: updated['notes'] as String?,
+          );
       if (!mounted) return;
       if (!saved) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -495,13 +500,13 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
             ),
           ),
         );
-        setState(() {});
+        await _refreshLocalOrders();
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم حفظ تعديلات الطلب محليًا.')),
       );
-      setState(() {});
+      await _refreshLocalOrders();
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(
@@ -541,9 +546,12 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
         ),
       );
       if (ok != true) return;
-      final removed = await OfflineStore.instance.deletePending(
-        '${order['local_id']}',
-      );
+      final workspaceId = _workspaceId;
+      if (workspaceId == null) return;
+      final removed = await ref.read(ordersRepositoryProvider).deleteLocalOrder(
+            workspaceId: workspaceId,
+            localId: '${order['local_id']}',
+          );
       if (!mounted) return;
       if (!removed) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -553,13 +561,13 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
             ),
           ),
         );
-        setState(() {});
+        await _refreshLocalOrders();
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم حذف الطلب المحلي.')),
       );
-      setState(() {});
+      await _refreshLocalOrders();
       return;
     }
     if (!await _ensureOnline()) return;
@@ -784,7 +792,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
     final localId = '${order['local_id']}';
     final workspaceId = _workspaceId;
     if (workspaceId == null) return;
-    final ok = await ref.read(syncEngineProvider).retryOne(
+    final ok = await ref.read(posSyncCoordinatorProvider).retryOne(
           localId,
           workspaceId: workspaceId,
         );
@@ -802,7 +810,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
   Future<void> _syncNow() async {
     if (_syncingNow) return;
     setState(() => _syncingNow = true);
-    final result = await ref.read(syncEngineProvider).flushPendingOrders(
+    final result = await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
           workspaceId: ref.read(workspaceIdProvider),
         );
     if (!mounted) return;
@@ -851,11 +859,18 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
 
   Future<void> _closeSession() async {
     if (!_hasSession || !_canManageTables || _closing) return;
-    if (_workspaceId == null ||
+    final workspaceId = _workspaceId;
+    final hasSqlitePending = workspaceId != null &&
+        await ref.read(ordersRepositoryProvider).hasUnsyncedForTable(
+              workspaceId: workspaceId,
+              tableId: widget.tableId,
+            );
+    final hasHivePending = workspaceId != null &&
         OfflineStore.instance.hasUnsyncedTableOrders(
           widget.tableId,
-          workspaceId: _workspaceId,
-        )) {
+          workspaceId: workspaceId,
+        );
+    if (workspaceId == null || hasSqlitePending || hasHivePending) {
       if (!mounted) return;
       await showDialog<void>(
         context: context,

@@ -10,10 +10,10 @@ import '../../core/navigation/pos_shell_nav.dart';
 import '../../core/network/cashier_link.dart';
 import '../../core/local_db/local_db_providers.dart';
 import '../../core/offline/offline_store.dart';
-import '../../core/offline/sync_engine.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
 import '../../core/printing/printer_service.dart';
+import '../../core/sync/pos_sync_coordinator.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
 import '../../core/theme/hasim_spacing.dart';
@@ -85,7 +85,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       ref.read(cashierLinkProvider.notifier).setDeviceOnline(nowOnline);
       if (nowOnline && wasOffline) {
         _loadBootstrap();
-        ref.read(syncEngineProvider).flushPendingOrders(
+        ref.read(posSyncCoordinatorProvider).flushPendingOrders(
               workspaceId: ref.read(workspaceIdProvider),
             ).then((_) {
           _refreshPending();
@@ -107,6 +107,42 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           ? 0
           : OfflineStore.instance.pendingOrders(workspaceId: workspaceId).length;
     });
+    if (workspaceId == null) return;
+    ref.read(syncQueueRepositoryProvider).pendingCount(workspaceId).then((n) {
+      if (!mounted) return;
+      final hive = OfflineStore.instance.pendingOrders(workspaceId: workspaceId).length;
+      setState(() => _pendingSync = n > hive ? n : hive);
+    });
+  }
+
+  Future<void> _enqueueLocalTableOrder({
+    required int tableId,
+    required int workspaceId,
+    required String clientRef,
+    required String? notes,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    final deviceId =
+        await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
+    await ref.read(ordersRepositoryProvider).createTableOrder(
+          workspaceId: workspaceId,
+          deviceId: deviceId,
+          tableId: tableId,
+          clientReference: clientRef,
+          notes: notes,
+          items: items,
+        );
+  }
+
+  Future<void> _migrateHiveOrders(int workspaceId) async {
+    try {
+      final deviceId =
+          await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
+      await ref.read(ordersRepositoryProvider).migrateHivePending(
+            workspaceId: workspaceId,
+            deviceId: deviceId,
+          );
+    } catch (_) {}
   }
 
   Future<void> _loadBootstrap() async {
@@ -136,6 +172,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       if (workspaceId != null) {
         try {
           await ref.read(initialSyncServiceProvider).ensureReady(workspaceId);
+          await _migrateHiveOrders(workspaceId);
           ref.invalidate(localPosReadyProvider(workspaceId));
           ref.invalidate(catalogItemsProvider);
           ref.invalidate(categoriesProvider);
@@ -143,7 +180,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           // Keep POS online path; offline readiness stays gated until sync succeeds.
         }
       }
-      await ref.read(syncEngineProvider).flushPendingOrders(
+      await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
             workspaceId: workspaceId,
           );
       _refreshPending();
@@ -265,7 +302,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
                 return;
               }
               final result =
-                  await ref.read(syncEngineProvider).flushPendingOrders(
+                  await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
                         workspaceId: ref.read(workspaceIdProvider),
                       );
               _refreshPending();
@@ -391,10 +428,10 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
         );
         return;
       }
-      await OfflineStore.instance.enqueueTableOrder(
+      await _enqueueLocalTableOrder(
         tableId: tableId,
         workspaceId: workspaceId,
-        idempotencyKey: clientRef,
+        clientRef: clientRef,
         notes: cart.notes,
         items: [
           for (final line in cart.lines)
@@ -507,10 +544,10 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
             );
             return;
           }
-          await OfflineStore.instance.enqueueTableOrder(
+          await _enqueueLocalTableOrder(
             tableId: tableId,
             workspaceId: workspaceId,
-            idempotencyKey: clientRef,
+            clientRef: clientRef,
             notes: cart.notes,
             items: [
               for (final line in cart.lines)

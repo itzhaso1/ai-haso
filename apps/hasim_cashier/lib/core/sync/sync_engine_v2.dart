@@ -4,29 +4,45 @@ import 'package:drift/drift.dart';
 
 import '../api/cashier_api.dart';
 import '../local_db/app_database.dart';
+import '../offline/offline_store.dart';
 import '../repositories/sync_queue_repository.dart';
 
-/// Sync Engine v2 skeleton — push sync_queue; pull cursor lands in Phase 4.
-/// Coexists with legacy Hive SyncEngine until the order outbox is migrated.
+/// Sync Engine v2 — push SQLite sync_queue to Laravel with stable idempotency.
+/// Coexists with Hive SyncEngine (dual-run) until Phase 6 removes Hive.
 class SyncEngineV2 {
   SyncEngineV2(
     this._db,
     this._queue, {
     CashierApiClient? api,
+    OfflineStore? offlineStore,
     Future<Map<String, dynamic>> Function(
       Map<String, dynamic> payload,
       String idempotencyKey,
     )? postOrder,
+    Future<Map<String, dynamic>> Function(
+      int serverOrderId,
+      Map<String, dynamic> payload,
+    )? postOrderItems,
+    Future<void> Function(int serverOrderId)? deleteOrder,
   })  : _api = api,
-        _postOrder = postOrder;
+        _hive = offlineStore ?? OfflineStore.instance,
+        _postOrder = postOrder,
+        _postOrderItems = postOrderItems,
+        _deleteOrder = deleteOrder;
 
   final AppDatabase _db;
   final SyncQueueRepository _queue;
   final CashierApiClient? _api;
+  final OfflineStore _hive;
   final Future<Map<String, dynamic>> Function(
     Map<String, dynamic> payload,
     String idempotencyKey,
   )? _postOrder;
+  final Future<Map<String, dynamic>> Function(
+    int serverOrderId,
+    Map<String, dynamic> payload,
+  )? _postOrderItems;
+  final Future<void> Function(int serverOrderId)? _deleteOrder;
 
   var _flushing = false;
   bool get isFlushing => _flushing;
@@ -43,41 +59,40 @@ class SyncEngineV2 {
     var failed = 0;
     var kept = 0;
     try {
+      await _queue.recoverStuckSyncing(workspaceId);
       final rows = await _queue.pendingForWorkspace(workspaceId);
       for (final row in rows) {
         if (row.workspaceId != workspaceId) continue;
+        if (row.status == 'cancelled' || row.status == 'synced') continue;
         if (row.nextAttemptAt != null &&
             row.nextAttemptAt!.isAfter(DateTime.now())) {
           kept++;
           continue;
         }
-        if (row.entityType != 'order' || row.operation != 'create') {
-          // Phase 1: only order-create pushes are wired; other ops stay queued.
+        if (row.entityType != 'order') {
           kept++;
           continue;
         }
+
         await _queue.markSyncing(row.id);
         try {
-          final payload = _decode(row.payloadJson);
-          payload['client_reference'] = row.clientReference;
-          final data = await _send(payload, row.clientReference);
-          final serverId = data['id'] is num
-              ? (data['id'] as num).toInt()
-              : int.tryParse('${data['id']}');
-          await _db.transaction(() async {
-            await (_db.update(_db.localOrders)
-                  ..where((t) => t.localId.equals(row.entityId)))
-                .write(
-              LocalOrdersCompanion(
-                serverId: Value(serverId),
-                syncStatus: const Value('synced'),
-                syncedAt: Value(DateTime.now()),
-                updatedAt: Value(DateTime.now()),
-              ),
+          if (row.operation == 'create') {
+            await _pushCreate(row);
+            synced++;
+          } else if (row.operation == 'update') {
+            await _pushUpdate(row);
+            synced++;
+          } else if (row.operation == 'delete') {
+            await _pushDelete(row);
+            synced++;
+          } else {
+            await _queue.markFailed(
+              row.id,
+              'عملية مزامنة غير مدعومة: ${row.operation}',
+              retryable: false,
             );
-            await _queue.markSynced(row.id);
-          });
-          synced++;
+            failed++;
+          }
         } on ApiException catch (e) {
           if (e.statusCode == 401) {
             await _queue.markFailed(row.id, e.message, retryable: true);
@@ -90,13 +105,16 @@ class SyncEngineV2 {
           }
           if (e.statusCode == 422 || e.statusCode == 403) {
             await _queue.markFailed(row.id, e.message, retryable: false);
+            await _markOrderFailed(row.entityId, e.message);
             failed++;
           } else {
             await _queue.markFailed(row.id, e.message, retryable: true);
+            await _markOrderPending(row.entityId, e.message);
             kept++;
           }
         } catch (e) {
           await _queue.markFailed(row.id, e.toString(), retryable: true);
+          await _markOrderPending(row.entityId, e.toString());
           kept++;
         }
       }
@@ -110,7 +128,106 @@ class SyncEngineV2 {
     }
   }
 
-  Future<Map<String, dynamic>> _send(
+  Future<void> _pushCreate(SyncQueueItem row) async {
+    final payload = _decode(row.payloadJson);
+    payload['client_reference'] = row.clientReference;
+    final data = await _sendCreate(payload, row.clientReference);
+    final serverId = data['id'] is num
+        ? (data['id'] as num).toInt()
+        : int.tryParse('${data['id']}');
+    await _db.transaction(() async {
+      await (_db.update(_db.localOrders)
+            ..where((t) =>
+                t.localId.equals(row.entityId) &
+                t.workspaceId.equals(row.workspaceId)))
+          .write(
+        LocalOrdersCompanion(
+          serverId: Value(serverId),
+          syncStatus: const Value('synced'),
+          lastError: const Value(null),
+          syncedAt: Value(DateTime.now()),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      await _queue.markSynced(row.id);
+    });
+    try {
+      await _hive.markSynced(row.clientReference, serverOrderId: serverId);
+    } catch (_) {}
+  }
+
+  Future<void> _pushUpdate(SyncQueueItem row) async {
+    final payload = _decode(row.payloadJson);
+    final serverId = (payload['server_order_id'] as num?)?.toInt();
+    if (serverId == null || serverId <= 0) {
+      throw StateError('update requires server_order_id');
+    }
+    await _sendUpdate(serverId, payload);
+    await _db.transaction(() async {
+      await (_db.update(_db.localOrders)
+            ..where((t) =>
+                t.localId.equals(row.entityId) &
+                t.workspaceId.equals(row.workspaceId)))
+          .write(
+        LocalOrdersCompanion(
+          syncStatus: const Value('synced'),
+          lastError: const Value(null),
+          syncedAt: Value(DateTime.now()),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      await _queue.markSynced(row.id);
+    });
+  }
+
+  Future<void> _pushDelete(SyncQueueItem row) async {
+    final payload = _decode(row.payloadJson);
+    final serverId = (payload['server_order_id'] as num?)?.toInt();
+    if (serverId == null || serverId <= 0) {
+      throw StateError('delete requires server_order_id');
+    }
+    await _sendDelete(serverId);
+    await _db.transaction(() async {
+      await (_db.update(_db.localOrders)
+            ..where((t) =>
+                t.localId.equals(row.entityId) &
+                t.workspaceId.equals(row.workspaceId)))
+          .write(
+        LocalOrdersCompanion(
+          posStatus: const Value('cancelled'),
+          syncStatus: const Value('synced'),
+          lastError: const Value(null),
+          syncedAt: Value(DateTime.now()),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      await _queue.markSynced(row.id);
+    });
+  }
+
+  Future<void> _markOrderFailed(String localId, String error) async {
+    await (_db.update(_db.localOrders)..where((t) => t.localId.equals(localId)))
+        .write(
+      LocalOrdersCompanion(
+        syncStatus: const Value('failed'),
+        lastError: Value(error),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  Future<void> _markOrderPending(String localId, String error) async {
+    await (_db.update(_db.localOrders)..where((t) => t.localId.equals(localId)))
+        .write(
+      LocalOrdersCompanion(
+        syncStatus: const Value('pending'),
+        lastError: Value(error),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>> _sendCreate(
     Map<String, dynamic> payload,
     String key,
   ) {
@@ -121,6 +238,32 @@ class SyncEngineV2 {
       throw StateError('SyncEngineV2 requires API or postOrder');
     }
     return api.post('/orders', data: payload, idempotencyKey: key);
+  }
+
+  Future<Map<String, dynamic>> _sendUpdate(
+    int serverOrderId,
+    Map<String, dynamic> payload,
+  ) {
+    final poster = _postOrderItems;
+    if (poster != null) return poster(serverOrderId, payload);
+    final api = _api;
+    if (api == null) {
+      throw StateError('SyncEngineV2 requires API or postOrderItems');
+    }
+    return api.post('/orders/$serverOrderId/items', data: payload);
+  }
+
+  Future<void> _sendDelete(int serverOrderId) async {
+    final deleter = _deleteOrder;
+    if (deleter != null) {
+      await deleter(serverOrderId);
+      return;
+    }
+    final api = _api;
+    if (api == null) {
+      throw StateError('SyncEngineV2 requires API or deleteOrder');
+    }
+    await api.delete('/orders/$serverOrderId');
   }
 
   Map<String, dynamic> _decode(String raw) {

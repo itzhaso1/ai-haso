@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/offline/offline_store.dart';
-import '../../core/offline/sync_engine.dart';
+import '../../core/sync/pos_sync_coordinator.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
 import '../../core/widgets/hasim_widgets.dart';
@@ -61,7 +61,7 @@ class _SyncQueuePanelState extends ConsumerState<SyncQueuePanel> {
 
   Future<void> _flush() async {
     setState(() => _busy = true);
-    await ref.read(syncEngineProvider).flushPendingOrders(
+    await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
           workspaceId: ref.read(workspaceIdProvider),
         );
     if (!mounted) return;
@@ -177,7 +177,7 @@ class _SyncQueuePanelState extends ConsumerState<SyncQueuePanel> {
                               child: TextButton(
                                 onPressed: () async {
                                   await ref
-                                      .read(syncEngineProvider)
+                                      .read(posSyncCoordinatorProvider)
                                       .retryOne(
                                         '${row['local_id']}',
                                         workspaceId:

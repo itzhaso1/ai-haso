@@ -3,14 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/api/cashier_api.dart';
+import '../../core/local_db/local_db_providers.dart';
 import '../../core/network/cashier_link.dart';
 import '../../core/offline/offline_store.dart';
+import '../../core/sync/pos_sync_coordinator.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
 import '../../core/widgets/hasim_widgets.dart';
 import '../cart/cart_controller.dart';
 
-/// In-table add-order sheet — posts `POST /orders` then returns.
+/// In-table add-order sheet — Local SQLite first, then sync_queue → Laravel.
 /// No invoice / payment / print (those happen only on close table).
 class TableAddOrderSheet extends ConsumerStatefulWidget {
   const TableAddOrderSheet({
@@ -192,23 +194,26 @@ class _TableAddOrderSheetState extends ConsumerState<TableAddOrderSheet> {
     if (workspaceId == null || workspaceId <= 0) {
       throw StateError('workspace id is required');
     }
+    final deviceId =
+        await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
     final notes = _notes.text.trim().isEmpty ? null : _notes.text.trim();
-    await OfflineStore.instance.enqueueTableOrder(
-      tableId: widget.tableId,
-      workspaceId: workspaceId,
-      idempotencyKey: key,
-      notes: notes,
-      items: [
-        for (final line in _lines)
-          {
-            'pos_menu_item_id': line.menuItemId,
-            'name': line.name,
-            'quantity': line.quantity,
-            'unit_price': line.unitPrice,
-            'total_amount': line.quantity * line.unitPrice,
-          },
-      ],
-    );
+    await ref.read(ordersRepositoryProvider).createTableOrder(
+          workspaceId: workspaceId,
+          deviceId: deviceId,
+          tableId: widget.tableId,
+          clientReference: key,
+          notes: notes,
+          items: [
+            for (final line in _lines)
+              {
+                'pos_menu_item_id': line.menuItemId,
+                'name': line.name,
+                'quantity': line.quantity,
+                'unit_price': line.unitPrice,
+                'total_amount': line.quantity * line.unitPrice,
+              },
+          ],
+        );
   }
 
   Future<void> _save() async {
@@ -223,89 +228,38 @@ class _TableAddOrderSheetState extends ConsumerState<TableAddOrderSheet> {
       );
       return;
     }
+    final workspaceId = ref.read(workspaceIdProvider);
+    if (workspaceId == null || workspaceId <= 0) {
+      setState(() {
+        _error = 'لا توجد مساحة عمل محددة. لا يمكن حفظ الطلب محليًا.';
+      });
+      return;
+    }
     setState(() {
       _saving = true;
       _error = null;
     });
     final clientRef = const Uuid().v4();
-    final payload = <String, dynamic>{
-      'order_type': 'table',
-      'dining_table_id': widget.tableId,
-      'client_reference': clientRef,
-      'notes': _notes.text.trim().isEmpty ? null : _notes.text.trim(),
-      'items': [
-        for (final line in _lines)
-          {
-            'pos_menu_item_id': line.menuItemId,
-            'quantity': line.quantity,
-          },
-      ],
-    };
-    final online = ref.read(cashierLinkProvider).allowMutations;
-    if (!online) {
-      if (ref.read(workspaceIdProvider) == null) {
-        setState(() {
-          _saving = false;
-          _error = 'لا توجد مساحة عمل محددة. لا يمكن حفظ الطلب محليًا.';
-        });
-        return;
-      }
+    try {
+      // Local-first: SQLite transaction + sync_queue (works fully offline).
       await _saveLocal(clientRef);
+      final online = ref.read(cashierLinkProvider).allowMutations;
+      if (online) {
+        await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+              workspaceId: workspaceId,
+            );
+      }
       if (!mounted) return;
       Navigator.pop(context, {
         'local_pending': true,
         'client_reference': clientRef,
         'dining_table_id': widget.tableId,
       });
-      return;
-    }
-    try {
-      final data = await ref.read(cashierApiProvider).post(
-            '/orders',
-            data: payload,
-            idempotencyKey: clientRef,
-          );
-      if (!mounted) return;
-      Navigator.pop(context, data);
-    } on ApiException catch (e) {
-      if (e.isUnavailable) {
-        if (ref.read(workspaceIdProvider) == null) {
-          if (!mounted) return;
-          setState(() {
-            _saving = false;
-            _error = e.message;
-          });
-          return;
-        }
-        await _saveLocal(clientRef);
-        if (!mounted) return;
-        Navigator.pop(context, {
-          'local_pending': true,
-          'client_reference': clientRef,
-          'dining_table_id': widget.tableId,
-        });
-        return;
-      }
+    } catch (e) {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = e.message;
-      });
-    } catch (e) {
-      if (ref.read(workspaceIdProvider) == null) {
-        if (!mounted) return;
-        setState(() {
-          _saving = false;
-          _error = e.toString();
-        });
-        return;
-      }
-      await _saveLocal(clientRef);
-      if (!mounted) return;
-      Navigator.pop(context, {
-        'local_pending': true,
-        'client_reference': clientRef,
-        'dining_table_id': widget.tableId,
+        _error = e.toString();
       });
     }
   }

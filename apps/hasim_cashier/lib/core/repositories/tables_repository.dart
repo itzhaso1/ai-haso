@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 
 import '../api/cashier_api.dart';
 import '../local_db/app_database.dart';
+import '../local_db/local_ids.dart';
 import '../offline/offline_store.dart';
 
 /// Tables UI reads/writes through this repository only.
@@ -47,7 +48,7 @@ class TablesRepository {
 
   /// Workspace-scoped local PK so the same server table id can exist in A and B.
   static String tableLocalId(int workspaceId, int serverId) =>
-      'w${workspaceId}_table_$serverId';
+      LocalIds.table(workspaceId, serverId);
 
   Future<void> replaceBoard(
     int workspaceId,

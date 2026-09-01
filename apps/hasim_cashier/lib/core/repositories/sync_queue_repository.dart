@@ -4,7 +4,9 @@ import 'package:drift/drift.dart';
 
 import '../local_db/app_database.dart';
 
-/// Durable outbox for local→server operations. Never delete on failure.
+/// Durable outbox for local→server operations. Never delete on failure
+/// of a push attempt; only cancel when the local entity itself is deleted
+/// before it ever reached the server.
 class SyncQueueRepository {
   SyncQueueRepository(this._db);
 
@@ -46,14 +48,91 @@ class SyncQueueRepository {
     return (_db.select(_db.syncQueueItems)
           ..where((t) =>
               t.workspaceId.equals(workspaceId) &
-              (t.status.equals('pending') | t.status.equals('failed')))
+              (t.status.equals('pending') |
+                  t.status.equals('failed') |
+                  t.status.equals('syncing')))
           ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
         .get();
   }
 
   Future<int> pendingCount(int workspaceId) async {
     final rows = await pendingForWorkspace(workspaceId);
-    return rows.length;
+    return rows
+        .where((r) => r.status == 'pending' || r.status == 'failed')
+        .length;
+  }
+
+  Future<SyncQueueItem?> findOpenOp({
+    required int workspaceId,
+    required String entityType,
+    required String entityId,
+    required String operation,
+  }) {
+    return (_db.select(_db.syncQueueItems)
+          ..where((t) =>
+              t.workspaceId.equals(workspaceId) &
+              t.entityType.equals(entityType) &
+              t.entityId.equals(entityId) &
+              t.operation.equals(operation) &
+              (t.status.equals('pending') |
+                  t.status.equals('failed') |
+                  t.status.equals('syncing')))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  /// Refresh create payload before first successful push (same client_reference).
+  Future<bool> updateOpenPayload({
+    required int workspaceId,
+    required String entityType,
+    required String entityId,
+    required String operation,
+    required Map<String, dynamic> payload,
+  }) async {
+    final row = await findOpenOp(
+      workspaceId: workspaceId,
+      entityType: entityType,
+      entityId: entityId,
+      operation: operation,
+    );
+    if (row == null) return false;
+    if (row.status == 'syncing') return false;
+    await (_db.update(_db.syncQueueItems)..where((t) => t.id.equals(row.id)))
+        .write(
+      SyncQueueItemsCompanion(
+        payloadJson: Value(jsonEncode(payload)),
+        status: const Value('pending'),
+        lastError: const Value(null),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+    return true;
+  }
+
+  /// Cancel a not-yet-synced op when the local entity is deleted offline.
+  Future<bool> cancelOpenOp({
+    required int workspaceId,
+    required String entityType,
+    required String entityId,
+    required String operation,
+  }) async {
+    final row = await findOpenOp(
+      workspaceId: workspaceId,
+      entityType: entityType,
+      entityId: entityId,
+      operation: operation,
+    );
+    if (row == null) return false;
+    if (row.status == 'syncing') return false;
+    await (_db.update(_db.syncQueueItems)..where((t) => t.id.equals(row.id)))
+        .write(
+      SyncQueueItemsCompanion(
+        status: const Value('cancelled'),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+    return true;
   }
 
   Future<void> markSyncing(int id) async {
@@ -92,5 +171,22 @@ class SyncQueueRepository {
         updatedAt: Value(DateTime.now()),
       ),
     );
+  }
+
+  Future<void> recoverStuckSyncing(int workspaceId) async {
+    final stuck = await (_db.select(_db.syncQueueItems)
+          ..where((t) =>
+              t.workspaceId.equals(workspaceId) & t.status.equals('syncing')))
+        .get();
+    final now = DateTime.now();
+    for (final row in stuck) {
+      await (_db.update(_db.syncQueueItems)..where((t) => t.id.equals(row.id)))
+          .write(
+        SyncQueueItemsCompanion(
+          status: const Value('pending'),
+          updatedAt: Value(now),
+        ),
+      );
+    }
   }
 }

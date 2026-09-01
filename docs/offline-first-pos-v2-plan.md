@@ -2,7 +2,7 @@
 
 **Branch:** `cursor/offline-first-pos-v2-757c`  
 **Base:** `cursor/cashier-ui-ux-fix-757c` @ `54806df`  
-**Status:** Phase 2 complete (Tables UI ← Local SQLite via TablesRepository)
+**Status:** Phase 3 complete (Orders Local-first + sync_queue; Hive dual-run)
 
 ## Audit summary (current = Online POS + durable outbox)
 
@@ -53,11 +53,14 @@ Laravel stays Source of Truth. UI must not depend on API for daily POS reads/wri
 - Close / payment / invoice / open-session mutations unchanged (online)
 
 
-### Phase 3 — Orders local-first + Sync Queue
-- Create/edit/delete orders as SQLite transactions + `sync_queue` rows.
-- Migrate Hive `cashier_pending_orders` → `sync_queue` / `orders` (preserve keys).
-- SyncEngine v2 push from queue; reuse Laravel idempotency.
-- Deprecate Hive order outbox after migration.
+### Phase 3 — Orders local-first + Sync Queue (done)
+- `OrdersRepository`: atomic create/update/delete + `sync_queue`
+- Hive → SQLite migration preserves `client_reference` / idempotency key
+- `SyncEngineV2` + `PosSyncCoordinator` (Hive dual-run flush)
+- Table add/edit/delete local pending via repository (no UI API for offline create)
+- Catalog/product/category `local_id` workspace-scoped (`w{ws}_prod_*`)
+- Open session / close / payment / invoice remain online
+- Hive outbox retained until Phase 6
 
 ### Phase 4 — Backend incremental sync (minimal Laravel)
 - `POST /devices/register`
