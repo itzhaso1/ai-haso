@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hasim/core/di/providers.dart';
 import 'package:hasim/core/models/models.dart';
+import 'package:hasim/core/network/api_exception.dart';
 import 'package:hasim/core/utils/relative_time.dart';
 import 'package:hasim/core/widgets/skeleton_list.dart';
 
@@ -52,6 +53,49 @@ class _CustomerProfileScreenState extends ConsumerState<CustomerProfileScreen> {
     }
   }
 
+  Future<void> _quickAddContact() async {
+    final customer = _customer;
+    final email = customer?.email?.trim();
+    if (customer == null || email == null || email.isEmpty) return;
+    try {
+      final existing = await ref.read(contactRepositoryProvider).findByEmail(email);
+      if (!mounted) return;
+      if (existing.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('جهة الاتصال موجودة مسبقاً'),
+            action: SnackBarAction(
+              label: 'عرض',
+              onPressed: () => context.push('/contacts/${existing.first.id}'),
+            ),
+          ),
+        );
+        return;
+      }
+      final created = await ref.read(contactRepositoryProvider).create(
+            name: customer.name,
+            email: email,
+            phone: customer.phone,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('تمت الإضافة إلى جهات الاتصال'),
+          action: SnackBarAction(
+            label: 'عرض',
+            onPressed: () => context.push('/contacts/${created.id}'),
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر الإضافة')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -80,6 +124,15 @@ class _CustomerProfileScreenState extends ConsumerState<CustomerProfileScreen> {
                         if (_customer!.email != null) _customer!.email!,
                       ].join(' · ')),
                     ),
+                    if (_customer!.email != null && _customer!.email!.trim().isNotEmpty)
+                      Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: TextButton.icon(
+                          onPressed: _quickAddContact,
+                          icon: const Icon(Icons.person_add_alt),
+                          label: const Text('إضافة لجهات الاتصال'),
+                        ),
+                      ),
                     const SizedBox(height: 16),
                     Text('المحادثات', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                     if (_conversations.isEmpty)

@@ -78,6 +78,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onTap: () => context.push('/channels'),
           ),
           ListTile(
+            leading: const Icon(Icons.contacts_outlined),
+            title: const Text('جهات الاتصال'),
+            trailing: const Icon(Icons.chevron_left),
+            onTap: () => context.push('/contacts'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.groups_outlined),
+            title: const Text('مجموعات جهات الاتصال'),
+            trailing: const Icon(Icons.chevron_left),
+            onTap: () => context.push('/contact-groups'),
+          ),
+          ListTile(
             leading: const Icon(Icons.notifications_active_outlined),
             title: const Text('تفضيلات الإشعارات'),
             trailing: const Icon(Icons.chevron_left),

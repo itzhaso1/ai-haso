@@ -8,12 +8,18 @@ import 'package:hasim/features/auth/presentation/login_screen.dart';
 import 'package:hasim/features/auth/presentation/reset_password_screen.dart';
 import 'package:hasim/features/auth/presentation/splash_screen.dart';
 import 'package:hasim/features/auth/providers/auth_controller.dart';
+import 'package:hasim/features/contacts/presentation/contact_detail_screen.dart';
+import 'package:hasim/features/contacts/presentation/contact_form_screen.dart';
+import 'package:hasim/features/contacts/presentation/contact_groups_screen.dart';
+import 'package:hasim/features/contacts/presentation/contacts_list_screen.dart';
 import 'package:hasim/features/conversations/presentation/chat_screen.dart';
 import 'package:hasim/features/conversations/presentation/conversations_screen.dart';
 import 'package:hasim/features/customers/presentation/customer_profile_screen.dart';
+import 'package:hasim/features/email/presentation/campaign_status_screen.dart';
 import 'package:hasim/features/email/presentation/email_compose_screen.dart';
 import 'package:hasim/features/email/presentation/email_detail_screen.dart';
 import 'package:hasim/features/email/presentation/email_list_screen.dart';
+import 'package:hasim/core/models/models.dart';
 import 'package:hasim/features/home/presentation/home_screen.dart';
 import 'package:hasim/features/notifications/presentation/notifications_screen.dart';
 import 'package:hasim/features/settings/presentation/channels_screen.dart';
@@ -21,6 +27,9 @@ import 'package:hasim/features/settings/presentation/notification_preferences_sc
 import 'package:hasim/features/settings/presentation/plans_screen.dart';
 import 'package:hasim/features/settings/presentation/profile_screen.dart';
 import 'package:hasim/features/settings/presentation/settings_screen.dart';
+import 'package:hasim/features/stories/presentation/create_story_screen.dart';
+import 'package:hasim/features/stories/presentation/story_viewer_screen.dart';
+import 'package:hasim/features/stories/providers/stories_controller.dart';
 import 'package:hasim/features/workspace/presentation/workspace_picker_screen.dart';
 import 'package:hasim/router/app_shell.dart';
 
@@ -80,6 +89,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/email/compose', builder: (context, state) => const EmailComposeScreen()),
       GoRoute(
+        path: '/email/campaigns/:id',
+        builder: (context, state) => CampaignStatusScreen(campaignId: int.parse(state.pathParameters['id']!)),
+      ),
+      GoRoute(
         path: '/email/:id',
         builder: (context, state) => EmailDetailScreen(id: int.parse(state.pathParameters['id']!)),
       ),
@@ -87,6 +100,40 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/appointments/:id',
         builder: (context, state) => AppointmentDetailScreen(id: int.parse(state.pathParameters['id']!)),
       ),
+      GoRoute(path: '/stories/create', builder: (context, state) => const CreateStoryScreen()),
+      GoRoute(
+        path: '/stories/view',
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is StoryViewerArgs) {
+            return StoryViewerScreen(args: extra);
+          }
+          if (extra is Map) {
+            final buckets = (extra['buckets'] as List?)?.whereType<StoryBucket>().toList() ?? const <StoryBucket>[];
+            final bucketIndex = (extra['bucketIndex'] as num?)?.toInt() ?? 0;
+            final storyIndex = (extra['storyIndex'] as num?)?.toInt() ?? 0;
+            if (buckets.isEmpty) {
+              return const Scaffold(body: Center(child: Text('لا توجد قصص للعرض')));
+            }
+            return StoryViewerScreen(
+              args: StoryViewerArgs(buckets: buckets, bucketIndex: bucketIndex, storyIndex: storyIndex),
+            );
+          }
+          return const Scaffold(body: Center(child: Text('لا توجد قصص للعرض')));
+        },
+      ),
+      GoRoute(path: '/contacts', builder: (context, state) => const ContactsListScreen()),
+      GoRoute(
+        path: '/contacts/form',
+        builder: (context, state) => ContactFormScreen(
+          contact: state.extra is EmailContactModel ? state.extra as EmailContactModel : null,
+        ),
+      ),
+      GoRoute(
+        path: '/contacts/:id',
+        builder: (context, state) => ContactDetailScreen(id: int.parse(state.pathParameters['id']!)),
+      ),
+      GoRoute(path: '/contact-groups', builder: (context, state) => const ContactGroupsScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => AppShell(navigationShell: navigationShell),
         branches: [

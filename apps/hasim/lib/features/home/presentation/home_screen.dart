@@ -6,6 +6,8 @@ import 'package:hasim/core/utils/relative_time.dart';
 import 'package:hasim/core/widgets/skeleton_list.dart';
 import 'package:hasim/features/auth/providers/auth_controller.dart';
 import 'package:hasim/features/home/providers/home_controller.dart';
+import 'package:hasim/features/stories/presentation/stories_strip.dart';
+import 'package:hasim/features/stories/providers/stories_controller.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 
 class HomeScreen extends ConsumerWidget {
@@ -34,7 +36,10 @@ class HomeScreen extends ConsumerWidget {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () => ref.read(homeControllerProvider.notifier).refresh(),
+        onRefresh: () async {
+          await ref.read(homeControllerProvider.notifier).refresh();
+          await ref.read(storiesControllerProvider.notifier).refresh();
+        },
         child: home.loading && snap == null
             ? const SkeletonCards()
             : ListView(
@@ -45,6 +50,8 @@ class HomeScreen extends ConsumerWidget {
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Text(home.error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
                     ),
+                  const StoriesStrip(),
+                  const SizedBox(height: 12),
                   Text(
                     '$greeting ${auth.user?.name ?? ''}',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
@@ -91,6 +98,8 @@ class HomeScreen extends ConsumerWidget {
                       children: [
                         _QuickAction(label: 'محادثات', icon: Icons.forum_outlined, onTap: () => context.go('/conversations')),
                         _QuickAction(label: 'بريد جديد', icon: Icons.edit_outlined, onTap: () => context.push('/email/compose')),
+                        _QuickAction(label: 'جهات الاتصال', icon: Icons.contacts_outlined, onTap: () => context.push('/contacts')),
+                        _QuickAction(label: 'قصة', icon: Icons.auto_stories_outlined, onTap: () => context.push('/stories/create')),
                         _QuickAction(label: 'الحجوزات', icon: Icons.calendar_today_outlined, onTap: () => context.go('/appointments')),
                         _QuickAction(label: 'القنوات', icon: Icons.hub_outlined, onTap: () => context.push('/channels')),
                       ],

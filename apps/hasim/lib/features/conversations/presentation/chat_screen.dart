@@ -4,7 +4,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hasim/core/di/providers.dart';
 import 'package:hasim/core/models/models.dart';
+import 'package:hasim/core/network/api_exception.dart';
 import 'package:hasim/core/widgets/async_body.dart';
 import 'package:hasim/core/widgets/skeleton_list.dart';
 import 'package:hasim/features/conversations/providers/conversations_controller.dart';
@@ -87,6 +89,49 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
+  Future<void> _quickAddContact() async {
+    final customer = ref.read(chatControllerProvider(widget.conversationId)).conversation?.customer;
+    final email = customer?.email?.trim();
+    if (email == null || email.isEmpty) return;
+    try {
+      final existing = await ref.read(contactRepositoryProvider).findByEmail(email);
+      if (!mounted) return;
+      if (existing.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('جهة الاتصال موجودة مسبقاً'),
+            action: SnackBarAction(
+              label: 'عرض',
+              onPressed: () => context.push('/contacts/${existing.first.id}'),
+            ),
+          ),
+        );
+        return;
+      }
+      final created = await ref.read(contactRepositoryProvider).create(
+            name: customer?.name ?? email,
+            email: email,
+            phone: customer?.phone,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('تمت الإضافة إلى جهات الاتصال'),
+          action: SnackBarAction(
+            label: 'عرض',
+            onPressed: () => context.push('/contacts/${created.id}'),
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر الإضافة')));
+      }
+    }
+  }
+
   void _openImage(String url) {
     showDialog<void>(
       context: context,
@@ -126,10 +171,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             onSelected: (v) {
               if (v == 'suggest') _suggest();
               if (v == 'summarize') _summarize();
+              if (v == 'add_contact') _quickAddContact();
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'suggest', child: Text('اقتراح رد')),
-              PopupMenuItem(value: 'summarize', child: Text('تلخيص')),
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'suggest', child: Text('اقتراح رد')),
+              const PopupMenuItem(value: 'summarize', child: Text('تلخيص')),
+              if (state.conversation?.customer?.email != null &&
+                  state.conversation!.customer!.email!.trim().isNotEmpty)
+                const PopupMenuItem(value: 'add_contact', child: Text('إضافة لجهات الاتصال')),
             ],
           ),
         ],

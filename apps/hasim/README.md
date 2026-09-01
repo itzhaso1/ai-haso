@@ -1,4 +1,4 @@
-# حاسم — تطبيق Flutter (Mobile API v1 · UX V2)
+# حاسم — تطبيق Flutter (Mobile API v1 · UX V3)
 
 عميل عربي RTL لمنصة حاسم، يعتمد حصراً على:
 
@@ -31,6 +31,15 @@ flutter run --dart-define=API_BASE=http://10.0.2.2:8000
 | جهاز حقيقي | `http://192.168.x.x:8000` |
 | إنتاج | `https://your-domain.com` |
 
+## V3 — قصص + جهات اتصال + حملات
+
+- شريط قصص في الرئيسية + عارض ملء الشاشة + إنشاء نص/صورة/فيديو (`visibility=workspace` افتراضياً)
+- دفتر عناوين البريد: قائمة/نموذج/تفاصيل + مفضلة + مجموعات وتعيين أعضاء
+- تهيئة البريد: اختيار حساب، رقائق مستلمين، `RecipientPickerSheet` (جهات/مجموعات/الكل)، CC/BCC اختياري
+- حملة جماعية عبر `POST /email/campaigns` عند تعدد المستلمين أو المجموعات أو «جميع جهات الاتصال»، مع شاشة حالة واستطلاع دوري
+- إضافة سريعة لجهة اتصال من تفاصيل البريد / المحادثة / ملف العميل
+- إعدادات: اختصارات «جهات الاتصال» و«مجموعات جهات الاتصال»
+
 ## V2 — ما تغيّر
 
 - Splash بعلامة حاسم وانتقال حسب الجلسة
@@ -55,9 +64,11 @@ flutter test
 
 1. Splash / Login / Forgot / Reset / Social  
 2. Workspace picker (بحث + أفاتار)  
-3. Home V2  
+3. Home V2 + Stories strip (V3)  
 4. Conversations + Chat V2  
-5. Email compose/detail V2  
+5. Email compose/detail V2 + campaigns/recipient picker (V3)  
 6. Appointments / Notifications  
 7. Profile / Plans / Channels / Theme / Notification prefs  
 8. Customer profile  
+9. Contacts / Contact groups (V3)  
+10. Story create / viewer (V3)  

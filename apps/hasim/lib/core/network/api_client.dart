@@ -181,6 +181,7 @@ class ApiClient {
     String path, {
     required FormData formData,
     bool idempotent = true,
+    void Function(int sent, int total)? onSendProgress,
     T Function(dynamic raw)? mapData,
   }) async {
     try {
@@ -191,6 +192,7 @@ class ApiClient {
       final res = await _dio.post<Map<String, dynamic>>(
         _rel(path),
         data: formData,
+        onSendProgress: onSendProgress,
         options: Options(headers: headers, contentType: 'multipart/form-data'),
       );
       return ApiResponse.fromJson(res.data ?? {}, mapData);

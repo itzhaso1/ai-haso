@@ -775,3 +775,341 @@ class PlansCatalog extends Equatable {
   @override
   List<Object?> get props => [plans, comparison];
 }
+
+class StoryAuthorModel extends Equatable {
+  const StoryAuthorModel({required this.id, required this.name, this.avatarPath});
+
+  final int id;
+  final String name;
+  final String? avatarPath;
+
+  factory StoryAuthorModel.fromJson(Map<String, dynamic> json) => StoryAuthorModel(
+        id: (json['id'] as num?)?.toInt() ?? 0,
+        name: json['name']?.toString() ?? '',
+        avatarPath: json['avatar_path']?.toString() ?? json['avatar_url']?.toString(),
+      );
+
+  @override
+  List<Object?> get props => [id, name];
+}
+
+class StoryModel extends Equatable {
+  const StoryModel({
+    required this.id,
+    required this.type,
+    this.caption,
+    this.bodyText,
+    this.backgroundColor,
+    this.mediaUrl,
+    this.mediaMime,
+    this.mediaSize,
+    this.thumbnailUrl,
+    this.visibility = 'workspace',
+    this.selectedUserIds = const [],
+    this.hiddenUserIds = const [],
+    this.expiresAt,
+    this.viewsCount = 0,
+    this.status,
+    this.createdAt,
+    this.author,
+    this.isMine = false,
+  });
+
+  final int id;
+  final String type;
+  final String? caption;
+  final String? bodyText;
+  final String? backgroundColor;
+  final String? mediaUrl;
+  final String? mediaMime;
+  final int? mediaSize;
+  final String? thumbnailUrl;
+  final String visibility;
+  final List<int> selectedUserIds;
+  final List<int> hiddenUserIds;
+  final DateTime? expiresAt;
+  final int viewsCount;
+  final String? status;
+  final DateTime? createdAt;
+  final StoryAuthorModel? author;
+  final bool isMine;
+
+  bool get isText => type == 'text';
+  bool get isImage => type == 'image';
+  bool get isVideo => type == 'video';
+
+  factory StoryModel.fromJson(Map<String, dynamic> json) {
+    List<int> ids(dynamic raw) {
+      if (raw is! List) return const [];
+      return raw.map((e) => (e as num?)?.toInt()).whereType<int>().toList();
+    }
+
+    return StoryModel(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      type: json['type']?.toString() ?? 'text',
+      caption: json['caption']?.toString(),
+      bodyText: json['body_text']?.toString(),
+      backgroundColor: json['background_color']?.toString(),
+      mediaUrl: json['media_url']?.toString(),
+      mediaMime: json['media_mime']?.toString(),
+      mediaSize: (json['media_size'] as num?)?.toInt(),
+      thumbnailUrl: json['thumbnail_url']?.toString(),
+      visibility: json['visibility']?.toString() ?? 'workspace',
+      selectedUserIds: ids(json['selected_user_ids']),
+      hiddenUserIds: ids(json['hidden_user_ids']),
+      expiresAt: DateTime.tryParse(json['expires_at']?.toString() ?? ''),
+      viewsCount: (json['views_count'] as num?)?.toInt() ?? 0,
+      status: json['status']?.toString(),
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? ''),
+      author: json['author'] is Map<String, dynamic>
+          ? StoryAuthorModel.fromJson(json['author'] as Map<String, dynamic>)
+          : null,
+      isMine: json['is_mine'] == true,
+    );
+  }
+
+  @override
+  List<Object?> get props => [id, type, viewsCount, isMine, status];
+}
+
+class ContactGroupRef extends Equatable {
+  const ContactGroupRef({required this.id, required this.name});
+
+  final int id;
+  final String name;
+
+  factory ContactGroupRef.fromJson(Map<String, dynamic> json) => ContactGroupRef(
+        id: (json['id'] as num?)?.toInt() ?? 0,
+        name: json['name']?.toString() ?? '',
+      );
+
+  @override
+  List<Object?> get props => [id, name];
+}
+
+class EmailContactModel extends Equatable {
+  const EmailContactModel({
+    required this.id,
+    required this.name,
+    required this.email,
+    this.normalizedEmail,
+    this.phone,
+    this.company,
+    this.jobTitle,
+    this.notes,
+    this.isFavorite = false,
+    this.avatarUrl,
+    this.createdAt,
+    this.updatedAt,
+    this.groups = const [],
+  });
+
+  final int id;
+  final String name;
+  final String email;
+  final String? normalizedEmail;
+  final String? phone;
+  final String? company;
+  final String? jobTitle;
+  final String? notes;
+  final bool isFavorite;
+  final String? avatarUrl;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+  final List<ContactGroupRef> groups;
+
+  factory EmailContactModel.fromJson(Map<String, dynamic> json) {
+    final groupsRaw = json['groups'];
+    final groups = <ContactGroupRef>[];
+    if (groupsRaw is List) {
+      for (final item in groupsRaw) {
+        if (item is Map<String, dynamic>) {
+          groups.add(ContactGroupRef.fromJson(item));
+        }
+      }
+    }
+
+    return EmailContactModel(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      name: json['name']?.toString() ?? '',
+      email: json['email']?.toString() ?? '',
+      normalizedEmail: json['normalized_email']?.toString(),
+      phone: json['phone']?.toString(),
+      company: json['company']?.toString(),
+      jobTitle: json['job_title']?.toString(),
+      notes: json['notes']?.toString(),
+      isFavorite: json['is_favorite'] == true,
+      avatarUrl: json['avatar_url']?.toString(),
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? ''),
+      updatedAt: DateTime.tryParse(json['updated_at']?.toString() ?? ''),
+      groups: groups,
+    );
+  }
+
+  EmailContactModel copyWith({bool? isFavorite, List<ContactGroupRef>? groups}) {
+    return EmailContactModel(
+      id: id,
+      name: name,
+      email: email,
+      normalizedEmail: normalizedEmail,
+      phone: phone,
+      company: company,
+      jobTitle: jobTitle,
+      notes: notes,
+      isFavorite: isFavorite ?? this.isFavorite,
+      avatarUrl: avatarUrl,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      groups: groups ?? this.groups,
+    );
+  }
+
+  @override
+  List<Object?> get props => [id, email, isFavorite, name];
+}
+
+class ContactGroupModel extends Equatable {
+  const ContactGroupModel({
+    required this.id,
+    required this.name,
+    this.description,
+    this.contactsCount = 0,
+    this.createdAt,
+    this.updatedAt,
+    this.contacts = const [],
+  });
+
+  final int id;
+  final String name;
+  final String? description;
+  final int contactsCount;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+  final List<EmailContactModel> contacts;
+
+  factory ContactGroupModel.fromJson(Map<String, dynamic> json) {
+    final contactsRaw = json['contacts'];
+    final contacts = <EmailContactModel>[];
+    if (contactsRaw is List) {
+      for (final item in contactsRaw) {
+        if (item is Map<String, dynamic>) {
+          contacts.add(EmailContactModel.fromJson(item));
+        }
+      }
+    }
+
+    return ContactGroupModel(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      name: json['name']?.toString() ?? '',
+      description: json['description']?.toString(),
+      contactsCount: (json['contacts_count'] as num?)?.toInt() ?? contacts.length,
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? ''),
+      updatedAt: DateTime.tryParse(json['updated_at']?.toString() ?? ''),
+      contacts: contacts,
+    );
+  }
+
+  @override
+  List<Object?> get props => [id, name, contactsCount];
+}
+
+class EmailCampaignModel extends Equatable {
+  const EmailCampaignModel({
+    required this.id,
+    this.emailAccountId,
+    this.subject,
+    this.body,
+    required this.status,
+    this.recipientCount = 0,
+    this.sentCount = 0,
+    this.failedCount = 0,
+    this.pendingCount,
+    this.errorMessage,
+    this.queuedAt,
+    this.startedAt,
+    this.completedAt,
+    this.createdAt,
+    this.accountName,
+    this.accountEmail,
+  });
+
+  final int id;
+  final int? emailAccountId;
+  final String? subject;
+  final String? body;
+  final String status;
+  final int recipientCount;
+  final int sentCount;
+  final int failedCount;
+  final int? pendingCount;
+  final String? errorMessage;
+  final DateTime? queuedAt;
+  final DateTime? startedAt;
+  final DateTime? completedAt;
+  final DateTime? createdAt;
+  final String? accountName;
+  final String? accountEmail;
+
+  bool get isTerminal =>
+      status == 'completed' || status == 'cancelled' || status == 'failed';
+
+  String get statusLabel {
+    switch (status) {
+      case 'queued':
+        return 'في الانتظار';
+      case 'processing':
+      case 'sending':
+        return 'جارٍ الإرسال';
+      case 'completed':
+        return 'مكتمل';
+      case 'cancelled':
+        return 'ملغى';
+      case 'failed':
+        return 'فشل';
+      default:
+        return status;
+    }
+  }
+
+  factory EmailCampaignModel.fromJson(Map<String, dynamic> json) {
+    final account = json['account'];
+    return EmailCampaignModel(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      emailAccountId: (json['email_account_id'] as num?)?.toInt(),
+      subject: json['subject']?.toString(),
+      body: json['body']?.toString(),
+      status: json['status']?.toString() ?? 'queued',
+      recipientCount: (json['recipient_count'] as num?)?.toInt() ?? 0,
+      sentCount: (json['sent_count'] as num?)?.toInt() ?? 0,
+      failedCount: (json['failed_count'] as num?)?.toInt() ?? 0,
+      pendingCount: (json['pending_count'] as num?)?.toInt(),
+      errorMessage: json['error_message']?.toString(),
+      queuedAt: DateTime.tryParse(json['queued_at']?.toString() ?? ''),
+      startedAt: DateTime.tryParse(json['started_at']?.toString() ?? ''),
+      completedAt: DateTime.tryParse(json['completed_at']?.toString() ?? ''),
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? ''),
+      accountName: account is Map ? account['name']?.toString() : null,
+      accountEmail: account is Map ? account['email']?.toString() : null,
+    );
+  }
+
+  @override
+  List<Object?> get props => [id, status, sentCount, failedCount, recipientCount];
+}
+
+class RecentRecipientModel extends Equatable {
+  const RecentRecipientModel({required this.email, this.name, this.contactId});
+
+  final String email;
+  final String? name;
+  final int? contactId;
+
+  factory RecentRecipientModel.fromJson(Map<String, dynamic> json) => RecentRecipientModel(
+        email: json['email']?.toString() ?? '',
+        name: json['name']?.toString(),
+        contactId: (json['contact_id'] as num?)?.toInt() ?? (json['id'] as num?)?.toInt(),
+      );
+
+  @override
+  List<Object?> get props => [email, contactId];
+}

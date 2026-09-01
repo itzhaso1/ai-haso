@@ -17,6 +17,9 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
   EmailMessageModel? _mail;
   String? _error;
   bool _loading = true;
+  bool _senderInContacts = true;
+  bool _checkingContact = false;
+  bool _addingContact = false;
 
   @override
   void initState() {
@@ -40,6 +43,7 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
           await ref.read(emailRepositoryProvider).markRead(mail.id);
         } catch (_) {}
       }
+      await _checkSenderContact(mail.sender);
     } on ApiException catch (e) {
       setState(() {
         _error = e.message;
@@ -50,6 +54,82 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
         _error = 'تعذر فتح الرسالة.';
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _checkSenderContact(String sender) async {
+    final email = _extractEmail(sender);
+    if (email == null) {
+      setState(() => _senderInContacts = true);
+      return;
+    }
+    setState(() => _checkingContact = true);
+    try {
+      final matches = await ref.read(contactRepositoryProvider).findByEmail(email);
+      if (!mounted) return;
+      setState(() {
+        _senderInContacts = matches.isNotEmpty;
+        _checkingContact = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _senderInContacts = true; // hide CTA on lookup failure
+        _checkingContact = false;
+      });
+    }
+  }
+
+  String? _extractEmail(String raw) {
+    final angle = RegExp(r'<([^>]+)>').firstMatch(raw);
+    final candidate = (angle?.group(1) ?? raw).trim();
+    if (!candidate.contains('@')) return null;
+    return candidate;
+  }
+
+  Future<void> _addSenderContact() async {
+    final mail = _mail;
+    if (mail == null) return;
+    final email = _extractEmail(mail.sender);
+    if (email == null) return;
+    final name = mail.sender.contains('<')
+        ? mail.sender.split('<').first.trim().replaceAll('"', '')
+        : email.split('@').first;
+    setState(() => _addingContact = true);
+    try {
+      final created = await ref.read(contactRepositoryProvider).create(
+            name: name.isEmpty ? email : name,
+            email: email,
+          );
+      if (!mounted) return;
+      setState(() {
+        _senderInContacts = true;
+        _addingContact = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('تمت الإضافة إلى جهات الاتصال'),
+          action: SnackBarAction(
+            label: 'عرض',
+            onPressed: () => context.push('/contacts/${created.id}'),
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _addingContact = false);
+      // Duplicate → treat as already present
+      if (e.statusCode == 422) {
+        setState(() => _senderInContacts = true);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _addingContact = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر الإضافة')));
+      }
     }
   }
 
@@ -109,6 +189,12 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
                       icon: const Icon(Icons.reply),
                       label: const Text('رد'),
                     ),
+                    if (!_senderInContacts && !_checkingContact)
+                      OutlinedButton.icon(
+                        onPressed: _addingContact ? null : _addSenderContact,
+                        icon: const Icon(Icons.person_add_alt),
+                        label: Text(_addingContact ? 'جارٍ الإضافة...' : 'إضافة إلى جهات الاتصال'),
+                      ),
                     TextButton(
                       onPressed: () => context.push('/email/compose'),
                       child: const Text('رسالة جديدة'),
