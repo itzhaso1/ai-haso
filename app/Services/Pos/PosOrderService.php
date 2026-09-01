@@ -423,13 +423,13 @@ class PosOrderService
         return $session;
     }
 
-    public function closeSession(TableSession $session, int $actorUserId): ?PosCashierInvoice
+    public function closeSession(TableSession $session, int $actorUserId, ?string $paymentMethod = null): ?PosCashierInvoice
     {
         if (in_array($session->status, ['closed', 'cancelled'], true)) {
             return null;
         }
 
-        return DB::transaction(function () use ($session, $actorUserId): ?PosCashierInvoice {
+        return DB::transaction(function () use ($session, $actorUserId, $paymentMethod): ?PosCashierInvoice {
             $orders = Order::query()
                 ->where('table_session_id', $session->id)
                 ->whereIn('source', ['pos', 'qr_menu'])
@@ -437,6 +437,24 @@ class PosOrderService
                 ->whereNull('pos_cashier_invoice_id')
                 ->with('items')
                 ->get();
+
+            if ($paymentMethod !== null && $paymentMethod !== '' && $orders->isNotEmpty()) {
+                $method = trim($paymentMethod);
+                foreach ($orders as $order) {
+                    $metadata = is_array($order->metadata) ? $order->metadata : [];
+                    $metadata['payment_method'] = $method;
+                    $order->update([
+                        'metadata' => $metadata,
+                        'payment_status' => in_array($method, ['cash', 'card', 'cashier', 'pay_now', 'transfer'], true)
+                            ? 'paid'
+                            : $order->payment_status,
+                    ]);
+                }
+                $orders = Order::query()
+                    ->whereIn('id', $orders->pluck('id')->all())
+                    ->with('items')
+                    ->get();
+            }
 
             $invoice = null;
             if ($orders->isNotEmpty()) {
@@ -474,6 +492,7 @@ class PosOrderService
             $this->auditPosAction('pos.table_session.closed', $session, User::query()->find($actorUserId), [
                 'invoice_id' => $invoice?->id,
                 'orders_count' => $orders->count(),
+                'payment_method' => $paymentMethod,
             ]);
 
             return $invoice;

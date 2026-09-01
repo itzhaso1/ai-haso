@@ -255,6 +255,56 @@ class CashierApiV1Test extends TestCase
             ], 'payment_methods']]);
     }
 
+    public function test_cashier_close_table_accepts_payment_method(): void
+    {
+        $this->seed(FoundationSeeder::class);
+        [$owner, $workspace] = $this->createWorkspaceOwner('store');
+        $item = $this->makeItem($workspace, 15);
+
+        $login = $this->postJson('/api/cashier/v1/auth/login', [
+            'email_or_phone' => $owner->email,
+            'password' => 'password',
+            'device_name' => 'كاشير حاسم test',
+            'device_type' => 'cashier',
+        ])->assertOk();
+        $token = $login->json('data.token');
+        $headers = ['X-Workspace-Id' => (string) $workspace->id];
+
+        $table = \App\Models\DiningTable::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'طاولة إغلاق '.uniqid(),
+            'status' => 'available',
+            'qr_token' => \Illuminate\Support\Str::random(48),
+        ]);
+
+        $create = $this->withToken($token)
+            ->withHeaders($headers + ['Idempotency-Key' => 'close-'.uniqid()])
+            ->postJson('/api/cashier/v1/orders', [
+                'order_type' => 'table',
+                'dining_table_id' => $table->id,
+                'client_reference' => 'close-order-'.uniqid(),
+                'items' => [['pos_menu_item_id' => $item->id, 'quantity' => 1]],
+            ])
+            ->assertCreated();
+
+        $sessionId = (int) $create->json('data.table_session_id');
+        $this->assertGreaterThan(0, $sessionId);
+
+        $close = $this->withToken($token)
+            ->withHeaders($headers)
+            ->postJson("/api/cashier/v1/tables/{$table->id}/sessions/{$sessionId}/close", [
+                'payment_method' => 'cash',
+            ])
+            ->assertOk();
+
+        $this->assertNotNull($close->json('data.invoice.id'));
+        $this->assertSame('cash', $close->json('data.invoice.payment_method'));
+        $order = Order::query()->findOrFail((int) $create->json('data.id'));
+        $this->assertEquals('completed', $order->pos_status);
+        $this->assertEquals('paid', $order->payment_status);
+        $this->assertEquals('cash', data_get($order->metadata, 'payment_method'));
+    }
+
     public function test_cashier_rejects_workspace_without_pos_feature(): void
     {
         $this->seed(FoundationSeeder::class);

@@ -129,8 +129,16 @@ class TableController extends CashierController
         $user = $this->authorizeCashier($request, $workspace, 'tables.manage');
         $this->ensureSession($table, $session);
 
+        $validated = $request->validate([
+            'payment_method' => ['nullable', 'string', 'in:cash,card,cashier,pay_now,pay_later,transfer'],
+        ]);
+
         try {
-            $invoice = $this->posOrderService->closeSession($session, (int) $user->id);
+            $invoice = $this->posOrderService->closeSession(
+                $session,
+                (int) $user->id,
+                $validated['payment_method'] ?? null,
+            );
         } catch (RuntimeException $exception) {
             return $this->fail($exception->getMessage(), 422);
         }
@@ -140,7 +148,10 @@ class TableController extends CashierController
                 'id' => $invoice->id,
                 'invoice_number' => $invoice->invoice_number,
                 'total_amount' => (float) $invoice->total_amount,
+                'subtotal' => (float) $invoice->subtotal,
+                'discount_amount' => (float) $invoice->discount_amount,
                 'currency' => $invoice->currency,
+                'payment_method' => $validated['payment_method'] ?? null,
             ] : null,
         ], message: $invoice ? 'تم إغلاق الجلسة وإصدار فاتورة.' : 'تم إغلاق الجلسة.');
     }
@@ -337,6 +348,7 @@ class TableController extends CashierController
             'total' => (float) ($item->total_amount ?? 0),
         ]));
 
+        $billable = $orders->where('pos_status', '!=', 'cancelled');
         $payload = [
             'id' => $table->id,
             'name' => $table->name,
@@ -349,9 +361,13 @@ class TableController extends CashierController
             'open_orders_count' => $orders
                 ->whereIn('pos_status', ['new', 'accepted', 'preparing', 'ready', 'delivered'])
                 ->count(),
+            'orders_count' => $billable->count(),
             'items_count' => (int) $lines->sum('quantity'),
             'lines' => $lines->values(),
-            'total' => (float) $lines->sum('total'),
+            'subtotal' => (float) $billable->sum('subtotal'),
+            'discount_amount' => (float) $billable->sum('discount_amount'),
+            'tax_amount' => (float) $billable->sum('tax_amount'),
+            'total' => (float) $billable->sum(fn ($o) => (float) $o->total_amount),
             'notes' => optional(
                 $orders->first(fn ($order) => filled($order->notes))
             )?->notes
@@ -362,6 +378,7 @@ class TableController extends CashierController
 
         if ($detailed) {
             $payload['orders'] = OrderResource::collection($orders);
+            $payload['session_open'] = $openSession !== null && $openSession->status === 'open';
         }
 
         return $payload;

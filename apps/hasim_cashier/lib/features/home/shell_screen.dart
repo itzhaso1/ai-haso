@@ -27,6 +27,7 @@ import '../orders/orders_list.dart';
 import '../reports/daily_reports_panel.dart';
 import '../settings/settings_panel.dart';
 import '../tables/tables_board.dart';
+import '../tables/table_workspace.dart';
 
 enum _PosSection {
   cashier,
@@ -304,6 +305,8 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       return;
     }
 
+    final wasTable = cart.channel == OrderChannel.table;
+    final tableId = cart.tableId;
     final clientRef = const Uuid().v4();
     final payload = ref.read(cartControllerProvider.notifier).toOrderPayload(
           clientReference: clientRef,
@@ -317,6 +320,24 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           );
       ref.read(cartControllerProvider.notifier).clear();
       if (!mounted) return;
+
+      // Table session orders: save only — no invoice/print dialog.
+      // Invoice is created only when closing the table.
+      if (wasTable) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'تم حفظ الطلب #${data['order_number'] ?? data['id']} على الطاولة.',
+            ),
+          ),
+        );
+        if (tableId != null) {
+          openTableWorkspace(ref, tableId);
+          requestPosShellTab(ref, PosShellTab.tables);
+        }
+        return;
+      }
+
       await showDialog<void>(
         context: context,
         barrierDismissible: false,
