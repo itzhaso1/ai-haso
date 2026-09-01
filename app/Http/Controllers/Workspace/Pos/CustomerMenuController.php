@@ -11,42 +11,65 @@ use App\Models\PosMenuItem;
 use App\Models\Workspace;
 use App\Services\Pos\PosMenuAiService;
 use App\Services\Pos\PosOrderService;
+use App\Services\Pos\TableGuestSessionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\View\View;
+use Illuminate\Http\Response;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\Cookie;
 
 class CustomerMenuController extends Controller
 {
     public function __construct(
         private readonly PosOrderService $posOrderService,
         private readonly PosMenuAiService $posMenuAiService,
+        private readonly TableGuestSessionService $guestSessionService,
     ) {}
 
-    public function generalMenu(Workspace $workspace): View
+    public function generalMenu(Workspace $workspace): Response
     {
-        return view('workspace.pos.menu', [
+        return response()->view('workspace.pos.menu', [
             'workspace' => $workspace,
             'table' => null,
             'items' => $this->menuItems($workspace->id),
             'sliderImages' => $this->menuSliderImages($workspace),
+            'guestSession' => null,
+            'guestSessionToken' => null,
+            'sessionExpired' => false,
         ]);
     }
 
-    public function tableMenu(Workspace $workspace, string $token): View
+    public function tableMenu(Request $request, Workspace $workspace, string $token): Response|RedirectResponse
     {
-        $table = DiningTable::withoutGlobalScopes()
-            ->where('workspace_id', $workspace->id)
-            ->where('qr_token', $token)
-            ->firstOrFail();
+        $table = $this->resolveTable($workspace, $token);
 
-        return view('workspace.pos.menu', [
-            'workspace' => $workspace,
-            'table' => $table,
-            'items' => $this->menuItems($workspace->id),
-            'sliderImages' => $this->menuSliderImages($workspace),
-        ]);
+        $cookieName = $this->guestSessionService->cookieName($table);
+        $incoming = (string) ($request->cookie($cookieName) ?: $request->query('guest_session_token', ''));
+
+        if ($request->boolean('fresh')) {
+            $guest = $this->guestSessionService->startFresh($table);
+            $response = redirect()->route('menu.table', [
+                'workspace' => $workspace->slug,
+                'token' => $table->qr_token,
+            ]);
+
+            return $response->withCookie($this->guestCookie($cookieName, $guest->token));
+        }
+
+        $guest = $this->guestSessionService->bootstrap($table, $incoming !== '' ? $incoming : null);
+
+        return response()
+            ->view('workspace.pos.menu', [
+                'workspace' => $workspace,
+                'table' => $table,
+                'items' => $this->menuItems($workspace->id),
+                'sliderImages' => $this->menuSliderImages($workspace),
+                'guestSession' => $guest,
+                'guestSessionToken' => $guest->token,
+                'sessionExpired' => false,
+            ])
+            ->withCookie($this->guestCookie($cookieName, $guest->token));
     }
 
     public function placeGeneralOrder(StorePublicMenuOrderRequest $request, Workspace $workspace): RedirectResponse
@@ -54,7 +77,7 @@ class CustomerMenuController extends Controller
         $validated = $request->validated();
 
         try {
-            $order = $this->posOrderService->createQrMenuOrder($workspace, null, $validated);
+            $order = $this->posOrderService->createQrMenuOrder($workspace, null, $validated, null);
         } catch (RuntimeException $exception) {
             return back()->withInput()->with('error', $exception->getMessage());
         }
@@ -77,42 +100,46 @@ class CustomerMenuController extends Controller
 
     public function placeTableOrder(StorePublicMenuOrderRequest $request, Workspace $workspace, string $token): RedirectResponse
     {
-        $table = DiningTable::withoutGlobalScopes()
-            ->where('workspace_id', $workspace->id)
-            ->where('qr_token', $token)
-            ->firstOrFail();
+        $table = $this->resolveTable($workspace, $token);
+        $cookieName = $this->guestSessionService->cookieName($table);
+        $guestToken = (string) ($request->input('guest_session_token') ?: $request->cookie($cookieName) ?: '');
 
         $validated = $request->validated();
+
         try {
-            $order = $this->posOrderService->createQrMenuOrder($workspace, $table, $validated);
+            $guest = $this->guestSessionService->assertValidForOrder($table, $guestToken);
+            $order = $this->posOrderService->createQrMenuOrder($workspace, $table, $validated, $guest);
         } catch (RuntimeException $exception) {
-            return back()->withInput()->with('error', $exception->getMessage());
+            return back()
+                ->withInput()
+                ->with('error', $exception->getMessage())
+                ->with('session_expired', true);
         }
 
         try {
             $payment = $this->prepareMenuCheckout($order, $validated);
         } catch (RuntimeException $exception) {
             return back()->with('success', 'تم إرسال طلب الطاولة بنجاح. رقم الطلب: '.$order->order_number)
-                ->with('error', $exception->getMessage());
+                ->with('error', $exception->getMessage())
+                ->withCookie($this->guestCookie($cookieName, $guestToken));
         }
 
+        $redirect = back()->withCookie($this->guestCookie($cookieName, $guest->token));
+
         if ($payment) {
-            return back()
+            return $redirect
                 ->with('success', 'تم إرسال طلب الطاولة بنجاح. رقم الطلب: '.$order->order_number.' (طريقة الدفع: الدفع الآن)')
                 ->with('payment_link', $payment->payment_link);
         }
 
-        return back()->with('success', 'تم إرسال طلب الطاولة بنجاح. رقم الطلب: '.$order->order_number.' (طريقة الدفع: الدفع عند الخروج)');
+        return $redirect->with('success', 'تم إرسال طلب الطاولة بنجاح. رقم الطلب: '.$order->order_number.' (طريقة الدفع: الدفع عند الخروج)');
     }
 
     public function askAi(Request $request, Workspace $workspace): JsonResponse
     {
         $token = (string) $request->route('token', '');
         if ($token !== '') {
-            DiningTable::withoutGlobalScopes()
-                ->where('workspace_id', $workspace->id)
-                ->where('qr_token', $token)
-                ->firstOrFail();
+            $this->resolveTable($workspace, $token);
         }
 
         $validated = $request->validate([
@@ -126,6 +153,28 @@ class CustomerMenuController extends Controller
         }
 
         return response()->json(['answer' => $answer]);
+    }
+
+    private function resolveTable(Workspace $workspace, string $token): DiningTable
+    {
+        return DiningTable::withoutGlobalScopes()
+            ->where('workspace_id', $workspace->id)
+            ->where('qr_token', $token)
+            ->firstOrFail();
+    }
+
+    private function guestCookie(string $name, string $token): Cookie
+    {
+        return cookie(
+            name: $name,
+            value: $token,
+            minutes: 60 * 24 * 7,
+            path: '/',
+            secure: (bool) config('session.secure', false),
+            httpOnly: true,
+            raw: false,
+            sameSite: 'lax'
+        );
     }
 
     private function menuItems(int $workspaceId)
@@ -161,7 +210,7 @@ class CustomerMenuController extends Controller
     }
 
     /**
-     * @param array<string,mixed> $validated
+     * @param  array<string,mixed>  $validated
      */
     private function prepareMenuCheckout(Order $order, array $validated): ?Payment
     {

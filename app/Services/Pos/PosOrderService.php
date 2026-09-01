@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
 use App\Models\PosCashierInvoice;
+use App\Models\PosCustomerSession;
 use App\Models\PosMenuItem;
 use App\Models\TableSession;
 use App\Models\User;
@@ -68,20 +69,50 @@ class PosOrderService
     /**
      * @param  array<string,mixed>  $payload
      */
-    public function createQrMenuOrder(Workspace $workspace, ?DiningTable $table, array $payload): Order
+    public function createQrMenuOrder(Workspace $workspace, ?DiningTable $table, array $payload, ?PosCustomerSession $guestSession = null): Order
     {
-        return DB::transaction(function () use ($workspace, $table, $payload): Order {
+        return DB::transaction(function () use ($workspace, $table, $payload, $guestSession): Order {
             $session = null;
             if ($table) {
-                $session = $this->ensureOpenSession($table);
+                if (! $guestSession) {
+                    throw new RuntimeException('انتهت جلسة هذه الطاولة. يرجى بدء جلسة جديدة.');
+                }
+
+                if ((int) $guestSession->workspace_id !== (int) $workspace->id
+                    || (int) $guestSession->dining_table_id !== (int) $table->id
+                    || ! $guestSession->isActive()
+                ) {
+                    throw new RuntimeException('انتهت جلسة هذه الطاولة. يرجى بدء جلسة جديدة.');
+                }
+
+                $session = TableSession::withoutGlobalScopes()
+                    ->whereKey($guestSession->table_session_id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $session || $session->status !== 'open' || (int) $session->dining_table_id !== (int) $table->id) {
+                    throw new RuntimeException('انتهت جلسة هذه الطاولة. يرجى بدء جلسة جديدة.');
+                }
+
                 $table->update(['status' => 'occupied']);
             }
+
             $customerId = $this->resolveWalkInCustomerId($workspace, $payload);
             $items = $this->normalizePosItems(
                 workspaceId: $workspace->id,
                 items: $payload['items'] ?? [],
                 requireActive: true
             );
+
+            $metadata = [
+                'channel' => 'qr_menu',
+                'customer_name' => $payload['customer_name'] ?? null,
+                'customer_phone' => $payload['customer_phone'] ?? null,
+                'payment_method' => $this->normalizePaymentMethod($payload),
+            ];
+            if ($guestSession) {
+                $metadata['pos_customer_session_id'] = $guestSession->id;
+            }
 
             $order = $this->createOrderWithSnapshots(
                 workspace: $workspace,
@@ -92,12 +123,7 @@ class PosOrderService
                 session: $session,
                 discountAmount: 0,
                 notes: $payload['notes'] ?? null,
-                metadata: [
-                    'channel' => 'qr_menu',
-                    'customer_name' => $payload['customer_name'] ?? null,
-                    'customer_phone' => $payload['customer_phone'] ?? null,
-                    'payment_method' => $this->normalizePaymentMethod($payload),
-                ],
+                metadata: $metadata,
                 currency: $this->resolveOrderCurrency($items),
             );
 
@@ -257,6 +283,8 @@ class PosOrderService
                 'closed_at' => now(),
             ]);
 
+            app(TableGuestSessionService::class)->revokeForTableSession($session);
+
             $table = $session->table;
             if ($table) {
                 $this->refreshTableStatus($table, $session->id);
@@ -289,6 +317,8 @@ class PosOrderService
                 'status' => 'cancelled',
                 'closed_at' => now(),
             ]);
+
+            app(TableGuestSessionService::class)->revokeForTableSession($session);
 
             $table = $session->table;
             if ($table) {
@@ -642,22 +672,27 @@ class PosOrderService
 
     private function ensureOpenSession(DiningTable $table): TableSession
     {
-        $session = TableSession::query()
-            ->where('dining_table_id', $table->id)
-            ->where('status', 'open')
-            ->latest('id')
-            ->first();
+        return DB::transaction(function () use ($table): TableSession {
+            DiningTable::withoutGlobalScopes()->whereKey($table->id)->lockForUpdate()->firstOrFail();
 
-        if ($session) {
-            return $session;
-        }
+            $session = TableSession::query()
+                ->where('dining_table_id', $table->id)
+                ->where('status', 'open')
+                ->lockForUpdate()
+                ->latest('id')
+                ->first();
 
-        return TableSession::query()->create([
-            'workspace_id' => $table->workspace_id,
-            'dining_table_id' => $table->id,
-            'status' => 'open',
-            'opened_at' => now(),
-        ]);
+            if ($session) {
+                return $session;
+            }
+
+            return TableSession::query()->create([
+                'workspace_id' => $table->workspace_id,
+                'dining_table_id' => $table->id,
+                'status' => 'open',
+                'opened_at' => now(),
+            ]);
+        });
     }
 
     /**

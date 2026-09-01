@@ -38,7 +38,7 @@
                     <p class="truncate text-sm font-extrabold text-slate-900">{{ $workspace->name }}</p>
                     <p class="truncate text-[11px] text-slate-500">
                         @if($table)
-                            طلب الطاولة: {{ $table->name }}
+                            طاولة {{ $table->name }}
                         @else
                             المنيو العام
                         @endif
@@ -52,6 +52,17 @@
 
         <main class="mx-auto max-w-6xl px-3 py-4 sm:px-4">
             @include('partials.flash')
+
+            @if($table && (session('session_expired') || ($sessionExpired ?? false)))
+                <section class="mb-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900" data-session-expired>
+                    <p class="font-bold">انتهت جلسة الطاولة</p>
+                    <p class="mt-1 text-xs">هذه الجلسة لم تعد متاحة. يمكنك بدء جلسة جديدة للطلب على {{ $table->name }}.</p>
+                    <a
+                        href="{{ route('menu.table', ['workspace' => $workspace->slug, 'token' => $table->qr_token, 'fresh' => 1]) }}"
+                        class="mt-3 inline-flex rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white"
+                    >بدء جلسة جديدة</a>
+                </section>
+            @endif
 
             @if(session('payment_link'))
                 <section class="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
@@ -228,6 +239,9 @@
                         <template x-if="checkoutStep">
                             <form method="POST" action="{{ $orderRoute }}" @submit="prepareSubmit" class="space-y-2">
                                 @csrf
+                                @if($table && !empty($guestSessionToken))
+                                    <input type="hidden" name="guest_session_token" value="{{ $guestSessionToken }}" />
+                                @endif
                                 <input name="customer_name" class="w-full rounded-lg border-slate-300 text-sm" placeholder="اسم العميل (اختياري)" />
                                 <input name="customer_phone" class="w-full rounded-lg border-slate-300 text-sm" placeholder="رقم الجوال (اختياري)" />
                                 <textarea name="notes" rows="2" class="w-full rounded-lg border-slate-300 text-sm" placeholder="ملاحظات الطلب"></textarea>

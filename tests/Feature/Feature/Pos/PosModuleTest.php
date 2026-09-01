@@ -39,12 +39,19 @@ class PosModuleTest extends TestCase
 
         $table = DiningTable::query()->where('name', 'Table 3')->firstOrFail();
 
-        $this->post(route('menu.table.order', ['workspace' => $workspace->slug, 'token' => $table->qr_token]), [
-            'customer_name' => 'Walk In',
-            'items' => [
-                ['pos_menu_item_id' => $item->id, 'quantity' => 2],
-            ],
-        ])->assertRedirect();
+        $this->get(route('menu.table', ['workspace' => $workspace->slug, 'token' => $table->qr_token]))
+            ->assertOk();
+
+        $guest = \App\Models\PosCustomerSession::query()->where('dining_table_id', $table->id)->firstOrFail();
+
+        $this->withUnencryptedCookie('pos_guest_'.$table->id, $guest->token)
+            ->post(route('menu.table.order', ['workspace' => $workspace->slug, 'token' => $table->qr_token]), [
+                'guest_session_token' => $guest->token,
+                'customer_name' => 'Walk In',
+                'items' => [
+                    ['pos_menu_item_id' => $item->id, 'quantity' => 2],
+                ],
+            ])->assertRedirect();
 
         $order = Order::withoutGlobalScopes()
             ->where('workspace_id', $workspace->id)
