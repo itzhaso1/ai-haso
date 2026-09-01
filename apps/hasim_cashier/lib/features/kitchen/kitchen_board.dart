@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
+import '../../core/config/app_config.dart';
 import '../../core/pos/pos_labels.dart';
 import '../../core/realtime/pos_event_source.dart';
 import '../../core/theme/hasim_colors.dart';
@@ -47,7 +48,7 @@ class _KitchenBoardState extends ConsumerState<KitchenBoard> {
 
   Future<void> _startPolling() async {
     _source = PollingPosEventSource(
-      interval: const Duration(seconds: 5),
+      interval: Duration(seconds: AppConfig.kitchenPollSeconds),
       poll: () async {
         await _load(silent: true);
         return const <PosEvent>[];

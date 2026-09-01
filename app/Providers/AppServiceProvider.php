@@ -200,6 +200,11 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(120)->by((string) ($request->user()?->id ?: $request->ip()));
         });
 
+        // Cashier POS polls tables/menu/kitchen — give more headroom than chat API.
+        RateLimiter::for('cashier-api', function (Request $request) {
+            return Limit::perMinute(300)->by((string) ($request->user()?->id ?: $request->ip()));
+        });
+
         RateLimiter::for('mobile-login', function (Request $request) {
             return Limit::perMinute(10)->by((string) $request->ip());
         });

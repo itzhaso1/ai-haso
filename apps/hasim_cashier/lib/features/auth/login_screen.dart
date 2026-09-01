@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
@@ -21,6 +23,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _password = TextEditingController();
   var _obscure = true;
   var _loading = false;
+  var _googleBusy = false;
   String? _error;
 
   @override
@@ -49,8 +52,59 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  Future<void> _google() async {
+    setState(() {
+      _googleBusy = true;
+      _error = null;
+    });
+    try {
+      final google = GoogleSignIn(scopes: const ['email', 'profile']);
+      final account = await google.signIn();
+      if (account == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تم إلغاء تسجيل الدخول عبر Google.')),
+          );
+        }
+        return;
+      }
+      final auth = await account.authentication;
+      final token = auth.accessToken ?? auth.idToken;
+      if (token == null || token.isEmpty) {
+        if (mounted) {
+          setState(() => _error = 'يحتاج إعداد Google على هذا الجهاز.');
+        }
+        return;
+      }
+      await ref.read(authControllerProvider.notifier).socialLogin(
+            provider: 'google',
+            accessToken: token,
+          );
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString().toLowerCase();
+      final needsSetup = msg.contains('client') ||
+          msg.contains('platform') ||
+          msg.contains('missing') ||
+          msg.contains('not been configured') ||
+          msg.contains('sign_in_failed') ||
+          msg.contains('10:') ||
+          msg.contains('12500');
+      setState(() {
+        _error = e is ApiException
+            ? e.message
+            : (needsSetup
+                ? 'يحتاج إعداد Google على هذا الجهاز.'
+                : 'تعذر تسجيل الدخول عبر Google.');
+      });
+    } finally {
+      if (mounted) setState(() => _googleBusy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final busy = _loading || _googleBusy;
     return Scaffold(
       body: DecoratedBox(
         decoration: const BoxDecoration(
@@ -129,17 +183,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           controller: _identifier,
                           keyboardType: TextInputType.emailAddress,
                           textInputAction: TextInputAction.next,
+                          enabled: !busy,
                           decoration: const InputDecoration(
                             labelText: 'البريد الإلكتروني أو الجوال',
+                            prefixIcon: Icon(Icons.person_outline),
                           ),
                         ),
                         const SizedBox(height: 12),
                         TextField(
                           controller: _password,
                           obscureText: _obscure,
-                          onSubmitted: (_) => _submit(),
+                          enabled: !busy,
+                          onSubmitted: (_) => busy ? null : _submit(),
                           decoration: InputDecoration(
                             labelText: 'كلمة المرور',
+                            prefixIcon: const Icon(Icons.lock_outline),
                             suffixIcon: IconButton(
                               onPressed: () =>
                                   setState(() => _obscure = !_obscure),
@@ -151,15 +209,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                           ),
                         ),
+                        Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: TextButton(
+                            onPressed: busy
+                                ? null
+                                : () => context.push('/forgot-password'),
+                            child: const Text('نسيت كلمة المرور؟'),
+                          ),
+                        ),
                         if (_error != null) ...[
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 4),
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
                               color: HasimColors.dangerSoft,
                               borderRadius:
                                   BorderRadius.circular(HasimRadius.sm),
-                              border: Border.all(color: const Color(0xFFFECDD3)),
+                              border:
+                                  Border.all(color: const Color(0xFFFECDD3)),
                             ),
                             child: Text(
                               _error!,
@@ -170,8 +238,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ),
                             ),
                           ),
+                          const SizedBox(height: 8),
                         ],
-                        const SizedBox(height: 16),
                         SizedBox(
                           height: 48,
                           child: FilledButton(
@@ -182,7 +250,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     BorderRadius.circular(HasimRadius.md),
                               ),
                             ),
-                            onPressed: _loading ? null : _submit,
+                            onPressed: busy ? null : _submit,
                             child: _loading
                                 ? const SizedBox(
                                     width: 20,
@@ -193,6 +261,42 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     ),
                                   )
                                 : const Text('تسجيل الدخول'),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            const Expanded(child: Divider()),
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 10),
+                              child: Text(
+                                'أو',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ),
+                            const Expanded(child: Divider()),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          height: 48,
+                          child: OutlinedButton.icon(
+                            onPressed: busy ? null : _google,
+                            icon: _googleBusy
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.g_mobiledata_rounded,
+                                    size: 28),
+                            label: const Text('الدخول عبر Google'),
                           ),
                         ),
                       ],

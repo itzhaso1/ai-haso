@@ -13,6 +13,7 @@ class AppConfig {
   static const connectTimeout = Duration(seconds: 20);
   static const receiveTimeout = Duration(seconds: 30);
 
-  static const menuPollSeconds = 3;
-  static const tablesPollSeconds = 3;
+  static const menuPollSeconds = 5;
+  static const tablesPollSeconds = 5;
+  static const kitchenPollSeconds = 8;
 }

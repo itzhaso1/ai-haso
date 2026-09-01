@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/audio/menu_sound_service.dart';
+import '../../core/config/app_config.dart';
 import '../../core/pos/pos_labels.dart';
 import '../../core/realtime/pos_event_source.dart';
 import '../../core/theme/hasim_colors.dart';
@@ -29,6 +30,7 @@ class _MenuOrdersFeedState extends ConsumerState<MenuOrdersFeed> {
   String? _error;
   String _filter = 'all';
   PollingPosEventSource? _source;
+  var _silentTicks = 0;
 
   static const _statusOptions = [
     'new',
@@ -64,7 +66,7 @@ class _MenuOrdersFeedState extends ConsumerState<MenuOrdersFeed> {
 
   Future<void> _startRealtime() async {
     _source = PollingPosEventSource(
-      interval: const Duration(seconds: 3),
+      interval: Duration(seconds: AppConfig.menuPollSeconds),
       poll: () async {
         await _fetch(silent: true);
         return const <PosEvent>[];
@@ -87,16 +89,6 @@ class _MenuOrdersFeedState extends ConsumerState<MenuOrdersFeed> {
           'after_id': _lastSeenId ?? 0,
         },
       );
-      // Full board still uses running menu list for status management.
-      final board = await ref
-          .read(cashierApiProvider)
-          .get('/orders', query: {'status': 'menu', 'per_page': 50});
-      final list = <Map<String, dynamic>>[];
-      if (board['orders'] is List) {
-        for (final item in board['orders'] as List) {
-          if (item is Map) list.add(Map<String, dynamic>.from(item));
-        }
-      }
       final incremental = <Map<String, dynamic>>[];
       if (data['orders'] is List) {
         for (final item in data['orders'] as List) {
@@ -124,6 +116,27 @@ class _MenuOrdersFeedState extends ConsumerState<MenuOrdersFeed> {
           ),
         );
       }
+
+      // Avoid double API hit every poll tick — refresh full board on demand.
+      _silentTicks += 1;
+      final needsBoard = !silent ||
+          incremental.isNotEmpty ||
+          _orders.isEmpty ||
+          _silentTicks % 6 == 0;
+
+      var list = _orders;
+      if (needsBoard) {
+        final board = await ref
+            .read(cashierApiProvider)
+            .get('/orders', query: {'status': 'menu', 'per_page': 50});
+        list = <Map<String, dynamic>>[];
+        if (board['orders'] is List) {
+          for (final item in board['orders'] as List) {
+            if (item is Map) list.add(Map<String, dynamic>.from(item));
+          }
+        }
+      }
+
       if (latestId != null && latestId > 0) {
         _lastSeenId = latestId;
       } else if (list.isNotEmpty) {

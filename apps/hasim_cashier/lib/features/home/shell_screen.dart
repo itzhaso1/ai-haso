@@ -58,6 +58,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
   var _online = true;
   var _pendingSync = 0;
   String? _bootstrapError;
+  var _bootstrapInFlight = false;
 
   @override
   void initState() {
@@ -104,6 +105,8 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
   }
 
   Future<void> _loadBootstrap() async {
+    if (_bootstrapInFlight) return;
+    _bootstrapInFlight = true;
     // Seed permissions from auth session immediately so reports/nav aren't
     // hidden while bootstrap is in-flight (root cause of missing reports).
     final sessionPerms =
@@ -129,6 +132,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       }
       setState(() {
         _bootstrap = data;
+        _bootstrapError = null;
         // channel_stats remain available via Reports (/orders/channel-stats
         // + /reports/daily) — not shown on the operational cashier home.
       });
@@ -136,6 +140,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
         final perms = Map<String, dynamic>.from(data['permissions'] as Map);
         ref.read(cashierPermissionsProvider.notifier).state = perms;
         // Keep auth session permissions in sync so nav/reports fallbacks stay fresh.
+        // applyBootstrapSnapshot is a no-op when unchanged (avoids router churn).
         ref.read(authControllerProvider.notifier).applyBootstrapSnapshot(
               permissions: perms,
               workspace: data['workspace'] is Map
@@ -160,9 +165,13 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
         if (mounted) context.go('/pos-blocked');
         return;
       }
+      if (!mounted) return;
       setState(() => _bootstrapError = e.message);
     } catch (e) {
+      if (!mounted) return;
       setState(() => _bootstrapError = e.toString());
+    } finally {
+      _bootstrapInFlight = false;
     }
   }
 

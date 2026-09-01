@@ -49,17 +49,7 @@ class AuthRepository {
     );
   }
 
-  Future<AuthSession> login({
-    required String emailOrPhone,
-    required String password,
-  }) async {
-    final data = await _api.post('/auth/login', data: {
-      'email_or_phone': emailOrPhone,
-      'password': password,
-      'device_name': 'كاشير حاسم',
-      'device_type': 'cashier',
-    });
-
+  Future<AuthSession> _sessionFromLoginPayload(Map<String, dynamic> data) async {
     final token = data['token'] as String? ?? '';
     await _storage.write(key: _tokenKey, value: token);
 
@@ -96,6 +86,58 @@ class AuthRepository {
           ? Map<String, dynamic>.from(data['entitlements'] as Map)
           : null,
     );
+  }
+
+  Future<AuthSession> login({
+    required String emailOrPhone,
+    required String password,
+  }) async {
+    final data = await _api.post('/auth/login', data: {
+      'email_or_phone': emailOrPhone,
+      'password': password,
+      'device_name': 'كاشير حاسم',
+      'device_type': 'cashier',
+    });
+    return _sessionFromLoginPayload(data);
+  }
+
+  Future<AuthSession> socialLogin({
+    required String provider,
+    required String accessToken,
+  }) async {
+    final data = await _api.post('/auth/social', data: {
+      'provider': provider,
+      'access_token': accessToken,
+      'device_name': 'كاشير حاسم',
+      'device_type': 'cashier',
+    });
+    return _sessionFromLoginPayload(data);
+  }
+
+  Future<String> forgotPassword(String email) async {
+    final data = await _api.post('/auth/forgot-password', data: {
+      'email': email,
+    });
+    final message = data['message'];
+    if (message is String && message.trim().isNotEmpty) return message;
+    return 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.';
+  }
+
+  Future<String> resetPassword({
+    required String email,
+    required String token,
+    required String password,
+    required String passwordConfirmation,
+  }) async {
+    final data = await _api.post('/auth/reset-password', data: {
+      'email': email,
+      'token': token,
+      'password': password,
+      'password_confirmation': passwordConfirmation,
+    });
+    final message = data['message'];
+    if (message is String && message.trim().isNotEmpty) return message;
+    return 'تم إعادة تعيين كلمة المرور بنجاح.';
   }
 
   Future<void> logout() async {
@@ -175,24 +217,66 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
     }
   }
 
-  Future<void> login(String emailOrPhone, String password) async {
-    state = const AsyncValue.loading();
-    try {
-      final session =
-          await _ref.read(authRepositoryProvider).login(
-                emailOrPhone: emailOrPhone,
-                password: password,
-              );
-      _ref.read(authTokenProvider.notifier).state = session.token;
-      final wid = session.workspace?['id'];
-      if (wid is int) {
-        _ref.read(workspaceIdProvider.notifier).state = wid;
-      }
-      state = AsyncValue.data(session);
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
-      rethrow;
+  Future<void> _applySession(AuthSession session) async {
+    _ref.read(authTokenProvider.notifier).state = session.token;
+    final wid = session.workspace?['id'];
+    if (wid is int) {
+      _ref.read(workspaceIdProvider.notifier).state = wid;
     }
+    state = AsyncValue.data(session);
+  }
+
+  Future<void> login(String emailOrPhone, String password) async {
+    // Keep previous session visible during login attempt — avoid splash remount loop.
+    try {
+      final session = await _ref.read(authRepositoryProvider).login(
+            emailOrPhone: emailOrPhone,
+            password: password,
+          );
+      await _applySession(session);
+    } catch (e, st) {
+      // Preserve logged-out state; surface error via thrown ApiException.
+      if (state.valueOrNull == null) {
+        state = AsyncValue.data(null);
+      }
+      Error.throwWithStackTrace(e, st);
+    }
+  }
+
+  Future<void> socialLogin({
+    required String provider,
+    required String accessToken,
+  }) async {
+    try {
+      final session = await _ref.read(authRepositoryProvider).socialLogin(
+            provider: provider,
+            accessToken: accessToken,
+          );
+      await _applySession(session);
+    } catch (e, st) {
+      if (state.valueOrNull == null) {
+        state = AsyncValue.data(null);
+      }
+      Error.throwWithStackTrace(e, st);
+    }
+  }
+
+  Future<String> forgotPassword(String email) {
+    return _ref.read(authRepositoryProvider).forgotPassword(email);
+  }
+
+  Future<String> resetPassword({
+    required String email,
+    required String token,
+    required String password,
+    required String passwordConfirmation,
+  }) {
+    return _ref.read(authRepositoryProvider).resetPassword(
+          email: email,
+          token: token,
+          password: password,
+          passwordConfirmation: passwordConfirmation,
+        );
   }
 
   Future<void> selectWorkspace(Map<String, dynamic> workspace) async {
@@ -207,7 +291,8 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
     Map<String, dynamic> permissions = const {};
     Map<String, dynamic>? entitlements;
     var posEnabled = workspace['pos_enabled'] == true;
-    Map<String, dynamic> resolvedWorkspace = Map<String, dynamic>.from(workspace);
+    Map<String, dynamic> resolvedWorkspace =
+        Map<String, dynamic>.from(workspace);
 
     try {
       final switched = await _ref.read(cashierApiProvider).post(
@@ -260,6 +345,7 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
   }
 
   /// Keep session permissions aligned with `/bootstrap` (source of truth).
+  /// No-op when nothing meaningful changed — prevents auth refresh storms.
   void applyBootstrapSnapshot({
     required Map<String, dynamic> permissions,
     Map<String, dynamic>? workspace,
@@ -268,17 +354,43 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
   }) {
     final current = state.valueOrNull;
     if (current == null) return;
+
+    final nextPerms =
+        permissions.isNotEmpty ? permissions : current.permissions;
+    final nextWorkspace = workspace ?? current.workspace;
+    final nextEntitlements = entitlements ?? current.entitlements;
+    final nextPos = posEnabled ?? current.posEnabled;
+
+    if (_sameMap(current.permissions, nextPerms) &&
+        _sameWorkspaceId(current.workspace, nextWorkspace) &&
+        current.posEnabled == nextPos) {
+      return;
+    }
+
     state = AsyncValue.data(
       AuthSession(
         token: current.token,
         user: current.user,
-        workspace: workspace ?? current.workspace,
+        workspace: nextWorkspace,
         workspaces: current.workspaces,
-        permissions: permissions.isNotEmpty ? permissions : current.permissions,
-        posEnabled: posEnabled ?? current.posEnabled,
-        entitlements: entitlements ?? current.entitlements,
+        permissions: nextPerms,
+        posEnabled: nextPos,
+        entitlements: nextEntitlements,
       ),
     );
+  }
+
+  bool _sameWorkspaceId(Map<String, dynamic>? a, Map<String, dynamic>? b) {
+    return a?['id'] == b?['id'];
+  }
+
+  bool _sameMap(Map<String, dynamic> a, Map<String, dynamic> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (b[entry.key] != entry.value) return false;
+    }
+    return true;
   }
 
   Future<void> logout() async {

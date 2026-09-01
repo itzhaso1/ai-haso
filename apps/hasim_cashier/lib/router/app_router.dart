@@ -5,21 +5,28 @@ import 'package:go_router/go_router.dart';
 import '../core/auth/auth_controller.dart';
 import '../core/theme/hasim_colors.dart';
 import '../core/theme/hasim_theme.dart';
+import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/login_screen.dart';
 import '../features/auth/pos_blocked_screen.dart';
 import '../features/auth/workspace_picker_screen.dart';
 import '../features/home/shell_screen.dart';
 
+/// GoRouter must NOT be rebuilt on every auth state change.
+/// Watching auth inside this provider remounted ShellScreen → re-hit
+/// /bootstrap in a loop until Laravel returned 429 Too Many Attempts.
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final auth = ref.watch(authControllerProvider);
+  final refresh = _AuthRefresh(ref);
 
   return GoRouter(
     initialLocation: '/splash',
-    refreshListenable: _AuthRefresh(ref),
+    refreshListenable: refresh,
     redirect: (context, state) {
+      final auth = ref.read(authControllerProvider);
       final loggingIn = state.matchedLocation == '/login';
       final picking = state.matchedLocation == '/workspaces';
       final splash = state.matchedLocation == '/splash';
+      final forgot = state.matchedLocation == '/forgot-password';
+      final reset = state.matchedLocation == '/reset-password';
 
       if (auth.isLoading) {
         return splash ? null : '/splash';
@@ -27,7 +34,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       final session = auth.valueOrNull;
       if (session == null) {
-        return loggingIn ? null : '/login';
+        if (loggingIn || forgot || reset) return null;
+        return '/login';
       }
 
       final needsPick =
@@ -36,7 +44,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return picking ? null : '/workspaces';
       }
 
-      if (loggingIn || splash || picking) {
+      if (loggingIn || splash || picking || forgot || reset) {
         return '/home';
       }
       return null;
@@ -44,6 +52,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: '/splash', builder: (_, __) => const _Splash()),
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+      GoRoute(
+        path: '/forgot-password',
+        builder: (_, __) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: '/reset-password',
+        builder: (context, state) {
+          final email = state.extra is String ? state.extra as String : '';
+          return ResetPasswordScreen(initialEmail: email);
+        },
+      ),
       GoRoute(
         path: '/workspaces',
         builder: (_, __) => const WorkspacePickerScreen(),

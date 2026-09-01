@@ -31,7 +31,7 @@ Route::prefix('auth')->group(function (): void {
     Route::post('/social', [AuthController::class, 'social'])->middleware('throttle:mobile-login');
 });
 
-Route::middleware(['auth:sanctum', 'throttle:mobile-api'])->group(function (): void {
+Route::middleware(['auth:sanctum', 'throttle:cashier-api'])->group(function (): void {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::get('/workspaces', [WorkspaceController::class, 'index']);
@@ -42,7 +42,7 @@ Route::middleware([
     'workspace.resolve',
     'workspace.member',
     'mobile.idempotency',
-    'throttle:mobile-api',
+    'throttle:cashier-api',
 ])->group(function (): void {
     Route::get('/bootstrap', BootstrapController::class);
     Route::get('/workspaces/current', [WorkspaceController::class, 'current']);

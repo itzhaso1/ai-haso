@@ -42,7 +42,7 @@ abstract class PosEventSource {
 class PollingPosEventSource implements PosEventSource {
   PollingPosEventSource({
     required this.poll,
-    this.interval = const Duration(seconds: 3),
+    this.interval = const Duration(seconds: 5),
   });
 
   final Future<List<PosEvent>> Function() poll;
@@ -51,6 +51,7 @@ class PollingPosEventSource implements PosEventSource {
   final _controller = StreamController<PosEvent>.broadcast();
   Timer? _timer;
   var _running = false;
+  var _tickInFlight = false;
 
   @override
   Stream<PosEvent> get events => _controller.stream;
@@ -67,6 +68,8 @@ class PollingPosEventSource implements PosEventSource {
   }
 
   Future<void> _tick() async {
+    if (!_running || _tickInFlight) return;
+    _tickInFlight = true;
     try {
       final batch = await poll();
       for (final event in batch) {
@@ -74,6 +77,8 @@ class PollingPosEventSource implements PosEventSource {
       }
     } catch (_) {
       // Keep polling; UI shows last known state.
+    } finally {
+      _tickInFlight = false;
     }
   }
 

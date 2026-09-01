@@ -209,6 +209,26 @@ class CashierApiClient {
       }
     }
 
+    // Prefer Arabic copy for throttle / known transport statuses.
+    final localized = switch (status) {
+      400 => 'طلب غير صالح.',
+      401 => 'انتهت الجلسة. سجّل الدخول مجددًا.',
+      403 => 'لا تملك صلاحية تنفيذ هذه العملية.',
+      404 => 'العنصر غير موجود.',
+      409 => 'تعارض في حالة الطلب. حدّث الصفحة وحاول مجددًا.',
+      422 => 'تعذر التحقق من البيانات المرسلة.',
+      429 => 'محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.',
+      500 || 502 || 503 => 'خطأ في الخادم. حاول لاحقًا.',
+      _ => null,
+    };
+    if (localized != null &&
+        (status == 429 ||
+            serverMessage == null ||
+            serverMessage.trim().isEmpty ||
+            serverMessage.toLowerCase().contains('too many'))) {
+      return ApiException(localized, statusCode: status, errors: errors);
+    }
+
     if (serverMessage != null && serverMessage.trim().isNotEmpty) {
       return ApiException(serverMessage, statusCode: status, errors: errors);
     }
@@ -222,17 +242,7 @@ class CashierApiClient {
       );
     }
     return ApiException(
-      switch (status) {
-        400 => 'طلب غير صالح.',
-        401 => 'انتهت الجلسة. سجّل الدخول مجددًا.',
-        403 => 'لا تملك صلاحية تنفيذ هذه العملية.',
-        404 => 'العنصر غير موجود.',
-        409 => 'تعارض في حالة الطلب. حدّث الصفحة وحاول مجددًا.',
-        422 => 'تعذر التحقق من البيانات المرسلة.',
-        429 => 'محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.',
-        500 || 502 || 503 => 'خطأ في الخادم. حاول لاحقًا.',
-        _ => 'تعذر إكمال الطلب.',
-      },
+      localized ?? 'تعذر إكمال الطلب.',
       statusCode: status,
       errors: errors,
     );

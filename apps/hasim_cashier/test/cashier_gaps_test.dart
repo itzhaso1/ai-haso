@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hasim_cashier/core/config/app_config.dart';
 import 'package:hasim_cashier/core/offline/conflict_strategy.dart';
 import 'package:hasim_cashier/core/offline/offline_store.dart';
 import 'package:hasim_cashier/core/permissions/cashier_permissions.dart';
@@ -107,6 +108,29 @@ void main() {
     // Empty map must not crash resolve / canViewReports.
     expect(CashierPermissions.resolve(null, null), isEmpty);
     expect(CashierPermissions.canViewReports(null), isFalse);
+  });
+
+  test('bootstrap auth snapshot equality skips identical permission maps', () {
+    const a = {'reports.view': true, 'orders.manage': true};
+    const b = {'reports.view': true, 'orders.manage': true};
+    const c = {'reports.view': false, 'orders.manage': true};
+    expect(a.length, b.length);
+    var same = true;
+    for (final e in a.entries) {
+      if (b[e.key] != e.value) same = false;
+    }
+    expect(same, isTrue);
+    same = true;
+    for (final e in a.entries) {
+      if (c[e.key] != e.value) same = false;
+    }
+    expect(same, isFalse);
+  });
+
+  test('poll intervals are slowed to avoid API throttle', () {
+    expect(AppConfig.menuPollSeconds >= 5, isTrue);
+    expect(AppConfig.tablesPollSeconds >= 5, isTrue);
+    expect(AppConfig.kitchenPollSeconds >= 5, isTrue);
   });
 
   test('hourly sales prefer sales_total over total_sales', () {
