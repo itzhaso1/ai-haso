@@ -144,23 +144,33 @@ class PosCartController extends PosBaseController
 
             if ($request->expectsJson()) {
                 return response()->json([
+                    'success' => true,
+                    'message' => 'تم إنشاء الطلب بنجاح',
                     'order_id' => $order->id,
+                    'order_number' => $order->order_number,
                     'invoice_id' => $invoice->id,
-                    'redirect' => route('workspace.pos.invoices.print', $invoice),
+                    'print_url' => route('workspace.pos.invoices.print', $invoice),
+                    // Kept for backward compatibility — cashier UI no longer auto-navigates.
+                    'redirect' => null,
                 ], 201);
             }
 
-            return redirect()->route('workspace.pos.invoices.print', $invoice)
-                ->with('success', 'تم إنشاء طلب مباشر بدون طاولة وتجهيز فاتورة الطباعة.');
+            return back()
+                ->with('success', 'تم إنشاء الطلب بنجاح.'.($order->order_number ? ' رقم الطلب: #'.$order->order_number : ''))
+                ->with('print_url', route('workspace.pos.invoices.print', $invoice))
+                ->with('order_number', $order->order_number);
         }
 
         if ($request->expectsJson()) {
             return response()->json([
+                'success' => true,
                 'order_id' => $order->id,
-                'message' => 'تم إنشاء طلب POS بنجاح.',
+                'order_number' => $order->order_number,
+                'message' => 'تم إنشاء الطلب بنجاح',
+                'print_url' => null,
             ], 201);
         }
 
-        return back()->with('success', 'تم إنشاء طلب POS بنجاح.');
+        return back()->with('success', 'تم إنشاء الطلب بنجاح.');
     }
 }

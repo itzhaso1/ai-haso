@@ -8,6 +8,7 @@ use App\Models\DiningTable;
 use App\Models\PosItemCategory;
 use App\Models\PosMenuItem;
 use App\Services\Pos\PosOrderService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -45,10 +46,11 @@ class CashierController extends PosBaseController
             'categories' => PosItemCategory::query()->where('is_active', true)->orderBy('sort_order')->orderBy('name')->get(['id', 'name']),
             'customers' => Customer::query()->orderBy('name')->limit(200)->get(['id', 'name', 'phone']),
             'tables' => DiningTable::query()->orderBy('name')->get(['id', 'name', 'status']),
+            'storeOrderUrl' => route('workspace.pos.orders.store'),
         ]);
     }
 
-    public function storeOrder(StorePosOrderRequest $request): RedirectResponse
+    public function storeOrder(StorePosOrderRequest $request): JsonResponse|RedirectResponse
     {
         $this->authorizePos($request, 'orders.manage');
 
@@ -59,19 +61,50 @@ class CashierController extends PosBaseController
                 actor: $request->user()
             );
         } catch (RuntimeException $exception) {
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => $exception->getMessage()], 422);
+            }
+
             return back()->withInput()->with('error', $exception->getMessage());
         }
+
+        $invoiceId = null;
+        $printUrl = null;
+        $invoiceError = null;
 
         if (! $order->dining_table_id) {
             try {
                 $invoice = $this->posOrderService->createInvoiceFromOrder($order, (int) $request->user()?->id);
+                $invoiceId = $invoice->id;
+                $printUrl = route('workspace.pos.invoices.print', $invoice);
             } catch (RuntimeException $exception) {
-                return back()->with('success', 'تم إنشاء طلب الكاشير.')->with('error', $exception->getMessage());
+                $invoiceError = $exception->getMessage();
             }
-
-            return redirect()->route('workspace.pos.invoices.print', $invoice)->with('success', 'تم إنشاء طلب مباشر بدون طاولة وتجهيز فاتورة الطباعة.');
         }
 
-        return back()->with('success', 'تم إنشاء طلب POS بنجاح.');
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'تم إنشاء الطلب بنجاح',
+                'order_id' => $order->id,
+                'order_number' => $order->order_number,
+                'invoice_id' => $invoiceId,
+                'print_url' => $printUrl,
+                'invoice_error' => $invoiceError,
+            ], 201);
+        }
+
+        // Classic form: stay on cashier — printing is optional via flash print_url.
+        $redirect = back()->with('success', 'تم إنشاء الطلب بنجاح.'.($order->order_number ? ' رقم الطلب: #'.$order->order_number : ''));
+
+        if ($printUrl) {
+            $redirect->with('print_url', $printUrl)->with('order_number', $order->order_number);
+        }
+
+        if ($invoiceError) {
+            $redirect->with('error', $invoiceError);
+        }
+
+        return $redirect;
     }
 }
