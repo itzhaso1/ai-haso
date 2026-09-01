@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
+import '../../core/permissions/permissions_provider.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/widgets/hasim_widgets.dart';
 
@@ -74,7 +75,13 @@ class _WorkspacePickerScreenState extends ConsumerState<WorkspacePickerScreen> {
   Future<void> _select(Map<String, dynamic> workspace) async {
     await ref.read(authControllerProvider.notifier).selectWorkspace(workspace);
     if (!mounted) return;
-    if (workspace['pos_enabled'] == false) {
+    final session = ref.read(authControllerProvider).valueOrNull;
+    if (session != null && session.permissions.isNotEmpty) {
+      ref.read(cashierPermissionsProvider.notifier).state =
+          Map<String, dynamic>.from(session.permissions);
+    }
+    final posEnabled = session?.posEnabled ?? (workspace['pos_enabled'] != false);
+    if (!posEnabled) {
       context.go('/pos-blocked');
     } else {
       context.go('/home');

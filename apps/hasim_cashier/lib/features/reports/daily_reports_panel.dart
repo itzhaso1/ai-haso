@@ -21,6 +21,7 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
   Map<String, dynamic> _liveChannelStats = const {};
   var _loading = true;
   String? _error;
+  var _forbidden = false;
   late DateTime _date;
 
   @override
@@ -35,26 +36,12 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
 
   String get _q => DateFormat('yyyy-MM-dd').format(_date);
 
-  Map<String, dynamic> get _perms => CashierPermissions.resolve(
-        ref.read(cashierPermissionsProvider),
-        ref.read(authControllerProvider).valueOrNull?.permissions,
-      );
-
   Future<void> _load() async {
-    if (!CashierPermissions.canViewReports(_perms)) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = null;
-        _data = null;
-        _liveChannelStats = const {};
-      });
-      return;
-    }
     if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
+      _forbidden = false;
     });
     try {
       final api = ref.read(cashierApiProvider);
@@ -76,17 +63,21 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
         _liveChannelStats = live;
         _loading = false;
         _error = null;
+        _forbidden = false;
       });
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
+        _forbidden = e.statusCode == 403;
         _error = e.message;
+        if (_forbidden) _data = null;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
+        _forbidden = false;
         _error = e.toString();
       });
     }
@@ -94,20 +85,25 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final perms = CashierPermissions.resolve(
-      ref.watch(cashierPermissionsProvider),
-      ref.watch(authControllerProvider).valueOrNull?.permissions,
-    );
-    if (!CashierPermissions.canViewReports(perms)) {
-      return const Padding(
-        padding: EdgeInsets.all(16),
-        child: HsEmpty(
-          title: 'غير مصرح بعرض التقارير',
-          subtitle:
-              'لا تملك صلاحية reports.view. تواصل مع مدير مساحة العمل.',
+    // If permissions arrive after first failed paint, reload once they allow reports.
+    ref.listen<Map<String, dynamic>>(cashierPermissionsProvider, (prev, next) {
+      final wasDenied = !CashierPermissions.canViewReports(
+        CashierPermissions.resolve(
+          prev,
+          ref.read(authControllerProvider).valueOrNull?.permissions,
         ),
       );
-    }
+      final nowAllowed = CashierPermissions.canViewReports(
+        CashierPermissions.resolve(
+          next,
+          ref.read(authControllerProvider).valueOrNull?.permissions,
+        ),
+      );
+      if (wasDenied && nowAllowed && _data == null && !_loading) {
+        _load();
+      }
+    });
+
     if (_loading) {
       return const Center(
         child: Column(
@@ -123,6 +119,18 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
         ),
       );
     }
+
+    if (_forbidden) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: HsEmpty(
+          title: 'غير مصرح بعرض التقارير',
+          subtitle:
+              'لا تملك صلاحية reports.view. تواصل مع مدير مساحة العمل.',
+        ),
+      );
+    }
+
     if (_error != null) {
       return Padding(
         padding: const EdgeInsets.all(16),
@@ -130,6 +138,18 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
           title: 'تعذر تحميل التقرير',
           subtitle: _error,
           actionLabel: 'إعادة المحاولة',
+          onAction: _load,
+        ),
+      );
+    }
+
+    if (_data == null) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: HsEmpty(
+          title: 'لا توجد بيانات للعرض',
+          subtitle: 'اضغط لإعادة تحميل التقرير اليومي.',
+          actionLabel: 'تحميل التقرير',
           onAction: _load,
         ),
       );
@@ -243,7 +263,7 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
               ),
               _metric(
                 _num(summary['tax_total']).toStringAsFixed(2),
-                'ضرائب',
+                'ضريبة',
               ),
               _metric('${_int(summary['total_quantity'])}', 'كميات'),
             ],
@@ -456,7 +476,7 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
           crossAxisCount: cols,
           mainAxisSpacing: 8,
           crossAxisSpacing: 8,
-          childAspectRatio: 2.4,
+          childAspectRatio: cols == 1 ? 3.2 : 2.4,
           children: [
             for (final card in cards)
               HsCard(
@@ -466,9 +486,12 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
                 padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
                       card.$1,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,

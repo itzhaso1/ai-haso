@@ -86,11 +86,27 @@ void main() {
       CashierPermissions.canViewReports({'orders.manage': true}),
       isTrue,
     );
+    // Truthy encodings from serializers must still unlock reports.
+    expect(
+      CashierPermissions.canViewReports({'reports.view': 1}),
+      isTrue,
+    );
+    expect(
+      CashierPermissions.canViewReports({'reports.view': 'true'}),
+      isTrue,
+    );
     final resolved = CashierPermissions.resolve(
       const {},
       {'reports.view': true, 'orders.manage': true},
     );
     expect(CashierPermissions.canViewReports(resolved), isTrue);
+  });
+
+  test('reports nav should not depend on empty permission map', () {
+    // Web always shows reports; client may still gate content via API 403.
+    // Empty map must not crash resolve / canViewReports.
+    expect(CashierPermissions.resolve(null, null), isEmpty);
+    expect(CashierPermissions.canViewReports(null), isFalse);
   });
 
   test('hourly sales prefer sales_total over total_sales', () {

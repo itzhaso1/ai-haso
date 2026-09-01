@@ -6,7 +6,9 @@ class CashierPermissions {
 
   static bool can(Map<String, dynamic>? permissions, String key) {
     if (permissions == null || permissions.isEmpty) return false;
-    return permissions[key] == true;
+    final value = permissions[key];
+    // Accept JSON bool and common truthy encodings from serializers.
+    return value == true || value == 1 || value == '1' || value == 'true';
   }
 
   /// Align with AuthorizesCashier / PosBaseController: not via `pos.manage` alone.

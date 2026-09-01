@@ -133,13 +133,25 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
         // + /reports/daily) — not shown on the operational cashier home.
       });
       if (data['permissions'] is Map) {
-        ref.read(cashierPermissionsProvider.notifier).state =
-            Map<String, dynamic>.from(data['permissions'] as Map);
+        final perms = Map<String, dynamic>.from(data['permissions'] as Map);
+        ref.read(cashierPermissionsProvider.notifier).state = perms;
+        // Keep auth session permissions in sync so nav/reports fallbacks stay fresh.
+        ref.read(authControllerProvider.notifier).applyBootstrapSnapshot(
+              permissions: perms,
+              workspace: data['workspace'] is Map
+                  ? Map<String, dynamic>.from(data['workspace'] as Map)
+                  : null,
+              entitlements: data['entitlements'] is Map
+                  ? Map<String, dynamic>.from(data['entitlements'] as Map)
+                  : null,
+              posEnabled: data['pos_enabled'] == true ? true : null,
+            );
       }
       await ref.read(syncEngineProvider).flushPendingOrders();
       _refreshPending();
     } on ApiException catch (e) {
       if (e.statusCode == 401) {
+        ref.read(cashierPermissionsProvider.notifier).state = {};
         await ref.read(authControllerProvider.notifier).logout();
         if (mounted) context.go('/login');
         return;
@@ -545,6 +557,7 @@ class _TopNav extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Match Web POS top-nav: reports always visible (auth happens on API).
     final items = <(_PosSection, String)>[
       (_PosSection.cashier, 'الكاشير'),
       (_PosSection.tables, 'الطاولات'),
@@ -552,6 +565,7 @@ class _TopNav extends ConsumerWidget {
       (_PosSection.orders, 'الطلبات'),
       (_PosSection.kitchen, 'المطبخ'),
       (_PosSection.invoices, 'الفواتير'),
+      (_PosSection.reports, 'التقارير'),
       if (CashierPermissions.canManageMenu(
         CashierPermissions.resolve(
           ref.watch(cashierPermissionsProvider),
@@ -559,13 +573,6 @@ class _TopNav extends ConsumerWidget {
         ),
       ))
         (_PosSection.items, 'إدارة الأصناف'),
-      if (CashierPermissions.canViewReports(
-        CashierPermissions.resolve(
-          ref.watch(cashierPermissionsProvider),
-          ref.watch(authControllerProvider).valueOrNull?.permissions,
-        ),
-      ))
-        (_PosSection.reports, 'التقارير'),
       (_PosSection.customers, 'العملاء'),
       (_PosSection.sync, 'المزامنة'),
       (_PosSection.settings, 'الإعدادات'),

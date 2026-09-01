@@ -196,24 +196,89 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
   }
 
   Future<void> selectWorkspace(Map<String, dynamic> workspace) async {
-    final id = workspace['id'];
-    if (id is! int) return;
+    final rawId = workspace['id'];
+    final id = rawId is int ? rawId : int.tryParse('$rawId');
+    if (id == null) return;
+
+    // Persist header workspace immediately so subsequent calls are scoped.
     _ref.read(workspaceIdProvider.notifier).state = id;
     await _ref.read(authRepositoryProvider).persistWorkspace(id);
+
+    Map<String, dynamic> permissions = const {};
+    Map<String, dynamic>? entitlements;
+    var posEnabled = workspace['pos_enabled'] == true;
+    Map<String, dynamic> resolvedWorkspace = Map<String, dynamic>.from(workspace);
+
+    try {
+      final switched = await _ref.read(cashierApiProvider).post(
+        '/workspaces/switch',
+        data: {
+          'workspace_id': id,
+          'device_name': 'كاشير حاسم',
+          'device_type': 'cashier',
+        },
+      );
+      if (switched['workspace'] is Map) {
+        resolvedWorkspace =
+            Map<String, dynamic>.from(switched['workspace'] as Map);
+      }
+      if (switched['permissions'] is Map) {
+        permissions =
+            Map<String, dynamic>.from(switched['permissions'] as Map);
+      }
+      if (switched['entitlements'] is Map) {
+        entitlements =
+            Map<String, dynamic>.from(switched['entitlements'] as Map);
+      }
+      if (switched.containsKey('pos_enabled')) {
+        posEnabled = switched['pos_enabled'] == true;
+      }
+    } catch (_) {
+      // Fall back to local selection; bootstrap will refresh permissions.
+      final current = state.valueOrNull;
+      permissions = current?.permissions ?? const {};
+      entitlements = current?.entitlements;
+      posEnabled =
+          workspace['pos_enabled'] == true || (current?.posEnabled ?? false);
+    }
+
     final current = state.valueOrNull;
     if (current != null) {
       state = AsyncValue.data(
         AuthSession(
           token: current.token,
           user: current.user,
-          workspace: workspace,
+          workspace: resolvedWorkspace,
           workspaces: current.workspaces,
-          permissions: current.permissions,
-          posEnabled: workspace['pos_enabled'] == true || current.posEnabled,
-          entitlements: current.entitlements,
+          permissions:
+              permissions.isNotEmpty ? permissions : current.permissions,
+          posEnabled: posEnabled,
+          entitlements: entitlements ?? current.entitlements,
         ),
       );
     }
+  }
+
+  /// Keep session permissions aligned with `/bootstrap` (source of truth).
+  void applyBootstrapSnapshot({
+    required Map<String, dynamic> permissions,
+    Map<String, dynamic>? workspace,
+    Map<String, dynamic>? entitlements,
+    bool? posEnabled,
+  }) {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    state = AsyncValue.data(
+      AuthSession(
+        token: current.token,
+        user: current.user,
+        workspace: workspace ?? current.workspace,
+        workspaces: current.workspaces,
+        permissions: permissions.isNotEmpty ? permissions : current.permissions,
+        posEnabled: posEnabled ?? current.posEnabled,
+        entitlements: entitlements ?? current.entitlements,
+      ),
+    );
   }
 
   Future<void> logout() async {
