@@ -12,7 +12,7 @@ class PosCashierUxTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_cashier_renders_category_sidebar_not_dropdown(): void
+    public function test_cashier_keeps_category_sidebar_and_narrow_cart(): void
     {
         $this->seed(FoundationSeeder::class);
         [$owner, $workspace] = $this->createWorkspaceOwner('store');
@@ -39,39 +39,123 @@ class PosCashierUxTest extends TestCase
             ->assertOk()
             ->getContent();
 
+        $this->assertStringContainsString('data-pos-categories-sidebar', $html);
         $this->assertStringContainsString('التصنيفات', $html);
         $this->assertStringContainsString('الكل', $html);
-        $this->assertStringContainsString('مشروبات', $html);
-        $this->assertStringContainsString('ابحث عن صنف', $html);
-        $this->assertStringContainsString('data-pos-categories-sidebar', $html);
-        $this->assertStringContainsString('data-pos-products', $html);
-        $this->assertStringContainsString('data-pos-cart', $html);
-
-        // Category dropdown must be gone.
+        $this->assertStringContainsString('xl:col-span-3', $html); // narrower cart
+        $this->assertStringContainsString('xl:col-span-7', $html); // wider products
+        $this->assertStringContainsString('إنشاء الطلب', $html);
+        $this->assertStringContainsString('طلب خارجي', $html);
+        $this->assertStringContainsString('إتمام + طباعة الفاتورة', $html);
+        $this->assertStringContainsString('إتمام بدون فاتورة', $html);
         $this->assertStringNotContainsString('كل التصنيفات', $html);
+        $this->assertStringNotContainsString('إتمام عبر سلة الجلسة', $html);
+        $this->assertStringNotContainsString('إنشاء Order', $html);
         $this->assertDoesNotMatchRegularExpression('/<select[^>]*x-model="selectedCategoryId"/', $html);
-
-        // Cart / order controls remain the original ones.
-        $this->assertStringContainsString('إنشاء Order', $html);
-        $this->assertStringContainsString('إتمام عبر سلة الجلسة', $html);
-        $this->assertStringContainsString('prepareSubmit', $html);
     }
 
-    public function test_cashier_category_filter_uses_client_side_selected_category(): void
+    public function test_create_order_json_returns_optional_print_without_forced_redirect(): void
+    {
+        $this->seed(FoundationSeeder::class);
+        [$owner, $workspace] = $this->createWorkspaceOwner('store');
+
+        $item = PosMenuItem::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'عصير',
+            'price' => 8,
+            'currency' => 'SAR',
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->postJson(route('workspace.pos.orders.store'), [
+                'items' => [
+                    ['pos_menu_item_id' => $item->id, 'quantity' => 1],
+                ],
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('message', 'تم إنشاء الطلب بنجاح')
+            ->assertJsonStructure(['order_id', 'order_number', 'print_url']);
+
+        $this->assertNotEmpty($response->json('order_number'));
+        $this->assertNotEmpty($response->json('print_url'));
+    }
+
+    public function test_create_order_form_stays_on_cashier(): void
+    {
+        $this->seed(FoundationSeeder::class);
+        [$owner, $workspace] = $this->createWorkspaceOwner('store');
+
+        $item = PosMenuItem::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'ماء',
+            'price' => 2,
+            'currency' => 'SAR',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->from(route('workspace.pos.cashier.index'))
+            ->post(route('workspace.pos.orders.store'), [
+                'items' => [
+                    ['pos_menu_item_id' => $item->id, 'quantity' => 1],
+                ],
+            ])
+            ->assertRedirect(route('workspace.pos.cashier.index'));
+    }
+
+    public function test_external_order_checkout_json_does_not_auto_redirect(): void
+    {
+        $this->seed(FoundationSeeder::class);
+        [$owner, $workspace] = $this->createWorkspaceOwner('store');
+
+        $item = PosMenuItem::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'شاي',
+            'price' => 5,
+            'currency' => 'SAR',
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->postJson(route('workspace.pos.cart.items.store'), [
+                'pos_menu_item_id' => $item->id,
+                'quantity' => 2,
+            ])->assertOk();
+
+        $response = $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->postJson(route('workspace.pos.cart.checkout'), []);
+
+        $response->assertCreated()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('redirect', null)
+            ->assertJsonStructure(['order_id', 'order_number', 'print_url']);
+    }
+
+    public function test_tables_board_separates_details_and_menu_actions(): void
     {
         $this->seed(FoundationSeeder::class);
         [$owner, $workspace] = $this->createWorkspaceOwner('store');
 
         $html = $this->actingAs($owner)
             ->withSession(['current_workspace_id' => $workspace->id])
-            ->get(route('workspace.pos.cashier.index'))
+            ->get(route('workspace.pos.tables.index'))
             ->assertOk()
             ->getContent();
 
-        $this->assertStringContainsString('selectedCategoryId', $html);
-        $this->assertStringContainsString('filteredItems', $html);
-        $this->assertStringContainsString('pos_item_category_id', $html);
-        $this->assertStringContainsString('countInCategory', $html);
+        $this->assertStringContainsString('data-table-order-details', $html);
+        $this->assertStringContainsString('تفاصيل الطلب', $html);
+        $this->assertStringContainsString('data-table-menu', $html);
+        $this->assertStringContainsString('الحساب', $html);
+        $this->assertStringContainsString('إغلاق الطاولة', $html);
+        $this->assertStringContainsString('confirmClose', $html);
+        $this->assertStringNotContainsString('إغلاق الجلسة</button>', $html);
     }
 
     /**

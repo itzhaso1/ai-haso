@@ -2,26 +2,27 @@
 
 @section('content')
     {{--
-      Layout (RTL): Categories RIGHT | Products CENTER | Cart LEFT
-      Categories use a dedicated sidebar column — no dropdown.
-      Cart / create-order / session-checkout logic unchanged from prior cashier.
+      Layout (RTL): Categories RIGHT | Products CENTER | Cart LEFT (narrower)
+      Categories sidebar kept as-is; cart narrowed; product cards denser.
     --}}
     <div
         x-data="cashierPos({
             items: @js($items),
             categories: @js($categories),
+            storeOrderUrl: @js($storeOrderUrl),
             cartEndpoints: {
                 addItem: @js(route('workspace.pos.cart.items.store')),
                 updateItem: @js(url('/workspace/pos/cart/items')),
                 removeItem: @js(url('/workspace/pos/cart/items')),
                 meta: @js(route('workspace.pos.cart.meta')),
                 checkout: @js(route('workspace.pos.cart.checkout')),
+                clear: @js(route('workspace.pos.cart.clear')),
                 csrf: @js(csrf_token()),
             },
         })"
-        class="grid gap-4 xl:grid-cols-12"
+        class="grid gap-3 xl:grid-cols-12"
     >
-        {{-- Categories sidebar (RIGHT in RTL = first column) --}}
+        {{-- Categories sidebar (RIGHT in RTL = first column) — KEEP EXISTING --}}
         <aside class="hidden xl:col-span-2 xl:block" data-pos-categories-sidebar>
             <nav
                 class="sticky top-3 max-h-[calc(100vh-7rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm"
@@ -57,13 +58,10 @@
             </nav>
         </aside>
 
-        {{-- Products (CENTER) --}}
-        <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:col-span-6" data-pos-products>
-            <div class="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                    <h2 class="text-base font-bold text-slate-900">أصناف الكاشير</h2>
-                    <p class="text-xs text-slate-500">مصدر مستقل عن Products / Inventory الخارجية.</p>
-                </div>
+        {{-- Products (CENTER) — denser cards --}}
+        <section class="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm xl:col-span-7" data-pos-products>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <h2 class="text-sm font-bold text-slate-900">أصناف الكاشير</h2>
                 <input
                     x-model="search"
                     type="search"
@@ -95,25 +93,31 @@
                 </template>
             </div>
 
-            <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5">
                 <template x-for="item in filteredItems" :key="item.id">
-                    <button type="button" @click="addItem(item)" class="rounded-xl border border-slate-200 bg-white p-3 text-right transition hover:border-slate-300 hover:shadow-sm">
-                        <template x-if="item.image_path">
-                            <img :src="`/storage/${item.image_path}`" alt="" class="mb-2 h-24 w-full rounded-lg object-cover" />
-                        </template>
-                        <template x-if="!item.image_path">
-                            <div class="mb-2 flex h-24 w-full items-center justify-center rounded-lg bg-slate-50 text-slate-300">
-                                <svg class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                            </div>
-                        </template>
-                        <p class="text-sm font-semibold text-slate-900" x-text="item.name"></p>
-                        <p class="mt-1 text-[11px] text-slate-500" x-text="item.category?.name || item.item_type || 'عام'"></p>
-                        <p class="text-[11px] text-slate-500" x-text="item.size_label || ''"></p>
-                        <p class="mt-2 text-sm font-bold text-slate-900">
-                            <span x-text="money(item.price)"></span>
-                            <span x-text="item.currency"></span>
-                        </p>
-                        <p class="mt-2 text-[11px] font-semibold text-emerald-700">اضغط لإضافة الصنف مباشرة</p>
+                    <button
+                        type="button"
+                        @click="addItem(item)"
+                        class="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-right transition hover:border-slate-300 hover:shadow-sm"
+                    >
+                        <div class="relative aspect-[5/3] w-full bg-slate-50">
+                            <template x-if="item.image_path">
+                                <img :src="`/storage/${item.image_path}`" alt="" class="h-full w-full object-cover" />
+                            </template>
+                            <template x-if="!item.image_path">
+                                <div class="flex h-full w-full items-center justify-center text-slate-300">
+                                    <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                </div>
+                            </template>
+                        </div>
+                        <div class="flex flex-1 flex-col gap-0.5 p-2">
+                            <p class="line-clamp-2 text-xs font-semibold leading-snug text-slate-900" x-text="item.name"></p>
+                            <p class="text-xs font-bold text-slate-900">
+                                <span x-text="money(item.price)"></span>
+                                <span class="text-[10px] font-medium text-slate-500" x-text="item.currency"></span>
+                            </p>
+                            <span class="mt-1 inline-flex items-center justify-center rounded-lg border border-emerald-600 px-2 py-1 text-[10px] font-semibold text-emerald-700">+ إضافة</span>
+                        </div>
                     </button>
                 </template>
             </div>
@@ -126,16 +130,15 @@
             </template>
         </section>
 
-        {{-- Cart / order (LEFT in RTL) — original create-order form kept --}}
-        <aside class="space-y-4 xl:col-span-4" data-pos-cart>
-            <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h2 class="text-base font-bold text-slate-900">طلب جديد</h2>
-                {{-- Existing full-order POST path kept for compatibility --}}
-                <form method="POST" action="{{ route('workspace.pos.orders.store') }}" @submit="prepareSubmit">
+        {{-- Cart / order (LEFT, narrower) --}}
+        <aside class="space-y-3 xl:col-span-3" data-pos-cart>
+            <article class="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                <h2 class="text-sm font-bold text-slate-900">طلب جديد</h2>
+                <form method="POST" action="{{ route('workspace.pos.orders.store') }}" @submit.prevent="createOrder">
                     @csrf
-                    <div class="mt-3 space-y-3">
+                    <div class="mt-3 space-y-2">
                         <div>
-                            <label class="mb-1 block text-xs font-semibold text-slate-600">العميل (اختياري)</label>
+                            <label class="mb-1 block text-[11px] font-semibold text-slate-600">العميل (اختياري)</label>
                             <select name="customer_id" x-model="customerId" @change="syncMeta" class="w-full rounded-lg border-slate-300 text-sm">
                                 <option value="">بدون عميل</option>
                                 @foreach($customers as $customer)
@@ -144,7 +147,7 @@
                             </select>
                         </div>
                         <div>
-                            <label class="mb-1 block text-xs font-semibold text-slate-600">الطاولة (اختياري)</label>
+                            <label class="mb-1 block text-[11px] font-semibold text-slate-600">الطاولة (اختياري)</label>
                             <select name="dining_table_id" x-model="diningTableId" @change="syncMeta" class="w-full rounded-lg border-slate-300 text-sm">
                                 <option value="">بدون طاولة</option>
                                 @foreach($tables as $table)
@@ -153,32 +156,32 @@
                             </select>
                         </div>
                         <div>
-                            <label class="mb-1 block text-xs font-semibold text-slate-600">الخصم</label>
+                            <label class="mb-1 block text-[11px] font-semibold text-slate-600">الخصم</label>
                             <input x-model.number="discount" @change="syncMeta" type="number" name="discount_amount" min="0" step="0.01" class="w-full rounded-lg border-slate-300 text-sm" />
                         </div>
                         <div>
-                            <label class="mb-1 block text-xs font-semibold text-slate-600">ملاحظات</label>
+                            <label class="mb-1 block text-[11px] font-semibold text-slate-600">ملاحظات</label>
                             <textarea name="notes" x-model="notes" @change="syncMeta" rows="2" class="w-full rounded-lg border-slate-300 text-sm"></textarea>
                         </div>
                     </div>
 
-                    <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <h3 class="text-xs font-bold text-slate-700">ملخص الطلب</h3>
+                    <div class="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                        <h3 class="text-[11px] font-bold text-slate-700">ملخص الطلب</h3>
                         <template x-if="cart.length === 0">
                             <p class="mt-2 text-xs text-slate-500">السلة فارغة.</p>
                         </template>
-                        <div class="mt-2 space-y-2">
+                        <div class="mt-2 max-h-40 space-y-1.5 overflow-y-auto">
                             <template x-for="(line, index) in cart" :key="line.pos_menu_item_id">
-                                <div class="rounded-lg bg-white p-2 text-xs">
+                                <div class="rounded-lg bg-white p-1.5 text-[11px]">
                                     <div class="flex items-center justify-between gap-2">
-                                        <p class="font-semibold text-slate-800" x-text="line.name"></p>
+                                        <p class="truncate font-semibold text-slate-800" x-text="line.name"></p>
                                         <button type="button" @click="removeLine(index)" class="text-rose-600">حذف</button>
                                     </div>
-                                    <div class="mt-2 flex items-center justify-between">
-                                        <div class="flex items-center gap-2">
-                                            <button type="button" @click="decrease(index)" class="rounded border border-slate-300 px-2">-</button>
+                                    <div class="mt-1.5 flex items-center justify-between">
+                                        <div class="flex items-center gap-1.5">
+                                            <button type="button" @click="decrease(index)" class="rounded border border-slate-300 px-1.5">-</button>
                                             <span x-text="line.quantity"></span>
-                                            <button type="button" @click="increase(index)" class="rounded border border-slate-300 px-2">+</button>
+                                            <button type="button" @click="increase(index)" class="rounded border border-slate-300 px-1.5">+</button>
                                         </div>
                                         <p class="font-semibold">
                                             <span x-text="money(line.quantity * line.unit_price)"></span>
@@ -188,37 +191,87 @@
                                 </div>
                             </template>
                         </div>
-                        <div class="mt-3 border-t border-slate-200 pt-2 text-xs text-slate-700">
-                            <p>عدد الأصناف: <span class="font-semibold" x-text="cart.length"></span></p>
-                            <p>Subtotal: <span class="font-semibold" x-text="money(subtotal)"></span></p>
-                            <p>Discount: <span class="font-semibold" x-text="money(discount || 0)"></span></p>
-                            <p class="mt-1 text-sm font-bold">
-                                إجمالي المبلغ المطلوب دفعه:
-                                <span x-text="money(total)"></span>
-                                <span x-text="orderCurrencyLabel"></span>
-                            </p>
+                        <div class="mt-2 space-y-0.5 border-t border-slate-200 pt-2 text-[11px] text-slate-700">
+                            <div class="flex justify-between"><span>المجموع</span><span class="font-semibold" x-text="money(subtotal)"></span></div>
+                            <div class="flex justify-between"><span>الخصم</span><span class="font-semibold" x-text="money(discount || 0)"></span></div>
+                            <div class="flex justify-between text-sm font-bold text-slate-900">
+                                <span>الإجمالي</span>
+                                <span>
+                                    <span x-text="money(total)"></span>
+                                    <span class="text-[10px] font-semibold text-slate-500" x-text="orderCurrencyLabel"></span>
+                                </span>
+                            </div>
                         </div>
                     </div>
 
                     <div class="mt-3 grid gap-2">
-                        <button class="w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
-                            إنشاء Order
+                        <button
+                            type="submit"
+                            :disabled="submitting || cart.length === 0"
+                            class="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            <svg x-show="submitting" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+                            <span x-text="submitting ? 'جاري الإنشاء...' : 'إنشاء الطلب'"></span>
                         </button>
-                        <button type="button" @click="checkoutViaCart" class="w-full rounded-lg border border-emerald-600 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50">
-                            إتمام عبر سلة الجلسة
+                        <button
+                            type="button"
+                            @click="checkoutViaCart"
+                            :disabled="submitting || cart.length === 0"
+                            class="w-full rounded-lg border border-emerald-600 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
+                        >
+                            طلب خارجي
                         </button>
                     </div>
+
+                    <template x-if="errorMessage">
+                        <div class="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">
+                            <p x-text="errorMessage"></p>
+                            <button type="button" @click="createOrder" class="mt-2 font-semibold underline">إعادة المحاولة</button>
+                        </div>
+                    </template>
                 </form>
             </article>
         </aside>
+
+        {{-- Success: optional print --}}
+        <div
+            x-show="successOpen"
+            x-cloak
+            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+            @keydown.escape.window="closeSuccess(false)"
+        >
+            <div class="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-xl" @click.outside="closeSuccess(false)">
+                <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                    <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                </div>
+                <h3 class="mt-3 text-center text-base font-bold text-slate-900">تم إنشاء الطلب بنجاح</h3>
+                <p class="mt-1 text-center text-sm text-slate-600" x-show="successOrderNumber">
+                    رقم الطلب: #<span x-text="successOrderNumber"></span>
+                </p>
+                <div class="mt-5 grid gap-2">
+                    <button
+                        type="button"
+                        @click="closeSuccess(true)"
+                        :disabled="!successPrintUrl"
+                        class="rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >إتمام + طباعة الفاتورة</button>
+                    <button
+                        type="button"
+                        @click="closeSuccess(false)"
+                        class="rounded-lg border border-emerald-600 bg-white px-3 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
+                    >إتمام بدون فاتورة</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
-        function cashierPos({ items, categories, cartEndpoints }) {
+        function cashierPos({ items, categories, cartEndpoints, storeOrderUrl }) {
             return {
                 items,
                 categories,
                 cartEndpoints,
+                storeOrderUrl,
                 search: '',
                 selectedCategoryId: '',
                 cart: [],
@@ -226,6 +279,11 @@
                 customerId: '',
                 diningTableId: '',
                 notes: '',
+                submitting: false,
+                errorMessage: '',
+                successOpen: false,
+                successOrderNumber: '',
+                successPrintUrl: '',
                 get filteredItems() {
                     return this.items.filter((item) => {
                         const matchesCategory = !this.selectedCategoryId || Number(item.pos_item_category_id) === Number(this.selectedCategoryId);
@@ -285,14 +343,8 @@
                 },
                 get orderCurrencyLabel() {
                     const currencies = [...new Set(this.cart.map((line) => line.currency).filter(Boolean))];
-                    if (currencies.length === 0) {
-                        return '';
-                    }
-
-                    if (currencies.length === 1) {
-                        return currencies[0];
-                    }
-
+                    if (currencies.length === 0) return '';
+                    if (currencies.length === 1) return currencies[0];
                     return 'MIX';
                 },
                 money(amount) {
@@ -305,9 +357,7 @@
                     });
                 },
                 syncCartQty(line) {
-                    if (!line?.key) {
-                        return;
-                    }
+                    if (!line?.key) return;
                     this.cartFetch(`${this.cartEndpoints.updateItem}/${line.key}`, 'PATCH', {
                         quantity: line.quantity,
                     });
@@ -334,16 +384,78 @@
                             credentials: 'same-origin',
                         });
                     } catch (error) {
-                        // Non-blocking: local cart + classic form submit remain primary.
                         console.warn('pos cart sync skipped', error);
                     }
                 },
-                async checkoutViaCart() {
-                    if (this.cart.length === 0) {
-                        alert('أضف صنفًا واحدًا على الأقل قبل إنشاء الطلب.');
-                        return;
+                clearLocalCart() {
+                    this.cart = [];
+                    this.discount = 0;
+                    this.notes = '';
+                    this.errorMessage = '';
+                },
+                openSuccess(payload) {
+                    this.successOrderNumber = payload.order_number || payload.order_id || '';
+                    this.successPrintUrl = payload.print_url || '';
+                    this.successOpen = true;
+                    this.clearLocalCart();
+                    if (this.cartEndpoints.clear) {
+                        this.cartFetch(this.cartEndpoints.clear, 'POST');
                     }
+                },
+                closeSuccess(shouldPrint) {
+                    const url = this.successPrintUrl;
+                    this.successOpen = false;
+                    this.successPrintUrl = '';
+                    this.successOrderNumber = '';
+                    if (shouldPrint && url) {
+                        window.open(url, '_blank', 'noopener');
+                    }
+                },
+                async createOrder() {
+                    if (this.submitting || this.cart.length === 0) return;
+                    this.submitting = true;
+                    this.errorMessage = '';
+                    await this.syncMeta();
 
+                    const body = {
+                        customer_id: this.customerId || null,
+                        dining_table_id: this.diningTableId || null,
+                        discount_amount: this.discount || 0,
+                        notes: this.notes || null,
+                        items: this.cart.map((line) => ({
+                            pos_menu_item_id: line.pos_menu_item_id,
+                            quantity: line.quantity,
+                        })),
+                    };
+
+                    try {
+                        const response = await fetch(this.storeOrderUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': this.cartEndpoints.csrf,
+                                'X-Requested-With': 'XMLHttpRequest',
+                            },
+                            body: JSON.stringify(body),
+                            credentials: 'same-origin',
+                        });
+                        const payload = await response.json().catch(() => ({}));
+                        if (!response.ok) {
+                            this.errorMessage = payload.message || 'تعذر إنشاء الطلب، حاول مرة أخرى.';
+                            return;
+                        }
+                        this.openSuccess(payload);
+                    } catch (error) {
+                        this.errorMessage = 'تعذر إنشاء الطلب، حاول مرة أخرى.';
+                    } finally {
+                        this.submitting = false;
+                    }
+                },
+                async checkoutViaCart() {
+                    if (this.submitting || this.cart.length === 0) return;
+                    this.submitting = true;
+                    this.errorMessage = '';
                     await this.syncMeta();
                     try {
                         const response = await fetch(this.cartEndpoints.checkout, {
@@ -362,45 +474,18 @@
                             }),
                             credentials: 'same-origin',
                         });
-                        const payload = await response.json();
+                        const payload = await response.json().catch(() => ({}));
                         if (!response.ok) {
-                            alert(payload.message || 'تعذر إتمام السلة.');
+                            this.errorMessage = payload.message || 'تعذر إنشاء الطلب، حاول مرة أخرى.';
                             return;
                         }
-                        if (payload.redirect) {
-                            window.location.href = payload.redirect;
-                            return;
-                        }
-                        window.location.reload();
+                        this.openSuccess(payload);
                     } catch (error) {
-                        alert('تعذر إتمام السلة.');
+                        this.errorMessage = 'تعذر إنشاء الطلب، حاول مرة أخرى.';
+                    } finally {
+                        this.submitting = false;
                     }
                 },
-                prepareSubmit(event) {
-                    if (this.cart.length === 0) {
-                        event.preventDefault();
-                        alert('أضف صنفًا واحدًا على الأقل قبل إنشاء الطلب.');
-                        return;
-                    }
-
-                    event.target.querySelectorAll('[data-cart-input]').forEach((node) => node.remove());
-
-                    this.cart.forEach((line, index) => {
-                        const itemInput = document.createElement('input');
-                        itemInput.type = 'hidden';
-                        itemInput.name = `items[${index}][pos_menu_item_id]`;
-                        itemInput.value = line.pos_menu_item_id;
-                        itemInput.dataset.cartInput = '1';
-                        event.target.appendChild(itemInput);
-
-                        const quantityInput = document.createElement('input');
-                        quantityInput.type = 'hidden';
-                        quantityInput.name = `items[${index}][quantity]`;
-                        quantityInput.value = line.quantity;
-                        quantityInput.dataset.cartInput = '1';
-                        event.target.appendChild(quantityInput);
-                    });
-                }
             };
         }
     </script>
