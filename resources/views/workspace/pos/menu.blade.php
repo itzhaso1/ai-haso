@@ -284,6 +284,7 @@
                 cart: [],
                 cartOpen: false,
                 checkoutStep: false,
+                clientReference: null,
                 itemsById: {},
                 init() {
                     this.itemsById = this.items.reduce((acc, item) => {
@@ -380,6 +381,8 @@
                 },
                 startCheckout() {
                     if (this.cart.length === 0) return;
+                    this.clientReference = this.clientReference
+                        || (window.crypto?.randomUUID?.() || (`menu-${Date.now()}-${Math.random().toString(16).slice(2)}`));
                     this.checkoutStep = true;
                 },
                 get total() {
@@ -428,7 +431,19 @@
                         return;
                     }
 
+                    if (!this.clientReference) {
+                        this.clientReference = (window.crypto?.randomUUID?.() || (`menu-${Date.now()}-${Math.random().toString(16).slice(2)}`));
+                    }
+
                     event.target.querySelectorAll('[data-cart-input]').forEach((node) => node.remove());
+
+                    const refInput = document.createElement('input');
+                    refInput.type = 'hidden';
+                    refInput.name = 'client_reference';
+                    refInput.value = this.clientReference;
+                    refInput.dataset.cartInput = '1';
+                    event.target.appendChild(refInput);
+
                     this.cart.forEach((line, index) => {
                         const itemInput = document.createElement('input');
                         itemInput.type = 'hidden';

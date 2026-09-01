@@ -32,8 +32,11 @@ class StorePosOrderRequest extends FormRequest
                 'integer',
                 Rule::exists('dining_tables', 'id')->where(fn ($query) => $query->where('workspace_id', $workspaceId)),
             ],
+            'order_type' => ['nullable', 'string', 'in:table,takeaway,delivery'],
+            'client_reference' => ['nullable', 'string', 'max:120'],
             'currency' => ['nullable', 'string', 'size:3'],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
+            'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'notes' => ['nullable', 'string'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.pos_menu_item_id' => [

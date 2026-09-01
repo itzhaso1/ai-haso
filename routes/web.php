@@ -490,6 +490,7 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::get('cashier', [PosCashierController::class, 'index'])->name('cashier.index');
             Route::get('menu', [PosMenuPageController::class, 'index'])->name('menu.index');
 
+            Route::get('orders/recent-menu', [PosCashierController::class, 'recentMenuOrders'])->name('orders.recent-menu');
             Route::post('orders', [PosCashierController::class, 'storeOrder'])->name('orders.store');
             Route::get('orders/running', [PosOrderController::class, 'running'])->name('orders.running');
             Route::get('kitchen', [PosKitchenController::class, 'index'])->name('kitchen.index');
@@ -538,6 +539,7 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::put('categories/{category}', [PosItemCategoryController::class, 'update'])->name('categories.update');
             Route::delete('categories/{category}', [PosItemCategoryController::class, 'destroy'])->name('categories.destroy');
             Route::post('settings/menu-slider', [PosSettingsController::class, 'updateMenuSlider'])->name('settings.menu-slider');
+            Route::post('settings/pos', [PosSettingsController::class, 'updatePosSettings'])->name('settings.pos');
         });
 
         Route::get('employees', [EmployeeInvitationController::class, 'index'])->name('employees.index');

@@ -209,6 +209,7 @@ class PosCartService
         $payload = [
             'customer_id' => $summary['customer_id'],
             'dining_table_id' => $summary['dining_table_id'],
+            'order_type' => $summary['dining_table_id'] ? 'table' : 'takeaway',
             'discount_amount' => $summary['discount_amount'],
             'notes' => $summary['notes'],
             'items' => array_map(static fn (array $line): array => [

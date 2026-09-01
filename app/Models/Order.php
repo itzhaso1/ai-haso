@@ -18,7 +18,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'finance_invoice_id',
     'pos_cashier_invoice_id',
     'order_number',
+    'client_reference',
     'source',
+    'order_type',
     'status',
     'pos_status',
     'payment_status',
@@ -27,6 +29,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'currency',
     'subtotal',
     'discount_amount',
+    'tax_amount',
     'shipping_amount',
     'total_amount',
     'payment_link',
@@ -40,11 +43,18 @@ class Order extends WorkspaceScopedModel
     /** @use HasFactory<\Database\Factories\OrderFactory> */
     use BelongsToWorkspace, HasFactory, SoftDeletes;
 
+    public const ORDER_TYPE_TABLE = 'table';
+
+    public const ORDER_TYPE_TAKEAWAY = 'takeaway';
+
+    public const ORDER_TYPE_DELIVERY = 'delivery';
+
     protected function casts(): array
     {
         return [
             'subtotal' => 'decimal:2',
             'discount_amount' => 'decimal:2',
+            'tax_amount' => 'decimal:2',
             'shipping_amount' => 'decimal:2',
             'total_amount' => 'decimal:2',
             'placed_at' => 'datetime',

@@ -14,6 +14,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'pos_item_category_id',
     'product_id',
     'name',
+    'sku',
+    'barcode',
     'item_type',
     'size_label',
     'description',

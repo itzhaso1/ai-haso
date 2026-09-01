@@ -13,6 +13,7 @@ use App\Models\PosMenuItem;
 use App\Models\TableSession;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\Audit\AuditLogService;
 use App\Services\Inventory\InventoryService;
 use App\Services\Order\OrderService;
 use App\Services\Payment\PaymentService;
@@ -35,18 +36,34 @@ class PosOrderService
     public function createPosOrder(Workspace $workspace, array $payload, ?User $actor): Order
     {
         return DB::transaction(function () use ($workspace, $payload, $actor): Order {
-            [$table, $session] = $this->resolveTableAndSession($workspace->id, $payload['dining_table_id'] ?? null);
+            if ($existing = $this->findIdempotentOrder($workspace->id, $payload['client_reference'] ?? null)) {
+                return $existing;
+            }
+
+            $orderType = $this->resolveOrderType($payload, isset($payload['dining_table_id']));
+            $diningTableId = in_array($orderType, [Order::ORDER_TYPE_TAKEAWAY, Order::ORDER_TYPE_DELIVERY], true)
+                ? null
+                : ($payload['dining_table_id'] ?? null);
+
+            [$table, $session] = $this->resolveTableAndSession($workspace->id, $diningTableId);
+            if ($table) {
+                $orderType = Order::ORDER_TYPE_TABLE;
+            }
+
             $items = $this->normalizePosItems(
                 workspaceId: $workspace->id,
                 items: $payload['items'] ?? [],
                 requireActive: true
             );
 
+            $discountAmount = $this->resolveDiscountAmount($payload, (float) $items->sum('total_amount'));
+
             $metadata = [
                 'channel' => 'cashier',
                 'created_by_user_id' => $actor?->id,
                 'created_by_name' => $actor?->name,
                 'payment_method' => 'cashier',
+                'order_type' => $orderType,
             ];
 
             if ($table && $session) {
@@ -57,9 +74,11 @@ class PosOrderService
                     items: $items,
                     customerId: isset($payload['customer_id']) ? (int) $payload['customer_id'] : null,
                     source: 'pos',
-                    discountAmount: (float) ($payload['discount_amount'] ?? 0),
+                    discountAmount: $discountAmount,
                     notes: $payload['notes'] ?? null,
                     metadata: $metadata,
+                    orderType: $orderType,
+                    clientReference: $this->normalizeClientReference($payload['client_reference'] ?? null),
                 );
             } else {
                 $order = $this->createOrderWithSnapshots(
@@ -69,14 +88,21 @@ class PosOrderService
                     items: $items,
                     table: $table,
                     session: $session,
-                    discountAmount: (float) ($payload['discount_amount'] ?? 0),
+                    discountAmount: $discountAmount,
                     notes: $payload['notes'] ?? null,
                     metadata: $metadata,
                     currency: $this->resolveOrderCurrency($items),
+                    orderType: $orderType,
+                    clientReference: $this->normalizeClientReference($payload['client_reference'] ?? null),
                 );
 
                 event(new \App\Events\OrderCreated($order));
             }
+
+            $this->auditPosAction('pos.order.created', $order, $actor, [
+                'order_type' => $orderType,
+                'source' => 'pos',
+            ]);
 
             return $order->fresh(['items', 'customer', 'table', 'tableSession']);
         });
@@ -88,6 +114,10 @@ class PosOrderService
     public function createQrMenuOrder(Workspace $workspace, ?DiningTable $table, array $payload, ?PosCustomerSession $guestSession = null): Order
     {
         return DB::transaction(function () use ($workspace, $table, $payload, $guestSession): Order {
+            if ($existing = $this->findIdempotentOrder($workspace->id, $payload['client_reference'] ?? null)) {
+                return $existing;
+            }
+
             $session = null;
             if ($table) {
                 if (! $guestSession) {
@@ -118,15 +148,19 @@ class PosOrderService
                 requireActive: true
             );
 
+            $orderType = $table ? Order::ORDER_TYPE_TABLE : Order::ORDER_TYPE_TAKEAWAY;
             $metadata = [
                 'channel' => 'qr_menu',
                 'customer_name' => $payload['customer_name'] ?? null,
                 'customer_phone' => $payload['customer_phone'] ?? null,
                 'payment_method' => $this->normalizePaymentMethod($payload),
+                'order_type' => $orderType,
             ];
             if ($guestSession) {
                 $metadata['pos_customer_session_id'] = $guestSession->id;
             }
+
+            $clientReference = $this->normalizeClientReference($payload['client_reference'] ?? null);
 
             if ($table && $session) {
                 $order = $this->mergeOrCreateSessionOrder(
@@ -139,6 +173,8 @@ class PosOrderService
                     discountAmount: 0,
                     notes: $payload['notes'] ?? null,
                     metadata: $metadata,
+                    orderType: $orderType,
+                    clientReference: $clientReference,
                 );
             } else {
                 $order = $this->createOrderWithSnapshots(
@@ -152,12 +188,17 @@ class PosOrderService
                     notes: $payload['notes'] ?? null,
                     metadata: $metadata,
                     currency: $this->resolveOrderCurrency($items),
+                    orderType: $orderType,
+                    clientReference: $clientReference,
                 );
 
                 event(new \App\Events\OrderCreated($order));
             }
 
-            return $order->fresh(['items', 'customer', 'table', 'tableSession']);
+            $fresh = $order->fresh(['items', 'customer', 'table', 'tableSession']);
+            event(new \App\Events\NewMenuOrderCreated($fresh));
+
+            return $fresh;
         });
     }
 
@@ -187,7 +228,11 @@ class PosOrderService
                 }
             }
 
-            return $cancelled->fresh(['items', 'customer', 'table', 'tableSession']);
+            $fresh = $cancelled->fresh(['items', 'customer', 'table', 'tableSession']);
+            event(new \App\Events\OrderCancelled($fresh));
+            $this->auditPosAction('pos.order.cancelled', $fresh, $actor);
+
+            return $fresh;
         }
 
         $attributes = ['pos_status' => $status];
@@ -203,7 +248,10 @@ class PosOrderService
 
         $order->update($attributes);
 
-        return $order->fresh(['items', 'customer', 'table', 'tableSession']);
+        $fresh = $order->fresh(['items', 'customer', 'table', 'tableSession']);
+        event(new \App\Events\OrderUpdated($fresh));
+
+        return $fresh;
     }
 
     /**
@@ -270,20 +318,42 @@ class PosOrderService
 
             $subtotal = (float) OrderItem::query()->where('order_id', $order->id)->sum('total_amount');
             $discountAmount = max(0, (float) ($payload['discount_amount'] ?? $order->discount_amount));
+            if (isset($payload['discount_percent'])) {
+                $discountAmount = $this->percentToAmount((float) $payload['discount_percent'], $subtotal);
+            }
+            $taxAmount = $this->calculateTaxAmount(
+                Workspace::withoutGlobalScopes()->find($order->workspace_id),
+                $subtotal,
+                $discountAmount
+            );
             $order->update([
                 'subtotal' => round($subtotal, 2),
                 'discount_amount' => $discountAmount,
-                'total_amount' => max(0, round($subtotal - $discountAmount, 2)),
+                'tax_amount' => $taxAmount,
+                'total_amount' => max(0, round($subtotal - $discountAmount + $taxAmount, 2)),
             ]);
 
-            return $order->fresh(['items', 'table', 'tableSession', 'customer']);
+            $fresh = $order->fresh(['items', 'table', 'tableSession', 'customer']);
+            event(new \App\Events\OrderUpdated($fresh));
+            $this->auditPosAction('pos.order.items_updated', $fresh, null);
+
+            return $fresh;
         });
     }
 
     public function openSession(DiningTable $table): TableSession
     {
+        $wasNew = ! TableSession::query()
+            ->where('dining_table_id', $table->id)
+            ->where('status', 'open')
+            ->exists();
+
         $session = $this->ensureOpenSession($table);
         $this->refreshTableStatus($table);
+
+        if ($wasNew || $session->wasRecentlyCreated) {
+            event(new \App\Events\TableSessionOpened($session));
+        }
 
         return $session;
     }
@@ -332,7 +402,14 @@ class PosOrderService
             $table = $session->table;
             if ($table) {
                 $this->refreshTableStatus($table, $session->id);
+                event(new \App\Events\TableUpdated($table->fresh()));
             }
+
+            event(new \App\Events\TableSessionClosed($session->fresh()));
+            $this->auditPosAction('pos.table_session.closed', $session, User::query()->find($actorUserId), [
+                'invoice_id' => $invoice?->id,
+                'orders_count' => $orders->count(),
+            ]);
 
             return $invoice;
         });
@@ -450,16 +527,33 @@ class PosOrderService
                     'table_session_id' => $targetSession->id,
                 ]);
 
+            PosCustomerSession::withoutGlobalScopes()
+                ->where('table_session_id', $session->id)
+                ->update([
+                    'dining_table_id' => $targetTable->id,
+                    'table_session_id' => $targetSession->id,
+                ]);
+
             $session->update([
                 'status' => 'closed',
                 'closed_at' => now(),
             ]);
 
             $targetTable->update(['status' => 'occupied']);
+            event(new \App\Events\TableUpdated($targetTable->fresh()));
+            event(new \App\Events\TableSessionClosed($session->fresh()));
 
             if ($sourceTable) {
                 $this->refreshTableStatus($sourceTable, $session->id);
+                event(new \App\Events\TableUpdated($sourceTable->fresh()));
             }
+
+            $this->auditPosAction('pos.table_session.transferred', $targetSession, null, [
+                'from_table_id' => $sourceTable?->id,
+                'to_table_id' => $targetTable->id,
+                'from_session_id' => $session->id,
+                'to_session_id' => $targetSession->id,
+            ]);
         });
     }
 
@@ -491,16 +585,33 @@ class PosOrderService
                     'table_session_id' => $targetSession->id,
                 ]);
 
+            PosCustomerSession::withoutGlobalScopes()
+                ->where('table_session_id', $sourceSession->id)
+                ->update([
+                    'dining_table_id' => $targetTable->id,
+                    'table_session_id' => $targetSession->id,
+                ]);
+
             $sourceSession->update([
                 'status' => 'closed',
                 'closed_at' => now(),
             ]);
 
             $targetTable->update(['status' => 'occupied']);
+            event(new \App\Events\TableUpdated($targetTable->fresh()));
+            event(new \App\Events\TableSessionClosed($sourceSession->fresh()));
 
             if ($sourceTable) {
                 $this->refreshTableStatus($sourceTable, $sourceSession->id);
+                event(new \App\Events\TableUpdated($sourceTable->fresh()));
             }
+
+            $this->auditPosAction('pos.table_session.merged', $targetSession, null, [
+                'from_table_id' => $sourceTable?->id,
+                'to_table_id' => $targetTable->id,
+                'from_session_id' => $sourceSession->id,
+                'to_session_id' => $targetSession->id,
+            ]);
         });
     }
 
@@ -830,6 +941,8 @@ class PosOrderService
         float $discountAmount,
         ?string $notes,
         ?array $metadata,
+        string $orderType = Order::ORDER_TYPE_TABLE,
+        ?string $clientReference = null,
     ): Order {
         $remaining = collect();
         $lastTouched = null;
@@ -837,7 +950,7 @@ class PosOrderService
         foreach ($items as $item) {
             $existingLine = $this->findMergeableSessionLine($session, $item);
             if ($existingLine) {
-                $this->increaseOrderItemQuantity($existingLine, (int) $item['quantity']);
+                $this->increaseOrderItemQuantity($existingLine, (int) $item['quantity'], $workspace);
                 $lastTouched = $existingLine->order()->with(['items', 'customer', 'table', 'tableSession'])->first();
                 continue;
             }
@@ -857,6 +970,8 @@ class PosOrderService
                 notes: $notes,
                 metadata: $metadata,
                 currency: $this->resolveOrderCurrency($remaining),
+                orderType: $orderType,
+                clientReference: $clientReference,
             );
 
             event(new \App\Events\OrderCreated($lastTouched));
@@ -868,7 +983,13 @@ class PosOrderService
             throw new RuntimeException('لا يمكن إنشاء طلب بدون عناصر.');
         }
 
+        // Persist client reference for idempotency even when only quantities were merged.
+        if ($clientReference && blank($lastTouched->client_reference)) {
+            $lastTouched->update(['client_reference' => $clientReference]);
+        }
+
         $table->update(['status' => 'occupied']);
+        event(new \App\Events\TableUpdated($table->fresh()));
 
         return $lastTouched->fresh(['items', 'customer', 'table', 'tableSession']);
     }
@@ -900,7 +1021,7 @@ class PosOrderService
             ->first();
     }
 
-    private function increaseOrderItemQuantity(OrderItem $line, int $quantityDelta): void
+    private function increaseOrderItemQuantity(OrderItem $line, int $quantityDelta, ?Workspace $workspace = null): void
     {
         $quantityDelta = max(1, $quantityDelta);
         $newQuantity = (int) $line->quantity + $quantityDelta;
@@ -920,9 +1041,12 @@ class PosOrderService
 
         $order = Order::withoutGlobalScopes()->whereKey($line->order_id)->lockForUpdate()->firstOrFail();
         $subtotal = (float) OrderItem::query()->where('order_id', $order->id)->sum('total_amount');
+        $workspace ??= Workspace::withoutGlobalScopes()->find($order->workspace_id);
+        $taxAmount = $this->calculateTaxAmount($workspace, $subtotal, (float) $order->discount_amount);
         $order->update([
             'subtotal' => round($subtotal, 2),
-            'total_amount' => max(0, round($subtotal - (float) $order->discount_amount, 2)),
+            'tax_amount' => $taxAmount,
+            'total_amount' => max(0, round($subtotal - (float) $order->discount_amount + $taxAmount, 2)),
         ]);
     }
 
@@ -942,10 +1066,13 @@ class PosOrderService
         ?array $metadata,
         string $currency,
         bool $syncInventory = true,
+        string $orderType = Order::ORDER_TYPE_TAKEAWAY,
+        ?string $clientReference = null,
     ): Order {
         $subtotal = round((float) $items->sum('total_amount'), 2);
         $discountAmount = max(0, round($discountAmount, 2));
-        $total = max(0, round($subtotal - $discountAmount, 2));
+        $taxAmount = $this->calculateTaxAmount($workspace, $subtotal, $discountAmount);
+        $total = max(0, round($subtotal - $discountAmount + $taxAmount, 2));
 
         $order = Order::query()->create([
             'workspace_id' => $workspace->id,
@@ -953,7 +1080,9 @@ class PosOrderService
             'dining_table_id' => $table?->id,
             'table_session_id' => $session?->id,
             'order_number' => $this->nextOrderNumber(),
+            'client_reference' => $clientReference,
             'source' => $source,
+            'order_type' => $orderType,
             'status' => 'confirmed',
             'pos_status' => 'new',
             'payment_status' => 'pending',
@@ -962,6 +1091,7 @@ class PosOrderService
             'currency' => $currency,
             'subtotal' => $subtotal,
             'discount_amount' => $discountAmount,
+            'tax_amount' => $taxAmount,
             'shipping_amount' => 0,
             'total_amount' => $total,
             'notes' => $notes,
@@ -1192,7 +1322,110 @@ class PosOrderService
                 ->where('pos_status', '!=', 'cancelled')
                 ->exists();
 
-        $table->update(['status' => $hasBillableOrders ? 'occupied' : 'available']);
+        if ($hasBillableOrders) {
+            $table->update(['status' => 'occupied']);
+
+            return;
+        }
+
+        // Preserve manually set operational statuses.
+        if (in_array($table->status, ['reserved', 'cleaning', 'closed'], true)) {
+            return;
+        }
+
+        $table->update(['status' => 'available']);
+    }
+
+    /**
+     * @param  array<string,mixed>  $payload
+     */
+    private function resolveOrderType(array $payload, bool $hasTableHint): string
+    {
+        $type = strtolower((string) ($payload['order_type'] ?? ''));
+        if (in_array($type, [Order::ORDER_TYPE_TABLE, Order::ORDER_TYPE_TAKEAWAY, Order::ORDER_TYPE_DELIVERY], true)) {
+            return $type;
+        }
+
+        return $hasTableHint ? Order::ORDER_TYPE_TABLE : Order::ORDER_TYPE_TAKEAWAY;
+    }
+
+    /**
+     * @param  array<string,mixed>  $payload
+     */
+    private function resolveDiscountAmount(array $payload, float $subtotal): float
+    {
+        if (isset($payload['discount_percent']) && is_numeric($payload['discount_percent'])) {
+            return $this->percentToAmount((float) $payload['discount_percent'], $subtotal);
+        }
+
+        return max(0, round((float) ($payload['discount_amount'] ?? 0), 2));
+    }
+
+    private function percentToAmount(float $percent, float $subtotal): float
+    {
+        $percent = max(0, min(100, $percent));
+
+        return max(0, round($subtotal * ($percent / 100), 2));
+    }
+
+    private function calculateTaxAmount(?Workspace $workspace, float $subtotal, float $discountAmount): float
+    {
+        if (! $workspace) {
+            return 0.0;
+        }
+
+        $rate = (float) data_get($workspace->settings ?? [], 'pos.tax_rate', 0);
+        if ($rate <= 0) {
+            return 0.0;
+        }
+
+        $taxable = max(0, $subtotal - $discountAmount);
+
+        return max(0, round($taxable * ($rate / 100), 2));
+    }
+
+    private function normalizeClientReference(mixed $reference): ?string
+    {
+        if (! is_string($reference)) {
+            return null;
+        }
+
+        $reference = trim($reference);
+
+        return $reference !== '' ? mb_substr($reference, 0, 120) : null;
+    }
+
+    private function findIdempotentOrder(int $workspaceId, mixed $reference): ?Order
+    {
+        $clientReference = $this->normalizeClientReference($reference);
+        if (! $clientReference) {
+            return null;
+        }
+
+        return Order::withoutGlobalScopes()
+            ->with(['items', 'customer', 'table', 'tableSession'])
+            ->where('workspace_id', $workspaceId)
+            ->where('client_reference', $clientReference)
+            ->first();
+    }
+
+    private function auditPosAction(string $action, mixed $entity, ?User $actor = null, ?array $meta = null): void
+    {
+        try {
+            app(AuditLogService::class)->log(
+                action: $action,
+                entityType: is_object($entity) ? $entity::class : 'pos',
+                entityId: is_object($entity) && isset($entity->id) ? (int) $entity->id : null,
+                actor: $actor,
+                meta: $meta,
+                workspaceId: is_object($entity) && isset($entity->workspace_id) ? (int) $entity->workspace_id : null,
+            );
+        } catch (\Throwable $exception) {
+            Log::warning('POS audit log failed', [
+                'action' => $action,
+                'error' => $exception->getMessage(),
+            ]);
+        }
     }
 
     /**

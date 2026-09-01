@@ -70,4 +70,29 @@ class PosSettingsController extends PosBaseController
 
         return back()->with('success', 'تم تحديث سلايدر المنيو بنجاح.');
     }
+
+    public function updatePosSettings(Request $request): RedirectResponse
+    {
+        $this->authorizePos($request, 'menu.manage');
+        $workspace = $this->currentWorkspace();
+
+        $validated = $request->validate([
+            'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'new_order_sound' => ['nullable', 'boolean'],
+            'enable_delivery' => ['nullable', 'boolean'],
+            'currency' => ['nullable', 'string', 'size:3'],
+        ]);
+
+        $settings = (array) ($workspace->settings ?? []);
+        data_set($settings, 'pos.tax_rate', round((float) ($validated['tax_rate'] ?? 0), 2));
+        data_set($settings, 'pos.new_order_sound', (bool) ($validated['new_order_sound'] ?? false));
+        data_set($settings, 'pos.enable_delivery', (bool) ($validated['enable_delivery'] ?? false));
+        if (! empty($validated['currency'])) {
+            data_set($settings, 'pos.currency', strtoupper($validated['currency']));
+        }
+
+        $workspace->update(['settings' => $settings]);
+
+        return back()->with('success', 'تم تحديث إعدادات الكاشير بنجاح.');
+    }
 }

@@ -133,6 +133,8 @@
                         @endforeach
                     </datalist>
                     <input name="size_label" placeholder="الحجم (اختياري)" class="w-full rounded-lg border-slate-300 text-sm" />
+                    <input name="sku" placeholder="SKU (اختياري)" class="w-full rounded-lg border-slate-300 text-sm" />
+                    <input name="barcode" placeholder="الباركود (اختياري)" class="w-full rounded-lg border-slate-300 text-sm" />
                     <textarea name="description" rows="2" placeholder="الوصف (اختياري)" class="w-full rounded-lg border-slate-300 text-sm"></textarea>
                     <input type="number" step="0.01" min="0" name="price" required placeholder="السعر" class="w-full rounded-lg border-slate-300 text-sm" />
                     <input name="currency" value="USD" class="w-full rounded-lg border-slate-300 text-sm" />
@@ -144,6 +146,34 @@
                     </label>
                     <input type="file" name="image_file" class="w-full rounded-lg border-slate-300 text-sm" />
                     <button class="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white">إضافة الصنف</button>
+                </form>
+            </article>
+
+            <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h3 class="text-base font-bold text-slate-900">إعدادات الكاشير العامة</h3>
+                <p class="mt-1 text-xs text-slate-500">الضريبة والصوت وأنواع الطلب — تُحسب الضريبة في الخادم عند إنشاء الطلب.</p>
+                @php($posSettings = (array) data_get(request()->attributes->get('workspace')?->settings ?? [], 'pos', []))
+                <form method="POST" action="{{ route('workspace.pos.settings.pos') }}" class="mt-3 space-y-3">
+                    @csrf
+                    <div>
+                        <label class="mb-1 block text-xs font-semibold text-slate-600">نسبة الضريبة %</label>
+                        <input type="number" name="tax_rate" min="0" max="100" step="0.01" value="{{ number_format((float) ($posSettings['tax_rate'] ?? 0), 2, '.', '') }}" class="w-full rounded-lg border-slate-300 text-sm" />
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-xs font-semibold text-slate-600">عملة الكاشير (اختياري)</label>
+                        <input name="currency" maxlength="3" value="{{ $posSettings['currency'] ?? '' }}" placeholder="SAR" class="w-full rounded-lg border-slate-300 text-sm" />
+                    </div>
+                    <label class="inline-flex items-center gap-2 text-sm text-slate-700">
+                        <input type="hidden" name="new_order_sound" value="0">
+                        <input type="checkbox" name="new_order_sound" value="1" @checked(($posSettings['new_order_sound'] ?? true))>
+                        تشغيل صوت عند طلب جديد من المنيو
+                    </label>
+                    <label class="inline-flex items-center gap-2 text-sm text-slate-700">
+                        <input type="hidden" name="enable_delivery" value="0">
+                        <input type="checkbox" name="enable_delivery" value="1" @checked(($posSettings['enable_delivery'] ?? false))>
+                        تفعيل طلب التوصيل في الكاشير
+                    </label>
+                    <button class="w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">حفظ إعدادات الكاشير</button>
                 </form>
             </article>
 

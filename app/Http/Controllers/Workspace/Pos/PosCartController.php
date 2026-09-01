@@ -128,50 +128,24 @@ class PosCartController extends PosBaseController
             return back()->withInput()->with('error', $exception->getMessage());
         }
 
-        if (! $order->dining_table_id) {
-            try {
-                $invoice = $this->posOrderService->createInvoiceFromOrder($order, (int) $request->user()?->id);
-            } catch (RuntimeException $exception) {
-                if ($request->expectsJson()) {
-                    return response()->json([
-                        'message' => 'تم إنشاء الطلب مع خطأ في الفاتورة: '.$exception->getMessage(),
-                        'order_id' => $order->id,
-                    ], 201);
-                }
-
-                return back()->with('success', 'تم إنشاء طلب الكاشير.')->with('error', $exception->getMessage());
-            }
-
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'تم إنشاء الطلب بنجاح',
-                    'order_id' => $order->id,
-                    'order_number' => $order->order_number,
-                    'invoice_id' => $invoice->id,
-                    'print_url' => route('workspace.pos.invoices.print', $invoice),
-                    // Cashier shows an optional-print modal; do not auto-navigate.
-                    'redirect' => null,
-                ], 201);
-            }
-
-            return back()
-                ->with('success', 'تم إنشاء الطلب بنجاح.'.($order->order_number ? ' رقم الطلب: #'.$order->order_number : ''))
-                ->with('print_url', route('workspace.pos.invoices.print', $invoice))
-                ->with('order_number', $order->order_number);
-        }
+        $printUrl = route('workspace.pos.orders.print', $order);
 
         if ($request->expectsJson()) {
             return response()->json([
                 'success' => true,
+                'message' => 'تم إنشاء الطلب بنجاح',
                 'order_id' => $order->id,
                 'order_number' => $order->order_number,
-                'message' => 'تم إنشاء الطلب بنجاح',
-                'print_url' => null,
+                'order_type' => $order->order_type,
+                'invoice_id' => null,
+                'print_url' => $printUrl,
                 'redirect' => null,
             ], 201);
         }
 
-        return back()->with('success', 'تم إنشاء الطلب بنجاح.');
+        return back()
+            ->with('success', 'تم إنشاء الطلب بنجاح.'.($order->order_number ? ' رقم الطلب: #'.$order->order_number : ''))
+            ->with('print_url', $printUrl)
+            ->with('order_number', $order->order_number);
     }
 }

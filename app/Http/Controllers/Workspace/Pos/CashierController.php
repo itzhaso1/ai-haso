@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Workspace\Pos;
 use App\Http\Requests\Pos\StorePosOrderRequest;
 use App\Models\Customer;
 use App\Models\DiningTable;
+use App\Models\Order;
 use App\Models\PosItemCategory;
 use App\Models\PosMenuItem;
 use App\Services\Pos\PosOrderService;
@@ -24,6 +25,10 @@ class CashierController extends PosBaseController
     {
         $this->authorizePos($request, 'orders.manage');
 
+        $workspace = $this->currentWorkspace();
+        $taxRate = (float) data_get($workspace->settings ?? [], 'pos.tax_rate', 0);
+        $soundEnabled = (bool) data_get($workspace->settings ?? [], 'pos.new_order_sound', true);
+
         $items = PosMenuItem::query()
             ->with('category:id,name')
             ->where('is_active', true)
@@ -34,6 +39,8 @@ class CashierController extends PosBaseController
                 'id',
                 'pos_item_category_id',
                 'name',
+                'sku',
+                'barcode',
                 'price',
                 'currency',
                 'item_type',
@@ -47,6 +54,10 @@ class CashierController extends PosBaseController
             'customers' => Customer::query()->orderBy('name')->limit(200)->get(['id', 'name', 'phone']),
             'tables' => DiningTable::query()->orderBy('name')->get(['id', 'name', 'status']),
             'storeOrderUrl' => route('workspace.pos.orders.store'),
+            'recentMenuOrdersUrl' => route('workspace.pos.orders.recent-menu'),
+            'taxRate' => $taxRate,
+            'soundEnabled' => $soundEnabled,
+            'workspaceId' => $workspace->id,
         ]);
     }
 
@@ -68,47 +79,64 @@ class CashierController extends PosBaseController
             return back()->withInput()->with('error', $exception->getMessage());
         }
 
-        $invoiceId = null;
-        $printUrl = null;
-        $invoiceError = null;
+        // Invoice is independent of order creation — print uses the order receipt.
+        $printUrl = route('workspace.pos.orders.print', $order);
 
-        if (! $order->dining_table_id) {
-            try {
-                $invoice = $this->posOrderService->createInvoiceFromOrder($order, (int) $request->user()?->id);
-                $invoiceId = $invoice->id;
-                $printUrl = route('workspace.pos.invoices.print', $invoice);
-            } catch (RuntimeException $exception) {
-                $invoiceError = $exception->getMessage();
-            }
-        }
-
-        // JSON (cashier UI): order is done; printing is an optional follow-up choice.
         if ($request->expectsJson()) {
             return response()->json([
                 'success' => true,
                 'message' => 'تم إنشاء الطلب بنجاح',
                 'order_id' => $order->id,
                 'order_number' => $order->order_number,
-                'invoice_id' => $invoiceId,
+                'order_type' => $order->order_type,
+                'invoice_id' => null,
                 'print_url' => $printUrl,
-                'invoice_error' => $invoiceError,
+                'invoice_error' => null,
             ], 201);
         }
 
-        // Classic form POST: stay on cashier; optional print via flash (no forced print page).
-        $redirect = back()->with(
-            'success',
-            'تم إنشاء الطلب بنجاح.'.($order->order_number ? ' رقم الطلب: #'.$order->order_number : '')
-        );
+        return back()
+            ->with('success', 'تم إنشاء الطلب بنجاح.'.($order->order_number ? ' رقم الطلب: #'.$order->order_number : ''))
+            ->with('print_url', $printUrl)
+            ->with('order_number', $order->order_number);
+    }
 
-        if ($printUrl) {
-            $redirect->with('print_url', $printUrl)->with('order_number', $order->order_number);
-        }
+    /**
+     * Polling fallback for new QR menu orders when realtime is unavailable.
+     */
+    public function recentMenuOrders(Request $request): JsonResponse
+    {
+        $this->authorizePos($request, 'orders.manage');
 
-        if ($invoiceError) {
-            $redirect->with('error', $invoiceError);
-        }
+        $afterId = max(0, (int) $request->query('after_id', 0));
 
-        return $redirect;
+        $orders = Order::query()
+            ->with(['table:id,name', 'items:id,order_id,product_name,quantity,total_amount'])
+            ->where('source', 'qr_menu')
+            ->when($afterId > 0, fn ($query) => $query->where('id', '>', $afterId))
+            ->latest('id')
+            ->limit(20)
+            ->get()
+            ->map(fn (Order $order) => [
+                'id' => $order->id,
+                'order_number' => $order->order_number,
+                'table_name' => $order->table?->name,
+                'dining_table_id' => $order->dining_table_id,
+                'notes' => $order->notes,
+                'total_amount' => (float) $order->total_amount,
+                'currency' => $order->currency,
+                'placed_at' => optional($order->placed_at)?->toIso8601String(),
+                'items' => $order->items->map(fn ($item) => [
+                    'name' => $item->product_name,
+                    'quantity' => (int) $item->quantity,
+                    'total_amount' => (float) $item->total_amount,
+                ])->values(),
+            ])
+            ->values();
+
+        return response()->json([
+            'orders' => $orders,
+            'latest_id' => (int) ($orders->max('id') ?? $afterId),
+        ]);
     }
 }

@@ -82,6 +82,43 @@
         }, duration);
     }
 
+    function playNewOrderSound() {
+        try {
+            unlockAudio();
+            const Ctx = global.AudioContext || global.webkitAudioContext;
+            if (!Ctx) return;
+            const ctx = state.audioCtx || new Ctx();
+            state.audioCtx = ctx;
+            if (ctx.state === 'suspended') {
+                ctx.resume().catch(() => {});
+            }
+
+            [660, 880, 1100].forEach((freq, index) => {
+                const oscillator = ctx.createOscillator();
+                const gain = ctx.createGain();
+                const start = ctx.currentTime + (index * 0.12);
+                oscillator.type = 'triangle';
+                oscillator.frequency.setValueAtTime(freq, start);
+                gain.gain.setValueAtTime(0.0001, start);
+                gain.gain.exponentialRampToValueAtTime(0.06, start + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.15);
+                oscillator.connect(gain);
+                gain.connect(ctx.destination);
+                oscillator.start(start);
+                oscillator.stop(start + 0.16);
+            });
+        } catch (_error) {
+            // Silent fail
+        }
+    }
+
+    function notifyNewMenuOrder(order) {
+        playNewOrderSound();
+        const table = order?.table_name ? `طاولة ${order.table_name}` : 'المنيو';
+        const number = order?.order_number ? `#${order.order_number}` : '';
+        showToast(`🛎️ طلب جديد من ${table} ${number}`.trim(), { duration: 4200 });
+    }
+
     function notifyItemAdded(itemName) {
         playAddSound();
         const label = (itemName || 'المنتج').toString().trim() || 'المنتج';
@@ -95,7 +132,9 @@
     global.HasoPosFeedback = {
         unlockAudio,
         playAddSound,
+        playNewOrderSound,
         showToast,
         notifyItemAdded,
+        notifyNewMenuOrder,
     };
 })(window);

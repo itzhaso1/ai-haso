@@ -230,7 +230,7 @@
 
                                 <div class="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-2 text-[11px] text-slate-500 sm:grid-cols-4">
                                     <div>المجموع الفرعي <span class="font-semibold text-slate-800">{{ number_format((float) $order->subtotal, 2) }}</span></div>
-                                    <div>ض.ق.م <span class="font-semibold text-slate-800">0.00</span></div>
+                                    <div>ض.ق.م <span class="font-semibold text-slate-800">{{ number_format((float) $order->tax_amount, 2) }}</span></div>
                                     <div>الخصم <span class="font-semibold text-slate-800">{{ number_format((float) $order->discount_amount, 2) }}</span></div>
                                     <div class="font-bold text-emerald-700">الإجمالي {{ number_format((float) $order->total_amount, 2) }} {{ $order->currency }}</div>
                                 </div>

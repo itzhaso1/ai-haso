@@ -23,6 +23,8 @@ class StorePosMenuItemRequest extends FormRequest
 
         return [
             'name' => ['required', 'string', 'max:255'],
+            'sku' => ['nullable', 'string', 'max:64'],
+            'barcode' => ['nullable', 'string', 'max:64'],
             'item_type' => ['nullable', 'string', 'max:100'],
             'pos_item_category_id' => [
                 'nullable',

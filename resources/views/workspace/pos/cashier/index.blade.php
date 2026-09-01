@@ -10,6 +10,10 @@
             items: @js($items),
             categories: @js($categories),
             storeOrderUrl: @js($storeOrderUrl),
+            recentMenuOrdersUrl: @js($recentMenuOrdersUrl),
+            taxRate: @js((float) $taxRate),
+            soundEnabled: @js((bool) $soundEnabled),
+            enableDelivery: @js((bool) data_get(request()->attributes->get('workspace')?->settings ?? [], 'pos.enable_delivery', false)),
             cartEndpoints: {
                 addItem: @js(route('workspace.pos.cart.items.store')),
                 updateItem: @js(url('/workspace/pos/cart/items')),
@@ -65,9 +69,10 @@
                 <h2 class="text-sm font-bold text-slate-900">أصناف الكاشير</h2>
                 <input
                     x-model="search"
+                    @keydown.enter.prevent="addByBarcode()"
                     type="search"
-                    placeholder="ابحث عن صنف..."
-                    class="w-full max-w-xs rounded-lg border-slate-300 bg-white text-sm sm:w-56"
+                    placeholder="ابحث بالاسم أو الباركود أو SKU..."
+                    class="w-full max-w-xs rounded-lg border-slate-300 bg-white text-sm sm:w-72"
                 />
             </div>
 
@@ -139,6 +144,14 @@
                     @csrf
                     <div class="mt-3 space-y-2">
                         <div>
+                            <label class="mb-1 block text-[11px] font-semibold text-slate-600">نوع الطلب</label>
+                            <div class="grid grid-cols-3 gap-1">
+                                <button type="button" @click="setOrderType('table')" :class="orderType === 'table' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-200'" class="rounded-lg border px-2 py-1.5 text-[11px] font-semibold">طاولة</button>
+                                <button type="button" @click="setOrderType('takeaway')" :class="orderType === 'takeaway' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-200'" class="rounded-lg border px-2 py-1.5 text-[11px] font-semibold">خارجي</button>
+                                <button type="button" x-show="enableDelivery" @click="setOrderType('delivery')" :class="orderType === 'delivery' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-200'" class="rounded-lg border px-2 py-1.5 text-[11px] font-semibold">توصيل</button>
+                            </div>
+                        </div>
+                        <div>
                             <label class="mb-1 block text-[11px] font-semibold text-slate-600">العميل (اختياري)</label>
                             <select name="customer_id" x-model="customerId" @change="syncMeta" class="w-full rounded-lg border-slate-300 text-sm">
                                 <option value="">بدون عميل</option>
@@ -147,18 +160,22 @@
                                 @endforeach
                             </select>
                         </div>
-                        <div>
-                            <label class="mb-1 block text-[11px] font-semibold text-slate-600">الطاولة (اختياري)</label>
+                        <div x-show="orderType === 'table'">
+                            <label class="mb-1 block text-[11px] font-semibold text-slate-600">الطاولة</label>
                             <select name="dining_table_id" x-model="diningTableId" @change="syncMeta" class="w-full rounded-lg border-slate-300 text-sm">
-                                <option value="">بدون طاولة</option>
+                                <option value="">اختر طاولة</option>
                                 @foreach($tables as $table)
-                                    <option value="{{ $table->id }}">{{ $table->name }} - {{ $table->status === 'occupied' ? 'Occupied' : 'Available' }}</option>
+                                    <option value="{{ $table->id }}">{{ $table->name }} - {{ match($table->status) { 'occupied' => 'مشغولة', 'reserved' => 'محجوزة', 'cleaning' => 'تنظيف', 'closed' => 'مغلقة', default => 'فارغة' } }}</option>
                                 @endforeach
                             </select>
                         </div>
                         <div>
-                            <label class="mb-1 block text-[11px] font-semibold text-slate-600">الخصم</label>
+                            <label class="mb-1 block text-[11px] font-semibold text-slate-600">الخصم (مبلغ)</label>
                             <input x-model.number="discount" @change="syncMeta" type="number" name="discount_amount" min="0" step="0.01" class="w-full rounded-lg border-slate-300 text-sm" />
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-[11px] font-semibold text-slate-600">الخصم (%)</label>
+                            <input x-model.number="discountPercent" type="number" min="0" max="100" step="0.01" class="w-full rounded-lg border-slate-300 text-sm" />
                         </div>
                         <div>
                             <label class="mb-1 block text-[11px] font-semibold text-slate-600">ملاحظات</label>
@@ -193,8 +210,9 @@
                             </template>
                         </div>
                         <div class="mt-2 space-y-0.5 border-t border-slate-200 pt-2 text-[11px] text-slate-700">
-                            <div class="flex justify-between"><span>المجموع</span><span class="font-semibold" x-text="money(subtotal)"></span></div>
-                            <div class="flex justify-between"><span>الخصم</span><span class="font-semibold" x-text="money(discount || 0)"></span></div>
+                            <div class="flex justify-between"><span>المجموع الفرعي</span><span class="font-semibold" x-text="money(subtotal)"></span></div>
+                            <div class="flex justify-between"><span>الخصم</span><span class="font-semibold" x-text="money(effectiveDiscount)"></span></div>
+                            <div class="flex justify-between"><span>الضريبة</span><span class="font-semibold" x-text="money(taxAmount)"></span></div>
                             <div class="flex justify-between text-sm font-bold text-slate-900">
                                 <span>الإجمالي</span>
                                 <span>
@@ -267,16 +285,22 @@
     </div>
 
     <script>
-        function cashierPos({ items, categories, cartEndpoints, storeOrderUrl }) {
+        function cashierPos({ items, categories, cartEndpoints, storeOrderUrl, recentMenuOrdersUrl = null, taxRate = 0, soundEnabled = true, enableDelivery = false }) {
             return {
                 items,
                 categories,
                 cartEndpoints,
                 storeOrderUrl,
+                recentMenuOrdersUrl,
+                taxRate: Number(taxRate || 0),
+                soundEnabled: !!soundEnabled,
+                enableDelivery: !!enableDelivery,
                 search: '',
                 selectedCategoryId: '',
                 cart: [],
                 discount: 0,
+                discountPercent: 0,
+                orderType: 'takeaway',
                 customerId: '',
                 diningTableId: '',
                 notes: '',
@@ -285,9 +309,18 @@
                 successOpen: false,
                 successOrderNumber: '',
                 successPrintUrl: '',
+                lastMenuOrderId: 0,
                 init() {
                     this.syncCartBadge();
                     this.$watch('cart', () => this.syncCartBadge(), { deep: true });
+                    this.bootstrapMenuOrderPolling();
+                },
+                setOrderType(type) {
+                    this.orderType = type;
+                    if (type !== 'table') {
+                        this.diningTableId = '';
+                    }
+                    this.syncMeta();
                 },
                 syncCartBadge() {
                     const count = this.cart.reduce((sum, line) => sum + Number(line.quantity || 0), 0);
@@ -308,9 +341,23 @@
                         const matchesSearch = term === ''
                             || (item.name || '').toLowerCase().includes(term)
                             || (item.item_type || '').toLowerCase().includes(term)
-                            || (item.category?.name || '').toLowerCase().includes(term);
+                            || (item.category?.name || '').toLowerCase().includes(term)
+                            || (item.sku || '').toLowerCase().includes(term)
+                            || (item.barcode || '').toLowerCase().includes(term);
                         return matchesCategory && matchesSearch;
                     });
+                },
+                addByBarcode() {
+                    const term = this.search.trim().toLowerCase();
+                    if (!term) return;
+                    const match = this.items.find((item) =>
+                        String(item.barcode || '').toLowerCase() === term
+                        || String(item.sku || '').toLowerCase() === term
+                    );
+                    if (match) {
+                        this.addItem(match);
+                        this.search = '';
+                    }
                 },
                 countInCategory(categoryId) {
                     return this.items.filter((item) => Number(item.pos_item_category_id) === Number(categoryId)).length;
@@ -362,8 +409,18 @@
                 get subtotal() {
                     return this.cart.reduce((sum, line) => sum + (line.quantity * line.unit_price), 0);
                 },
+                get effectiveDiscount() {
+                    if (Number(this.discountPercent || 0) > 0) {
+                        return Math.max(0, this.subtotal * (Number(this.discountPercent) / 100));
+                    }
+                    return Number(this.discount || 0);
+                },
+                get taxAmount() {
+                    const taxable = Math.max(0, this.subtotal - this.effectiveDiscount);
+                    return Math.max(0, taxable * (Number(this.taxRate || 0) / 100));
+                },
                 get total() {
-                    return Math.max(0, this.subtotal - Number(this.discount || 0));
+                    return Math.max(0, this.subtotal - this.effectiveDiscount + this.taxAmount);
                 },
                 get orderCurrencyLabel() {
                     const currencies = [...new Set(this.cart.map((line) => line.currency).filter(Boolean))];
@@ -389,10 +446,45 @@
                 syncMeta() {
                     this.cartFetch(this.cartEndpoints.meta, 'POST', {
                         customer_id: this.customerId || null,
-                        dining_table_id: this.diningTableId || null,
-                        discount_amount: this.discount || 0,
+                        dining_table_id: this.orderType === 'table' ? (this.diningTableId || null) : null,
+                        discount_amount: this.effectiveDiscount || 0,
                         notes: this.notes || null,
                     });
+                },
+                async bootstrapMenuOrderPolling() {
+                    if (!this.recentMenuOrdersUrl) return;
+                    try {
+                        const response = await fetch(`${this.recentMenuOrdersUrl}?after_id=0`, {
+                            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                            credentials: 'same-origin',
+                        });
+                        const payload = await response.json().catch(() => ({}));
+                        this.lastMenuOrderId = Number(payload.latest_id || 0);
+                    } catch (_error) {
+                        this.lastMenuOrderId = 0;
+                    }
+                    setInterval(() => this.pollMenuOrders(), 8000);
+                },
+                async pollMenuOrders() {
+                    if (!this.recentMenuOrdersUrl) return;
+                    try {
+                        const response = await fetch(`${this.recentMenuOrdersUrl}?after_id=${this.lastMenuOrderId}`, {
+                            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                            credentials: 'same-origin',
+                        });
+                        const payload = await response.json().catch(() => ({}));
+                        const orders = payload.orders || [];
+                        if (orders.length && this.soundEnabled) {
+                            orders.slice().reverse().forEach((order) => {
+                                window.HasoPosFeedback?.notifyNewMenuOrder(order);
+                            });
+                        }
+                        if (payload.latest_id) {
+                            this.lastMenuOrderId = Math.max(this.lastMenuOrderId, Number(payload.latest_id));
+                        }
+                    } catch (_error) {
+                        // polling fallback must never break cashier UI
+                    }
                 },
                 async cartFetch(url, method, body) {
                     try {
@@ -414,6 +506,7 @@
                 clearLocalCart() {
                     this.cart = [];
                     this.discount = 0;
+                    this.discountPercent = 0;
                     this.notes = '';
                     this.errorMessage = '';
                     this.syncCartBadge();
@@ -438,20 +531,29 @@
                 },
                 async createOrder() {
                     if (this.submitting || this.cart.length === 0) return;
+                    if (this.orderType === 'table' && !this.diningTableId) {
+                        this.errorMessage = 'يرجى اختيار طاولة لهذا الطلب.';
+                        return;
+                    }
                     this.submitting = true;
                     this.errorMessage = '';
                     await this.syncMeta();
 
                     const body = {
                         customer_id: this.customerId || null,
-                        dining_table_id: this.diningTableId || null,
-                        discount_amount: this.discount || 0,
+                        dining_table_id: this.orderType === 'table' ? (this.diningTableId || null) : null,
+                        order_type: this.orderType,
                         notes: this.notes || null,
                         items: this.cart.map((line) => ({
                             pos_menu_item_id: line.pos_menu_item_id,
                             quantity: line.quantity,
                         })),
                     };
+                    if (Number(this.discountPercent || 0) > 0) {
+                        body.discount_percent = this.discountPercent;
+                    } else {
+                        body.discount_amount = this.discount || 0;
+                    }
 
                     try {
                         const response = await fetch(this.storeOrderUrl, {
@@ -479,6 +581,7 @@
                 },
                 async checkoutViaCart() {
                     if (this.submitting || this.cart.length === 0) return;
+                    this.setOrderType('takeaway');
                     this.submitting = true;
                     this.errorMessage = '';
                     await this.syncMeta();
@@ -493,8 +596,8 @@
                             },
                             body: JSON.stringify({
                                 customer_id: this.customerId || null,
-                                dining_table_id: this.diningTableId || null,
-                                discount_amount: this.discount || 0,
+                                dining_table_id: null,
+                                discount_amount: this.effectiveDiscount || 0,
                                 notes: this.notes || null,
                             }),
                             credentials: 'same-origin',

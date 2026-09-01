@@ -28,6 +28,6 @@ abstract class PosBaseController extends Controller
             ->wherePivotIn('membership_role', ['owner', 'admin', 'manager', 'agent', 'receptionist'])
             ->exists();
 
-        abort_unless($isElevatedMember, 403, 'You are not allowed to access POS module.');
+        abort_unless($isElevatedMember, 403, 'ليس لديك صلاحية للوصول إلى وحدة الكاشير.');
     }
 }

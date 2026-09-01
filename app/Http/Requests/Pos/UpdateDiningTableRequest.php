@@ -19,7 +19,7 @@ class UpdateDiningTableRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
-            'status' => ['nullable', 'in:available,occupied'],
+            'status' => ['nullable', 'in:available,occupied,reserved,cleaning,closed'],
         ];
     }
 }

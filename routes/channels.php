@@ -36,7 +36,7 @@ Broadcast::channel('workspace.{workspaceId}.conversation.{conversationId}', func
         ->exists();
 });
 
-Broadcast::channel('workspace.{workspaceId}.notifications', function (User $user, int $workspaceId): bool {
+Broadcast::channel('workspace.{workspaceId}.pos', function (User $user, int $workspaceId): bool {
     return Workspace::query()
         ->whereKey($workspaceId)
         ->whereHas('users', function ($query) use ($user): void {
