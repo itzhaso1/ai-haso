@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hasim/core/theme/theme_mode_controller.dart';
+import 'package:hasim/core/widgets/hasim_shell_header.dart';
 import 'package:hasim/features/auth/providers/auth_controller.dart';
 import 'package:hasim/features/home/providers/home_controller.dart';
 
@@ -19,13 +20,14 @@ class MoreScreen extends ConsumerWidget {
     final notifCount = snap?.unreadNotifications ?? 0;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('المزيد'),
-        centerTitle: true,
-      ),
+      appBar: const HasimShellHeader(),
       body: ListView(
         padding: const EdgeInsets.only(bottom: 32),
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Text('المزيد', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: InkWell(
@@ -34,7 +36,7 @@ class MoreScreen extends ConsumerWidget {
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+                  border: Border.all(color: theme.dividerColor.withValues(alpha: 0.6)),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Row(

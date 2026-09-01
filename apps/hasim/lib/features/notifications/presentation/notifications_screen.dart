@@ -1,10 +1,11 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hasim/core/di/providers.dart';
 import 'package:hasim/core/models/models.dart';
 import 'package:hasim/core/network/api_exception.dart';
 import 'package:hasim/core/widgets/async_body.dart';
+import 'package:hasim/features/stories/providers/stories_controller.dart';
+import 'package:hasim/router/notification_deep_link.dart';
 
 class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
@@ -24,14 +25,26 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final items = await ref.read(notificationRepositoryProvider).list();
-      setState(() { _items = items; _loading = false; });
+      setState(() {
+        _items = items;
+        _loading = false;
+      });
     } on ApiException catch (e) {
-      setState(() { _error = e.message; _loading = false; });
+      setState(() {
+        _error = e.message;
+        _loading = false;
+      });
     } catch (_) {
-      setState(() { _error = 'تعذر تحميل الإشعارات.'; _loading = false; });
+      setState(() {
+        _error = 'تعذر تحميل الإشعارات.';
+        _loading = false;
+      });
     }
   }
 
@@ -64,11 +77,18 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
             itemBuilder: (context, i) {
               final n = _items[i];
               return ListTile(
-                leading: Icon(n.isRead ? Icons.notifications_none : Icons.notifications_active, color: Theme.of(context).colorScheme.primary),
+                leading: Icon(
+                  n.isRead ? Icons.notifications_none : Icons.notifications_active,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 title: Text(n.title, style: TextStyle(fontWeight: n.isRead ? FontWeight.w500 : FontWeight.w800)),
                 subtitle: Text(n.body, maxLines: 2, overflow: TextOverflow.ellipsis),
                 onTap: () async {
                   await ref.read(notificationRepositoryProvider).markRead(n.id);
+                  if (!context.mounted) return;
+                  final stories = ref.read(storiesControllerProvider);
+                  await openNotificationDeepLink(context, n, stories: stories);
+                  if (!context.mounted) return;
                   await _load();
                 },
               );

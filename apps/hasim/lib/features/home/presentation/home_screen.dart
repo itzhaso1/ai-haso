@@ -88,7 +88,7 @@ class HomeScreen extends ConsumerWidget {
                         _QuickAction(label: 'محادثات', icon: Icons.forum_outlined, onTap: () => context.go('/conversations')),
                         _QuickAction(label: 'بريد جديد', icon: Icons.edit_outlined, onTap: () => context.push('/email/compose')),
                         _QuickAction(label: 'جهات الاتصال', icon: Icons.contacts_outlined, onTap: () => context.push('/contacts')),
-                        _QuickAction(label: 'قصة', icon: Icons.auto_stories_outlined, onTap: () => context.push('/stories/create')),
+                        _QuickAction(label: 'تحديث', icon: Icons.auto_stories_outlined, onTap: () => context.push('/stories/create')),
                         _QuickAction(label: 'الحجوزات', icon: Icons.calendar_today_outlined, onTap: () => context.go('/appointments')),
                         _QuickAction(label: 'القنوات', icon: Icons.hub_outlined, onTap: () => context.push('/channels')),
                       ],

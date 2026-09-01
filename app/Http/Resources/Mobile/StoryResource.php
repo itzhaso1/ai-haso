@@ -47,6 +47,26 @@ class StoryResource extends JsonResource
             'is_mine' => $request->user()
                 ? (int) $this->user_id === (int) $request->user()->id
                 : false,
+            // Additive: whether the current user already viewed this story (for badges / rings).
+            'viewed_by_me' => $this->resolveViewedByMe($request),
         ];
+    }
+
+    private function resolveViewedByMe(Request $request): bool
+    {
+        $user = $request->user();
+        if ($user === null) {
+            return false;
+        }
+
+        if ((int) $this->user_id === (int) $user->id) {
+            return true;
+        }
+
+        if ($this->relationLoaded('views')) {
+            return $this->views->isNotEmpty();
+        }
+
+        return $this->views()->where('user_id', $user->id)->exists();
     }
 }

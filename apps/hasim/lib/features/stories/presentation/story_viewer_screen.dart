@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hasim/core/di/providers.dart';
 import 'package:hasim/core/models/models.dart';
 import 'package:hasim/features/stories/providers/stories_controller.dart';
+import 'package:video_player/video_player.dart';
 
 class StoryViewerArgs {
   const StoryViewerArgs({
@@ -35,15 +36,21 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
   Timer? _timer;
   double _progress = 0;
   bool _paused = false;
-  final _reply = TextEditingController();
   final Set<int> _viewed = {};
+  VideoPlayerController? _video;
 
   List<StoryBucket> get _buckets => widget.args.buckets;
   StoryBucket get _bucket => _buckets[_bucketIndex];
   StoryModel get _story => _bucket.stories[_storyIndex];
 
   Duration get _duration {
-    if (_story.isVideo) return const Duration(seconds: 15);
+    if (_story.isVideo) {
+      final v = _video;
+      if (v != null && v.value.isInitialized && v.value.duration.inMilliseconds > 0) {
+        return v.value.duration;
+      }
+      return const Duration(seconds: 15);
+    }
     return const Duration(seconds: 5);
   }
 
@@ -52,7 +59,8 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
     super.initState();
     _bucketIndex = widget.args.bucketIndex.clamp(0, widget.args.buckets.length - 1);
     _storyIndex = widget.args.storyIndex.clamp(0, _bucket.stories.length - 1);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _prepareMedia();
       _markViewed();
       _startTimer();
     });
@@ -61,14 +69,35 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
   @override
   void dispose() {
     _timer?.cancel();
-    _reply.dispose();
+    _video?.dispose();
     super.dispose();
+  }
+
+  Future<void> _prepareMedia() async {
+    await _video?.dispose();
+    _video = null;
+    final story = _story;
+    if (!story.isVideo || story.mediaUrl == null) return;
+    final controller = VideoPlayerController.networkUrl(Uri.parse(story.mediaUrl!));
+    try {
+      await controller.initialize();
+      await controller.setLooping(false);
+      await controller.play();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() => _video = controller);
+    } catch (_) {
+      await controller.dispose();
+    }
   }
 
   Future<void> _markViewed() async {
     final id = _story.id;
     if (_viewed.contains(id) || _story.isMine) return;
     _viewed.add(id);
+    ref.read(storiesControllerProvider.notifier).markViewedLocally(id);
     try {
       await ref.read(storyRepositoryProvider).markViewed(id);
     } catch (_) {}
@@ -89,20 +118,24 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
     });
   }
 
+  Future<void> _goTo({required int bucketIndex, required int storyIndex}) async {
+    setState(() {
+      _bucketIndex = bucketIndex;
+      _storyIndex = storyIndex;
+      _paused = false;
+    });
+    await _prepareMedia();
+    _markViewed();
+    _startTimer();
+  }
+
   void _next() {
     if (_storyIndex < _bucket.stories.length - 1) {
-      setState(() => _storyIndex++);
-      _markViewed();
-      _startTimer();
+      _goTo(bucketIndex: _bucketIndex, storyIndex: _storyIndex + 1);
       return;
     }
     if (_bucketIndex < _buckets.length - 1) {
-      setState(() {
-        _bucketIndex++;
-        _storyIndex = 0;
-      });
-      _markViewed();
-      _startTimer();
+      _goTo(bucketIndex: _bucketIndex + 1, storyIndex: 0);
       return;
     }
     if (mounted) context.pop();
@@ -110,18 +143,12 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
 
   void _prev() {
     if (_storyIndex > 0) {
-      setState(() => _storyIndex--);
-      _markViewed();
-      _startTimer();
+      _goTo(bucketIndex: _bucketIndex, storyIndex: _storyIndex - 1);
       return;
     }
     if (_bucketIndex > 0) {
-      setState(() {
-        _bucketIndex--;
-        _storyIndex = _bucket.stories.length - 1;
-      });
-      _markViewed();
-      _startTimer();
+      final prevBucket = _buckets[_bucketIndex - 1];
+      _goTo(bucketIndex: _bucketIndex - 1, storyIndex: prevBucket.stories.length - 1);
     } else {
       _startTimer();
     }
@@ -138,23 +165,23 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
     return const Color(0xFF067E6B);
   }
 
-  void _onReply() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('الرد عبر المحادثة قريبًا')),
-    );
-    _reply.clear();
-  }
-
   @override
   Widget build(BuildContext context) {
     final story = _story;
     final bg = story.isText ? _parseBg(story.backgroundColor) : Colors.black;
+    final video = _video;
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: GestureDetector(
-        onLongPressStart: (_) => setState(() => _paused = true),
-        onLongPressEnd: (_) => setState(() => _paused = false),
+        onLongPressStart: (_) {
+          setState(() => _paused = true);
+          video?.pause();
+        },
+        onLongPressEnd: (_) {
+          setState(() => _paused = false);
+          video?.play();
+        },
         onTapUp: (d) {
           final w = MediaQuery.sizeOf(context).width;
           if (d.localPosition.dx < w * 0.35) {
@@ -170,19 +197,28 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
             if (story.isImage && story.mediaUrl != null)
               CachedNetworkImage(imageUrl: story.mediaUrl!, fit: BoxFit.contain)
             else if (story.isVideo && story.mediaUrl != null)
-              Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (story.thumbnailUrl != null)
-                      CachedNetworkImage(imageUrl: story.thumbnailUrl!, height: 220, fit: BoxFit.cover)
-                    else
-                      const Icon(Icons.play_circle_outline, size: 72, color: Colors.white70),
-                    const SizedBox(height: 12),
-                    Text(story.caption ?? 'فيديو', style: const TextStyle(color: Colors.white70)),
-                  ],
-                ),
-              )
+              video != null && video.value.isInitialized
+                  ? FittedBox(
+                      fit: BoxFit.contain,
+                      child: SizedBox(
+                        width: video.value.size.width,
+                        height: video.value.size.height,
+                        child: VideoPlayer(video),
+                      ),
+                    )
+                  : Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (story.thumbnailUrl != null)
+                            CachedNetworkImage(imageUrl: story.thumbnailUrl!, height: 220, fit: BoxFit.cover)
+                          else
+                            const CircularProgressIndicator(color: Colors.white70),
+                          const SizedBox(height: 12),
+                          Text(story.caption ?? 'جاري تحميل الفيديو…', style: const TextStyle(color: Colors.white70)),
+                        ],
+                      ),
+                    )
             else if (story.isText)
               Center(
                 child: Padding(
@@ -198,7 +234,7 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
               Positioned(
                 left: 16,
                 right: 16,
-                bottom: 100,
+                bottom: 48,
                 child: Text(
                   story.caption!,
                   textAlign: TextAlign.center,
@@ -264,37 +300,6 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> {
                       ],
                     ),
                   ),
-                  const Spacer(),
-                  if (!story.isMine)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _reply,
-                              style: const TextStyle(color: Colors.white),
-                              decoration: InputDecoration(
-                                hintText: 'رد...',
-                                hintStyle: const TextStyle(color: Colors.white54),
-                                filled: true,
-                                fillColor: Colors.white12,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(24),
-                                  borderSide: BorderSide.none,
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                              ),
-                              onSubmitted: (_) => _onReply(),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: _onReply,
-                            icon: const Icon(Icons.send, color: Colors.white),
-                          ),
-                        ],
-                      ),
-                    ),
                 ],
               ),
             ),

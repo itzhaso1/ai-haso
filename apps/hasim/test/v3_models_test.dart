@@ -32,6 +32,7 @@ void main() {
       expect(story.selectedUserIds, [1, 2]);
       expect(story.viewsCount, 3);
       expect(story.isMine, isTrue);
+      expect(story.viewedByMe, isTrue);
       expect(story.author?.name, 'أحمد');
       expect(story.expiresAt, isNotNull);
     });
@@ -43,9 +44,11 @@ void main() {
         'media_url': 'https://example.com/a.jpg',
         'views_count': 0,
         'is_mine': false,
+        'viewed_by_me': false,
       });
       expect(story.isImage, isTrue);
       expect(story.mediaUrl, contains('a.jpg'));
+      expect(story.viewedByMe, isFalse);
     });
   });
 

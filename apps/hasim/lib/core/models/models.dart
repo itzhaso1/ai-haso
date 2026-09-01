@@ -813,6 +813,7 @@ class StoryModel extends Equatable {
     this.createdAt,
     this.author,
     this.isMine = false,
+    this.viewedByMe = false,
   });
 
   final int id;
@@ -833,6 +834,7 @@ class StoryModel extends Equatable {
   final DateTime? createdAt;
   final StoryAuthorModel? author;
   final bool isMine;
+  final bool viewedByMe;
 
   bool get isText => type == 'text';
   bool get isImage => type == 'image';
@@ -865,11 +867,36 @@ class StoryModel extends Equatable {
           ? StoryAuthorModel.fromJson(json['author'] as Map<String, dynamic>)
           : null,
       isMine: json['is_mine'] == true,
+      viewedByMe: json['viewed_by_me'] == true || json['is_mine'] == true,
+    );
+  }
+
+  StoryModel copyWith({bool? viewedByMe, int? viewsCount}) {
+    return StoryModel(
+      id: id,
+      type: type,
+      caption: caption,
+      bodyText: bodyText,
+      backgroundColor: backgroundColor,
+      mediaUrl: mediaUrl,
+      mediaMime: mediaMime,
+      mediaSize: mediaSize,
+      thumbnailUrl: thumbnailUrl,
+      visibility: visibility,
+      selectedUserIds: selectedUserIds,
+      hiddenUserIds: hiddenUserIds,
+      expiresAt: expiresAt,
+      viewsCount: viewsCount ?? this.viewsCount,
+      status: status,
+      createdAt: createdAt,
+      author: author,
+      isMine: isMine,
+      viewedByMe: viewedByMe ?? this.viewedByMe,
     );
   }
 
   @override
-  List<Object?> get props => [id, type, viewsCount, isMine, status];
+  List<Object?> get props => [id, type, viewsCount, isMine, viewedByMe, status];
 }
 
 class ContactGroupRef extends Equatable {

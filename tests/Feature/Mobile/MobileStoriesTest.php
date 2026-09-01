@@ -62,17 +62,33 @@ class MobileStoriesTest extends TestCase
         // Reset auth guard cache so bearer token for a different user is honored.
         $this->app['auth']->forgetGuards();
 
+        $beforeView = $this->withToken($viewerToken)
+            ->withHeader('X-Workspace-Id', (string) $workspace->id)
+            ->getJson('/api/mobile/v1/stories')
+            ->assertOk();
+        $viewerRow = collect($beforeView->json('data'))->firstWhere(fn ($row) => (int) $row['id'] === (int) $storyId);
+        $this->assertFalse((bool) ($viewerRow['viewed_by_me'] ?? true));
+
         $this->withToken($viewerToken)
             ->withHeader('X-Workspace-Id', (string) $workspace->id)
             ->postJson("/api/mobile/v1/stories/{$storyId}/view")
             ->assertOk()
             ->assertJsonPath('success', true)
-            ->assertJsonPath('data.is_mine', false);
+            ->assertJsonPath('data.is_mine', false)
+            ->assertJsonPath('data.viewed_by_me', true);
 
         $this->assertDatabaseHas('story_views', [
             'story_id' => $storyId,
             'user_id' => $viewer->id,
         ]);
+        $this->assertSame(1, (int) Story::withoutGlobalScopes()->find($storyId)->views_count);
+
+        // Idempotent second view should not increment views_count again.
+        $this->app['auth']->forgetGuards();
+        $this->withToken($viewerToken)
+            ->withHeader('X-Workspace-Id', (string) $workspace->id)
+            ->postJson("/api/mobile/v1/stories/{$storyId}/view")
+            ->assertOk();
         $this->assertSame(1, (int) Story::withoutGlobalScopes()->find($storyId)->views_count);
 
         // Expire and ensure list hides it

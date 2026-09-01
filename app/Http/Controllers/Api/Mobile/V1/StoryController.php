@@ -91,7 +91,13 @@ class StoryController extends MobileController
             return $this->fail($exception->getMessage(), 403);
         }
 
-        return $this->ok(new StoryResource($story->fresh()->load('author:id,name,avatar_path')), message: 'تم تسجيل المشاهدة.');
+        return $this->ok(
+            new StoryResource($story->fresh()->load([
+                'author:id,name,avatar_path',
+                'views' => fn ($query) => $query->where('user_id', $request->user()->id),
+            ])),
+            message: 'تم تسجيل المشاهدة.',
+        );
     }
 
     public function destroy(Request $request, Story $story): JsonResponse

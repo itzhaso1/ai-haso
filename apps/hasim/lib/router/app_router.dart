@@ -31,6 +31,7 @@ import 'package:hasim/features/settings/presentation/profile_screen.dart';
 import 'package:hasim/features/settings/presentation/settings_screen.dart';
 import 'package:hasim/features/stories/presentation/create_story_screen.dart';
 import 'package:hasim/features/stories/presentation/story_viewer_screen.dart';
+import 'package:hasim/features/stories/presentation/updates_screen.dart';
 import 'package:hasim/features/stories/providers/stories_controller.dart';
 import 'package:hasim/features/workspace/presentation/workspace_picker_screen.dart';
 import 'package:hasim/router/app_shell.dart';
@@ -148,6 +149,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(routes: [GoRoute(path: '/conversations', builder: (context, state) => const ConversationsScreen())]),
           StatefulShellBranch(routes: [GoRoute(path: '/email', builder: (context, state) => const EmailListScreen())]),
           StatefulShellBranch(routes: [GoRoute(path: '/appointments', builder: (context, state) => const AppointmentsScreen())]),
+          StatefulShellBranch(routes: [GoRoute(path: '/updates', builder: (context, state) => const UpdatesScreen())]),
           StatefulShellBranch(routes: [GoRoute(path: '/more', builder: (context, state) => const MoreScreen())]),
         ],
       ),

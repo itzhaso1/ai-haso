@@ -9,8 +9,7 @@ import 'package:hasim/core/theme/app_theme.dart';
 import 'package:hasim/features/stories/providers/stories_controller.dart';
 import 'package:image_picker/image_picker.dart';
 
-/// Create story. Visibility defaults to `workspace`.
-/// `selected` / `hidden` user targeting is deferred — no workspace members list API on mobile yet.
+/// إنشاء تحديث — يستخدم Story API الحالية.
 class CreateStoryScreen extends ConsumerStatefulWidget {
   const CreateStoryScreen({super.key});
 
@@ -18,13 +17,14 @@ class CreateStoryScreen extends ConsumerStatefulWidget {
   ConsumerState<CreateStoryScreen> createState() => _CreateStoryScreenState();
 }
 
-class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> with SingleTickerProviderStateMixin {
-  late final TabController _tabs;
+enum _CreateMode { choose, text, image, video }
+
+class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
+  _CreateMode _mode = _CreateMode.choose;
   final _text = TextEditingController();
   final _caption = TextEditingController();
   Color _bg = const Color(0xFF067E6B);
   XFile? _media;
-  bool _isVideo = false;
   bool _publishing = false;
   double _uploadProgress = 0;
   static const _expiresInHours = 24;
@@ -40,36 +40,31 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> with Sing
   ];
 
   @override
-  void initState() {
-    super.initState();
-    _tabs = TabController(length: 3, vsync: this);
-  }
-
-  @override
   void dispose() {
-    _tabs.dispose();
     _text.dispose();
     _caption.dispose();
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
+  Future<void> _pickImage({bool replace = false}) async {
     final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (file == null) return;
     setState(() {
       _media = file;
-      _isVideo = false;
+      _mode = _CreateMode.image;
     });
   }
 
-  Future<void> _pickVideo() async {
+  Future<void> _pickVideo({bool replace = false}) async {
     final file = await ImagePicker().pickVideo(source: ImageSource.gallery);
     if (file == null) return;
     setState(() {
       _media = file;
-      _isVideo = true;
+      _mode = _CreateMode.video;
     });
   }
+
+  void _removeMedia() => setState(() => _media = null);
 
   String _hex(Color c) {
     final v = c.toARGB32().toRadixString(16).padLeft(8, '0');
@@ -77,14 +72,20 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> with Sing
   }
 
   Future<void> _publish() async {
-    final tab = _tabs.index;
-    final type = tab == 0 ? 'text' : (tab == 1 ? 'image' : 'video');
+    final type = switch (_mode) {
+      _CreateMode.text => 'text',
+      _CreateMode.image => 'image',
+      _CreateMode.video => 'video',
+      _CreateMode.choose => null,
+    };
+    if (type == null) return;
+
     if (type == 'text' && _text.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('اكتب نص القصة.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('اكتب نص التحديث.')));
       return;
     }
     if (type != 'text' && _media == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('اختر ملفًا للقصة.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('اختر ملفًا للتحديث.')));
       return;
     }
 
@@ -106,15 +107,15 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> with Sing
               setState(() => _uploadProgress = sent / total);
             },
           );
-      await ref.read(storiesControllerProvider.notifier).refresh();
+      await ref.read(storiesControllerProvider.notifier).refresh(force: true);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم نشر القصة')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم نشر التحديث')));
         context.pop();
       }
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر نشر القصة')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تعذر نشر التحديث')));
     } finally {
       if (mounted) setState(() => _publishing = false);
     }
@@ -124,92 +125,140 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> with Sing
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('قصة جديدة'),
-        bottom: TabBar(
-          controller: _tabs,
-          tabs: const [
-            Tab(text: 'نص'),
-            Tab(text: 'صورة'),
-            Tab(text: 'فيديو'),
-          ],
-        ),
+        title: const Text('إنشاء تحديث'),
         actions: [
-          TextButton(onPressed: _publishing ? null : _publish, child: Text(_publishing ? '...' : 'نشر')),
+          if (_mode != _CreateMode.choose)
+            TextButton(
+              onPressed: _publishing ? null : _publish,
+              child: Text(_publishing ? '...' : 'نشر'),
+            ),
         ],
       ),
       body: Column(
         children: [
           if (_publishing) LinearProgressIndicator(value: _uploadProgress > 0 ? _uploadProgress : null),
           Expanded(
-            child: TabBarView(
-              controller: _tabs,
-              children: [
-                _TextTab(
+            child: switch (_mode) {
+              _CreateMode.choose => _ChooseType(
+                  onText: () => setState(() => _mode = _CreateMode.text),
+                  onImage: () => _pickImage(),
+                  onVideo: () => _pickVideo(),
+                ),
+              _CreateMode.text => _TextEditor(
                   controller: _text,
                   bg: _bg,
                   colors: _colors,
                   onColor: (c) => setState(() => _bg = c),
+                  onBack: () => setState(() => _mode = _CreateMode.choose),
                 ),
-                _MediaTab(
-                  label: 'اختر صورة',
-                  media: !_isVideo ? _media : null,
-                  onPick: _pickImage,
+              _CreateMode.image => _MediaEditor(
+                  isVideo: false,
+                  media: _media,
                   caption: _caption,
+                  onPick: () => _pickImage(replace: true),
+                  onRemove: _removeMedia,
+                  onBack: () => setState(() {
+                    _media = null;
+                    _mode = _CreateMode.choose;
+                  }),
                 ),
-                _MediaTab(
-                  label: 'اختر فيديو',
-                  media: _isVideo ? _media : null,
-                  onPick: _pickVideo,
-                  caption: _caption,
+              _CreateMode.video => _MediaEditor(
                   isVideo: true,
+                  media: _media,
+                  caption: _caption,
+                  onPick: () => _pickVideo(replace: true),
+                  onRemove: _removeMedia,
+                  onBack: () => setState(() {
+                    _media = null;
+                    _mode = _CreateMode.choose;
+                  }),
                 ),
-              ],
-            ),
+            },
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                InputDecorator(
-                  decoration: const InputDecoration(labelText: 'الظهور'),
-                  child: Text(
-                    'مساحة العمل فقط · تنتهي خلال $_expiresInHours ساعة',
-                    style: TextStyle(color: Colors.grey.shade700),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'تحديد مستخدمين محددين/مخفيين غير متاح حالياً (لا توجد واجهة أعضاء للمساحة على الموبايل).',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600, height: 1.35),
-                ),
-              ],
+          if (_mode != _CreateMode.choose)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Text(
+                'الظهور: مساحة العمل · ينتهي خلال $_expiresInHours ساعة (حسب الخادم)',
+                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
             ),
-          ),
         ],
       ),
     );
   }
 }
 
-class _TextTab extends StatelessWidget {
-  const _TextTab({
+class _ChooseType extends StatelessWidget {
+  const _ChooseType({required this.onText, required this.onImage, required this.onVideo});
+
+  final VoidCallback onText;
+  final VoidCallback onImage;
+  final VoidCallback onVideo;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        Text('اختر نوع التحديث', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 16),
+        _TypeTile(icon: Icons.image_outlined, title: 'صورة', onTap: onImage),
+        _TypeTile(icon: Icons.videocam_outlined, title: 'فيديو', onTap: onVideo),
+        _TypeTile(icon: Icons.edit_outlined, title: 'نص', onTap: onText),
+      ],
+    );
+  }
+}
+
+class _TypeTile extends StatelessWidget {
+  const _TypeTile({required this.icon, required this.title, required this.onTap});
+
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      leading: CircleAvatar(
+        backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.12),
+        child: Icon(icon, color: theme.colorScheme.primary),
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+      trailing: const Icon(Icons.chevron_left),
+      onTap: onTap,
+    );
+  }
+}
+
+class _TextEditor extends StatelessWidget {
+  const _TextEditor({
     required this.controller,
     required this.bg,
     required this.colors,
     required this.onColor,
+    required this.onBack,
   });
 
   final TextEditingController controller;
   final Color bg;
   final List<Color> colors;
   final ValueChanged<Color> onColor;
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: TextButton.icon(onPressed: onBack, icon: const Icon(Icons.arrow_forward), label: const Text('رجوع')),
+        ),
         Container(
           height: 280,
           padding: const EdgeInsets.all(20),
@@ -241,10 +290,7 @@ class _TextTab extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: c,
                     shape: BoxShape.circle,
-                    border: Border.all(
-                      color: c == bg ? AppTheme.brand : Colors.transparent,
-                      width: 2.5,
-                    ),
+                    border: Border.all(color: c == bg ? AppTheme.brand : Colors.transparent, width: 2.5),
                   ),
                 ),
               ),
@@ -255,26 +301,32 @@ class _TextTab extends StatelessWidget {
   }
 }
 
-class _MediaTab extends StatelessWidget {
-  const _MediaTab({
-    required this.label,
-    required this.onPick,
+class _MediaEditor extends StatelessWidget {
+  const _MediaEditor({
+    required this.isVideo,
+    required this.media,
     required this.caption,
-    this.media,
-    this.isVideo = false,
+    required this.onPick,
+    required this.onRemove,
+    required this.onBack,
   });
 
-  final String label;
-  final VoidCallback onPick;
-  final TextEditingController caption;
-  final XFile? media;
   final bool isVideo;
+  final XFile? media;
+  final TextEditingController caption;
+  final VoidCallback onPick;
+  final VoidCallback onRemove;
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: TextButton.icon(onPressed: onBack, icon: const Icon(Icons.arrow_forward), label: const Text('رجوع')),
+        ),
         AspectRatio(
           aspectRatio: 9 / 12,
           child: Material(
@@ -290,19 +342,45 @@ class _MediaTab extends StatelessWidget {
                         children: [
                           Icon(isVideo ? Icons.videocam_outlined : Icons.image_outlined, size: 40),
                           const SizedBox(height: 8),
-                          Text(label),
+                          Text(isVideo ? 'اختر فيديو' : 'اختر صورة'),
                         ],
                       ),
                     )
                   : isVideo
-                      ? Center(child: Text(media!.name, textAlign: TextAlign.center))
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Text(media!.name, textAlign: TextAlign.center),
+                          ),
+                        )
                       : ClipRRect(
                           borderRadius: BorderRadius.circular(16),
-                          child: Image.file(File(media!.path), fit: BoxFit.cover),
+                          child: Image.file(File(media!.path), fit: BoxFit.cover, width: double.infinity),
                         ),
             ),
           ),
         ),
+        const SizedBox(height: 12),
+        if (media != null)
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onPick,
+                  icon: const Icon(Icons.swap_horiz),
+                  label: const Text('استبدال'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onRemove,
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('إزالة'),
+                ),
+              ),
+            ],
+          ),
         const SizedBox(height: 12),
         TextField(controller: caption, decoration: const InputDecoration(labelText: 'تعليق (اختياري)')),
       ],

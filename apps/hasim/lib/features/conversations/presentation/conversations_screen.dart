@@ -3,15 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hasim/core/utils/relative_time.dart';
 import 'package:hasim/core/widgets/async_body.dart';
-import 'package:hasim/core/widgets/hasim_logo.dart';
+import 'package:hasim/core/widgets/hasim_shell_header.dart';
 import 'package:hasim/core/widgets/skeleton_list.dart';
-import 'package:hasim/features/auth/providers/auth_controller.dart';
 import 'package:hasim/features/conversations/providers/conversations_controller.dart';
 import 'package:hasim/features/home/providers/home_controller.dart';
-import 'package:hasim/features/stories/presentation/stories_strip.dart';
-import 'package:hasim/features/stories/providers/stories_controller.dart';
 
-/// الشاشة الأولى بعد الدخول — محادثات أولاً (Messaging App).
+/// الشاشة الأولى بعد الدخول — محادثات فقط (بحث + فلاتر + قائمة).
 class ConversationsScreen extends ConsumerStatefulWidget {
   const ConversationsScreen({super.key});
   @override
@@ -21,7 +18,8 @@ class ConversationsScreen extends ConsumerStatefulWidget {
 class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
   final _search = TextEditingController();
 
-  /// فلاتر مدعومة في Mobile API فقط: all | unread | archived
+  /// فلاتر مدعومة في Mobile API: all | unread | archived
+  /// «المخصصة لي» غير متاحة في الـ API حاليًا — لا نخترع فلترًا وهميًا.
   static const _filters = [
     ('all', 'الكل'),
     ('unread', 'غير مقروءة'),
@@ -41,103 +39,14 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
     super.dispose();
   }
 
-  Future<void> _openOverflowMenu() async {
-    final value = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            ListTile(leading: const Icon(Icons.person_outline), title: const Text('حسابي'), onTap: () => Navigator.pop(ctx, 'profile')),
-            ListTile(leading: const Icon(Icons.contacts_outlined), title: const Text('جهات الاتصال'), onTap: () => Navigator.pop(ctx, 'contacts')),
-            ListTile(leading: const Icon(Icons.hub_outlined), title: const Text('القنوات'), onTap: () => Navigator.pop(ctx, 'channels')),
-            ListTile(leading: const Icon(Icons.workspace_premium_outlined), title: const Text('الباقة والاستخدام'), onTap: () => Navigator.pop(ctx, 'plans')),
-            ListTile(leading: const Icon(Icons.notifications_outlined), title: const Text('الإشعارات'), onTap: () => Navigator.pop(ctx, 'notifications')),
-            ListTile(leading: const Icon(Icons.settings_outlined), title: const Text('الإعدادات'), onTap: () => Navigator.pop(ctx, 'settings')),
-            ListTile(leading: const Icon(Icons.security_outlined), title: const Text('الأمان والجلسات'), onTap: () => Navigator.pop(ctx, 'security')),
-            ListTile(leading: const Icon(Icons.swap_horiz), title: const Text('تبديل مساحة العمل'), onTap: () => Navigator.pop(ctx, 'workspace')),
-            const Divider(),
-            ListTile(
-              leading: Icon(Icons.logout, color: Theme.of(ctx).colorScheme.error),
-              title: Text('تسجيل الخروج', style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
-              onTap: () => Navigator.pop(ctx, 'logout'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (value == null || !mounted) return;
-    switch (value) {
-      case 'profile':
-        context.push('/profile');
-      case 'contacts':
-        context.push('/contacts');
-      case 'channels':
-        context.push('/channels');
-      case 'plans':
-        context.push('/plans');
-      case 'notifications':
-        context.push('/notifications');
-      case 'settings':
-        context.push('/settings');
-      case 'security':
-        context.push('/more/security');
-      case 'workspace':
-        context.push('/workspaces');
-      case 'logout':
-        await ref.read(authControllerProvider.notifier).logout();
-        if (mounted) context.go('/login');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(conversationsControllerProvider);
     final notifier = ref.read(conversationsControllerProvider.notifier);
-    final snap = ref.watch(homeControllerProvider).snapshot;
     final theme = Theme.of(context);
-    final notif = snap?.unreadNotifications ?? 0;
 
     return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        titleSpacing: 4,
-        title: Row(
-          children: [
-            Semantics(
-              button: true,
-              label: 'المزيد',
-              child: IconButton(
-                tooltip: 'المزيد',
-                onPressed: _openOverflowMenu,
-                icon: const Icon(Icons.more_horiz),
-              ),
-            ),
-            const Spacer(),
-            Text(
-              'حاسم',
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: theme.colorScheme.primary,
-              ),
-            ),
-            const SizedBox(width: 8),
-            const HasimLogo(size: 28),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'الإشعارات',
-            onPressed: () => context.push('/notifications'),
-            icon: Badge(
-              isLabelVisible: notif > 0,
-              label: Text('$notif'),
-              child: const Icon(Icons.notifications_outlined),
-            ),
-          ),
-        ],
-      ),
+      appBar: const HasimShellHeader(),
       body: Column(
         children: [
           Padding(
@@ -160,10 +69,9 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
               },
             ),
           ),
-          const StoriesStrip(),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
             child: Row(
               children: [
                 for (final f in _filters)
@@ -192,7 +100,6 @@ class _ConversationsScreenState extends ConsumerState<ConversationsScreen> {
             child: RefreshIndicator(
               onRefresh: () async {
                 await notifier.refresh();
-                await ref.read(storiesControllerProvider.notifier).refresh();
                 await ref.read(homeControllerProvider.notifier).refresh();
               },
               child: state.loading && state.items.isEmpty

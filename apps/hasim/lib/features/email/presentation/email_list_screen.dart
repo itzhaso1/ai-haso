@@ -1,8 +1,8 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hasim/core/widgets/async_body.dart';
+import 'package:hasim/core/widgets/hasim_shell_header.dart';
 import 'package:hasim/features/email/providers/email_controller.dart';
 
 class EmailListScreen extends ConsumerWidget {
@@ -13,12 +13,24 @@ class EmailListScreen extends ConsumerWidget {
     final state = ref.watch(emailControllerProvider);
     final notifier = ref.read(emailControllerProvider.notifier);
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('البريد'),
-        actions: [IconButton(onPressed: () => context.push('/email/compose'), icon: const Icon(Icons.edit_outlined))],
+      appBar: HasimShellHeader(
+        extraActions: [
+          IconButton(
+            tooltip: 'رسالة جديدة',
+            onPressed: () => context.push('/email/compose'),
+            icon: const Icon(Icons.edit_outlined),
+          ),
+        ],
       ),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Text('البريد', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.all(8),
             child: SegmentedButton<String>(

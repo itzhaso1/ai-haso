@@ -106,7 +106,10 @@ class StoryService
         $this->expireOldStories($workspace);
 
         return Story::query()
-            ->with(['author:id,name,avatar_path'])
+            ->with([
+                'author:id,name,avatar_path',
+                'views' => fn ($query) => $query->where('user_id', $user->id),
+            ])
             ->where('workspace_id', $workspace->id)
             ->where('status', Story::STATUS_ACTIVE)
             ->where('expires_at', '>', now())
@@ -119,7 +122,10 @@ class StoryService
     public function findVisible(Workspace $workspace, User $user, int $storyId): Story
     {
         $story = Story::query()
-            ->with(['author:id,name,avatar_path'])
+            ->with([
+                'author:id,name,avatar_path',
+                'views' => fn ($query) => $query->where('user_id', $user->id),
+            ])
             ->where('workspace_id', $workspace->id)
             ->findOrFail($storyId);
 
