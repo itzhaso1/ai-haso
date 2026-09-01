@@ -23,15 +23,16 @@ class AuthController extends MobileController
     public function login(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'email' => ['required_without:phone', 'nullable', 'string'],
-            'phone' => ['required_without:email', 'nullable', 'string'],
+            'email' => ['required_without_all:phone,email_or_phone', 'nullable', 'string'],
+            'phone' => ['required_without_all:email,email_or_phone', 'nullable', 'string'],
+            'email_or_phone' => ['required_without_all:email,phone', 'nullable', 'string'],
             'password' => ['required', 'string'],
             'workspace_id' => ['nullable', 'integer'],
             'device_name' => ['nullable', 'string', 'max:255'],
             'device_type' => ['nullable', 'string', 'max:32'],
         ]);
 
-        $identifier = trim((string) ($validated['email'] ?? $validated['phone'] ?? ''));
+        $identifier = trim((string) ($validated['email_or_phone'] ?? $validated['email'] ?? $validated['phone'] ?? ''));
         if ($identifier === '') {
             return $this->fail('يرجى إدخال البريد الإلكتروني أو رقم الجوال.', 422);
         }
@@ -72,6 +73,15 @@ class AuthController extends MobileController
         }
 
         $this->mobileAuthService->logoutCurrent($user, $user->currentAccessToken());
+
+        // Ensure bearer token cannot be reused even if token object typing differs.
+        $bearer = $request->bearerToken();
+        if (is_string($bearer) && str_contains($bearer, '|')) {
+            [$id] = explode('|', $bearer, 2);
+            if (is_numeric($id)) {
+                $user->tokens()->whereKey((int) $id)->delete();
+            }
+        }
 
         return $this->ok(message: 'تم تسجيل الخروج بنجاح.');
     }

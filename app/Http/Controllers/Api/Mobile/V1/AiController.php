@@ -23,27 +23,45 @@ class AiController extends MobileController
         private readonly WorkspaceContext $workspaceContext,
     ) {}
 
-    public function suggestReply(Request $request, Conversation $conversation): JsonResponse
+    public function suggestReply(Request $request): JsonResponse
     {
-        $this->authorize('view', $conversation);
-
         $validated = $request->validate([
+            'conversation_id' => ['required', 'integer'],
             'content' => ['nullable', 'string'],
             'persist' => ['nullable', 'boolean'],
         ]);
 
+        $conversation = Conversation::query()->findOrFail($validated['conversation_id']);
+        $this->authorize('view', $conversation);
+
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $user = $request->user();
+        if (! $user || ! $this->featureAccessService->hasFeature($user, $workspace, 'ai')) {
+            return $this->fail('ميزة الذكاء الاصطناعي غير متاحة لباقتك.', 403);
+        }
+
+        if ($request->boolean('persist')) {
+            return $this->fail('حفظ الرد الآلي غير مدعوم من هذا المسار.', 422);
+        }
+
+        $latestInbound = Message::query()
+            ->where('conversation_id', $conversation->id)
+            ->where('direction', 'inbound')
+            ->latest('id')
+            ->first();
+
         $inbound = new Message([
-            'content' => $validated['content'] ?? '',
+            'content' => $validated['content'] ?? $latestInbound?->content ?? '',
             'direction' => 'inbound',
             'conversation_id' => $conversation->id,
             'workspace_id' => $conversation->workspace_id,
         ]);
         $inbound->setRelation('conversation', $conversation);
 
-        $suggestion = $this->aiService->generateReply($conversation, $inbound);
-
-        if ($request->boolean('persist')) {
-            return $this->fail('حفظ الرد الآلي غير مدعوم من هذا المسار.', 422);
+        try {
+            $suggestion = $this->aiService->generateReply($conversation, $inbound);
+        } catch (\Throwable) {
+            return $this->fail('تعذر توليد اقتراح الرد حالياً.', 503);
         }
 
         return $this->ok([
@@ -52,11 +70,17 @@ class AiController extends MobileController
         ]);
     }
 
-    public function summarizeConversation(Request $request, Conversation $conversation): JsonResponse
+    public function summarizeConversation(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'conversation_id' => ['required', 'integer'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:50'],
+        ]);
+
+        $conversation = Conversation::query()->findOrFail($validated['conversation_id']);
         $this->authorize('view', $conversation);
 
-        $limit = max(1, min(50, (int) $request->input('limit', 20)));
+        $limit = max(1, min(50, (int) ($validated['limit'] ?? 20)));
 
         $messages = Message::query()
             ->where('conversation_id', $conversation->id)
@@ -91,15 +115,19 @@ class AiController extends MobileController
             ]);
             $synthetic->setRelation('conversation', $conversation);
 
-            $summary = $this->aiService->generateReply($conversation, $synthetic);
+            try {
+                $summary = $this->aiService->generateReply($conversation, $synthetic);
 
-            return $this->ok([
-                'summary' => $summary,
-                'meta' => [
-                    'source' => 'ai',
-                    'message_count' => $messages->count(),
-                ],
-            ]);
+                return $this->ok([
+                    'summary' => $summary,
+                    'meta' => [
+                        'source' => 'ai',
+                        'message_count' => $messages->count(),
+                    ],
+                ]);
+            } catch (\Throwable) {
+                // fall through to local summary
+            }
         }
 
         return $this->ok([

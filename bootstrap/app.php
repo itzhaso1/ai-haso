@@ -21,7 +21,16 @@ return Application::configure(basePath: dirname(__DIR__))
             Route::middleware('web')
                 ->prefix('platform')
                 ->group(base_path('routes/platform.php'));
+
+            Route::middleware('api')
+                ->prefix('api/mobile/v1')
+                ->name('mobile.v1.')
+                ->group(base_path('routes/mobile.php'));
         },
+    )
+    ->withBroadcasting(
+        channels: __DIR__.'/../routes/channels.php',
+        attributes: ['prefix' => 'api', 'middleware' => ['api', 'auth:sanctum']],
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->validateCsrfTokens(except: [
@@ -34,10 +43,48 @@ return Application::configure(basePath: dirname(__DIR__))
             'workspace.selected' => EnsureWorkspaceSelected::class,
             'workspace.feature' => EnsureFeatureAccess::class,
             'platform.admin' => EnsurePlatformAdmin::class,
+            'mobile.idempotency' => \App\Http\Middleware\Mobile\EnsureIdempotency::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+
+        $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e, Request $request) {
+            if ($request->is('api/mobile/*') || $request->is('api/mobile/v1/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'انتهت جلسة تسجيل الدخول.',
+                ], 401);
+            }
+        });
+
+        $exceptions->render(function (\Illuminate\Auth\Access\AuthorizationException $e, Request $request) {
+            if ($request->is('api/mobile/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'لا تملك صلاحية تنفيذ هذا الإجراء.',
+                ], 403);
+            }
+        });
+
+        $exceptions->render(function (\Illuminate\Database\Eloquent\ModelNotFoundException $e, Request $request) {
+            if ($request->is('api/mobile/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'العنصر المطلوب غير موجود.',
+                ], 404);
+            }
+        });
+
+        $exceptions->render(function (\Illuminate\Validation\ValidationException $e, Request $request) {
+            if ($request->is('api/mobile/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'بيانات غير صالحة.',
+                    'errors' => $e->errors(),
+                ], 422);
+            }
+        });
     })->create();

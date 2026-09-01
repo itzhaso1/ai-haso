@@ -26,7 +26,7 @@ class DeviceSessionController extends MobileController
         return $this->ok(DeviceSessionResource::collection($sessions));
     }
 
-    public function destroy(Request $request, int $session): JsonResponse
+    public function destroy(Request $request, int $tokenId): JsonResponse
     {
         $user = $request->user();
         if (! $user) {
@@ -34,17 +34,17 @@ class DeviceSessionController extends MobileController
         }
 
         $currentId = (int) ($user->currentAccessToken()?->id ?? 0);
-        if ($currentId === $session) {
+        if ($currentId === $tokenId) {
             return $this->fail('لا يمكن إلغاء الجلسة الحالية من هنا. استخدم تسجيل الخروج.', 422);
         }
 
         try {
-            $this->mobileAuthService->revokeSession($user, $session);
+            $this->mobileAuthService->revokeSession($user, $tokenId);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException) {
             return $this->fail('الجلسة غير موجودة.', 404);
         }
 
-        return $this->ok(message: 'تم إلغاء الجلسة بنجاح.');
+        return $this->ok(message: 'تم إنهاء الجلسة.');
     }
 
     public function destroyAll(Request $request): JsonResponse

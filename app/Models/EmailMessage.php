@@ -18,6 +18,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'delivery_status',
     'delivery_error',
     'delivered_at',
+    'read_at',
+    'starred_at',
+    'folder',
     'message_id',
     'in_reply_to',
     'thread_key',
@@ -30,6 +33,8 @@ class EmailMessage extends WorkspaceScopedModel
     {
         return [
             'delivered_at' => 'datetime',
+            'read_at' => 'datetime',
+            'starred_at' => 'datetime',
         ];
     }
 
