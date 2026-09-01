@@ -517,6 +517,7 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::get('reports/daily', [PosReportController::class, 'daily'])->name('reports.daily');
 
             Route::get('tables', [PosTableController::class, 'index'])->name('tables.index');
+            Route::get('tables/live', [PosTableController::class, 'liveBoard'])->name('tables.live');
             Route::post('tables', [PosTableController::class, 'store'])->name('tables.store');
             Route::get('tables/{table}', [PosTableController::class, 'show'])->name('tables.show');
             Route::put('tables/{table}', [PosTableController::class, 'update'])->name('tables.update');

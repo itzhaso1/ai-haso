@@ -7,6 +7,7 @@
         x-data="tablesBoard({
             tables: @js($tablesPayload),
             csrf: @js(csrf_token()),
+            liveBoardUrl: @js($liveBoardUrl),
         })"
         class="grid gap-3 lg:grid-cols-12"
     >
@@ -172,14 +173,16 @@
     </div>
 
     <script>
-        function tablesBoard({ tables, csrf }) {
+        function tablesBoard({ tables, csrf, liveBoardUrl = null }) {
             return {
                 tables,
                 csrf,
+                liveBoardUrl,
                 selected: null,
                 openMenuId: null,
                 closeConfirmOpen: false,
                 pendingClose: null,
+                pollTimer: null,
                 selectTable(table) {
                     this.selected = table;
                     this.openMenuId = null;
@@ -202,6 +205,46 @@
                     const seconds = String(diff % 60).padStart(2, '0');
                     return `${hours}:${minutes}:${seconds}`;
                 },
+                applyLiveTables(nextTables) {
+                    const previous = new Map(this.tables.map((table) => [String(table.id), table]));
+                    this.tables = nextTables;
+
+                    nextTables.forEach((table) => {
+                        const before = previous.get(String(table.id));
+                        if (before && before.status !== 'occupied' && table.status === 'occupied') {
+                            window.HasoPosFeedback?.notifyNewMenuOrder({
+                                table_name: table.name,
+                                order_number: table.open_orders_count || '',
+                            });
+                        }
+                    });
+
+                    if (this.selected) {
+                        const refreshed = nextTables.find((table) => Number(table.id) === Number(this.selected.id));
+                        if (refreshed) {
+                            this.selected = refreshed;
+                        }
+                    }
+                },
+                async refreshBoard() {
+                    if (!this.liveBoardUrl) return;
+                    try {
+                        const response = await fetch(this.liveBoardUrl, {
+                            headers: {
+                                'Accept': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest',
+                            },
+                            credentials: 'same-origin',
+                        });
+                        if (!response.ok) return;
+                        const payload = await response.json();
+                        if (Array.isArray(payload.tables)) {
+                            this.applyLiveTables(payload.tables);
+                        }
+                    } catch (_error) {
+                        // Keep board usable if polling fails.
+                    }
+                },
                 init() {
                     setInterval(() => {
                         document.querySelectorAll('[data-live-timer]').forEach((node) => {
@@ -209,6 +252,15 @@
                             if (opened) node.textContent = this.formatDuration(opened);
                         });
                     }, 1000);
+
+                    if (this.liveBoardUrl) {
+                        this.pollTimer = setInterval(() => this.refreshBoard(), 3000);
+                        document.addEventListener('visibilitychange', () => {
+                            if (!document.hidden) {
+                                this.refreshBoard();
+                            }
+                        });
+                    }
                 },
             };
         }

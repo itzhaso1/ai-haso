@@ -241,6 +241,48 @@ class PosFinalCashierCompletionTest extends TestCase
         $this->assertStringContainsString('notifyNewMenuOrder', $html);
     }
 
+    public function test_live_tables_board_shows_occupied_after_menu_order_without_manual_refresh(): void
+    {
+        $this->seed(FoundationSeeder::class);
+        [$owner, $workspace] = $this->createWorkspaceOwner('store');
+        $table = $this->makeTable($workspace, 'Live');
+        $item = $this->makeItem($workspace);
+
+        $html = $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->get(route('workspace.pos.tables.index'))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('liveBoardUrl', $html);
+        $this->assertStringContainsString('refreshBoard', $html);
+
+        $this->get(route('menu.table', ['workspace' => $workspace->slug, 'token' => $table->qr_token]))->assertOk();
+        $guest = PosCustomerSession::query()->where('dining_table_id', $table->id)->firstOrFail();
+
+        $this->withUnencryptedCookie('pos_guest_'.$table->id, $guest->token)
+            ->post(route('menu.table.order', ['workspace' => $workspace->slug, 'token' => $table->qr_token]), [
+                'guest_session_token' => $guest->token,
+                'client_reference' => 'live-board-ref-1',
+                'items' => [['pos_menu_item_id' => $item->id, 'quantity' => 1]],
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('dining_tables', [
+            'id' => $table->id,
+            'status' => 'occupied',
+        ]);
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->getJson(route('workspace.pos.tables.live'))
+            ->assertOk()
+            ->assertJsonFragment([
+                'id' => $table->id,
+                'status' => 'occupied',
+            ]);
+    }
+
     private function makeItem(Workspace $workspace, float $price = 10): PosMenuItem
     {
         return PosMenuItem::withoutGlobalScopes()->create([

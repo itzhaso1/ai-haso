@@ -27,7 +27,38 @@ class TableController extends PosBaseController
     {
         $this->authorizePos($request, 'tables.manage');
 
-        $tables = DiningTable::query()
+        $tables = $this->tablesQuery()->paginate(30);
+        $tablesPayload = $this->buildTablesPayload($tables->getCollection());
+
+        return view('workspace.pos.tables.index', [
+            'tables' => $tables,
+            'tablesPayload' => $tablesPayload,
+            'liveBoardUrl' => route('workspace.pos.tables.live'),
+            'posStatuses' => $this->posStatusLabels(),
+        ]);
+    }
+
+    /**
+     * Live snapshot for the tables board (polling fallback when Reverb is offline).
+     */
+    public function liveBoard(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $this->authorizePos($request, 'tables.manage');
+
+        $tables = $this->tablesQuery()->limit(100)->get();
+
+        return response()->json([
+            'tables' => $this->buildTablesPayload($tables),
+            'generated_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<\App\Models\DiningTable>
+     */
+    private function tablesQuery()
+    {
+        return DiningTable::query()
             ->with([
                 'sessions' => fn ($query) => $query
                     ->where('status', 'open')
@@ -36,6 +67,7 @@ class TableController extends PosBaseController
                     ->with([
                         'orders' => fn ($orders) => $orders
                             ->whereIn('source', ['pos', 'qr_menu'])
+                            ->where('pos_status', '!=', 'cancelled')
                             ->with(['items', 'customer:id,name'])
                             ->latest('id'),
                     ]),
@@ -46,11 +78,18 @@ class TableController extends PosBaseController
                     ->whereIn('source', ['pos', 'qr_menu'])
                     ->whereIn('pos_status', ['new', 'accepted', 'preparing', 'ready', 'delivered']),
             ])
-            ->orderBy('name')
-            ->paginate(30);
+            ->orderBy('name');
+    }
 
+    /**
+     * @param  \Illuminate\Support\Collection<int, DiningTable>  $tables
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function buildTablesPayload($tables)
+    {
         $workspace = $this->currentWorkspace();
-        $tablesPayload = $tables->getCollection()->map(function (DiningTable $table) use ($workspace) {
+
+        return $tables->map(function (DiningTable $table) use ($workspace) {
             $openSession = $table->sessions->first();
             $orders = $openSession?->orders ?? collect();
             $lines = $orders->flatMap(fn ($order) => $order->items->map(fn ($item) => [
@@ -79,12 +118,6 @@ class TableController extends PosBaseController
                 'total' => (float) $lines->sum('total'),
             ];
         })->values();
-
-        return view('workspace.pos.tables.index', [
-            'tables' => $tables,
-            'tablesPayload' => $tablesPayload,
-            'posStatuses' => $this->posStatusLabels(),
-        ]);
     }
 
     public function show(Request $request, DiningTable $table): View
