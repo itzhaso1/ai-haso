@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\Cashier\V1\AuthController;
 use App\Http\Controllers\Api\Cashier\V1\BootstrapController;
 use App\Http\Controllers\Api\Cashier\V1\CatalogController;
 use App\Http\Controllers\Api\Cashier\V1\CustomerController;
+use App\Http\Controllers\Api\Cashier\V1\DeviceController;
 use App\Http\Controllers\Api\Cashier\V1\InvoiceController;
 use App\Http\Controllers\Api\Cashier\V1\KitchenController;
 use App\Http\Controllers\Api\Cashier\V1\OrderController;
@@ -11,6 +12,7 @@ use App\Http\Controllers\Api\Cashier\V1\PlanController;
 use App\Http\Controllers\Api\Cashier\V1\ReportController;
 use App\Http\Controllers\Api\Cashier\V1\ReturnController;
 use App\Http\Controllers\Api\Cashier\V1\SettingsController;
+use App\Http\Controllers\Api\Cashier\V1\SyncController;
 use App\Http\Controllers\Api\Cashier\V1\TableController;
 use App\Http\Controllers\Api\Cashier\V1\WorkspaceController;
 use Illuminate\Support\Facades\Route;
@@ -47,6 +49,9 @@ Route::middleware([
     Route::get('/bootstrap', BootstrapController::class);
     Route::get('/workspaces/current', [WorkspaceController::class, 'current']);
     Route::post('/workspaces/switch', [WorkspaceController::class, 'switch'])->middleware('throttle:mobile-write');
+
+    Route::post('/devices/register', [DeviceController::class, 'register'])->middleware('throttle:mobile-write');
+    Route::get('/sync/changes', [SyncController::class, 'changes']);
 
     Route::get('/plan', [PlanController::class, 'current']);
     Route::get('/plans', [PlanController::class, 'index']);

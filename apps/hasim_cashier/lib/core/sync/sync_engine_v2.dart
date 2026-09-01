@@ -4,10 +4,12 @@ import 'package:drift/drift.dart';
 
 import '../api/cashier_api.dart';
 import '../local_db/app_database.dart';
+import '../local_db/workspace_scope.dart';
 import '../offline/offline_store.dart';
 import '../repositories/sync_queue_repository.dart';
+import 'sync_pull_applier.dart';
 
-/// Sync Engine v2 — push SQLite sync_queue to Laravel with stable idempotency.
+/// Sync Engine v2 — push SQLite sync_queue, then pull incremental changes.
 /// Coexists with Hive SyncEngine (dual-run) until Phase 6 removes Hive.
 class SyncEngineV2 {
   SyncEngineV2(
@@ -15,6 +17,7 @@ class SyncEngineV2 {
     this._queue, {
     CashierApiClient? api,
     OfflineStore? offlineStore,
+    SyncPullApplier? pullApplier,
     Future<Map<String, dynamic>> Function(
       Map<String, dynamic> payload,
       String idempotencyKey,
@@ -24,16 +27,20 @@ class SyncEngineV2 {
       Map<String, dynamic> payload,
     )? postOrderItems,
     Future<void> Function(int serverOrderId)? deleteOrder,
+    Future<Map<String, dynamic>> Function(int since, int limit)? fetchChanges,
   })  : _api = api,
         _hive = offlineStore ?? OfflineStore.instance,
+        _pullApplier = pullApplier ?? SyncPullApplier(_db),
         _postOrder = postOrder,
         _postOrderItems = postOrderItems,
-        _deleteOrder = deleteOrder;
+        _deleteOrder = deleteOrder,
+        _fetchChanges = fetchChanges;
 
   final AppDatabase _db;
   final SyncQueueRepository _queue;
   final CashierApiClient? _api;
   final OfflineStore _hive;
+  final SyncPullApplier _pullApplier;
   final Future<Map<String, dynamic>> Function(
     Map<String, dynamic> payload,
     String idempotencyKey,
@@ -43,9 +50,96 @@ class SyncEngineV2 {
     Map<String, dynamic> payload,
   )? _postOrderItems;
   final Future<void> Function(int serverOrderId)? _deleteOrder;
+  final Future<Map<String, dynamic>> Function(int since, int limit)?
+      _fetchChanges;
 
   var _flushing = false;
   bool get isFlushing => _flushing;
+
+  /// Push pending local ops, then pull server deltas. Pull failure never
+  /// drops the local sync_queue or pending orders.
+  Future<SyncEngineV2Result> syncBidirectional({
+    required int workspaceId,
+    String? deviceId,
+  }) async {
+    final push = await pushPending(workspaceId: workspaceId);
+    try {
+      final pull = await pullChanges(
+        workspaceId: workspaceId,
+        deviceId: deviceId,
+      );
+      return SyncEngineV2Result(
+        synced: push.synced,
+        failed: push.failed,
+        keptPending: push.keptPending,
+        authRequired: push.authRequired || pull.authRequired,
+        skippedInFlight: push.skippedInFlight,
+        pulled: pull.pulled,
+        cursor: pull.cursor,
+        pullFailed: pull.pullFailed,
+      );
+    } catch (e) {
+      // Keep pending local ops + existing cursor intact.
+      return SyncEngineV2Result(
+        synced: push.synced,
+        failed: push.failed,
+        keptPending: push.keptPending,
+        authRequired: push.authRequired,
+        skippedInFlight: push.skippedInFlight,
+        pullFailed: true,
+        pullError: e.toString(),
+      );
+    }
+  }
+
+  /// After full Initial Sync snapshot, anchor cursor to server head without
+  /// re-applying historical create events.
+  Future<int> anchorCursorToServerHead({
+    required int workspaceId,
+    String? deviceId,
+  }) async {
+    final data = await _loadChanges(since: 0, limit: 0);
+    final serverCursor = (data['server_cursor'] as num?)?.toInt() ??
+        (data['cursor'] as num?)?.toInt() ??
+        0;
+    await _db.writeCursor(workspaceId, '$serverCursor', deviceId: deviceId);
+    return serverCursor;
+  }
+
+  Future<SyncEngineV2Result> pullChanges({
+    required int workspaceId,
+    String? deviceId,
+    int pageLimit = 200,
+  }) async {
+    if (workspaceId <= 0) return const SyncEngineV2Result();
+    final rawCursor = await _db.readCursor(workspaceId);
+    var since = int.tryParse(rawCursor ?? '') ?? 0;
+    var pulled = 0;
+    var cursor = since;
+    var hasMore = true;
+    while (hasMore) {
+      final data = await _loadChanges(since: since, limit: pageLimit);
+      final changes = <Map<String, dynamic>>[];
+      if (data['changes'] is List) {
+        for (final item in data['changes'] as List) {
+          if (item is Map) changes.add(Map<String, dynamic>.from(item));
+        }
+      }
+      final responseCursor = (data['cursor'] as num?)?.toInt() ?? since;
+      cursor = await _pullApplier.applyBatch(
+        workspaceId: workspaceId,
+        fromCursor: since,
+        responseCursor: responseCursor,
+        changes: changes,
+        deviceId: deviceId,
+      );
+      pulled += changes.length;
+      hasMore = data['has_more'] == true;
+      since = cursor;
+      if (changes.isEmpty) break;
+    }
+    return SyncEngineV2Result(pulled: pulled, cursor: cursor);
+  }
 
   Future<SyncEngineV2Result> pushPending({required int workspaceId}) async {
     if (_flushing) {
@@ -274,6 +368,22 @@ class SyncEngineV2 {
     } catch (_) {}
     return <String, dynamic>{};
   }
+
+  Future<Map<String, dynamic>> _loadChanges({
+    required int since,
+    required int limit,
+  }) {
+    final fetcher = _fetchChanges;
+    if (fetcher != null) return fetcher(since, limit);
+    final api = _api;
+    if (api == null) {
+      throw StateError('SyncEngineV2 requires API or fetchChanges');
+    }
+    return api.get('/sync/changes', query: {
+      'since': since,
+      'limit': limit,
+    });
+  }
 }
 
 class SyncEngineV2Result {
@@ -283,6 +393,10 @@ class SyncEngineV2Result {
     this.keptPending = 0,
     this.authRequired = false,
     this.skippedInFlight = false,
+    this.pulled = 0,
+    this.cursor,
+    this.pullFailed = false,
+    this.pullError,
   });
 
   final int synced;
@@ -290,4 +404,8 @@ class SyncEngineV2Result {
   final int keptPending;
   final bool authRequired;
   final bool skippedInFlight;
+  final int pulled;
+  final int? cursor;
+  final bool pullFailed;
+  final String? pullError;
 }

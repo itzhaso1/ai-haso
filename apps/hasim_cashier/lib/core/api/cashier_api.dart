@@ -13,6 +13,7 @@ final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
 
 final authTokenProvider = StateProvider<String?>((ref) => null);
 final workspaceIdProvider = StateProvider<int?>((ref) => null);
+final deviceIdHeaderProvider = StateProvider<String?>((ref) => null);
 
 final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
@@ -32,11 +33,15 @@ final dioProvider = Provider<Dio>((ref) {
       onRequest: (options, handler) {
         final token = ref.read(authTokenProvider);
         final workspaceId = ref.read(workspaceIdProvider);
+        final deviceId = ref.read(deviceIdHeaderProvider);
         if (token != null && token.isNotEmpty) {
           options.headers['Authorization'] = 'Bearer $token';
         }
         if (workspaceId != null) {
           options.headers['X-Workspace-Id'] = workspaceId.toString();
+        }
+        if (deviceId != null && deviceId.isNotEmpty) {
+          options.headers['X-Device-Id'] = deviceId;
         }
         handler.next(options);
       },

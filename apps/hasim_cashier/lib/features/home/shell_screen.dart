@@ -87,6 +87,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
         _loadBootstrap();
         ref.read(posSyncCoordinatorProvider).flushPendingOrders(
               workspaceId: ref.read(workspaceIdProvider),
+              deviceId: ref.read(deviceIdHeaderProvider),
             ).then((_) {
           _refreshPending();
         });
@@ -171,7 +172,20 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       final workspaceId = ref.read(workspaceIdProvider);
       if (workspaceId != null) {
         try {
-          await ref.read(initialSyncServiceProvider).ensureReady(workspaceId);
+          final deviceId =
+              await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
+          ref.read(deviceIdHeaderProvider.notifier).state = deviceId;
+          await ref.read(deviceRegistrationServiceProvider).register(
+                deviceId: deviceId,
+              );
+          final syncResult =
+              await ref.read(initialSyncServiceProvider).ensureReady(workspaceId);
+          if (!syncResult.fromCache) {
+            await ref.read(syncEngineV2Provider).anchorCursorToServerHead(
+                  workspaceId: workspaceId,
+                  deviceId: deviceId,
+                );
+          }
           await _migrateHiveOrders(workspaceId);
           ref.invalidate(localPosReadyProvider(workspaceId));
           ref.invalidate(catalogItemsProvider);
@@ -180,8 +194,10 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           // Keep POS online path; offline readiness stays gated until sync succeeds.
         }
       }
+      final deviceId = ref.read(deviceIdHeaderProvider);
       await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
             workspaceId: workspaceId,
+            deviceId: deviceId,
           );
       _refreshPending();
     } on ApiException catch (e) {
@@ -304,6 +320,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
               final result =
                   await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
                         workspaceId: ref.read(workspaceIdProvider),
+                        deviceId: ref.read(deviceIdHeaderProvider),
                       );
               _refreshPending();
               if (!context.mounted) return;

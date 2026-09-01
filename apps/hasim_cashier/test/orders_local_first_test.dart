@@ -182,6 +182,7 @@ void main() {
   });
 
   test('app restart keeps order items totals and sync_queue', () async {
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     final dir = await Directory.systemTemp.createTemp('pos_v2_restart_');
     final file = File('${dir.path}/pos.sqlite');
     final db1 = AppDatabase.file(file);

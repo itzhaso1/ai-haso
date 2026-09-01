@@ -2,7 +2,7 @@
 
 **Branch:** `cursor/offline-first-pos-v2-757c`  
 **Base:** `cursor/cashier-ui-ux-fix-757c` @ `54806df`  
-**Status:** Phase 3 complete (Orders Local-first + sync_queue; Hive dual-run)
+**Status:** Phase 4 complete (Laravel devices + incremental sync_changes + Flutter pull)
 
 ## Audit summary (current = Online POS + durable outbox)
 
@@ -62,11 +62,12 @@ Laravel stays Source of Truth. UI must not depend on API for daily POS reads/wri
 - Open session / close / payment / invoice remain online
 - Hive outbox retained until Phase 6
 
-### Phase 4 — Backend incremental sync (minimal Laravel)
-- `POST /devices/register`
-- `GET /sync/changes?since=cursor` (catalog/tables/settings + tombstones)
-- Optional write `If-Match` / `expected_updated_at` → 409
-- Do **not** rewrite PosOrderService close/invoice rules.
+### Phase 4 — Backend incremental sync (done)
+- `POST /devices/register` (idempotent, workspace-bound device_id)
+- `GET /sync/changes?since=` monotonic `pos_sync_changes.id` cursor
+- Observer emits create/update/delete for products/categories/tables
+- Flutter SyncEngineV2: push → pull → apply TX → cursor
+- Close / payment / invoice / open-session unchanged; Hive retained
 
 ### Phase 5 — Bidirectional + conflicts + customers
 - Pull apply + conflict table + strategies (server-authoritative for catalog).

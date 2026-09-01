@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/cashier_api.dart';
 import '../device/device_identity.dart';
+import '../device/device_registration_service.dart';
 import '../local_db/app_database.dart';
 import '../local_db/initial_sync_service.dart';
 import '../local_db/workspace_scope.dart';
@@ -9,6 +10,7 @@ import '../repositories/catalog_repository.dart';
 import '../repositories/orders_repository.dart';
 import '../repositories/sync_queue_repository.dart';
 import '../repositories/tables_repository.dart';
+import '../sync/sync_pull_applier.dart';
 
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase.open();
@@ -22,6 +24,10 @@ final deviceIdentityProvider = Provider<DeviceIdentity>((ref) {
 
 final deviceIdProvider = FutureProvider<String>((ref) async {
   return ref.watch(deviceIdentityProvider).getOrCreateDeviceId();
+});
+
+final deviceRegistrationServiceProvider = Provider<DeviceRegistrationService>((ref) {
+  return DeviceRegistrationService(ref.watch(cashierApiProvider));
 });
 
 final catalogRepositoryProvider = Provider<CatalogRepository>((ref) {
@@ -44,6 +50,10 @@ final ordersRepositoryProvider = Provider<OrdersRepository>((ref) {
     ref.watch(appDatabaseProvider),
     ref.watch(syncQueueRepositoryProvider),
   );
+});
+
+final syncPullApplierProvider = Provider<SyncPullApplier>((ref) {
+  return SyncPullApplier(ref.watch(appDatabaseProvider));
 });
 
 final initialSyncServiceProvider = Provider<InitialSyncService>((ref) {

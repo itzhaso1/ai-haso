@@ -3,10 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/cashier_api.dart';
 import '../local_db/local_db_providers.dart';
 import '../offline/offline_store.dart';
+import '../offline/pending_order.dart';
 import '../offline/sync_engine.dart';
 import 'sync_engine_v2.dart';
 
-/// Flushes Hive outbox + SQLite sync_queue together (Phase 3 dual-run).
+/// Flushes Hive outbox + SQLite sync_queue, then pulls Laravel deltas.
 class PosSyncCoordinator {
   PosSyncCoordinator({
     required SyncEngine hiveEngine,
@@ -17,12 +18,18 @@ class PosSyncCoordinator {
   final SyncEngine _hive;
   final SyncEngineV2 _sqlite;
 
-  Future<SyncFlushResult> flushPendingOrders({int? workspaceId}) async {
+  Future<SyncFlushResult> flushPendingOrders({
+    int? workspaceId,
+    String? deviceId,
+  }) async {
     final hive = await _hive.flushPendingOrders(workspaceId: workspaceId);
     if (workspaceId == null || workspaceId <= 0) {
       return hive;
     }
-    final sqlite = await _sqlite.pushPending(workspaceId: workspaceId);
+    final sqlite = await _sqlite.syncBidirectional(
+      workspaceId: workspaceId,
+      deviceId: deviceId,
+    );
     return SyncFlushResult(
       synced: hive.synced + sqlite.synced,
       failed: hive.failed + sqlite.failed,
@@ -32,11 +39,14 @@ class PosSyncCoordinator {
     );
   }
 
-  Future<bool> retryOne(String localId, {int? workspaceId}) async {
+  Future<bool> retryOne(String localId, {int? workspaceId, String? deviceId}) async {
     final hiveOk =
         await _hive.retryOne(localId, workspaceId: workspaceId);
     if (workspaceId == null || workspaceId <= 0) return hiveOk;
-    final sqlite = await _sqlite.pushPending(workspaceId: workspaceId);
+    final sqlite = await _sqlite.syncBidirectional(
+      workspaceId: workspaceId,
+      deviceId: deviceId,
+    );
     return hiveOk || sqlite.synced > 0;
   }
 }
@@ -47,6 +57,7 @@ final syncEngineV2Provider = Provider<SyncEngineV2>((ref) {
     ref.watch(syncQueueRepositoryProvider),
     api: ref.watch(cashierApiProvider),
     offlineStore: OfflineStore.instance,
+    pullApplier: ref.watch(syncPullApplierProvider),
   );
 });
 
