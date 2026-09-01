@@ -1,0 +1,277 @@
+<?php
+
+namespace App\Http\Controllers\Api\Cashier\V1;
+
+use App\Http\Controllers\Api\Cashier\CashierController;
+use App\Http\Controllers\Api\Cashier\Concerns\AuthorizesCashier;
+use App\Http\Controllers\Api\Cashier\Concerns\ResolvesCashierWorkspace;
+use App\Http\Resources\Cashier\OrderResource;
+use App\Models\DiningTable;
+use App\Models\TableSession;
+use App\Services\Feature\FeatureAccessService;
+use App\Services\Pos\PosOrderService;
+use App\Support\Tenancy\WorkspaceContext;
+use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use RuntimeException;
+
+class TableController extends CashierController
+{
+    use AuthorizesCashier;
+    use ResolvesCashierWorkspace;
+
+    public function __construct(
+        private readonly WorkspaceContext $workspaceContext,
+        private readonly FeatureAccessService $featureAccessService,
+        private readonly PosOrderService $posOrderService,
+    ) {}
+
+    public function index(Request $request): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $this->authorizeCashier($request, $workspace, 'tables.manage');
+        $this->ensurePos($workspace);
+
+        $tables = DiningTable::query()
+            ->with([
+                'sessions' => fn ($query) => $query
+                    ->where('status', 'open')
+                    ->latest('id')
+                    ->limit(1)
+                    ->with([
+                        'orders' => fn ($orders) => $orders
+                            ->whereIn('source', ['pos', 'qr_menu'])
+                            ->where('pos_status', '!=', 'cancelled')
+                            ->with(['items', 'customer:id,name'])
+                            ->latest('id'),
+                    ]),
+            ])
+            ->orderBy('name')
+            ->limit(100)
+            ->get();
+
+        return $this->ok([
+            'tables' => $tables->map(fn (DiningTable $table) => $this->tablePayload($table, $workspace))->values(),
+            'generated_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    public function show(Request $request, DiningTable $table): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $this->authorizeCashier($request, $workspace, 'tables.manage');
+        $this->ensurePos($workspace);
+
+        $table->load([
+            'sessions' => fn ($query) => $query->where('status', 'open')->latest('id')->limit(1)->with([
+                'orders' => fn ($orders) => $orders
+                    ->whereIn('source', ['pos', 'qr_menu'])
+                    ->where('pos_status', '!=', 'cancelled')
+                    ->with(['items', 'customer:id,name,phone'])
+                    ->latest('id'),
+            ]),
+        ]);
+
+        return $this->ok($this->tablePayload($table, $workspace, detailed: true));
+    }
+
+    public function openSession(Request $request, DiningTable $table): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $this->authorizeCashier($request, $workspace, 'tables.manage');
+        $this->ensurePos($workspace);
+
+        $session = $this->posOrderService->openSession($table);
+
+        return $this->ok([
+            'session_id' => $session->id,
+            'table_id' => $table->id,
+            'status' => $session->status,
+            'opened_at' => optional($session->opened_at)?->toIso8601String(),
+        ], message: 'تم فتح جلسة الطاولة.');
+    }
+
+    public function closeSession(Request $request, DiningTable $table, TableSession $session): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $user = $this->authorizeCashier($request, $workspace, 'tables.manage');
+        $this->ensureSession($table, $session);
+
+        try {
+            $invoice = $this->posOrderService->closeSession($session, (int) $user->id);
+        } catch (RuntimeException $exception) {
+            return $this->fail($exception->getMessage(), 422);
+        }
+
+        return $this->ok([
+            'invoice' => $invoice ? [
+                'id' => $invoice->id,
+                'invoice_number' => $invoice->invoice_number,
+                'total_amount' => (float) $invoice->total_amount,
+                'currency' => $invoice->currency,
+            ] : null,
+        ], message: $invoice ? 'تم إغلاق الجلسة وإصدار فاتورة.' : 'تم إغلاق الجلسة.');
+    }
+
+    public function cancelSession(Request $request, DiningTable $table, TableSession $session): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $this->authorizeCashier($request, $workspace, 'tables.manage');
+        $this->ensureSession($table, $session);
+
+        try {
+            $this->posOrderService->cancelSession($session, $request->user());
+        } catch (RuntimeException $exception) {
+            return $this->fail($exception->getMessage(), 422);
+        }
+
+        return $this->ok(message: 'تم إلغاء جلسة الطاولة.');
+    }
+
+    public function transfer(Request $request, DiningTable $table, TableSession $session): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $this->authorizeCashier($request, $workspace, 'tables.manage');
+        $this->ensureSession($table, $session);
+
+        $validated = $request->validate([
+            'target_table_id' => [
+                'required',
+                'integer',
+                Rule::exists('dining_tables', 'id')->where(fn ($q) => $q->where('workspace_id', $workspace->id)),
+            ],
+        ]);
+
+        $target = DiningTable::query()->findOrFail((int) $validated['target_table_id']);
+
+        try {
+            $this->posOrderService->transferSession($session, $target);
+        } catch (RuntimeException $exception) {
+            return $this->fail($exception->getMessage(), 422);
+        }
+
+        return $this->ok(message: 'تم نقل الجلسة إلى الطاولة المحددة.');
+    }
+
+    public function merge(Request $request, DiningTable $table, TableSession $session): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $this->authorizeCashier($request, $workspace, 'tables.manage');
+        $this->ensureSession($table, $session);
+
+        $validated = $request->validate([
+            'target_table_id' => [
+                'required',
+                'integer',
+                Rule::exists('dining_tables', 'id')->where(fn ($q) => $q->where('workspace_id', $workspace->id)),
+            ],
+        ]);
+
+        $target = DiningTable::query()->findOrFail((int) $validated['target_table_id']);
+
+        try {
+            $this->posOrderService->mergeSessions($session, $target);
+        } catch (RuntimeException $exception) {
+            return $this->fail($exception->getMessage(), 422);
+        }
+
+        return $this->ok(message: 'تم دمج الجلسات.');
+    }
+
+    public function split(Request $request, DiningTable $table, TableSession $session): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $user = $this->authorizeCashier($request, $workspace, 'tables.manage');
+        $this->ensureSession($table, $session);
+
+        $validated = $request->validate([
+            'groups' => ['required', 'array', 'min:1'],
+            'groups.*.items' => ['required', 'array', 'min:1'],
+            'groups.*.items.*.order_item_id' => ['required', 'integer'],
+            'groups.*.items.*.quantity' => ['required', 'integer', 'min:1'],
+        ]);
+
+        try {
+            $orders = $this->posOrderService->splitSessionByItems($session, $validated['groups'], $user);
+        } catch (RuntimeException $exception) {
+            return $this->fail($exception->getMessage(), 422);
+        }
+
+        return $this->ok([
+            'orders' => OrderResource::collection($orders->load(['items'])),
+        ], message: 'تم تقسيم الحساب.');
+    }
+
+    public function applyDiscount(Request $request, DiningTable $table, TableSession $session): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $this->authorizeCashier($request, $workspace, 'tables.manage');
+        $this->ensureSession($table, $session);
+
+        $validated = $request->validate([
+            'discount_amount' => ['required', 'numeric', 'min:0'],
+        ]);
+
+        try {
+            $this->posOrderService->applySessionDiscount($session, (float) $validated['discount_amount']);
+        } catch (RuntimeException $exception) {
+            return $this->fail($exception->getMessage(), 422);
+        }
+
+        return $this->ok(message: 'تم تطبيق الخصم على الجلسة.');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function tablePayload(DiningTable $table, \App\Models\Workspace $workspace, bool $detailed = false): array
+    {
+        $openSession = $table->sessions->first();
+        $orders = $openSession?->orders ?? collect();
+        $lines = $orders->flatMap(fn ($order) => $order->items->map(fn ($item) => [
+            'name' => $item->product_name ?? 'صنف',
+            'quantity' => (int) $item->quantity,
+            'total' => (float) ($item->total_amount ?? 0),
+        ]));
+
+        $payload = [
+            'id' => $table->id,
+            'name' => $table->name,
+            'status' => $table->status,
+            'session_id' => $openSession?->id,
+            'opened_at' => optional($openSession?->opened_at)?->toIso8601String(),
+            'customer_name' => optional($orders->first()?->customer)->name,
+            'lines' => $lines->values(),
+            'total' => (float) $lines->sum('total'),
+            'menu_url' => url('/menu/'.$workspace->slug.'/table/'.$table->qr_token),
+            'qr_token' => $table->qr_token,
+        ];
+
+        if ($detailed) {
+            $payload['orders'] = OrderResource::collection($orders);
+        }
+
+        return $payload;
+    }
+
+    private function ensurePos(\App\Models\Workspace $workspace): void
+    {
+        if (! $this->featureAccessService->workspaceHasFeature($workspace, 'pos')) {
+            throw new HttpResponseException(
+                $this->fail('الكاشير غير متاح في باقتك الحالية', 403, meta: [
+                    'pos_enabled' => false,
+                    'plans_url' => url('/workspace/billing'),
+                ])
+            );
+        }
+    }
+
+    private function ensureSession(DiningTable $table, TableSession $session): void
+    {
+        if ((int) $session->dining_table_id !== (int) $table->id) {
+            throw new HttpResponseException($this->fail('الجلسة غير مرتبطة بهذه الطاولة.', 404));
+        }
+    }
+}

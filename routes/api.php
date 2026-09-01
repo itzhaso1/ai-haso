@@ -85,3 +85,14 @@ Route::post('/webhooks/payments/{provider}', [PaymentWebhookController::class, '
 Route::prefix('mobile/v1')
     ->name('mobile.v1.')
     ->group(base_path('routes/mobile.php'));
+
+/*
+|--------------------------------------------------------------------------
+| Hasim Cashier API v1 — كاشير حاسم
+|--------------------------------------------------------------------------
+| Final paths: /api/cashier/v1/...
+| Separate product surface from Hasim Chat mobile API.
+*/
+Route::prefix('cashier/v1')
+    ->name('cashier.v1.')
+    ->group(base_path('routes/cashier.php'));

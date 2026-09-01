@@ -1,0 +1,80 @@
+<?php
+
+use App\Http\Controllers\Api\Cashier\V1\AuthController;
+use App\Http\Controllers\Api\Cashier\V1\BootstrapController;
+use App\Http\Controllers\Api\Cashier\V1\CatalogController;
+use App\Http\Controllers\Api\Cashier\V1\CustomerController;
+use App\Http\Controllers\Api\Cashier\V1\InvoiceController;
+use App\Http\Controllers\Api\Cashier\V1\OrderController;
+use App\Http\Controllers\Api\Cashier\V1\PlanController;
+use App\Http\Controllers\Api\Cashier\V1\ReturnController;
+use App\Http\Controllers\Api\Cashier\V1\TableController;
+use App\Http\Controllers\Api\Cashier\V1\WorkspaceController;
+use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| Hasim Cashier API v1 — كاشير حاسم
+|--------------------------------------------------------------------------
+| Paths: /api/cashier/v1/...
+| Independent from Hasim Chat Mobile API (/api/mobile/v1).
+| Reuses Sanctum auth + PosOrderService business logic.
+*/
+
+Route::prefix('auth')->group(function (): void {
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:mobile-login');
+    Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:mobile-login');
+    Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:mobile-login');
+    Route::post('/social', [AuthController::class, 'social'])->middleware('throttle:mobile-login');
+});
+
+Route::middleware(['auth:sanctum', 'throttle:mobile-api'])->group(function (): void {
+    Route::post('/auth/logout', [AuthController::class, 'logout']);
+    Route::get('/auth/me', [AuthController::class, 'me']);
+    Route::get('/workspaces', [WorkspaceController::class, 'index']);
+});
+
+Route::middleware([
+    'auth:sanctum',
+    'workspace.resolve',
+    'workspace.member',
+    'mobile.idempotency',
+    'throttle:mobile-api',
+])->group(function (): void {
+    Route::get('/bootstrap', BootstrapController::class);
+    Route::get('/workspaces/current', [WorkspaceController::class, 'current']);
+    Route::post('/workspaces/switch', [WorkspaceController::class, 'switch'])->middleware('throttle:mobile-write');
+
+    Route::get('/plan', [PlanController::class, 'current']);
+    Route::get('/plans', [PlanController::class, 'index']);
+
+    Route::get('/catalog/categories', [CatalogController::class, 'categories']);
+    Route::get('/catalog/items', [CatalogController::class, 'items']);
+
+    Route::get('/customers', [CustomerController::class, 'index']);
+    Route::post('/customers', [CustomerController::class, 'store'])->middleware('throttle:mobile-write');
+
+    Route::get('/orders', [OrderController::class, 'index']);
+    Route::post('/orders', [OrderController::class, 'store'])->middleware('throttle:mobile-write');
+    Route::get('/orders/{order}', [OrderController::class, 'show']);
+    Route::post('/orders/{order}/status', [OrderController::class, 'updateStatus'])->middleware('throttle:mobile-write');
+    Route::post('/orders/{order}/items', [OrderController::class, 'updateItems'])->middleware('throttle:mobile-write');
+    Route::post('/orders/{order}/invoice', [OrderController::class, 'createInvoice'])->middleware('throttle:mobile-write');
+    Route::post('/orders/{order}/payment-link', [OrderController::class, 'createPaymentLink'])->middleware('throttle:mobile-write');
+    Route::post('/orders/{order}/returns', [ReturnController::class, 'store'])->middleware('throttle:mobile-write');
+    Route::post('/returns/{return}/refund', [ReturnController::class, 'markRefunded'])->middleware('throttle:mobile-write');
+
+    Route::get('/tables', [TableController::class, 'index']);
+    Route::get('/tables/{table}', [TableController::class, 'show']);
+    Route::post('/tables/{table}/sessions/open', [TableController::class, 'openSession'])->middleware('throttle:mobile-write');
+    Route::post('/tables/{table}/sessions/{session}/close', [TableController::class, 'closeSession'])->middleware('throttle:mobile-write');
+    Route::post('/tables/{table}/sessions/{session}/cancel', [TableController::class, 'cancelSession'])->middleware('throttle:mobile-write');
+    Route::post('/tables/{table}/sessions/{session}/transfer', [TableController::class, 'transfer'])->middleware('throttle:mobile-write');
+    Route::post('/tables/{table}/sessions/{session}/merge', [TableController::class, 'merge'])->middleware('throttle:mobile-write');
+    Route::post('/tables/{table}/sessions/{session}/split', [TableController::class, 'split'])->middleware('throttle:mobile-write');
+    Route::post('/tables/{table}/sessions/{session}/discount', [TableController::class, 'applyDiscount'])->middleware('throttle:mobile-write');
+
+    Route::get('/invoices', [InvoiceController::class, 'index']);
+    Route::get('/invoices/{invoice}', [InvoiceController::class, 'show']);
+    Route::put('/invoices/{invoice}', [InvoiceController::class, 'update'])->middleware('throttle:mobile-write');
+});

@@ -53,7 +53,7 @@ return Application::configure(basePath: dirname(__DIR__))
         );
 
         $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e, Request $request) {
-            if ($request->is('api/mobile/*') || $request->is('api/mobile/v1/*')) {
+            if ($request->is('api/mobile/*') || $request->is('api/mobile/v1/*') || $request->is('api/cashier/*')) {
                 return response()->json([
                     'success' => false,
                     'message' => 'انتهت جلسة تسجيل الدخول.',
@@ -62,7 +62,7 @@ return Application::configure(basePath: dirname(__DIR__))
         });
 
         $exceptions->render(function (\Illuminate\Auth\Access\AuthorizationException $e, Request $request) {
-            if ($request->is('api/mobile/*')) {
+            if ($request->is('api/mobile/*') || $request->is('api/cashier/*')) {
                 return response()->json([
                     'success' => false,
                     'message' => 'لا تملك صلاحية تنفيذ هذا الإجراء.',
@@ -71,7 +71,7 @@ return Application::configure(basePath: dirname(__DIR__))
         });
 
         $exceptions->render(function (\Illuminate\Database\Eloquent\ModelNotFoundException $e, Request $request) {
-            if ($request->is('api/mobile/*')) {
+            if ($request->is('api/mobile/*') || $request->is('api/cashier/*')) {
                 return response()->json([
                     'success' => false,
                     'message' => 'العنصر المطلوب غير موجود.',
@@ -80,7 +80,7 @@ return Application::configure(basePath: dirname(__DIR__))
         });
 
         $exceptions->render(function (\Illuminate\Validation\ValidationException $e, Request $request) {
-            if ($request->is('api/mobile/*')) {
+            if ($request->is('api/mobile/*') || $request->is('api/cashier/*')) {
                 return response()->json([
                     'success' => false,
                     'message' => 'بيانات غير صالحة.',
