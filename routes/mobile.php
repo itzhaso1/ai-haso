@@ -4,6 +4,8 @@ use App\Http\Controllers\Api\Mobile\V1\AiController;
 use App\Http\Controllers\Api\Mobile\V1\AppointmentController;
 use App\Http\Controllers\Api\Mobile\V1\AttachmentController;
 use App\Http\Controllers\Api\Mobile\V1\AuthController;
+use App\Http\Controllers\Api\Mobile\V1\BrandingController;
+use App\Http\Controllers\Api\Mobile\V1\ChannelController;
 use App\Http\Controllers\Api\Mobile\V1\ConversationController;
 use App\Http\Controllers\Api\Mobile\V1\CustomerController;
 use App\Http\Controllers\Api\Mobile\V1\DeviceController;
@@ -11,6 +13,7 @@ use App\Http\Controllers\Api\Mobile\V1\DeviceSessionController;
 use App\Http\Controllers\Api\Mobile\V1\EmailController;
 use App\Http\Controllers\Api\Mobile\V1\HomeController;
 use App\Http\Controllers\Api\Mobile\V1\NotificationController;
+use App\Http\Controllers\Api\Mobile\V1\PlanController;
 use App\Http\Controllers\Api\Mobile\V1\SearchController;
 use App\Http\Controllers\Api\Mobile\V1\UnreadController;
 use App\Http\Controllers\Api\Mobile\V1\WorkspaceController;
@@ -18,6 +21,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function (): void {
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:mobile-login');
+    Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:mobile-login');
+    Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:mobile-login');
+    Route::post('/social', [AuthController::class, 'social'])->middleware('throttle:mobile-login');
 });
 
 Route::get('/attachments/{attachment}/download', [AttachmentController::class, 'download'])
@@ -27,6 +33,9 @@ Route::get('/attachments/{attachment}/download', [AttachmentController::class, '
 Route::middleware(['auth:sanctum', 'throttle:mobile-api'])->group(function (): void {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/auth/me', [AuthController::class, 'me']);
+    Route::patch('/auth/profile', [AuthController::class, 'updateProfile']);
+    Route::put('/auth/password', [AuthController::class, 'updatePassword']);
+    Route::post('/auth/avatar', [AuthController::class, 'uploadAvatar'])->middleware('throttle:mobile-write');
 
     Route::get('/sessions', [DeviceSessionController::class, 'index']);
     Route::delete('/sessions/{tokenId}', [DeviceSessionController::class, 'destroy']);
@@ -64,6 +73,7 @@ Route::middleware([
     Route::post('/messages/{message}/attachments', [AttachmentController::class, 'store'])
         ->middleware('throttle:mobile-attachments');
 
+    Route::get('/emails/accounts', [EmailController::class, 'accounts']);
     Route::get('/emails/inbox', [EmailController::class, 'inbox']);
     Route::get('/emails/sent', [EmailController::class, 'sent']);
     Route::get('/emails/drafts', [EmailController::class, 'drafts']);
@@ -71,6 +81,11 @@ Route::middleware([
     Route::post('/emails', [EmailController::class, 'send'])->middleware('throttle:mobile-email');
     Route::post('/emails/{emailMessage}/read', [EmailController::class, 'read']);
     Route::post('/emails/{emailMessage}/star', [EmailController::class, 'star']);
+
+    Route::get('/channels', [ChannelController::class, 'index']);
+    Route::get('/plan', [PlanController::class, 'current']);
+    Route::get('/plans', [PlanController::class, 'index']);
+    Route::get('/branding', [BrandingController::class, 'show']);
 
     Route::get('/appointments/today', [AppointmentController::class, 'today']);
     Route::get('/appointments/upcoming', [AppointmentController::class, 'upcoming']);

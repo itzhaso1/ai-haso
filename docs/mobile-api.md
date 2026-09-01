@@ -22,8 +22,14 @@ Errors (Arabic user messages):
 | Method | URL | Auth | Notes |
 |--------|-----|------|-------|
 | POST | `/auth/login` | public | `email` / `phone` / `email_or_phone` + `password`; optional `workspace_id`, `device_name`, `device_type` |
+| POST | `/auth/forgot-password` | public | `{email}` — Password broker reset link; Arabic JSON |
+| POST | `/auth/reset-password` | public | `{email, token, password, password_confirmation}` |
+| POST | `/auth/social` | public | `{provider: google\|facebook, access_token}`; optional `workspace_id`, `device_name`, `device_type` — same login envelope as password |
 | POST | `/auth/logout` | Bearer | Revokes current token + linked push tokens |
 | GET | `/auth/me` | Bearer | User + workspaces + current workspace |
+| PATCH | `/auth/profile` | Bearer | `name`, optional `email`, `phone`, `locale`, `timezone` |
+| PUT | `/auth/password` | Bearer | `current_password`, `password`, `password_confirmation` |
+| POST | `/auth/avatar` | Bearer | multipart `avatar` image → public disk `avatar_path` |
 
 ## Device sessions
 
@@ -78,6 +84,7 @@ Channels are opaque strings from core (`whatsapp`, `web`, `manual`, …). App do
 
 | Method | URL |
 |--------|-----|
+| GET | `/emails/accounts` | send-account picker (id, name, email, brand_color, logo_url — no secrets) |
 | GET | `/emails/inbox` |
 | GET | `/emails/sent` |
 | GET | `/emails/drafts` |
@@ -85,6 +92,17 @@ Channels are opaque strings from core (`whatsapp`, `web`, `manual`, …). App do
 | POST | `/emails` | send via `WorkspaceEmailSender` |
 | POST | `/emails/{id}/read` |
 | POST | `/emails/{id}/star` |
+
+## Channels / plan / branding
+
+Workspace-context routes (Bearer + `X-Workspace-Id`).
+
+| Method | URL | Notes |
+|--------|-----|-------|
+| GET | `/channels` | Connected vs available channels; Arabic `status_label`; `can_connect_in_app` true only for WhatsApp when embedded signup is configured |
+| GET | `/plan` | Current workspace `FeatureAccessService::entitlementsSnapshot` |
+| GET | `/plans` | Official public catalog (starter/pro/business/enterprise) + `comparison_rows` / matrix |
+| GET | `/branding` | Platform (حاسم / `#06C2A4`) + current workspace `{id,name,type}` |
 
 ## Appointments
 

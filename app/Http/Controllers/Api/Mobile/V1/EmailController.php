@@ -5,11 +5,13 @@ namespace App\Http\Controllers\Api\Mobile\V1;
 use App\Http\Controllers\Api\Mobile\Concerns\ResolvesMobileWorkspace;
 use App\Http\Controllers\Api\Mobile\MobileController;
 use App\Http\Resources\Mobile\EmailMessageResource;
+use App\Models\EmailAccount;
 use App\Models\EmailMessage;
 use App\Services\Mobile\MobileEmailService;
 use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use RuntimeException;
 
@@ -85,6 +87,27 @@ class EmailController extends MobileController
         $message = $this->mobileEmailService->toggleStar($emailMessage);
 
         return $this->ok(new EmailMessageResource($message));
+    }
+
+    public function accounts(): JsonResponse
+    {
+        $this->requireWorkspace($this->workspaceContext);
+
+        $accounts = EmailAccount::query()
+            ->orderBy('name')
+            ->get()
+            ->map(fn (EmailAccount $account): array => [
+                'id' => $account->id,
+                'name' => $account->name,
+                'email' => $account->email,
+                'brand_color' => $account->brand_color,
+                'logo_url' => $account->logo_path
+                    ? Storage::disk('public')->url($account->logo_path)
+                    : null,
+            ])
+            ->values();
+
+        return $this->ok($accounts);
     }
 
     private function listFolder(Request $request, string $folder): JsonResponse

@@ -6,6 +6,7 @@ use App\Models\DevicePushToken;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Auth\AuthenticationService;
+use App\Services\Auth\SocialAuthService;
 use App\Services\Audit\AuditLogService;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -13,12 +14,14 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\NewAccessToken;
 use Laravel\Sanctum\PersonalAccessToken;
+use RuntimeException;
 
 class MobileAuthService
 {
     public function __construct(
         private readonly AuthenticationService $authenticationService,
         private readonly AuditLogService $auditLogService,
+        private readonly SocialAuthService $socialAuthService,
     ) {}
 
     /**
@@ -60,6 +63,61 @@ class MobileAuthService
             entityId: $user->id,
             actor: $user,
             meta: [
+                'device_name' => $device['device_name'] ?? null,
+                'device_type' => $device['device_type'] ?? null,
+            ],
+            workspaceId: $workspace->id,
+        );
+
+        return [
+            'user' => $user,
+            'workspace' => $workspace,
+            'workspaces' => $workspaces,
+            'token' => $token,
+        ];
+    }
+
+    /**
+     * Social login via provider access token, returning the same envelope as password login.
+     *
+     * @param  array{device_name?:string,device_type?:string,user_agent?:string,ip_address?:string}  $device
+     * @return array{user:User,workspace:Workspace|null,workspaces:\Illuminate\Support\Collection,token:NewAccessToken}
+     */
+    public function loginWithSocial(string $provider, string $accessToken, ?int $workspaceId, array $device = []): array
+    {
+        if (! in_array($provider, ['google', 'facebook'], true)) {
+            throw new RuntimeException('مزود تسجيل الدخول الاجتماعي غير مدعوم.');
+        }
+
+        try {
+            $result = $this->socialAuthService->loginWithAccessToken($provider, $accessToken, $workspaceId);
+        } catch (RuntimeException $exception) {
+            throw new AuthenticationException($exception->getMessage() ?: 'فشل تسجيل الدخول الاجتماعي.');
+        }
+
+        /** @var User $user */
+        $user = $result['user'];
+        /** @var Workspace $workspace */
+        $workspace = $result['workspace'];
+
+        // Replace the generic API token from SocialAuthService with a mobile device token.
+        if (isset($result['token']) && $result['token'] instanceof NewAccessToken) {
+            $result['token']->accessToken->delete();
+        }
+
+        $workspaces = $user->workspaces()
+            ->wherePivot('status', 'active')
+            ->get();
+
+        $token = $this->issueDeviceToken($user, $workspace->id, $device);
+
+        $this->auditLogService->log(
+            action: 'mobile.auth.social_login',
+            entityType: 'user',
+            entityId: $user->id,
+            actor: $user,
+            meta: [
+                'provider' => $provider,
                 'device_name' => $device['device_name'] ?? null,
                 'device_type' => $device['device_type'] ?? null,
             ],
