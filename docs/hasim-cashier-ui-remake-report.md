@@ -103,7 +103,7 @@ Widgets: `HasimPrimaryButton`, `HasimSecondaryButton`, `HasimTextField`, `HasimE
 | Orders status Arabic + items | **MATCHED** | `OrdersList` + تحديث الحالة عبر API |
 | Menu order cards + حالات | **MATCHED** | New/Accepted/Preparing/Ready… |
 | فواتير / مطبخ / عملاء / إعدادات | **MATCHED** | شاشات Native على API الحالي |
-| إدارة الأصناف / التقارير اليومية | **MISSING** | أسطح إدارة ويب؛ ليست تدفق كاشير تشغيلي أساسي |
+| إدارة الأصناف / التقارير اليومية | **NAV MATCHED / DATA MISSING** | شاشات placeholder؛ يلزم API Additive |
 | طباعة ESC/POS أصلية | **PARTIAL** | خيار بعد النجاح موجود؛ مسار طباعة أصلي لاحقًا |
 | Echo realtime | **PARTIAL** | polling 3s لطلبات المنيو |
 

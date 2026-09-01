@@ -13,6 +13,7 @@ import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
 import '../../core/theme/hasim_spacing.dart';
 import '../../core/widgets/hasim_widgets.dart';
+import '../admin/admin_placeholders.dart';
 import '../cart/cart_controller.dart';
 import '../customers/customers_panel.dart';
 import '../invoices/invoices_list.dart';
@@ -30,6 +31,8 @@ enum _PosSection {
   kitchen,
   invoices,
   customers,
+  items,
+  reports,
   settings,
 }
 
@@ -195,6 +198,8 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
                     _PosSection.kitchen => const KitchenBoard(),
                     _PosSection.invoices => const InvoicesList(),
                     _PosSection.customers => const CustomersPanel(),
+                    _PosSection.items => const ItemsAdminPanel(),
+                    _PosSection.reports => const DailyReportsPanel(),
                     _PosSection.settings => const SettingsPanel(),
                   },
           ),
@@ -447,6 +452,8 @@ class _TopNav extends StatelessWidget {
       (_PosSection.orders, 'الطلبات'),
       (_PosSection.kitchen, 'المطبخ'),
       (_PosSection.invoices, 'الفواتير'),
+      (_PosSection.items, 'إدارة الأصناف'),
+      (_PosSection.reports, 'التقارير اليومية'),
       (_PosSection.customers, 'العملاء'),
       (_PosSection.settings, 'الإعدادات'),
     ];
