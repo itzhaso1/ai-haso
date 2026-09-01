@@ -815,34 +815,6 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
                   ],
                 ),
         ),
-        if (_hasSession)
-          Material(
-            color: HasimColors.surface,
-            elevation: 8,
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: HsPrimaryButton(
-                        label: '+ إضافة طلب',
-                        onPressed: _addOrder,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: HsOutlineButton(
-                        label: 'إغلاق الطاولة',
-                        onPressed: _closeSession,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
       ],
     );
   }
@@ -929,7 +901,23 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
               bold: true),
           if (_hasSession) ...[
             const SizedBox(height: 12),
-            HsPrimaryButton(label: '+ إضافة طلب', onPressed: _addOrder),
+            Row(
+              children: [
+                Expanded(
+                  child: HsPrimaryButton(
+                    label: '+ إضافة طلب',
+                    onPressed: _addOrder,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: HsOutlineButton(
+                    label: 'إغلاق الطاولة',
+                    onPressed: _closeSession,
+                  ),
+                ),
+              ],
+            ),
           ] else if (_canManageTables) ...[
             const SizedBox(height: 12),
             HsPrimaryButton(label: 'فتح جلسة', onPressed: _openSession),
@@ -1016,8 +1004,6 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
             _action('فتح جلسة', Icons.lock_open_outlined, _openSession),
             _action('QR المنيو', Icons.qr_code_2_outlined, _showQr),
           ] else ...[
-            _action('إضافة طلب', Icons.add_circle_outline, _addOrder),
-            _action('إغلاق الطاولة', Icons.lock_outline, _closeSession),
             Theme(
               data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
               child: ExpansionTile(
