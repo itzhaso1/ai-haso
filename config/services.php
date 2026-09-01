@@ -64,6 +64,12 @@ return [
         'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
     ],
 
+    'fcm' => [
+        'enabled' => env('FCM_ENABLED', false),
+        'server_key' => env('FCM_SERVER_KEY'),
+        'project_id' => env('FCM_PROJECT_ID'),
+    ],
+
     'whatsapp' => [
         'token' => env('WHATSAPP_PERMANENT_TOKEN'),
     ],

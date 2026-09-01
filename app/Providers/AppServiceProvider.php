@@ -84,8 +84,11 @@ use App\Services\Domain\NamecheapRegistrar;
 use App\Services\Subscription\Contracts\SubscriptionBillingProviderInterface;
 use App\Services\Subscription\LocalSubscriptionBillingProvider;
 use App\Support\Tenancy\WorkspaceContext;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -110,6 +113,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Notification::extend('central_mail', fn ($app) => $app->make(CentralMailChannel::class));
+
+        $this->configureMobileRateLimiting();
 
         Gate::policy(Workspace::class, WorkspacePolicy::class);
         Gate::policy(Category::class, CategoryPolicy::class);
@@ -187,5 +192,40 @@ class AppServiceProvider extends ServiceProvider
         WebsiteDomainContact::observe(WorkspaceAuditObserver::class);
         Website::observe(WebsiteResolverObserver::class);
         WebsiteDomain::observe(WebsiteResolverObserver::class);
+    }
+
+    private function configureMobileRateLimiting(): void
+    {
+        RateLimiter::for('mobile-api', function (Request $request) {
+            return Limit::perMinute(120)->by((string) ($request->user()?->id ?: $request->ip()));
+        });
+
+        RateLimiter::for('mobile-login', function (Request $request) {
+            return Limit::perMinute(10)->by((string) $request->ip());
+        });
+
+        RateLimiter::for('mobile-messages', function (Request $request) {
+            return Limit::perMinute(60)->by((string) ($request->user()?->id ?: $request->ip()));
+        });
+
+        RateLimiter::for('mobile-email', function (Request $request) {
+            return Limit::perMinute(20)->by((string) ($request->user()?->id ?: $request->ip()));
+        });
+
+        RateLimiter::for('mobile-ai', function (Request $request) {
+            return Limit::perMinute(10)->by((string) ($request->user()?->id ?: $request->ip()));
+        });
+
+        RateLimiter::for('mobile-attachments', function (Request $request) {
+            return Limit::perMinute(30)->by((string) ($request->user()?->id ?: $request->ip()));
+        });
+
+        RateLimiter::for('mobile-write', function (Request $request) {
+            return Limit::perMinute(40)->by((string) ($request->user()?->id ?: $request->ip()));
+        });
+
+        RateLimiter::for('mobile-search', function (Request $request) {
+            return Limit::perMinute(30)->by((string) ($request->user()?->id ?: $request->ip()));
+        });
     }
 }
