@@ -470,57 +470,59 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
             : c.maxWidth >= 520
                 ? 2
                 : 1;
-        return GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: cols,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-          childAspectRatio: cols == 1 ? 3.2 : 2.4,
+        final width = cols == 1
+            ? c.maxWidth
+            : (c.maxWidth - (8 * (cols - 1))) / cols;
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
             for (final card in cards)
-              HsCard(
-                color: card.$4 ? const Color(0xFFECFDF5) : HasimColors.surface,
-                borderColor:
-                    card.$4 ? const Color(0xFFA7F3D0) : HasimColors.border,
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      card.$1,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: card.$4
-                            ? HasimColors.ctaDark
-                            : HasimColors.muted,
+              SizedBox(
+                width: width.isFinite && width > 0 ? width : c.maxWidth,
+                child: HsCard(
+                  color: card.$4 ? const Color(0xFFECFDF5) : HasimColors.surface,
+                  borderColor:
+                      card.$4 ? const Color(0xFFA7F3D0) : HasimColors.border,
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        card.$1,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: card.$4
+                              ? HasimColors.ctaDark
+                              : HasimColors.muted,
+                        ),
                       ),
-                    ),
-                    Text(
-                      '${card.$2}',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: card.$4
-                            ? const Color(0xFF065F46)
-                            : HasimColors.ink,
+                      const SizedBox(height: 4),
+                      Text(
+                        '${card.$2}',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          color: card.$4
+                              ? const Color(0xFF065F46)
+                              : HasimColors.ink,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'مفتوحة الآن: ${card.$3}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: card.$4
-                            ? HasimColors.ctaDark
-                            : HasimColors.muted,
+                      Text(
+                        'مفتوحة الآن: ${card.$3}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: card.$4
+                              ? HasimColors.ctaDark
+                              : HasimColors.muted,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
           ],

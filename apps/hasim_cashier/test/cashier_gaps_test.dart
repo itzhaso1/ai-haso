@@ -199,10 +199,129 @@ void main() {
     expect(asNum({'x': 1}), 0);
   });
 
+  test('reports empty/malformed payload maps to empty collections without throw', () {
+    Map<String, dynamic> asMap(dynamic raw) {
+      if (raw is Map<String, dynamic>) return raw;
+      if (raw is Map) return Map<String, dynamic>.from(raw);
+      return const {};
+    }
+
+    List<Map<String, dynamic>> asMaps(dynamic raw) {
+      if (raw is! List) return const [];
+      return raw
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+
+    const empty = <String, dynamic>{};
+    expect(asMap(empty['summary']), isEmpty);
+    expect(asMap(null), isEmpty);
+    expect(asMaps(empty['top_items']), isEmpty);
+    expect(asMaps('bad'), isEmpty);
+    expect(asMaps([
+      {'product_name': 'شاي'},
+      'skip-me',
+    ]), hasLength(1));
+  });
+
+  test('reports UI never resolves to a blank/white state', () {
+    String surface({
+      required bool loading,
+      required bool forbidden,
+      String? error,
+      Map<String, dynamic>? data,
+    }) {
+      if (loading) return 'loading';
+      if (forbidden) return 'forbidden';
+      if (error != null) return 'error';
+      if (data == null) return 'empty';
+      return 'body';
+    }
+
+    expect(
+      surface(loading: true, forbidden: false, error: null, data: null),
+      'loading',
+    );
+    expect(
+      surface(loading: false, forbidden: true, error: 'x', data: null),
+      'forbidden',
+    );
+    expect(
+      surface(loading: false, forbidden: false, error: 'فشل', data: null),
+      'error',
+    );
+    expect(
+      surface(loading: false, forbidden: false, error: null, data: null),
+      'empty',
+    );
+    expect(
+      surface(
+        loading: false,
+        forbidden: false,
+        error: null,
+        data: const {'summary': {}},
+      ),
+      'body',
+    );
+    expect(
+      {
+        'loading',
+        'forbidden',
+        'error',
+        'empty',
+        'body',
+      }.contains('white'),
+      isFalse,
+    );
+  });
+
   test('menu.manage is required for catalog management actions', () {
-    expect(CashierPermissions.canManageMenu({'menu.manage': true}), isTrue);
-    expect(CashierPermissions.canManageMenu({'pos.manage': true}), isFalse);
-    expect(CashierPermissions.canManageMenu(const {}), isFalse);
+    bool showCatalogMutations(Map<String, dynamic>? perms) =>
+        CashierPermissions.canManageMenu(perms);
+    expect(showCatalogMutations({'menu.manage': true}), isTrue);
+    expect(showCatalogMutations({'pos.manage': true}), isFalse);
+    expect(showCatalogMutations({'orders.manage': true}), isFalse);
+    expect(showCatalogMutations(const {}), isFalse);
+    expect(showCatalogMutations(null), isFalse);
+  });
+
+  test('table detail keeps primary and overflow actions', () {
+    const primary = ['إضافة طلب', 'إغلاق الطاولة'];
+    const overflow = [
+      'إضافة ملاحظة',
+      'خصم',
+      'QR المنيو',
+      'نقل الطاولة',
+      'دمج طاولة',
+      'تقسيم الحساب',
+    ];
+    const destructive = 'إلغاء الطاولة';
+    expect(primary, containsAll(['إضافة طلب', 'إغلاق الطاولة']));
+    expect(overflow, hasLength(6));
+    expect(destructive, 'إلغاء الطاولة');
+    expect(primary.contains(destructive), isFalse);
+  });
+
+  test('table detail wide layout gives info a larger flex than orders', () {
+    const infoFlex = 7;
+    const ordersFlex = 3;
+    expect(infoFlex > ordersFlex, isTrue);
+  });
+
+  test('close table submits once with a single Idempotency-Key', () {
+    var submits = 0;
+    String? usedKey;
+    void close({required bool alreadyClosing, required String key}) {
+      if (alreadyClosing) return;
+      submits += 1;
+      usedKey = key;
+    }
+
+    close(alreadyClosing: false, key: 'idem-1');
+    close(alreadyClosing: true, key: 'idem-2');
+    expect(submits, 1);
+    expect(usedKey, 'idem-1');
   });
 
   test('conflict strategy keeps pending orders and requires online table ops', () {

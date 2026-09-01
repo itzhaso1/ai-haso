@@ -54,6 +54,21 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
 
   bool get _hasSession => _sessionId != null;
 
+  String get _customerLabel {
+    final fromTable = _detail?['customer_name'];
+    if (fromTable is String && fromTable.trim().isNotEmpty) {
+      return fromTable.trim();
+    }
+    for (final order in _orders) {
+      final customer = order['customer'];
+      if (customer is Map) {
+        final name = customer['name'];
+        if (name != null && '$name'.trim().isNotEmpty) return '$name'.trim();
+      }
+    }
+    return '—';
+  }
+
   List<Map<String, dynamic>> get _orders {
     final raw = _detail?['orders'];
     if (raw is! List) return const [];
@@ -776,6 +791,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
             ),
           ),
         ),
+        _identityStrip(occupied),
         Expanded(
           child: isWide
               ? Row(
@@ -783,9 +799,9 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
                   children: [
                     // RTL: first child = right = table info (larger share).
                     Expanded(
-                      flex: 5,
+                      flex: 7,
                       child: ListView(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
                         children: [
                           _infoCard(occupied),
                           const SizedBox(height: 10),
@@ -796,7 +812,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
                     const VerticalDivider(width: 1),
                     // Orders panel — smaller share.
                     Expanded(
-                      flex: 4,
+                      flex: 3,
                       child: _ordersPanel(),
                     ),
                   ],
@@ -809,11 +825,72 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
                     _actionsCard(),
                     const SizedBox(height: 10),
                     SizedBox(
-                      height: MediaQuery.sizeOf(context).height * 0.45,
+                      height: MediaQuery.sizeOf(context).height * 0.42,
                       child: _ordersPanel(),
                     ),
                   ],
                 ),
+        ),
+      ],
+    );
+  }
+
+  Widget _identityStrip(bool occupied) {
+    return Material(
+      color: HasimColors.surface,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: HasimColors.border)),
+        ),
+        child: Wrap(
+          spacing: 16,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            occupied
+                ? HsBadge.occupied(
+                    PosLabels.tableStatus(_detail!['status'] as String?),
+                  )
+                : HsBadge.available(
+                    PosLabels.tableStatus(_detail!['status'] as String?),
+                  ),
+            _identityChip('العميل', _customerLabel),
+            _identityChip(
+              'الإجمالي',
+              ((_detail!['total'] as num?) ?? 0).toStringAsFixed(2),
+              highlight: true,
+            ),
+            _identityChip(
+              'الجلسة',
+              _hasSession ? 'مفتوحة · ${_durationLabel()}' : 'لا توجد جلسة',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _identityChip(String label, String value, {bool highlight = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: HasimColors.muted,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w900,
+            color: highlight ? HasimColors.ctaDark : HasimColors.ink,
+          ),
         ),
       ],
     );
@@ -850,6 +927,11 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
             ],
           ),
           const SizedBox(height: 6),
+          Text(
+            'العميل: $_customerLabel',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
           Text(
             _hasSession
                 ? 'جلسة مفتوحة · المدة ${_durationLabel()}'
@@ -1001,7 +1083,6 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
             ),
           ),
           if (!_hasSession) ...[
-            _action('فتح جلسة', Icons.lock_open_outlined, _openSession),
             _action('QR المنيو', Icons.qr_code_2_outlined, _showQr),
           ] else ...[
             Theme(

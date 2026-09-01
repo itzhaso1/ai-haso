@@ -287,19 +287,30 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
             ),
           ] else ...[
             const SizedBox(height: 12),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                Expanded(
-                  child: HsOutlineButton(
-                    label: '+ إضافة تصنيف',
+                SizedBox(
+                  height: 48,
+                  child: OutlinedButton.icon(
                     onPressed: () => _editCategory(),
+                    icon: const Icon(Icons.create_new_folder_outlined),
+                    label: const Text(
+                      '+ إضافة تصنيف',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: HsPrimaryButton(
-                    label: '+ إضافة منتج',
+                SizedBox(
+                  height: 48,
+                  child: FilledButton.icon(
                     onPressed: () => _editItem(),
+                    icon: const Icon(Icons.add),
+                    label: const Text(
+                      '+ إضافة منتج',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
                   ),
                 ),
               ],
