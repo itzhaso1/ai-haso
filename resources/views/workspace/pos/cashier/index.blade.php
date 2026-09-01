@@ -21,6 +21,7 @@
             },
         })"
         class="grid gap-3 xl:grid-cols-12"
+        @pos-cart-toggle.window="document.querySelector('[data-pos-cart]')?.scrollIntoView({ behavior: 'smooth', block: 'start' })"
     >
         {{-- Categories sidebar (RIGHT in RTL = first column) — KEEP EXISTING --}}
         <aside class="hidden xl:col-span-2 xl:block" data-pos-categories-sidebar>
@@ -284,6 +285,22 @@
                 successOpen: false,
                 successOrderNumber: '',
                 successPrintUrl: '',
+                init() {
+                    this.syncCartBadge();
+                    this.$watch('cart', () => this.syncCartBadge(), { deep: true });
+                },
+                syncCartBadge() {
+                    const count = this.cart.reduce((sum, line) => sum + Number(line.quantity || 0), 0);
+                    if (window.Alpine?.store('posCartUi')) {
+                        Alpine.store('posCartUi').setCount(count);
+                    }
+                },
+                notifyAdded(name) {
+                    window.HasoPosFeedback?.notifyItemAdded(name);
+                    if (window.Alpine?.store('posCartUi')) {
+                        Alpine.store('posCartUi').pulseBadge();
+                    }
+                },
                 get filteredItems() {
                     return this.items.filter((item) => {
                         const matchesCategory = !this.selectedCategoryId || Number(item.pos_item_category_id) === Number(this.selectedCategoryId);
@@ -303,6 +320,8 @@
                     if (existing) {
                         existing.quantity += 1;
                         this.syncCartAdd(item.id, 1);
+                        this.syncCartBadge();
+                        this.notifyAdded(item.name);
                         return;
                     }
 
@@ -315,10 +334,13 @@
                         quantity: 1,
                     });
                     this.syncCartAdd(item.id, 1);
+                    this.syncCartBadge();
+                    this.notifyAdded(item.name);
                 },
                 increase(index) {
                     this.cart[index].quantity += 1;
                     this.syncCartQty(this.cart[index]);
+                    this.syncCartBadge();
                 },
                 decrease(index) {
                     if (this.cart[index].quantity <= 1) {
@@ -327,6 +349,7 @@
                     }
                     this.cart[index].quantity -= 1;
                     this.syncCartQty(this.cart[index]);
+                    this.syncCartBadge();
                 },
                 removeLine(index) {
                     const line = this.cart[index];
@@ -334,6 +357,7 @@
                     if (line?.key) {
                         this.cartFetch(`${this.cartEndpoints.removeItem}/${line.key}`, 'DELETE');
                     }
+                    this.syncCartBadge();
                 },
                 get subtotal() {
                     return this.cart.reduce((sum, line) => sum + (line.quantity * line.unit_price), 0);
@@ -392,6 +416,7 @@
                     this.discount = 0;
                     this.notes = '';
                     this.errorMessage = '';
+                    this.syncCartBadge();
                 },
                 openSuccess(payload) {
                     this.successOrderNumber = payload.order_number || payload.order_id || '';

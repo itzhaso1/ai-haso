@@ -42,6 +42,8 @@ class PosCashierUxTest extends TestCase
         $this->assertStringContainsString('data-pos-categories-sidebar', $html);
         $this->assertStringContainsString('التصنيفات', $html);
         $this->assertStringContainsString('الكل', $html);
+        $this->assertStringContainsString('data-pos-cart-nav', $html);
+        $this->assertStringContainsString('notifyAdded', $html);
         $this->assertStringContainsString('xl:col-span-3', $html); // narrower cart
         $this->assertStringContainsString('xl:col-span-7', $html); // wider products
         $this->assertStringContainsString('إنشاء الطلب', $html);
@@ -320,6 +322,34 @@ class PosCashierUxTest extends TestCase
 
         $this->assertGreaterThanOrEqual(2, $activeAfterSplit->count());
         $this->assertEquals(30.0, round((float) $activeAfterSplit->sum('total_amount'), 2));
+    }
+
+    public function test_public_menu_has_compact_grid_and_cart_navbar(): void
+    {
+        $this->seed(FoundationSeeder::class);
+        [$owner, $workspace] = $this->createWorkspaceOwner('store');
+
+        PosMenuItem::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'شاي',
+            'price' => 5,
+            'currency' => 'SAR',
+            'is_active' => true,
+        ]);
+
+        $html = $this->get(route('menu.general', ['workspace' => $workspace->slug]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('data-menu-navbar', $html);
+        $this->assertStringContainsString('data-pos-cart-nav', $html);
+        $this->assertStringContainsString('data-pos-cart-badge', $html);
+        $this->assertStringContainsString('data-menu-cart-drawer', $html);
+        $this->assertStringContainsString('متابعة الطلب', $html);
+        $this->assertStringContainsString('grid-cols-2', $html);
+        $this->assertStringContainsString('data-menu-product-grid', $html);
+        $this->assertStringContainsString('HasoPosFeedback', $html);
+        $this->assertStringContainsString('notifyItemAdded', $html);
     }
 
     /**

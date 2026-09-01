@@ -1,10 +1,32 @@
 
-
 import Alpine from 'alpinejs';
+import './pos-feedback';
 
 window.Alpine = Alpine;
 
 document.addEventListener('alpine:init', () => {
+    Alpine.store('posCartUi', {
+        count: 0,
+        open: false,
+        bumpPulse: false,
+        setCount(count) {
+            this.count = Math.max(0, Number(count) || 0);
+        },
+        openDrawer() {
+            this.open = true;
+        },
+        closeDrawer() {
+            this.open = false;
+        },
+        toggleDrawer() {
+            this.open = !this.open;
+        },
+        pulseBadge() {
+            this.bumpPulse = true;
+            setTimeout(() => { this.bumpPulse = false; }, 280);
+        },
+    });
+
     Alpine.data('assistantWidget', (chatUrl) => ({
         open: false,
         loading: false,
