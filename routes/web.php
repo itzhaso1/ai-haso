@@ -491,6 +491,7 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::get('menu', [PosMenuPageController::class, 'index'])->name('menu.index');
 
             Route::get('orders/recent-menu', [PosCashierController::class, 'recentMenuOrders'])->name('orders.recent-menu');
+            Route::get('orders/channel-stats', [PosCashierController::class, 'channelStats'])->name('orders.channel-stats');
             Route::post('orders', [PosCashierController::class, 'storeOrder'])->name('orders.store');
             Route::get('orders/running', [PosOrderController::class, 'running'])->name('orders.running');
             Route::get('kitchen', [PosKitchenController::class, 'index'])->name('kitchen.index');

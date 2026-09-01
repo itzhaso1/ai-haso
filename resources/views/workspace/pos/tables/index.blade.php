@@ -1,6 +1,8 @@
 @extends('layouts.pos', ['pageTitle' => 'لوحة الطاولات'])
 
 @section('content')
+    @include('workspace.pos.partials.order-channel-stats', ['orderChannelStats' => $orderChannelStats])
+
     @php($workspace = request()->attributes->get('workspace'))
 
     <div

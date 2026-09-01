@@ -1,6 +1,8 @@
 @extends('layouts.pos', ['pageTitle' => 'واجهة الكاشير'])
 
 @section('content')
+    @include('workspace.pos.partials.order-channel-stats', ['orderChannelStats' => $orderChannelStats])
+
     {{--
       Layout (RTL): Categories RIGHT | Products CENTER | Cart LEFT (narrower)
       Categories sidebar kept as-is; cart narrowed; product cards denser.
@@ -11,6 +13,7 @@
             categories: @js($categories),
             storeOrderUrl: @js($storeOrderUrl),
             recentMenuOrdersUrl: @js($recentMenuOrdersUrl),
+            orderStatsUrl: @js($orderStatsUrl),
             taxRate: @js((float) $taxRate),
             soundEnabled: @js((bool) $soundEnabled),
             enableDelivery: @js((bool) data_get(request()->attributes->get('workspace')?->settings ?? [], 'pos.enable_delivery', false)),
@@ -285,13 +288,14 @@
     </div>
 
     <script>
-        function cashierPos({ items, categories, cartEndpoints, storeOrderUrl, recentMenuOrdersUrl = null, taxRate = 0, soundEnabled = true, enableDelivery = false }) {
+        function cashierPos({ items, categories, cartEndpoints, storeOrderUrl, recentMenuOrdersUrl = null, orderStatsUrl = null, taxRate = 0, soundEnabled = true, enableDelivery = false }) {
             return {
                 items,
                 categories,
                 cartEndpoints,
                 storeOrderUrl,
                 recentMenuOrdersUrl,
+                orderStatsUrl,
                 taxRate: Number(taxRate || 0),
                 soundEnabled: !!soundEnabled,
                 enableDelivery: !!enableDelivery,
@@ -314,6 +318,28 @@
                     this.syncCartBadge();
                     this.$watch('cart', () => this.syncCartBadge(), { deep: true });
                     this.bootstrapMenuOrderPolling();
+                    this.refreshOrderStats();
+                    setInterval(() => this.refreshOrderStats(), 15000);
+                },
+                async refreshOrderStats() {
+                    if (!this.orderStatsUrl) return;
+                    try {
+                        const response = await fetch(this.orderStatsUrl, {
+                            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                            credentials: 'same-origin',
+                        });
+                        if (!response.ok) return;
+                        const payload = await response.json();
+                        const stats = payload.stats || {};
+                        document.querySelectorAll('[data-pos-order-channel-stats] [data-stat]').forEach((node) => {
+                            const key = node.getAttribute('data-stat');
+                            if (key && Object.prototype.hasOwnProperty.call(stats, key)) {
+                                node.textContent = String(stats[key]);
+                            }
+                        });
+                    } catch (_error) {
+                        // stats refresh is non-blocking
+                    }
                 },
                 setOrderType(type) {
                     this.orderType = type;
@@ -573,6 +599,7 @@
                             return;
                         }
                         this.openSuccess(payload);
+                        this.refreshOrderStats();
                     } catch (error) {
                         this.errorMessage = 'تعذر إنشاء الطلب، حاول مرة أخرى.';
                     } finally {
@@ -608,6 +635,7 @@
                             return;
                         }
                         this.openSuccess(payload);
+                        this.refreshOrderStats();
                     } catch (error) {
                         this.errorMessage = 'تعذر إنشاء الطلب، حاول مرة أخرى.';
                     } finally {

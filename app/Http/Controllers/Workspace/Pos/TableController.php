@@ -10,6 +10,7 @@ use App\Models\Order;
 use App\Models\PosMenuItem;
 use App\Models\TableSession;
 use App\Services\Pos\PosOrderService;
+use App\Services\Pos\PosOrderStatsService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -21,6 +22,7 @@ class TableController extends PosBaseController
 {
     public function __construct(
         private readonly PosOrderService $posOrderService,
+        private readonly PosOrderStatsService $posOrderStatsService,
     ) {}
 
     public function index(Request $request): View
@@ -34,6 +36,7 @@ class TableController extends PosBaseController
             'tables' => $tables,
             'tablesPayload' => $tablesPayload,
             'liveBoardUrl' => route('workspace.pos.tables.live'),
+            'orderChannelStats' => $this->posOrderStatsService->channelCounts(),
             'posStatuses' => $this->posStatusLabels(),
         ]);
     }

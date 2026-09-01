@@ -11,6 +11,7 @@ use App\Models\PosCashierInvoiceItem;
 use App\Models\PosItemCategory;
 use App\Models\PosMenuItem;
 use App\Models\TableSession;
+use App\Services\Pos\PosOrderStatsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,10 @@ use Illuminate\View\View;
 
 class PosReportController extends PosBaseController
 {
+    public function __construct(
+        private readonly PosOrderStatsService $posOrderStatsService,
+    ) {}
+
     public function daily(Request $request): View
     {
         $this->authorizePos($request, 'reports.view');
@@ -56,6 +61,9 @@ class PosReportController extends PosBaseController
 
         $customerSummary = $this->buildCustomerSummary($orders);
         $salesByHour = $this->buildSalesByHour($orders->whereNotNull('pos_cashier_invoice_id'));
+        $orderChannelStats = $this->posOrderStatsService->channelCounts(
+            \Illuminate\Support\Carbon::parse($date)->startOfDay()
+        );
 
         $recentOperations = AuditLog::query()
             ->with('user:id,name')
@@ -83,7 +91,11 @@ class PosReportController extends PosBaseController
                 'orders_count' => $orders->count(),
                 'paid_orders_count' => $orders->where('payment_status', 'paid')->count(),
                 'unpaid_orders_count' => $orders->where('payment_status', '!=', 'paid')->count(),
+                'table_orders_count' => (int) $orderChannelStats['table'],
+                'takeaway_orders_count' => (int) $orderChannelStats['takeaway'],
+                'delivery_orders_count' => (int) $orderChannelStats['delivery'],
             ],
+            'orderChannelStats' => $orderChannelStats,
             'quantityByType' => $quantityByType,
             'topTypes' => $quantityByType->take(10),
             'topItems' => $topItems,

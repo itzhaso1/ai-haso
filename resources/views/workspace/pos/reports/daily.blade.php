@@ -40,6 +40,8 @@
                     <p class="mt-1 text-lg font-bold text-amber-700">{{ $summary['unpaid_orders_count'] }}</p>
                 </div>
             </div>
+
+            @include('workspace.pos.partials.order-channel-stats', ['orderChannelStats' => $orderChannelStats])
         </article>
 
         <div class="grid gap-4 xl:grid-cols-3">

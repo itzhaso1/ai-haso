@@ -283,6 +283,56 @@ class PosFinalCashierCompletionTest extends TestCase
             ]);
     }
 
+    public function test_cashier_dashboard_shows_order_channel_counts(): void
+    {
+        $this->seed(FoundationSeeder::class);
+        [$owner, $workspace] = $this->createWorkspaceOwner('store');
+        $item = $this->makeItem($workspace);
+        $table = $this->makeTable($workspace, 'Stats');
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->postJson(route('workspace.pos.orders.store'), [
+                'order_type' => 'table',
+                'dining_table_id' => $table->id,
+                'items' => [['pos_menu_item_id' => $item->id, 'quantity' => 1]],
+            ])->assertCreated();
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->postJson(route('workspace.pos.orders.store'), [
+                'order_type' => 'takeaway',
+                'items' => [['pos_menu_item_id' => $item->id, 'quantity' => 1]],
+            ])->assertCreated();
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->postJson(route('workspace.pos.orders.store'), [
+                'order_type' => 'delivery',
+                'items' => [['pos_menu_item_id' => $item->id, 'quantity' => 1]],
+            ])->assertCreated();
+
+        $html = $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->get(route('workspace.pos.cashier.index'))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('داخل المطعم', $html);
+        $this->assertStringContainsString('طلب خارجي', $html);
+        $this->assertStringContainsString('توصيل', $html);
+        $this->assertStringContainsString('data-pos-order-channel-stats', $html);
+
+        $this->actingAs($owner)
+            ->withSession(['current_workspace_id' => $workspace->id])
+            ->getJson(route('workspace.pos.orders.channel-stats'))
+            ->assertOk()
+            ->assertJsonPath('stats.table', 1)
+            ->assertJsonPath('stats.takeaway', 1)
+            ->assertJsonPath('stats.delivery', 1)
+            ->assertJsonPath('stats.total', 3);
+    }
+
     private function makeItem(Workspace $workspace, float $price = 10): PosMenuItem
     {
         return PosMenuItem::withoutGlobalScopes()->create([

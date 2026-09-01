@@ -9,6 +9,7 @@ use App\Models\Order;
 use App\Models\PosItemCategory;
 use App\Models\PosMenuItem;
 use App\Services\Pos\PosOrderService;
+use App\Services\Pos\PosOrderStatsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,6 +20,7 @@ class CashierController extends PosBaseController
 {
     public function __construct(
         private readonly PosOrderService $posOrderService,
+        private readonly PosOrderStatsService $posOrderStatsService,
     ) {}
 
     public function index(Request $request): View
@@ -55,6 +57,8 @@ class CashierController extends PosBaseController
             'tables' => DiningTable::query()->orderBy('name')->get(['id', 'name', 'status']),
             'storeOrderUrl' => route('workspace.pos.orders.store'),
             'recentMenuOrdersUrl' => route('workspace.pos.orders.recent-menu'),
+            'orderStatsUrl' => route('workspace.pos.orders.channel-stats'),
+            'orderChannelStats' => $this->posOrderStatsService->channelCounts(),
             'taxRate' => $taxRate,
             'soundEnabled' => $soundEnabled,
             'workspaceId' => $workspace->id,
@@ -137,6 +141,15 @@ class CashierController extends PosBaseController
         return response()->json([
             'orders' => $orders,
             'latest_id' => (int) ($orders->max('id') ?? $afterId),
+        ]);
+    }
+
+    public function channelStats(Request $request): JsonResponse
+    {
+        $this->authorizePos($request, 'orders.manage');
+
+        return response()->json([
+            'stats' => $this->posOrderStatsService->channelCounts(),
         ]);
     }
 }
