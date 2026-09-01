@@ -15,6 +15,7 @@ import '../../core/theme/hasim_radius.dart';
 import '../../core/widgets/hasim_widgets.dart';
 import '../cart/cart_controller.dart';
 import 'table_action_wizards.dart';
+import 'table_order_editor.dart';
 
 /// Tables board matching Laravel `workspace/pos/tables/index` + `show` actions.
 class TablesBoard extends ConsumerStatefulWidget {
@@ -511,6 +512,90 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
     );
   }
 
+  bool _canMutateOrder(Map<String, dynamic> order) {
+    final status = order['pos_status'] as String?;
+    final paid = order['payment_status'] == 'paid';
+    final invoiced = order['pos_cashier_invoice_id'] != null;
+    return status != 'cancelled' &&
+        status != 'completed' &&
+        !paid &&
+        !invoiced;
+  }
+
+  Future<void> _editOrder(Map<String, dynamic> order) async {
+    if (!_canMutateOrder(order)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'لا يمكن تعديل هذا الطلب (مدفوع / مفوتر / ملغي / مكتمل).',
+          ),
+        ),
+      );
+      return;
+    }
+    if (!await _ensureOnlineForTableAction()) return;
+    final updated = await showDialog<Map<String, dynamic>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => TableOrderEditorDialog(order: order),
+    );
+    if (updated == null) return;
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تم حفظ تعديلات الطلب.')),
+    );
+    await _load();
+  }
+
+  Future<void> _deleteOrder(Map<String, dynamic> order) async {
+    if (!_canMutateOrder(order)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'لا يمكن حذف هذا الطلب (مدفوع / مفوتر / ملغي / مكتمل).',
+          ),
+        ),
+      );
+      return;
+    }
+    if (!await _ensureOnlineForTableAction()) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('هل أنت متأكد من حذف هذا الطلب؟'),
+        content: Text(
+          'سيتم حذف الطلب #${order['order_number'] ?? order['id']} من الطاولة نهائيًا (إلغاء في Laravel).',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: HasimColors.danger),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('حذف الطلب'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final id = (order['id'] as num?)?.toInt();
+    if (id == null) return;
+    try {
+      await ref.read(cashierApiProvider).delete('/orders/$id');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم حذف الطلب.')),
+      );
+      await _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   List<Widget> _lineWidgets(Map<String, dynamic> selected) {
     final raw = selected['lines'];
     if (raw is! List || raw.isEmpty) {
@@ -790,33 +875,65 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
                           border: Border.all(color: HasimColors.border),
                           borderRadius: BorderRadius.circular(HasimRadius.md),
                         ),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Expanded(
-                              child: Text(
-                                '#${order['order_number'] ?? order['id']}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 12,
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '#${order['order_number'] ?? order['id']}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 12,
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                HsBadge(
+                                  label: PosLabels.status(
+                                    order['pos_status'] as String?,
+                                  ),
+                                  background: HasimColors.ctaSoft,
+                                  foreground: HasimColors.ctaDark,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  ((order['total_amount'] as num?) ?? 0)
+                                      .toStringAsFixed(2),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
                             ),
-                            HsBadge(
-                              label: PosLabels.status(
-                                order['pos_status'] as String?,
+                            if (_canMutateOrder(order)) ...[
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      onPressed: () => _editOrder(order),
+                                      icon: const Icon(Icons.edit_outlined,
+                                          size: 16),
+                                      label: const Text('تعديل الطلب'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      onPressed: () => _deleteOrder(order),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: HasimColors.danger,
+                                      ),
+                                      icon: const Icon(Icons.delete_outline,
+                                          size: 16),
+                                      label: const Text('حذف الطلب'),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              background: HasimColors.ctaSoft,
-                              foreground: HasimColors.ctaDark,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              ((order['total_amount'] as num?) ?? 0)
-                                  .toStringAsFixed(2),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 12,
-                              ),
-                            ),
+                            ],
                           ],
                         ),
                       ),

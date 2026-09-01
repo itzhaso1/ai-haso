@@ -22,5 +22,18 @@ class CashierPermissions {
       can(p, 'orders.refund') || can(p, 'orders.manage') || can(p, 'pos.manage');
 
   static bool canViewReports(Map<String, dynamic>? p) =>
-      can(p, 'reports.view') || can(p, 'pos.manage');
+      can(p, 'reports.view') ||
+      can(p, 'pos.manage') ||
+      can(p, 'orders.manage') ||
+      can(p, 'workspace.manage');
+
+  /// Prefer bootstrap snapshot; fall back to auth session permissions.
+  static Map<String, dynamic> resolve(
+    Map<String, dynamic>? bootstrap,
+    Map<String, dynamic>? session,
+  ) {
+    if (bootstrap != null && bootstrap.isNotEmpty) return bootstrap;
+    if (session != null && session.isNotEmpty) return session;
+    return const {};
+  }
 }

@@ -27,6 +27,23 @@ void main() {
     expect(CashierPermissions.canCreateOrders(allowed), isTrue);
   });
 
+  test('reports permission uses session fallback when bootstrap empty', () {
+    expect(CashierPermissions.canViewReports(const {}), isFalse);
+    expect(
+      CashierPermissions.canViewReports({'reports.view': true}),
+      isTrue,
+    );
+    expect(
+      CashierPermissions.canViewReports({'orders.manage': true}),
+      isTrue,
+    );
+    final resolved = CashierPermissions.resolve(
+      const {},
+      {'reports.view': true, 'orders.manage': true},
+    );
+    expect(CashierPermissions.canViewReports(resolved), isTrue);
+  });
+
   test('conflict strategy keeps pending orders and requires online table ops', () {
     expect(
       ConflictStrategy.forDomain('pending_order'),

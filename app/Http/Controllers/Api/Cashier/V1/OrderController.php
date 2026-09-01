@@ -199,6 +199,28 @@ class OrderController extends CashierController
         return $this->ok(new OrderResource($updated->load(['items', 'table', 'customer'])), message: 'تم تعديل الطلب.');
     }
 
+    /**
+     * Delete (cancel) a table/POS order — mirrors Web "حذف الطلب".
+     * Respects Laravel business rules (paid / invoiced / already cancelled).
+     */
+    public function destroy(Request $request, Order $order): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $user = $this->authorizeCashier($request, $workspace);
+        $this->ensurePosOrder($order);
+
+        try {
+            $updated = $this->posOrderService->deletePosOrder($order, $user);
+        } catch (RuntimeException $exception) {
+            return $this->fail($exception->getMessage(), 422);
+        }
+
+        return $this->ok(
+            new OrderResource($updated->load(['items', 'table', 'customer'])),
+            message: 'تم حذف الطلب.',
+        );
+    }
+
     public function createInvoice(Request $request, Order $order): JsonResponse
     {
         $workspace = $this->requireWorkspace($this->workspaceContext);

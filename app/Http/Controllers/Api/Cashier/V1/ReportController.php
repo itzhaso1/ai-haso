@@ -97,11 +97,30 @@ class ReportController extends CashierController
                 'total_quantity' => (int) $quantityByType->sum('quantity'),
                 'paid_orders_count' => $orders->where('payment_status', 'paid')->count(),
                 'unpaid_orders_count' => $orders->where('payment_status', '!=', 'paid')->count(),
+                'open_orders_count' => $orders
+                    ->whereIn('pos_status', ['new', 'accepted', 'preparing', 'ready', 'delivered'])
+                    ->where('payment_status', '!=', 'paid')
+                    ->whereNull('pos_cashier_invoice_id')
+                    ->count(),
+                'completed_orders_count' => $orders->where('pos_status', 'completed')->count(),
+                'cancelled_orders_count' => $orders->where('pos_status', 'cancelled')->count(),
+                'discount_total' => (float) $orders->sum('discount_amount'),
+                'tax_total' => (float) $orders->sum('tax_amount'),
                 'table_orders_count' => (int) ($channelStats['table'] ?? 0),
                 'takeaway_orders_count' => (int) ($channelStats['takeaway'] ?? 0),
                 'delivery_orders_count' => (int) ($channelStats['delivery'] ?? 0),
             ],
             'channel_stats' => $channelStats,
+            'payment_methods' => $orders
+                ->map(fn (Order $order) => data_get($order->metadata, 'payment_method') ?: (
+                    $order->payment_status === 'paid' ? 'paid' : 'pending'
+                ))
+                ->countBy()
+                ->map(fn ($count, $method) => [
+                    'method' => (string) $method,
+                    'orders_count' => (int) $count,
+                ])
+                ->values(),
             'quantity_by_type' => $quantityByType,
             'top_items' => $topItems,
             'sales_by_hour' => $salesByHour,

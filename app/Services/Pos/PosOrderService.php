@@ -221,6 +221,8 @@ class PosOrderService
     public function updatePosStatus(Order $order, string $status, ?User $actor): Order
     {
         if ($status === 'cancelled') {
+            $this->assertOrderMutable($order, action: 'حذف');
+
             $cancelled = $this->orderService->cancel($order->load('items'), $actor);
             if ($cancelled->dining_table_id) {
                 $table = DiningTable::withoutGlobalScopes()->find($cancelled->dining_table_id);
@@ -264,9 +266,7 @@ class PosOrderService
             throw new RuntimeException('يمكن تعديل عناصر فواتير POS فقط.');
         }
 
-        if (in_array($order->pos_status, ['completed', 'cancelled'], true)) {
-            throw new RuntimeException('لا يمكن تعديل طلب مكتمل أو ملغي.');
-        }
+        $this->assertOrderMutable($order, action: 'تعديل');
 
         $incomingItems = collect($payload['items'] ?? []);
         if ($incomingItems->isEmpty()) {
@@ -274,23 +274,57 @@ class PosOrderService
         }
 
         return DB::transaction(function () use ($order, $incomingItems, $payload): Order {
+            $workspace = Workspace::withoutGlobalScopes()->findOrFail($order->workspace_id);
             $existingIds = $order->items()->pluck('id')->all();
 
             foreach ($incomingItems as $line) {
                 $itemId = (int) ($line['id'] ?? 0);
+                $menuItemId = (int) ($line['pos_menu_item_id'] ?? 0);
+                $remove = (bool) ($line['remove'] ?? false);
+
+                // New catalog line.
+                if ($itemId <= 0 && $menuItemId > 0) {
+                    if ($remove) {
+                        continue;
+                    }
+                    $normalized = $this->normalizePosItems(
+                        (int) $workspace->id,
+                        [['pos_menu_item_id' => $menuItemId, 'quantity' => (int) ($line['quantity'] ?? 1)]],
+                        requireActive: true
+                    )->first();
+                    $order->items()->create([
+                        'workspace_id' => $workspace->id,
+                        'order_id' => $order->id,
+                        'product_id' => $normalized['product_id'] ?? null,
+                        'product_variant_id' => null,
+                        'pos_menu_item_id' => $normalized['pos_menu_item_id'],
+                        'product_name' => $normalized['name'],
+                        'variant_name' => $normalized['size_label'],
+                        'item_type' => $normalized['item_type'],
+                        'sku' => null,
+                        'quantity' => $normalized['quantity'],
+                        'unit_price' => $normalized['unit_price'],
+                        'discount_amount' => 0,
+                        'total_amount' => $normalized['total_amount'],
+                    ]);
+                    continue;
+                }
+
                 if (! in_array($itemId, $existingIds, true)) {
                     continue;
                 }
 
-                $remove = (bool) ($line['remove'] ?? false);
                 if ($remove) {
                     OrderItem::query()->where('order_id', $order->id)->whereKey($itemId)->delete();
                     continue;
                 }
 
                 $quantity = max(1, (int) ($line['quantity'] ?? 1));
-                $unitPrice = max(0, (float) ($line['unit_price'] ?? 0));
-                $lineDiscount = max(0, (float) ($line['discount_amount'] ?? 0));
+                $existing = OrderItem::query()->where('order_id', $order->id)->whereKey($itemId)->first();
+                $unitPrice = array_key_exists('unit_price', $line)
+                    ? max(0, (float) $line['unit_price'])
+                    : max(0, (float) ($existing?->unit_price ?? 0));
+                $lineDiscount = max(0, (float) ($line['discount_amount'] ?? $existing?->discount_amount ?? 0));
                 $lineTotal = max(0, ($quantity * $unitPrice) - $lineDiscount);
 
                 OrderItem::query()
@@ -322,17 +356,21 @@ class PosOrderService
             if (isset($payload['discount_percent'])) {
                 $discountAmount = $this->percentToAmount((float) $payload['discount_percent'], $subtotal);
             }
-            $taxAmount = $this->calculateTaxAmount(
-                Workspace::withoutGlobalScopes()->find($order->workspace_id),
-                $subtotal,
-                $discountAmount
-            );
-            $order->update([
+            $taxAmount = $this->calculateTaxAmount($workspace, $subtotal, $discountAmount);
+
+            $attributes = [
                 'subtotal' => round($subtotal, 2),
                 'discount_amount' => $discountAmount,
                 'tax_amount' => $taxAmount,
                 'total_amount' => max(0, round($subtotal - $discountAmount + $taxAmount, 2)),
-            ]);
+            ];
+            if (array_key_exists('notes', $payload)) {
+                $attributes['notes'] = filled($payload['notes'] ?? null)
+                    ? mb_substr(trim((string) $payload['notes']), 0, 2000)
+                    : null;
+            }
+
+            $order->update($attributes);
 
             $fresh = $order->fresh(['items', 'table', 'tableSession', 'customer']);
             event(new \App\Events\OrderUpdated($fresh));
@@ -340,6 +378,32 @@ class PosOrderService
 
             return $fresh;
         });
+    }
+
+    /**
+     * Soft-delete (cancel) a POS/QR order — mirrors Web table "حذف الطلب".
+     */
+    public function deletePosOrder(Order $order, ?User $actor): Order
+    {
+        return $this->updatePosStatus($order, 'cancelled', $actor);
+    }
+
+    /**
+     * Web SoT: edit/delete only when not cancelled, not paid, and not invoiced.
+     */
+    private function assertOrderMutable(Order $order, string $action = 'تعديل'): void
+    {
+        if (in_array($order->pos_status, ['completed', 'cancelled'], true)) {
+            throw new RuntimeException("لا يمكن {$action} طلب مكتمل أو ملغي.");
+        }
+
+        if ($order->payment_status === 'paid') {
+            throw new RuntimeException("لا يمكن {$action} طلب مدفوع. استخدم المرتجعات.");
+        }
+
+        if ($order->pos_cashier_invoice_id) {
+            throw new RuntimeException("لا يمكن {$action} طلب مرتبط بفاتورة كاشير.");
+        }
     }
 
     public function openSession(DiningTable $table): TableSession

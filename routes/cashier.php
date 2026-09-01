@@ -67,6 +67,7 @@ Route::middleware([
     Route::get('/orders/{order}', [OrderController::class, 'show']);
     Route::post('/orders/{order}/status', [OrderController::class, 'updateStatus'])->middleware('throttle:mobile-write');
     Route::post('/orders/{order}/items', [OrderController::class, 'updateItems'])->middleware('throttle:mobile-write');
+    Route::delete('/orders/{order}', [OrderController::class, 'destroy'])->middleware('throttle:mobile-write');
     Route::post('/orders/{order}/invoice', [OrderController::class, 'createInvoice'])->middleware('throttle:mobile-write');
     Route::post('/orders/{order}/payment-link', [OrderController::class, 'createPaymentLink'])->middleware('throttle:mobile-write');
     Route::post('/orders/{order}/returns', [ReturnController::class, 'store'])->middleware('throttle:mobile-write');

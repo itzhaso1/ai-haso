@@ -165,6 +165,96 @@ class CashierApiV1Test extends TestCase
         $this->assertArrayHasKey('enable_delivery', $bootstrapSettings);
     }
 
+    public function test_cashier_can_edit_and_delete_table_order(): void
+    {
+        $this->seed(FoundationSeeder::class);
+        [$owner, $workspace] = $this->createWorkspaceOwner('store');
+        $item = $this->makeItem($workspace, 10);
+        $item2 = $this->makeItem($workspace, 7.5);
+
+        $login = $this->postJson('/api/cashier/v1/auth/login', [
+            'email_or_phone' => $owner->email,
+            'password' => 'password',
+            'device_name' => 'كاشير حاسم test',
+            'device_type' => 'cashier',
+        ])->assertOk();
+
+        $token = $login->json('data.token');
+        $headers = [
+            'X-Workspace-Id' => (string) $workspace->id,
+            'Idempotency-Key' => 'edit-del-'.uniqid(),
+        ];
+
+        $table = \App\Models\DiningTable::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'طاولة تعديل '.uniqid(),
+            'status' => 'available',
+            'qr_token' => \Illuminate\Support\Str::random(48),
+        ]);
+
+        $create = $this->withToken($token)
+            ->withHeaders($headers)
+            ->postJson('/api/cashier/v1/orders', [
+                'order_type' => 'table',
+                'dining_table_id' => $table->id,
+                'client_reference' => 'edit-order-'.uniqid(),
+                'items' => [
+                    ['pos_menu_item_id' => $item->id, 'quantity' => 2],
+                ],
+            ])
+            ->assertCreated();
+
+        $orderId = (int) $create->json('data.id');
+        $lineId = (int) $create->json('data.items.0.id');
+        $this->assertGreaterThan(0, $lineId);
+
+        $this->withToken($token)
+            ->withHeaders(['X-Workspace-Id' => (string) $workspace->id])
+            ->postJson("/api/cashier/v1/orders/{$orderId}/items", [
+                'notes' => 'ملاحظة تعديل',
+                'discount_amount' => 1,
+                'items' => [
+                    [
+                        'id' => $lineId,
+                        'quantity' => 3,
+                        'unit_price' => 10,
+                    ],
+                    [
+                        'pos_menu_item_id' => $item2->id,
+                        'quantity' => 1,
+                    ],
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.notes', 'ملاحظة تعديل')
+            ->assertJsonPath('data.discount_amount', 1);
+
+        $order = Order::query()->findOrFail($orderId);
+        $this->assertEquals(2, $order->items()->count());
+        $this->assertEquals(37.5, (float) $order->subtotal); // 3*10 + 7.5
+        $this->assertEquals('ملاحظة تعديل', $order->notes);
+
+        $this->withToken($token)
+            ->withHeaders(['X-Workspace-Id' => (string) $workspace->id])
+            ->deleteJson("/api/cashier/v1/orders/{$orderId}")
+            ->assertOk()
+            ->assertJsonPath('data.pos_status', 'cancelled');
+
+        $this->assertEquals('cancelled', $order->fresh()->pos_status);
+
+        $this->withToken($token)
+            ->withHeaders(['X-Workspace-Id' => (string) $workspace->id])
+            ->getJson('/api/cashier/v1/reports/daily')
+            ->assertOk()
+            ->assertJsonStructure(['data' => ['summary' => [
+                'open_orders_count',
+                'completed_orders_count',
+                'cancelled_orders_count',
+                'discount_total',
+                'tax_total',
+            ], 'payment_methods']]);
+    }
+
     public function test_cashier_rejects_workspace_without_pos_feature(): void
     {
         $this->seed(FoundationSeeder::class);

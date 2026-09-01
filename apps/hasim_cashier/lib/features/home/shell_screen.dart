@@ -104,6 +104,16 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
   }
 
   Future<void> _loadBootstrap() async {
+    // Seed permissions from auth session immediately so reports/nav aren't
+    // hidden while bootstrap is in-flight (root cause of missing reports).
+    final sessionPerms =
+        ref.read(authControllerProvider).valueOrNull?.permissions;
+    if (sessionPerms != null &&
+        sessionPerms.isNotEmpty &&
+        ref.read(cashierPermissionsProvider).isEmpty) {
+      ref.read(cashierPermissionsProvider.notifier).state =
+          Map<String, dynamic>.from(sessionPerms);
+    }
     try {
       final data = await ref.read(cashierApiProvider).get('/bootstrap');
       if (!mounted) return;
@@ -526,9 +536,12 @@ class _TopNav extends ConsumerWidget {
       (_PosSection.invoices, 'الفواتير'),
       (_PosSection.items, 'إدارة الأصناف'),
       if (CashierPermissions.canViewReports(
-        ref.watch(cashierPermissionsProvider),
+        CashierPermissions.resolve(
+          ref.watch(cashierPermissionsProvider),
+          ref.watch(authControllerProvider).valueOrNull?.permissions,
+        ),
       ))
-        (_PosSection.reports, 'التقارير اليومية'),
+        (_PosSection.reports, 'التقارير'),
       (_PosSection.customers, 'العملاء'),
       (_PosSection.sync, 'المزامنة'),
       (_PosSection.settings, 'الإعدادات'),

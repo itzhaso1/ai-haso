@@ -112,6 +112,15 @@ class CashierApiClient {
     }
   }
 
+  Future<Map<String, dynamic>> delete(String path) async {
+    try {
+      final response = await _dio.delete(path);
+      return _unwrap(response);
+    } on DioException catch (e) {
+      throw _mapError(e);
+    }
+  }
+
   Map<String, dynamic> _unwrap(Response response) {
     final body = response.data;
     if (body is! Map) {
