@@ -192,6 +192,7 @@ final cartControllerProvider =
 final catalogItemsProvider =
     FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final api = ref.watch(cashierApiProvider);
+  final workspaceId = ref.watch(workspaceIdProvider);
   try {
     final data = await api.get('/catalog/items', query: {'per_page': 100});
     final items = data['items'];
@@ -200,19 +201,20 @@ final catalogItemsProvider =
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
-      await OfflineStore.instance.cacheCatalog(list);
+      await OfflineStore.instance.cacheCatalog(list, workspaceId: workspaceId);
       return list;
     }
   } catch (_) {
-    final offline = OfflineStore.instance.readCatalog();
+    final offline = OfflineStore.instance.readCatalog(workspaceId: workspaceId);
     if (offline.isNotEmpty) return offline;
   }
-  return OfflineStore.instance.readCatalog();
+  return OfflineStore.instance.readCatalog(workspaceId: workspaceId);
 });
 
 final categoriesProvider =
     FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final api = ref.watch(cashierApiProvider);
+  final workspaceId = ref.watch(workspaceIdProvider);
   try {
     final data = await api.get('/catalog/categories');
     final categories = data['categories'];
@@ -221,12 +223,16 @@ final categoriesProvider =
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
-      await OfflineStore.instance.cacheCategories(list);
+      await OfflineStore.instance.cacheCategories(
+        list,
+        workspaceId: workspaceId,
+      );
       return list;
     }
   } catch (_) {
-    final offline = OfflineStore.instance.readCategories();
+    final offline =
+        OfflineStore.instance.readCategories(workspaceId: workspaceId);
     if (offline.isNotEmpty) return offline;
   }
-  return OfflineStore.instance.readCategories();
+  return OfflineStore.instance.readCategories(workspaceId: workspaceId);
 });

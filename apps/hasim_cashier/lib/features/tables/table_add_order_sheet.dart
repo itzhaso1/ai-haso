@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/api/cashier_api.dart';
+import '../../core/network/cashier_link.dart';
+import '../../core/offline/offline_store.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
 import '../../core/widgets/hasim_widgets.dart';
@@ -48,11 +50,51 @@ class _TableAddOrderSheetState extends ConsumerState<TableAddOrderSheet> {
     super.dispose();
   }
 
+  List<Map<String, dynamic>> _cachedCatalog() {
+    final hive = OfflineStore.instance.readCatalog(
+      workspaceId: ref.read(workspaceIdProvider),
+    );
+    if (hive.isNotEmpty) return hive;
+    return ref.read(catalogItemsProvider).valueOrNull ?? const [];
+  }
+
+  List<Map<String, dynamic>> _cachedCategories() {
+    final hive = OfflineStore.instance.readCategories(
+      workspaceId: ref.read(workspaceIdProvider),
+    );
+    if (hive.isNotEmpty) return hive;
+    return const [];
+  }
+
+  void _applyCatalog(
+    List<Map<String, dynamic>> items,
+    List<Map<String, dynamic>> cats, {
+    String? error,
+  }) {
+    setState(() {
+      _catalog = items;
+      _categories = cats;
+      _loading = false;
+      if (items.isEmpty) {
+        _error = error ??
+            'الكتالوج غير متاح بدون اتصال. افتح التطبيق وهو متصل لتحميل الأصناف.';
+      } else {
+        _error = error;
+      }
+    });
+  }
+
   Future<void> _loadCatalog() async {
     setState(() {
       _loading = true;
       _error = null;
     });
+    final link = ref.read(cashierLinkProvider);
+    if (!link.isOnline) {
+      if (!mounted) return;
+      _applyCatalog(_cachedCatalog(), _cachedCategories());
+      return;
+    }
     try {
       final api = ref.read(cashierApiProvider);
       final itemsData =
@@ -71,27 +113,39 @@ class _TableAddOrderSheetState extends ConsumerState<TableAddOrderSheet> {
         }
       }
       if (items.isEmpty) {
-        items.addAll(ref.read(catalogItemsProvider).valueOrNull ?? const []);
+        items.addAll(_cachedCatalog());
+      }
+      if (cats.isEmpty) {
+        cats.addAll(_cachedCategories());
+      }
+      if (items.isNotEmpty) {
+        await OfflineStore.instance.cacheCatalog(
+          items,
+          workspaceId: ref.read(workspaceIdProvider),
+        );
+      }
+      if (cats.isNotEmpty) {
+        await OfflineStore.instance.cacheCategories(
+          cats,
+          workspaceId: ref.read(workspaceIdProvider),
+        );
       }
       if (!mounted) return;
-      setState(() {
-        _catalog = items;
-        _categories = cats;
-        _loading = false;
-      });
+      _applyCatalog(items, cats);
     } on ApiException catch (e) {
       if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = e.message;
-        _catalog = ref.read(catalogItemsProvider).valueOrNull ?? const [];
-      });
+      _applyCatalog(
+        _cachedCatalog(),
+        _cachedCategories(),
+        error: _cachedCatalog().isEmpty ? e.message : null,
+      );
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = e.toString();
-      });
+      _applyCatalog(
+        _cachedCatalog(),
+        _cachedCategories(),
+        error: _cachedCatalog().isEmpty ? e.toString() : null,
+      );
     }
   }
 
@@ -133,9 +187,40 @@ class _TableAddOrderSheetState extends ConsumerState<TableAddOrderSheet> {
     });
   }
 
+  Future<void> _saveLocal(String key) async {
+    final workspaceId = ref.read(workspaceIdProvider);
+    if (workspaceId == null || workspaceId <= 0) {
+      throw StateError('workspace id is required');
+    }
+    final notes = _notes.text.trim().isEmpty ? null : _notes.text.trim();
+    await OfflineStore.instance.enqueueTableOrder(
+      tableId: widget.tableId,
+      workspaceId: workspaceId,
+      idempotencyKey: key,
+      notes: notes,
+      items: [
+        for (final line in _lines)
+          {
+            'pos_menu_item_id': line.menuItemId,
+            'name': line.name,
+            'quantity': line.quantity,
+            'unit_price': line.unitPrice,
+            'total_amount': line.quantity * line.unitPrice,
+          },
+      ],
+    );
+  }
+
   Future<void> _save() async {
     if (_lines.isEmpty) {
       setState(() => _error = 'أضف منتجًا واحدًا على الأقل.');
+      return;
+    }
+    if (_catalog.isEmpty) {
+      setState(
+        () => _error =
+            'الكتالوج غير متاح بدون اتصال. افتح التطبيق وهو متصل لتحميل الأصناف.',
+      );
       return;
     }
     setState(() {
@@ -156,6 +241,24 @@ class _TableAddOrderSheetState extends ConsumerState<TableAddOrderSheet> {
           },
       ],
     };
+    final online = ref.read(cashierLinkProvider).allowMutations;
+    if (!online) {
+      if (ref.read(workspaceIdProvider) == null) {
+        setState(() {
+          _saving = false;
+          _error = 'لا توجد مساحة عمل محددة. لا يمكن حفظ الطلب محليًا.';
+        });
+        return;
+      }
+      await _saveLocal(clientRef);
+      if (!mounted) return;
+      Navigator.pop(context, {
+        'local_pending': true,
+        'client_reference': clientRef,
+        'dining_table_id': widget.tableId,
+      });
+      return;
+    }
     try {
       final data = await ref.read(cashierApiProvider).post(
             '/orders',
@@ -165,16 +268,44 @@ class _TableAddOrderSheetState extends ConsumerState<TableAddOrderSheet> {
       if (!mounted) return;
       Navigator.pop(context, data);
     } on ApiException catch (e) {
+      if (e.isUnavailable) {
+        if (ref.read(workspaceIdProvider) == null) {
+          if (!mounted) return;
+          setState(() {
+            _saving = false;
+            _error = e.message;
+          });
+          return;
+        }
+        await _saveLocal(clientRef);
+        if (!mounted) return;
+        Navigator.pop(context, {
+          'local_pending': true,
+          'client_reference': clientRef,
+          'dining_table_id': widget.tableId,
+        });
+        return;
+      }
       if (!mounted) return;
       setState(() {
         _saving = false;
         _error = e.message;
       });
     } catch (e) {
+      if (ref.read(workspaceIdProvider) == null) {
+        if (!mounted) return;
+        setState(() {
+          _saving = false;
+          _error = e.toString();
+        });
+        return;
+      }
+      await _saveLocal(clientRef);
       if (!mounted) return;
-      setState(() {
-        _saving = false;
-        _error = e.toString();
+      Navigator.pop(context, {
+        'local_pending': true,
+        'client_reference': clientRef,
+        'dining_table_id': widget.tableId,
       });
     }
   }
@@ -259,10 +390,13 @@ class _TableAddOrderSheetState extends ConsumerState<TableAddOrderSheet> {
                     Expanded(
                       flex: 3,
                       child: _filtered.isEmpty
-                          ? const Center(
+                          ? Center(
                               child: Text(
-                                'لا توجد منتجات',
-                                style: TextStyle(color: HasimColors.muted),
+                                _catalog.isEmpty
+                                    ? 'الكتالوج غير متاح بدون اتصال. افتح التطبيق وهو متصل لتحميل الأصناف.'
+                                    : 'لا توجد منتجات',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: HasimColors.muted),
                               ),
                             )
                           : ListView.builder(

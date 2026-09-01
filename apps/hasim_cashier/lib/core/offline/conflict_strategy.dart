@@ -7,8 +7,8 @@
 /// |--------|-----------------|---------------|
 /// | Catalog cache | read-only cache | Server wins on next online bootstrap/catalog fetch |
 /// | Cart (local) | yes | Local until checkout; never invents stock |
-/// | Create order | yes (Pending Sync) | `client_reference` + Idempotency-Key → server dedupe |
-/// | Table open/close/transfer/merge/split | **no** (online only) | Must hit Laravel; show error if offline |
+/// | Create order (table/takeaway) | yes (Pending Sync) | Same UUID Idempotency-Key until server confirms |
+/// | Table open/close/transfer/merge/split/payment/invoice | **no** (online only) | Close blocked while pending orders exist |
 /// | Inventory / availability | no local mutation | Server rejects oversell; Flutter shows API error |
 /// | Invoice edit / refund | online only | Server policy wins |
 ///

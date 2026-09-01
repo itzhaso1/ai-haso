@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
+import '../../core/network/cashier_link.dart';
+import '../../core/offline/offline_store.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
 import '../../core/theme/hasim_colors.dart';
@@ -14,9 +16,11 @@ class TableOrderEditorDialog extends ConsumerStatefulWidget {
   const TableOrderEditorDialog({
     super.key,
     required this.order,
+    this.localPending = false,
   });
 
   final Map<String, dynamic> order;
+  final bool localPending;
 
   @override
   ConsumerState<TableOrderEditorDialog> createState() =>
@@ -67,6 +71,15 @@ class _TableOrderEditorDialogState
   }
 
   Future<void> _loadCatalog() async {
+    final cached = OfflineStore.instance.readCatalog(
+      workspaceId: ref.read(workspaceIdProvider),
+    );
+    if (!ref.read(cashierLinkProvider).isOnline) {
+      setState(() => _catalog = cached.isNotEmpty
+          ? cached
+          : (ref.read(catalogItemsProvider).valueOrNull ?? const []));
+      return;
+    }
     try {
       final data = await ref
           .read(cashierApiProvider)
@@ -78,9 +91,19 @@ class _TableOrderEditorDialogState
           if (item is Map) list.add(Map<String, dynamic>.from(item));
         }
       }
-      setState(() => _catalog = list);
+      setState(
+        () => _catalog = list.isNotEmpty
+            ? list
+            : (cached.isNotEmpty
+                ? cached
+                : (ref.read(catalogItemsProvider).valueOrNull ?? const [])),
+      );
     } catch (_) {
-      setState(() => _catalog = ref.read(catalogItemsProvider).valueOrNull ?? []);
+      setState(
+        () => _catalog = cached.isNotEmpty
+            ? cached
+            : (ref.read(catalogItemsProvider).valueOrNull ?? const []),
+      );
     }
   }
 
@@ -185,6 +208,26 @@ class _TableOrderEditorDialogState
       _saving = true;
       _error = null;
     });
+    if (widget.localPending) {
+      final localItems = [
+        for (final line in _lines)
+          if (!line.remove && line.menuItemId != null)
+            {
+              'pos_menu_item_id': line.menuItemId,
+              'name': line.name,
+              'quantity': line.quantity,
+              'unit_price': line.unitPrice,
+              'total_amount': line.quantity * line.unitPrice,
+            },
+      ];
+      if (!mounted) return;
+      Navigator.pop(context, {
+        'local_pending': true,
+        'notes': _notes.text.trim(),
+        'items': localItems,
+      });
+      return;
+    }
     final orderId = (widget.order['id'] as num).toInt();
     final payload = <String, dynamic>{
       'notes': _notes.text.trim(),

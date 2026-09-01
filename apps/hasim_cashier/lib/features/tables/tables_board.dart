@@ -74,7 +74,10 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
         }
       }
       if (!mounted) return;
-      await OfflineStore.instance.cacheTables(list);
+      await OfflineStore.instance.cacheTables(
+        list,
+        workspaceId: ref.read(workspaceIdProvider),
+      );
       if (silent && _sameBoardSnapshot(_tables, list)) {
         return;
       }
@@ -85,7 +88,9 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
       });
     } on ApiException catch (e) {
       if (!mounted) return;
-      final cached = OfflineStore.instance.readTables();
+      final cached = OfflineStore.instance.readTables(
+        workspaceId: ref.read(workspaceIdProvider),
+      );
       if (cached.isNotEmpty && _tables.isEmpty) {
         setState(() {
           _tables = cached;

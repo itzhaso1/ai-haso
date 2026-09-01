@@ -6,6 +6,8 @@ import 'package:uuid/uuid.dart';
 import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/offline/conflict_strategy.dart';
+import '../../core/offline/offline_store.dart';
+import '../../core/offline/sync_engine.dart';
 import '../../core/network/cashier_link.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
@@ -34,6 +36,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
   List<Map<String, dynamic>> _allTables = const [];
   var _loading = true;
   var _closing = false;
+  var _syncingNow = false;
   String? _error;
   String _filter = 'all';
   final _search = TextEditingController();
@@ -50,9 +53,16 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
     super.dispose();
   }
 
-  int? get _sessionId => (_detail?['session_id'] as num?)?.toInt();
+  int? get _sessionId {
+    final id = (_detail?['session_id'] as num?)?.toInt();
+    if (id == null || id == 0) return null;
+    return id;
+  }
 
-  bool get _hasSession => _sessionId != null;
+  bool get _hasSession => _sessionId != null || _pendingSyncCount > 0;
+
+  bool get _canAddOrder =>
+      _hasSession || _detail?['status'] == 'occupied';
 
   String get _customerLabel {
     final fromTable = _detail?['customer_name'];
@@ -71,12 +81,58 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
 
   List<Map<String, dynamic>> get _orders {
     final raw = _detail?['orders'];
-    if (raw is! List) return const [];
-    return raw
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
+    final server = raw is List
+        ? raw
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList()
+        : <Map<String, dynamic>>[];
+    return _mergePendingOrders(server);
+  }
+
+  int? get _workspaceId => ref.read(workspaceIdProvider);
+
+  List<PendingOrder> _localOrdersForTable() {
+    final workspaceId = _workspaceId;
+    if (workspaceId == null) return const [];
+    return OfflineStore.instance
+        .allPendingOrders(workspaceId: workspaceId)
+        .where((order) => order.tableId == widget.tableId)
         .toList();
   }
+
+  List<Map<String, dynamic>> _mergePendingOrders(
+    List<Map<String, dynamic>> server,
+  ) {
+    final local = _localOrdersForTable();
+    if (local.isEmpty) return server;
+    final merged = [...server];
+    for (final order in local) {
+      final serverId = order.serverOrderId;
+      if (order.status == SyncStatus.synced &&
+          serverId != null &&
+          server.any((row) => (row['id'] as num?)?.toInt() == serverId)) {
+        continue;
+      }
+      if (order.status == SyncStatus.synced && serverId == null) {
+        continue;
+      }
+      merged.add(order.toDisplayOrder());
+    }
+    return merged;
+  }
+
+  int get _pendingSyncCount {
+    final workspaceId = _workspaceId;
+    if (workspaceId == null) return 0;
+    return OfflineStore.instance.unsyncedCountForTable(
+      widget.tableId,
+      workspaceId: workspaceId,
+    );
+  }
+
+  bool _isLocalPending(Map<String, dynamic> order) =>
+      order['is_local_pending'] == true;
 
   List<Map<String, dynamic>> get _filteredOrders {
     final q = _search.text.trim().toLowerCase();
@@ -160,6 +216,17 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
         }
       }
       if (!mounted) return;
+      await OfflineStore.instance.cacheTableDetail(
+        widget.tableId,
+        detail,
+        workspaceId: _workspaceId,
+      );
+      if (list.isNotEmpty) {
+        await OfflineStore.instance.cacheTables(
+          list,
+          workspaceId: _workspaceId,
+        );
+      }
       setState(() {
         _detail = detail;
         _allTables = list;
@@ -167,17 +234,54 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       });
     } on ApiException catch (e) {
       if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = e.message;
-      });
+      _applyCachedTable(e.message);
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = e.toString();
-      });
+      _applyCachedTable(e.toString());
     }
+  }
+
+  void _applyCachedTable(String error) {
+    final cached = OfflineStore.instance.readTableDetail(
+          widget.tableId,
+          workspaceId: _workspaceId,
+        ) ??
+        OfflineStore.instance.tableFromBoardCache(
+          widget.tableId,
+          workspaceId: _workspaceId,
+        );
+    final pending = _workspaceId == null
+        ? const <PendingOrder>[]
+        : OfflineStore.instance.unsyncedOrders(
+            tableId: widget.tableId,
+            workspaceId: _workspaceId,
+          );
+    if (cached != null) {
+      setState(() {
+        _detail = cached;
+        _allTables = OfflineStore.instance.readTables(workspaceId: _workspaceId);
+        _loading = false;
+        _error = null;
+      });
+      return;
+    }
+    if (pending.isNotEmpty) {
+      setState(() {
+        _detail = {
+          'id': widget.tableId,
+          'name': 'طاولة ${widget.tableId}',
+          'status': 'occupied',
+          'orders': const [],
+        };
+        _loading = false;
+        _error = null;
+      });
+      return;
+    }
+    setState(() {
+      _loading = false;
+      _error = error;
+    });
   }
 
   String _durationLabel() {
@@ -192,7 +296,14 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
     return '$h:$m:$s';
   }
 
+  bool _isSyncingLocal(Map<String, dynamic> order) =>
+      order['sync_status'] == SyncStatus.syncing.name;
+
+  bool _isFailedLocal(Map<String, dynamic> order) =>
+      order['sync_status'] == SyncStatus.failed.name;
+
   bool _canMutateOrder(Map<String, dynamic> order) {
+    if (_isLocalPending(order)) return !_isSyncingLocal(order);
     final status = order['pos_status'] as String?;
     // Mirror Laravel assertOrderMutable: not cancelled/completed/paid/invoiced.
     return status != 'cancelled' &&
@@ -312,13 +423,12 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
   }
 
   Future<void> _addOrder() async {
-    if (!_hasSession) {
+    if (!_canAddOrder) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('افتح الجلسة أولًا قبل إضافة طلب.')),
       );
       return;
     }
-    if (!await _ensureOnline()) return;
     final created = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
@@ -330,6 +440,13 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
     );
     if (created == null) return;
     if (!mounted) return;
+    if (created['local_pending'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم حفظ الطلب — بانتظار الاتصال')),
+      );
+      setState(() {});
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -351,14 +468,48 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       );
       return;
     }
-    if (!await _ensureOnline()) return;
+    if (!_isLocalPending(order) && !await _ensureOnline()) return;
     final updated = await showDialog<Map<String, dynamic>>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => TableOrderEditorDialog(order: order),
+      builder: (ctx) => TableOrderEditorDialog(
+        order: order,
+        localPending: _isLocalPending(order),
+      ),
     );
     if (updated == null) return;
     if (!mounted) return;
+    if (_isLocalPending(order) || updated['local_pending'] == true) {
+      final localId = '${order['local_id']}';
+      final items = (updated['items'] is List)
+          ? (updated['items'] as List)
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList()
+          : const <Map<String, dynamic>>[];
+      final saved = await OfflineStore.instance.updatePendingOrder(
+        localId,
+        items: items,
+        notes: updated['notes'] as String?,
+      );
+      if (!mounted) return;
+      if (!saved) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'تعذر تعديل الطلب أثناء المزامنة. أعد المحاولة بعد انتهائها.',
+            ),
+          ),
+        );
+        setState(() {});
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم حفظ تعديلات الطلب محليًا.')),
+      );
+      setState(() {});
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('تم حفظ تعديلات الطلب.')),
     );
@@ -374,6 +525,47 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
           ),
         ),
       );
+      return;
+    }
+    if (_isLocalPending(order)) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('هل أنت متأكد من حذف هذا الطلب؟'),
+          content: const Text('سيتم حذف الطلب المحلي من طابور المزامنة.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: HasimColors.danger),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('حذف الطلب'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      final removed = await OfflineStore.instance.deletePending(
+        '${order['local_id']}',
+      );
+      if (!mounted) return;
+      if (!removed) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'تعذر حذف الطلب أثناء المزامنة. أعد المحاولة بعد انتهائها.',
+            ),
+          ),
+        );
+        setState(() {});
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم حذف الطلب المحلي.')),
+      );
+      setState(() {});
       return;
     }
     if (!await _ensureOnline()) return;
@@ -594,8 +786,100 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
     }
   }
 
+  Future<void> _retryLocalOrder(Map<String, dynamic> order) async {
+    final localId = '${order['local_id']}';
+    final workspaceId = _workspaceId;
+    if (workspaceId == null) return;
+    final ok = await ref.read(syncEngineProvider).retryOne(
+          localId,
+          workspaceId: workspaceId,
+        );
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تعذر إعادة المزامنة الآن. تحقق من الاتصال أو الجلسة.'),
+        ),
+      );
+    }
+    await _load();
+  }
+
+  Future<void> _syncNow() async {
+    if (_syncingNow) return;
+    setState(() => _syncingNow = true);
+    final result = await ref.read(syncEngineProvider).flushPendingOrders(
+          workspaceId: ref.read(workspaceIdProvider),
+        );
+    if (!mounted) return;
+    setState(() => _syncingNow = false);
+    if (result.authRequired) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('انتهت الجلسة. سجّل الدخول مجددًا لإكمال المزامنة.'),
+        ),
+      );
+      return;
+    }
+    if (result.skippedInFlight) {
+      return;
+    }
+    await _load();
+  }
+
+  Widget _pendingSyncBanner() {
+    final count = _pendingSyncCount;
+    if (count <= 0) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      color: HasimColors.warningSoft,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '$count طلبات بانتظار المزامنة',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: HasimColors.warning,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: _syncingNow ? null : _syncNow,
+            child: Text(_syncingNow ? 'جاري…' : 'مزامنة الآن'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _closeSession() async {
     if (!_hasSession || !_canManageTables || _closing) return;
+    if (_workspaceId == null ||
+        OfflineStore.instance.hasUnsyncedTableOrders(
+          widget.tableId,
+          workspaceId: _workspaceId,
+        )) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('لا يمكن إغلاق الطاولة'),
+          content: const Text(
+            'لا يمكن إغلاق الطاولة قبل مزامنة الطلبات عند عودة الاتصال.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('حسنًا'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
     if (!await _ensureOnline()) return;
     final result = await showDialog<CloseTableResult>(
       context: context,
@@ -790,6 +1074,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
           ),
         ),
         _identityStrip(occupied),
+        _pendingSyncBanner(),
         Expanded(
           child: isWide
               ? Row(
@@ -979,7 +1264,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
           _moneyRow('الضريبة', (_detail!['tax_amount'] as num?) ?? 0),
           _moneyRow('الإجمالي النهائي', (_detail!['total'] as num?) ?? 0,
               bold: true),
-          if (_hasSession) ...[
+          if (_canAddOrder) ...[
             const SizedBox(height: 12),
             Row(
               children: [
@@ -1241,6 +1526,26 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
                                     background: HasimColors.ctaSoft,
                                     foreground: HasimColors.ctaDark,
                                   ),
+                                  if (order['sync_label'] != null) ...[
+                                    const SizedBox(width: 6),
+                                    HsBadge(
+                                      label: '${order['sync_label']}',
+                                      background: order['sync_status'] ==
+                                              SyncStatus.failed.name
+                                          ? HasimColors.dangerSoft
+                                          : order['sync_status'] ==
+                                                  SyncStatus.syncing.name
+                                              ? HasimColors.brandSoft
+                                              : HasimColors.warningSoft,
+                                      foreground: order['sync_status'] ==
+                                              SyncStatus.failed.name
+                                          ? HasimColors.danger
+                                          : order['sync_status'] ==
+                                                  SyncStatus.syncing.name
+                                              ? HasimColors.brandDark
+                                              : HasimColors.warning,
+                                    ),
+                                  ],
                                 ],
                               ),
                               const SizedBox(height: 8),
@@ -1304,6 +1609,27 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
                                   ),
                                 ],
                               ),
+                              if (order['last_error'] != null) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  '${order['last_error']}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: HasimColors.danger,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                              if (_isFailedLocal(order)) ...[
+                                const SizedBox(height: 8),
+                                Align(
+                                  alignment: AlignmentDirectional.centerEnd,
+                                  child: TextButton(
+                                    onPressed: () => _retryLocalOrder(order),
+                                    child: const Text('إعادة المزامنة'),
+                                  ),
+                                ),
+                              ],
                               if (_canMutateOrder(order)) ...[
                                 const SizedBox(height: 8),
                                 Row(

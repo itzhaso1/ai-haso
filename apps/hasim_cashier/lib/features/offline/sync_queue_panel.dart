@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/cashier_api.dart';
 import '../../core/offline/offline_store.dart';
 import '../../core/offline/sync_engine.dart';
 import '../../core/theme/hasim_colors.dart';
@@ -27,7 +28,10 @@ class _SyncQueuePanelState extends ConsumerState<SyncQueuePanel> {
 
   void _reload() {
     setState(() {
-      _records = OfflineStore.instance.allOrderRecords().take(40).toList();
+      _records = OfflineStore.instance
+          .allOrderRecords(workspaceId: ref.read(workspaceIdProvider))
+          .take(40)
+          .toList();
     });
   }
 
@@ -57,7 +61,9 @@ class _SyncQueuePanelState extends ConsumerState<SyncQueuePanel> {
 
   Future<void> _flush() async {
     setState(() => _busy = true);
-    await ref.read(syncEngineProvider).flushPendingOrders();
+    await ref.read(syncEngineProvider).flushPendingOrders(
+          workspaceId: ref.read(workspaceIdProvider),
+        );
     if (!mounted) return;
     setState(() => _busy = false);
     _reload();
@@ -172,7 +178,11 @@ class _SyncQueuePanelState extends ConsumerState<SyncQueuePanel> {
                                 onPressed: () async {
                                   await ref
                                       .read(syncEngineProvider)
-                                      .retryOne('${row['local_id']}');
+                                      .retryOne(
+                                        '${row['local_id']}',
+                                        workspaceId:
+                                            ref.read(workspaceIdProvider),
+                                      );
                                   _reload();
                                 },
                                 child: const Text('Retry'),

@@ -84,7 +84,9 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       ref.read(cashierLinkProvider.notifier).setDeviceOnline(nowOnline);
       if (nowOnline && wasOffline) {
         _loadBootstrap();
-        ref.read(syncEngineProvider).flushPendingOrders().then((_) {
+        ref.read(syncEngineProvider).flushPendingOrders(
+              workspaceId: ref.read(workspaceIdProvider),
+            ).then((_) {
           _refreshPending();
         });
       }
@@ -98,8 +100,11 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
 
   void _refreshPending() {
     if (!mounted) return;
+    final workspaceId = ref.read(workspaceIdProvider);
     setState(() {
-      _pendingSync = OfflineStore.instance.pendingOrders().length;
+      _pendingSync = workspaceId == null
+          ? 0
+          : OfflineStore.instance.pendingOrders(workspaceId: workspaceId).length;
     });
   }
 
@@ -126,7 +131,9 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       }
       await OfflineStore.instance.cacheBootstrap(data);
       _applyBootstrapPayload(data, fromCache: false);
-      await ref.read(syncEngineProvider).flushPendingOrders();
+      await ref.read(syncEngineProvider).flushPendingOrders(
+            workspaceId: ref.read(workspaceIdProvider),
+          );
       _refreshPending();
     } on ApiException catch (e) {
       if (e.isUnauthorized) {
@@ -245,12 +252,24 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
                 );
                 return;
               }
-              final n =
-                  await ref.read(syncEngineProvider).flushPendingOrders();
+              final result =
+                  await ref.read(syncEngineProvider).flushPendingOrders(
+                        workspaceId: ref.read(workspaceIdProvider),
+                      );
               _refreshPending();
               if (!context.mounted) return;
+              if (result.authRequired) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'انتهت الجلسة. سجّل الدخول مجددًا لإكمال المزامنة.',
+                    ),
+                  ),
+                );
+                return;
+              }
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('تمت مزامنة $n طلبات')),
+                SnackBar(content: Text('تمت مزامنة ${result.synced} طلبات')),
               );
             },
           ),
@@ -342,22 +361,50 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     }
 
     final wasTable = cart.channel == OrderChannel.table;
-    if (wasTable && !ref.read(cashierLinkProvider).allowMutations) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'عمليات الطاولات تتطلب اتصالًا بالخادم. لا يمكن حفظ الطلب محليًا.',
-          ),
-        ),
-      );
-      return;
-    }
-
     final tableId = cart.tableId;
     final clientRef = const Uuid().v4();
     final payload = ref.read(cartControllerProvider.notifier).toOrderPayload(
           clientReference: clientRef,
         );
+
+    if (wasTable && !ref.read(cashierLinkProvider).allowMutations) {
+      if (tableId == null) return;
+      final workspaceId = ref.read(workspaceIdProvider);
+      if (workspaceId == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('لا توجد مساحة عمل محددة. لا يمكن حفظ الطلب محليًا.'),
+          ),
+        );
+        return;
+      }
+      await OfflineStore.instance.enqueueTableOrder(
+        tableId: tableId,
+        workspaceId: workspaceId,
+        idempotencyKey: clientRef,
+        notes: cart.notes,
+        items: [
+          for (final line in cart.lines)
+            {
+              'pos_menu_item_id': line.menuItemId,
+              'name': line.name,
+              'quantity': line.quantity,
+              'unit_price': line.unitPrice,
+              'total_amount': line.lineTotal,
+            },
+        ],
+      );
+      ref.read(cartControllerProvider.notifier).clear();
+      _refreshPending();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم حفظ الطلب — بانتظار الاتصال')),
+      );
+      openTableWorkspace(ref, tableId);
+      requestPosShellTab(ref, PosShellTab.tables);
+      return;
+    }
 
     try {
       final data = await ref.read(cashierApiProvider).post(
@@ -439,20 +486,60 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       );
     } on ApiException catch (e) {
       if (wasTable) {
+        if (e.isUnavailable && tableId != null) {
+          final workspaceId = ref.read(workspaceIdProvider);
+          if (workspaceId == null) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(e.message)),
+            );
+            return;
+          }
+          await OfflineStore.instance.enqueueTableOrder(
+            tableId: tableId,
+            workspaceId: workspaceId,
+            idempotencyKey: clientRef,
+            notes: cart.notes,
+            items: [
+              for (final line in cart.lines)
+                {
+                  'pos_menu_item_id': line.menuItemId,
+                  'name': line.name,
+                  'quantity': line.quantity,
+                  'unit_price': line.unitPrice,
+                  'total_amount': line.lineTotal,
+                },
+            ],
+          );
+          ref.read(cartControllerProvider.notifier).clear();
+          _refreshPending();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تم حفظ الطلب — بانتظار الاتصال')),
+          );
+          openTableWorkspace(ref, tableId);
+          requestPosShellTab(ref, PosShellTab.tables);
+          return;
+        }
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              e.isUnavailable
-                  ? 'عمليات الطاولات تتطلب اتصالًا بالخادم.'
-                  : e.message,
-            ),
-          ),
+          SnackBar(content: Text(e.message)),
         );
         return;
       }
       if (e.isUnavailable) {
-        await OfflineStore.instance.enqueueOrder(payload);
+        final workspaceId = ref.read(workspaceIdProvider);
+        if (workspaceId == null) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.message)),
+          );
+          return;
+        }
+        await OfflineStore.instance.enqueueOrder(
+          payload,
+          workspaceId: workspaceId,
+        );
         ref.read(cartControllerProvider.notifier).clear();
         _refreshPending();
         if (!mounted) return;
@@ -806,7 +893,9 @@ class _CashierHome extends ConsumerWidget {
             ),
             loading: () => const LinearProgressIndicator(),
             error: (e, _) {
-              final offline = OfflineStore.instance.readCategories();
+              final offline = OfflineStore.instance.readCategories(
+                workspaceId: ref.read(workspaceIdProvider),
+              );
               if (offline.isEmpty) {
                 return HsEmpty(
                   title: 'تعذر تحميل التصنيفات',
@@ -957,7 +1046,9 @@ class _ProductsPanel extends ConsumerWidget {
               }).toList();
 
               if (filtered.isEmpty) {
-                final offline = OfflineStore.instance.readCatalog();
+                final offline = OfflineStore.instance.readCatalog(
+                  workspaceId: ref.read(workspaceIdProvider),
+                );
                 if (list.isEmpty && offline.isNotEmpty) {
                   return _grid(ref, offline, crossAxis);
                 }
@@ -971,12 +1062,17 @@ class _ProductsPanel extends ConsumerWidget {
                   },
                 );
               }
-              OfflineStore.instance.cacheCatalog(list);
+              OfflineStore.instance.cacheCatalog(
+                list,
+                workspaceId: ref.read(workspaceIdProvider),
+              );
               return _grid(ref, filtered, crossAxis);
             },
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) {
-              final offline = OfflineStore.instance.readCatalog();
+              final offline = OfflineStore.instance.readCatalog(
+                workspaceId: ref.read(workspaceIdProvider),
+              );
               if (offline.isNotEmpty) return _grid(ref, offline, crossAxis);
               return HsEmpty(title: 'تعذر تحميل المنتجات', subtitle: '$e');
             },
