@@ -42,7 +42,11 @@ Primary CTA in cashier cart: **emerald-600** filled. Brand teal used for categor
 | Login guest brand | `LoginScreen` | MATCHED |
 | Splash | `_Splash` | MATCHED |
 | Offline / pending sync | `ConnectionBanner` | MATCHED |
-| Kitchen / Items admin / Invoice pages | — | MISSING (not in this remake phase) |
+| Kitchen | `KitchenBoard` | MATCHED |
+| Invoices | `InvoicesList` | MATCHED |
+| Customers | `CustomersPanel` | MATCHED |
+| Settings sound | `SettingsPanel` | MATCHED |
+| Items admin / daily reports | — | MISSING (admin surfaces) |
 | Native ESC/POS printing | success dialog option only | PARTIAL |
 
 ## RTL cashier home (web)

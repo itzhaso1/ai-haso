@@ -90,7 +90,7 @@ Widgets: `HasimPrimaryButton`, `HasimSecondaryButton`, `HasimTextField`, `HasimE
 ## 10. Tests
 
 `flutter analyze` — بدون أخطاء  
-`flutter test` — 3 نجح (tokens + offline + widget smoke)
+`flutter test` — 6 نجح (labels + cart + config)
 
 ---
 
@@ -102,7 +102,8 @@ Widgets: `HasimPrimaryButton`, `HasimSecondaryButton`, `HasimTextField`, `HasimE
 | Menu sound | **MATCHED** | `audioplayers` + `assets/sounds/menu_order.wav` + SharedPreferences |
 | Orders status Arabic + items | **MATCHED** | `OrdersList` + تحديث الحالة عبر API |
 | Menu order cards + حالات | **MATCHED** | New/Accepted/Preparing/Ready… |
-| فواتير / مطبخ / عملاء admin | **PARTIAL/MISSING** | خارج نطاق مطابقة كاشير أساسي؛ API فواتير موجود جزئيًا |
+| فواتير / مطبخ / عملاء / إعدادات | **MATCHED** | شاشات Native على API الحالي |
+| إدارة الأصناف / التقارير اليومية | **MISSING** | أسطح إدارة ويب؛ ليست تدفق كاشير تشغيلي أساسي |
 | طباعة ESC/POS أصلية | **PARTIAL** | خيار بعد النجاح موجود؛ مسار طباعة أصلي لاحقًا |
 | Echo realtime | **PARTIAL** | polling 3s لطلبات المنيو |
 
@@ -126,9 +127,14 @@ Widgets: `HasimPrimaryButton`, `HasimSecondaryButton`, `HasimTextField`, `HasimE
 | Product grid | HasimProductCard grid | MATCHED |
 | Cart panel | CartPanel | MATCHED |
 | Success print modal | _showOrderSuccess | MATCHED |
-| Table board | TablesScreen | MATCHED |
-| Orders list | OrdersScreen | PARTIAL |
-| Menu orders | MenuOrdersScreen | PARTIAL |
+| Table board + actions | TablesBoard | MATCHED |
+| Orders list | OrdersList | MATCHED |
+| Menu orders + sound | MenuOrdersFeed | MATCHED |
+| Kitchen | KitchenBoard | MATCHED |
+| Invoices | InvoicesList | MATCHED |
+| Customers | CustomersPanel | MATCHED |
+| Settings (sound) | SettingsPanel | MATCHED |
 | Nav pills | ShellScreen | MATCHED |
 | Login brand | LoginScreen | MATCHED |
 | Offline | banner + sync | MATCHED (UX) |
+| إدارة الأصناف / التقارير اليومية | — | MISSING (admin web; خارج نطاق الكاشير التشغيلي) |

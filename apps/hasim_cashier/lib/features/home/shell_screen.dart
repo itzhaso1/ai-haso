@@ -14,11 +14,24 @@ import '../../core/theme/hasim_radius.dart';
 import '../../core/theme/hasim_spacing.dart';
 import '../../core/widgets/hasim_widgets.dart';
 import '../cart/cart_controller.dart';
+import '../customers/customers_panel.dart';
+import '../invoices/invoices_list.dart';
+import '../kitchen/kitchen_board.dart';
 import '../orders/menu_orders_feed.dart';
 import '../orders/orders_list.dart';
+import '../settings/settings_panel.dart';
 import '../tables/tables_board.dart';
 
-enum _PosSection { cashier, tables, orders, menu }
+enum _PosSection {
+  cashier,
+  tables,
+  orders,
+  menu,
+  kitchen,
+  invoices,
+  customers,
+  settings,
+}
 
 class ShellScreen extends ConsumerStatefulWidget {
   const ShellScreen({super.key});
@@ -179,6 +192,10 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
                     _PosSection.tables => const TablesBoard(),
                     _PosSection.orders => const OrdersList(),
                     _PosSection.menu => const MenuOrdersFeed(),
+                    _PosSection.kitchen => const KitchenBoard(),
+                    _PosSection.invoices => const InvoicesList(),
+                    _PosSection.customers => const CustomersPanel(),
+                    _PosSection.settings => const SettingsPanel(),
                   },
           ),
         ],
@@ -428,6 +445,10 @@ class _TopNav extends StatelessWidget {
       (_PosSection.tables, 'الطاولات'),
       (_PosSection.menu, 'Menu'),
       (_PosSection.orders, 'الطلبات'),
+      (_PosSection.kitchen, 'المطبخ'),
+      (_PosSection.invoices, 'الفواتير'),
+      (_PosSection.customers, 'العملاء'),
+      (_PosSection.settings, 'الإعدادات'),
     ];
     return Container(
       width: double.infinity,
