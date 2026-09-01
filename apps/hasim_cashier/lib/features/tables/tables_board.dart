@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
+import '../../core/config/app_config.dart';
 import '../../core/pos/pos_labels.dart';
+import '../../core/realtime/pos_event_source.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
 import '../../core/widgets/hasim_widgets.dart';
@@ -21,18 +23,45 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
   List<Map<String, dynamic>> _tables = const [];
   var _loading = true;
   String? _error;
+  PollingPosEventSource? _source;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _startPolling();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  @override
+  void dispose() {
+    _source?.dispose();
+    _source = null;
+    super.dispose();
+  }
+
+  Future<void> _startPolling() async {
+    _source?.dispose();
+    _source = PollingPosEventSource(
+      interval: Duration(seconds: AppConfig.tablesPollSeconds),
+      poll: () async {
+        // Skip while a table detail is open — detail owns its own refresh.
+        if (!mounted || ref.read(openTableIdProvider) != null) {
+          return const <PosEvent>[];
+        }
+        await _load(silent: true);
+        return const <PosEvent>[];
+      },
+    );
+    await _source!.start();
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent && mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final data = await ref.read(cashierApiProvider).get('/tables');
       final list = <Map<String, dynamic>>[];
@@ -41,21 +70,51 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
           if (item is Map) list.add(Map<String, dynamic>.from(item));
         }
       }
+      if (!mounted) return;
+      if (silent && _sameBoardSnapshot(_tables, list)) {
+        return;
+      }
       setState(() {
         _tables = list;
         _loading = false;
+        _error = null;
       });
     } on ApiException catch (e) {
+      if (!mounted) return;
+      if (silent) return;
       setState(() {
         _loading = false;
         _error = e.message;
       });
     } catch (e) {
+      if (!mounted) return;
+      if (silent) return;
       setState(() {
         _loading = false;
         _error = e.toString();
       });
     }
+  }
+
+  bool _sameBoardSnapshot(
+    List<Map<String, dynamic>> current,
+    List<Map<String, dynamic>> next,
+  ) {
+    if (current.length != next.length) return false;
+    for (var i = 0; i < current.length; i++) {
+      final a = current[i];
+      final b = next[i];
+      if (a['id'] != b['id'] ||
+          a['status'] != b['status'] ||
+          a['session_id'] != b['session_id'] ||
+          a['open_orders_count'] != b['open_orders_count'] ||
+          a['orders_count'] != b['orders_count'] ||
+          a['total'] != b['total'] ||
+          a['name'] != b['name']) {
+        return false;
+      }
+    }
+    return true;
   }
 
   @override

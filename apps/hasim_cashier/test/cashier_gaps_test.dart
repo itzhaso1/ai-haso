@@ -37,8 +37,13 @@ void main() {
       CashierPermissions.canManageMenu({'orders.manage': true}),
       isFalse,
     );
+    // Backend AuthorizesCashier does not grant menu via pos.manage alone.
     expect(
       CashierPermissions.canManageMenu({'pos.manage': true}),
+      isFalse,
+    );
+    expect(
+      CashierPermissions.canManageMenu({'workspace.manage': true}),
       isTrue,
     );
   });
@@ -50,6 +55,15 @@ void main() {
     );
     expect(
       CashierPermissions.canManageTables({'orders.manage': true}),
+      isFalse,
+    );
+    expect(
+      CashierPermissions.canManageTables({'tables.manage': true}),
+      isTrue,
+    );
+    // Backend does not grant tables via pos.manage alone.
+    expect(
+      CashierPermissions.canManageTables({'pos.manage': true}),
       isFalse,
     );
     expect(
