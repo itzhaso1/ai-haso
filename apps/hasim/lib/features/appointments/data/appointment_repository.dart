@@ -37,7 +37,7 @@ class AppointmentRepository {
 
   Future<AppointmentModel> cancel(int id, {String? reason}) async {
     final res = await _api.post('/appointments/$id/cancel', idempotent: true, body: {
-      if (reason != null) 'reason': reason,
+      'reason': ?reason,
     });
     final map = asMap(res.data);
     if (map == null) throw ApiException(res.message ?? 'تعذر إلغاء الحجز.');
@@ -47,7 +47,7 @@ class AppointmentRepository {
   Future<AppointmentModel> reschedule(int id, {required String startsAt, String? endsAt}) async {
     final res = await _api.post('/appointments/$id/reschedule', idempotent: true, body: {
       'starts_at': startsAt,
-      if (endsAt != null) 'ends_at': endsAt,
+      'ends_at': ?endsAt,
     });
     final map = asMap(res.data);
     if (map == null) throw ApiException(res.message ?? 'تعذر إعادة الجدولة.');

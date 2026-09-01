@@ -1,9 +1,10 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hasim/core/di/providers.dart';
 import 'package:hasim/core/models/models.dart';
 import 'package:hasim/core/network/api_exception.dart';
+import 'package:hasim/features/email/presentation/email_compose_screen.dart';
 
 class EmailDetailScreen extends ConsumerStatefulWidget {
   const EmailDetailScreen({super.key, required this.id});
@@ -24,15 +25,42 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final mail = await ref.read(emailRepositoryProvider).show(widget.id);
-      setState(() { _mail = mail; _loading = false; });
+      setState(() {
+        _mail = mail;
+        _loading = false;
+      });
+      if (!mail.isRead) {
+        try {
+          await ref.read(emailRepositoryProvider).markRead(mail.id);
+        } catch (_) {}
+      }
     } on ApiException catch (e) {
-      setState(() { _error = e.message; _loading = false; });
+      setState(() {
+        _error = e.message;
+        _loading = false;
+      });
     } catch (_) {
-      setState(() { _error = 'تعذر فتح الرسالة.'; _loading = false; });
+      setState(() {
+        _error = 'تعذر فتح الرسالة.';
+        _loading = false;
+      });
     }
+  }
+
+  void _reply() {
+    final mail = _mail;
+    if (mail == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => EmailComposeScreen(replyTo: mail, accountId: mail.emailAccountId),
+      ),
+    );
   }
 
   @override
@@ -42,10 +70,17 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
         title: const Text('تفاصيل الرسالة'),
         actions: [
           IconButton(
-            onPressed: _mail == null ? null : () async {
-              await ref.read(emailRepositoryProvider).star(_mail!.id);
-              await _load();
-            },
+            tooltip: 'رد',
+            onPressed: _mail == null ? null : _reply,
+            icon: const Icon(Icons.reply),
+          ),
+          IconButton(
+            onPressed: _mail == null
+                ? null
+                : () async {
+                    await ref.read(emailRepositoryProvider).star(_mail!.id);
+                    await _load();
+                  },
             icon: Icon(_mail?.isStarred == true ? Icons.star : Icons.star_border),
           ),
         ],
@@ -57,12 +92,27 @@ class _EmailDetailScreenState extends ConsumerState<EmailDetailScreen> {
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    Text(_mail!.subject ?? '(بدون موضوع)', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    Text(
+                      _mail!.subject ?? '(بدون موضوع)',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                    ),
                     const SizedBox(height: 8),
                     Text('من: ${_mail!.sender}'),
                     Text('إلى: ${_mail!.recipient}'),
+                    if (_mail!.emailAccountId != null)
+                      Text('حساب: ${_mail!.emailAccountId}', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
                     const Divider(height: 24),
                     Text(_mail!.body ?? _mail!.preview ?? '', style: const TextStyle(height: 1.5)),
+                    const SizedBox(height: 24),
+                    FilledButton.icon(
+                      onPressed: _reply,
+                      icon: const Icon(Icons.reply),
+                      label: const Text('رد'),
+                    ),
+                    TextButton(
+                      onPressed: () => context.push('/email/compose'),
+                      child: const Text('رسالة جديدة'),
+                    ),
                   ],
                 ),
     );

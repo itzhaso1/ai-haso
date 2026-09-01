@@ -1,18 +1,25 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hasim/features/appointments/presentation/appointment_detail_screen.dart';
 import 'package:hasim/features/appointments/presentation/appointments_screen.dart';
+import 'package:hasim/features/auth/presentation/forgot_password_screen.dart';
 import 'package:hasim/features/auth/presentation/login_screen.dart';
+import 'package:hasim/features/auth/presentation/reset_password_screen.dart';
+import 'package:hasim/features/auth/presentation/splash_screen.dart';
 import 'package:hasim/features/auth/providers/auth_controller.dart';
 import 'package:hasim/features/conversations/presentation/chat_screen.dart';
 import 'package:hasim/features/conversations/presentation/conversations_screen.dart';
+import 'package:hasim/features/customers/presentation/customer_profile_screen.dart';
 import 'package:hasim/features/email/presentation/email_compose_screen.dart';
 import 'package:hasim/features/email/presentation/email_detail_screen.dart';
 import 'package:hasim/features/email/presentation/email_list_screen.dart';
 import 'package:hasim/features/home/presentation/home_screen.dart';
 import 'package:hasim/features/notifications/presentation/notifications_screen.dart';
+import 'package:hasim/features/settings/presentation/channels_screen.dart';
+import 'package:hasim/features/settings/presentation/notification_preferences_screen.dart';
+import 'package:hasim/features/settings/presentation/plans_screen.dart';
+import 'package:hasim/features/settings/presentation/profile_screen.dart';
 import 'package:hasim/features/settings/presentation/settings_screen.dart';
 import 'package:hasim/features/workspace/presentation/workspace_picker_screen.dart';
 import 'package:hasim/router/app_shell.dart';
@@ -24,28 +31,62 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     navigatorKey: _rootKey,
-    initialLocation: '/home',
+    initialLocation: '/splash',
     refreshListenable: _AuthListenable(ref),
     redirect: (context, state) {
-      if (auth.bootstrapping) return null;
-      final loggingIn = state.matchedLocation == '/login';
-      if (!auth.isAuthenticated) return loggingIn ? null : '/login';
-      if (auth.isAuthenticated && loggingIn) {
+      final loc = state.matchedLocation;
+      final publicAuth = loc == '/login' ||
+          loc == '/forgot-password' ||
+          loc == '/reset-password' ||
+          loc == '/splash';
+
+      if (loc == '/splash') return null;
+      if (auth.bootstrapping) return '/splash';
+
+      if (!auth.isAuthenticated) {
+        return publicAuth ? null : '/login';
+      }
+      if (auth.isAuthenticated && (loc == '/login' || loc == '/forgot-password' || loc == '/reset-password')) {
         return auth.workspace == null ? '/workspaces' : '/home';
       }
-      if (auth.isAuthenticated && auth.workspace == null && state.matchedLocation != '/workspaces') {
+      if (auth.isAuthenticated && auth.workspace == null && loc != '/workspaces') {
         return '/workspaces';
       }
       return null;
     },
     routes: [
+      GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(path: '/forgot-password', builder: (context, state) => const ForgotPasswordScreen()),
+      GoRoute(
+        path: '/reset-password',
+        builder: (context, state) => ResetPasswordScreen(
+          initialEmail: state.extra is String ? state.extra as String : null,
+        ),
+      ),
       GoRoute(path: '/workspaces', builder: (context, state) => const WorkspacePickerScreen()),
       GoRoute(path: '/notifications', builder: (context, state) => const NotificationsScreen()),
-      GoRoute(path: '/conversations/:id', builder: (context, state) => ChatScreen(conversationId: int.parse(state.pathParameters['id']!))),
+      GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
+      GoRoute(path: '/plans', builder: (context, state) => const PlansScreen()),
+      GoRoute(path: '/channels', builder: (context, state) => const ChannelsScreen()),
+      GoRoute(path: '/notification-preferences', builder: (context, state) => const NotificationPreferencesScreen()),
+      GoRoute(
+        path: '/customers/:id',
+        builder: (context, state) => CustomerProfileScreen(customerId: int.parse(state.pathParameters['id']!)),
+      ),
+      GoRoute(
+        path: '/conversations/:id',
+        builder: (context, state) => ChatScreen(conversationId: int.parse(state.pathParameters['id']!)),
+      ),
       GoRoute(path: '/email/compose', builder: (context, state) => const EmailComposeScreen()),
-      GoRoute(path: '/email/:id', builder: (context, state) => EmailDetailScreen(id: int.parse(state.pathParameters['id']!))),
-      GoRoute(path: '/appointments/:id', builder: (context, state) => AppointmentDetailScreen(id: int.parse(state.pathParameters['id']!))),
+      GoRoute(
+        path: '/email/:id',
+        builder: (context, state) => EmailDetailScreen(id: int.parse(state.pathParameters['id']!)),
+      ),
+      GoRoute(
+        path: '/appointments/:id',
+        builder: (context, state) => AppointmentDetailScreen(id: int.parse(state.pathParameters['id']!)),
+      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => AppShell(navigationShell: navigationShell),
         branches: [

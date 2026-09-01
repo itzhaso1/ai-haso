@@ -1,5 +1,5 @@
-
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hasim/core/di/providers.dart';
@@ -14,6 +14,7 @@ class ConversationsState {
     this.items = const [],
     this.nextCursor,
     this.filter = 'all',
+    this.channel,
     this.search = '',
     this.error,
   });
@@ -23,6 +24,7 @@ class ConversationsState {
   final List<ConversationModel> items;
   final String? nextCursor;
   final String filter;
+  final String? channel;
   final String search;
   final String? error;
 
@@ -32,6 +34,8 @@ class ConversationsState {
     List<ConversationModel>? items,
     String? nextCursor,
     String? filter,
+    String? channel,
+    bool clearChannel = false,
     String? search,
     String? error,
     bool clearCursor = false,
@@ -42,6 +46,7 @@ class ConversationsState {
       items: items ?? this.items,
       nextCursor: clearCursor ? nextCursor : (nextCursor ?? this.nextCursor),
       filter: filter ?? this.filter,
+      channel: clearChannel ? channel : (channel ?? this.channel),
       search: search ?? this.search,
       error: error,
     );
@@ -51,6 +56,10 @@ class ConversationsState {
 class ConversationsController extends StateNotifier<ConversationsState> {
   ConversationsController(this._ref) : super(const ConversationsState()) {
     _sub = _ref.read(realtimeServiceProvider).conversationsChanged.listen((_) => refresh(silent: true));
+    final cached = _ref.read(localCacheProvider).readConversations();
+    if (cached != null && cached.isNotEmpty) {
+      state = state.copyWith(items: cached);
+    }
     refresh();
   }
 
@@ -68,6 +77,11 @@ class ConversationsController extends StateNotifier<ConversationsState> {
     await refresh();
   }
 
+  Future<void> setChannel(String? channel) async {
+    state = state.copyWith(channel: channel, clearChannel: true);
+    await refresh();
+  }
+
   Future<void> setSearch(String search) async {
     state = state.copyWith(search: search);
     await refresh();
@@ -78,8 +92,10 @@ class ConversationsController extends StateNotifier<ConversationsState> {
     try {
       final page = await _ref.read(conversationRepositoryProvider).list(
             filter: state.filter,
+            channel: state.channel,
             search: state.search,
           );
+      await _ref.read(localCacheProvider).saveConversations(page.items);
       state = state.copyWith(loading: false, items: page.items, nextCursor: page.nextCursor, clearCursor: true);
     } on ApiException catch (e) {
       state = state.copyWith(loading: false, error: e.message);
@@ -95,6 +111,7 @@ class ConversationsController extends StateNotifier<ConversationsState> {
     try {
       final page = await _ref.read(conversationRepositoryProvider).list(
             filter: state.filter,
+            channel: state.channel,
             search: state.search,
             cursor: cursor,
           );
@@ -117,35 +134,43 @@ class ChatState {
   const ChatState({
     this.loading = true,
     this.sending = false,
+    this.loadingOlder = false,
     this.conversation,
     this.messages = const [],
     this.nextCursor,
     this.error,
+    this.aiBusy = false,
   });
 
   final bool loading;
   final bool sending;
+  final bool loadingOlder;
   final ConversationModel? conversation;
-  final List<MessageModel> messages; // chronological ascending for UI
+  final List<MessageModel> messages;
   final String? nextCursor;
   final String? error;
+  final bool aiBusy;
 
   ChatState copyWith({
     bool? loading,
     bool? sending,
+    bool? loadingOlder,
     ConversationModel? conversation,
     List<MessageModel>? messages,
     String? nextCursor,
     String? error,
+    bool? aiBusy,
     bool clearCursor = false,
   }) {
     return ChatState(
       loading: loading ?? this.loading,
       sending: sending ?? this.sending,
+      loadingOlder: loadingOlder ?? this.loadingOlder,
       conversation: conversation ?? this.conversation,
       messages: messages ?? this.messages,
       nextCursor: clearCursor ? nextCursor : (nextCursor ?? this.nextCursor),
       error: error,
+      aiBusy: aiBusy ?? this.aiBusy,
     );
   }
 }
@@ -160,6 +185,10 @@ class ChatController extends StateNotifier<ChatState> {
   StreamSubscription? _sub;
 
   Future<void> _init() async {
+    final cached = _ref.read(localCacheProvider).readMessages(conversationId);
+    if (cached != null && cached.isNotEmpty) {
+      state = state.copyWith(messages: cached, loading: true);
+    }
     _ref.read(realtimeServiceProvider).watchConversation(conversationId);
     _sub = _ref.read(realtimeServiceProvider).messageCreated.listen((m) {
       if (m.conversationId != conversationId) return;
@@ -183,6 +212,7 @@ class ChatController extends StateNotifier<ChatState> {
       final conversation = await repo.getById(conversationId);
       final page = await repo.messages(conversationId);
       final chronological = page.items.reversed.toList();
+      await _ref.read(localCacheProvider).saveMessages(conversationId, chronological);
       state = ChatState(
         loading: false,
         conversation: conversation,
@@ -199,16 +229,22 @@ class ChatController extends StateNotifier<ChatState> {
 
   Future<void> loadOlder() async {
     final cursor = state.nextCursor;
-    if (cursor == null) return;
+    if (cursor == null || state.loadingOlder) return;
+    state = state.copyWith(loadingOlder: true);
     try {
       final page = await _ref.read(conversationRepositoryProvider).messages(conversationId, cursor: cursor);
       final olderChronological = page.items.reversed.toList();
+      final merged = [...olderChronological, ...state.messages];
+      await _ref.read(localCacheProvider).saveMessages(conversationId, merged);
       state = state.copyWith(
-        messages: [...olderChronological, ...state.messages],
+        loadingOlder: false,
+        messages: merged,
         nextCursor: page.nextCursor,
         clearCursor: true,
       );
-    } catch (_) {}
+    } catch (_) {
+      state = state.copyWith(loadingOlder: false);
+    }
   }
 
   Future<void> send(String content) async {
@@ -233,7 +269,36 @@ class ChatController extends StateNotifier<ChatState> {
             clientId,
           );
       final updated = state.messages.map((m) {
-        if (m.clientId == clientId) return saved.copyWith(localPending: false);
+        if (m.clientId == clientId) return saved.copyWith(localPending: false, clientId: clientId);
+        return m;
+      }).toList();
+      state = state.copyWith(messages: updated, sending: false);
+      await _ref.read(localCacheProvider).saveMessages(conversationId, updated);
+    } catch (_) {
+      final updated = state.messages.map((m) {
+        if (m.clientId == clientId) return m.copyWith(localPending: false, localFailed: true);
+        return m;
+      }).toList();
+      state = state.copyWith(messages: updated, sending: false, error: 'تعذر إرسال الرسالة.');
+    }
+  }
+
+  Future<void> retryFailed(MessageModel message) async {
+    if (!message.localFailed || message.clientId == null) return;
+    final clientId = message.clientId!;
+    final updatedPending = state.messages.map((m) {
+      if (m.clientId == clientId) return m.copyWith(localPending: true, localFailed: false);
+      return m;
+    }).toList();
+    state = state.copyWith(messages: updatedPending, sending: true, error: null);
+    try {
+      final saved = await _ref.read(conversationRepositoryProvider).sendMessageWithKey(
+            conversationId,
+            message.content,
+            clientId,
+          );
+      final updated = state.messages.map((m) {
+        if (m.clientId == clientId) return saved.copyWith(localPending: false, clientId: clientId);
         return m;
       }).toList();
       state = state.copyWith(messages: updated, sending: false);
@@ -242,7 +307,80 @@ class ChatController extends StateNotifier<ChatState> {
         if (m.clientId == clientId) return m.copyWith(localPending: false, localFailed: true);
         return m;
       }).toList();
-      state = state.copyWith(messages: updated, sending: false, error: 'تعذر إرسال الرسالة.');
+      state = state.copyWith(messages: updated, sending: false);
+    }
+  }
+
+  Future<MessageModel?> sendThenAttach(File file, {String caption = ''}) async {
+    final text = caption.trim().isEmpty ? '📎' : caption.trim();
+    final clientId = newIdempotencyKey();
+    final optimistic = MessageModel(
+      id: -DateTime.now().millisecondsSinceEpoch,
+      conversationId: conversationId,
+      direction: 'outbound',
+      messageType: 'text',
+      content: text,
+      createdAt: DateTime.now(),
+      localPending: true,
+      clientId: clientId,
+    );
+    state = state.copyWith(messages: [...state.messages, optimistic], sending: true);
+    try {
+      final saved = await _ref.read(conversationRepositoryProvider).sendMessageWithKey(
+            conversationId,
+            text,
+            clientId,
+          );
+      final attachment = await _ref.read(conversationRepositoryProvider).uploadAttachment(saved.id, file);
+      final withAttach = saved.copyWith(
+        localPending: false,
+        clientId: clientId,
+        attachments: [...saved.attachments, attachment],
+      );
+      final updated = state.messages.map((m) {
+        if (m.clientId == clientId) return withAttach;
+        return m;
+      }).toList();
+      state = state.copyWith(messages: updated, sending: false);
+      await _ref.read(localCacheProvider).saveMessages(conversationId, updated);
+      return withAttach;
+    } catch (_) {
+      final updated = state.messages.map((m) {
+        if (m.clientId == clientId) return m.copyWith(localPending: false, localFailed: true);
+        return m;
+      }).toList();
+      state = state.copyWith(messages: updated, sending: false, error: 'تعذر إرسال المرفق.');
+      return null;
+    }
+  }
+
+  Future<String?> suggestReply() async {
+    state = state.copyWith(aiBusy: true);
+    try {
+      final text = await _ref.read(aiRepositoryProvider).suggestReply(conversationId);
+      state = state.copyWith(aiBusy: false);
+      return text;
+    } on ApiException catch (e) {
+      state = state.copyWith(aiBusy: false, error: e.message);
+      return null;
+    } catch (_) {
+      state = state.copyWith(aiBusy: false, error: 'تعذر توليد اقتراح الرد.');
+      return null;
+    }
+  }
+
+  Future<String?> summarize() async {
+    state = state.copyWith(aiBusy: true);
+    try {
+      final text = await _ref.read(aiRepositoryProvider).summarize(conversationId);
+      state = state.copyWith(aiBusy: false);
+      return text;
+    } on ApiException catch (e) {
+      state = state.copyWith(aiBusy: false, error: e.message);
+      return null;
+    } catch (_) {
+      state = state.copyWith(aiBusy: false, error: 'تعذر تلخيص المحادثة.');
+      return null;
     }
   }
 }

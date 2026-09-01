@@ -1,81 +1,59 @@
-# حاسم — Flutter Architecture
+# حاسم — Flutter Architecture (V2)
 
 ## 1) API Contract (Mobile v1)
 
 Base: `{API_BASE}/api/mobile/v1`  
 Auth: `Authorization: Bearer {token}`  
 Workspace: `X-Workspace-Id: {id}`  
-Envelope: `{ success, data, meta?, message? }`  
-Errors: Arabic `message` + optional `errors`
+Envelope: `{ success, data, meta?, message? }`
 
-| Area | Endpoints used |
-|------|----------------|
-| Auth | POST `/auth/login`, POST `/auth/logout`, GET `/auth/me` |
-| Workspace | GET `/workspaces`, GET `/workspaces/current`, POST `/workspaces/switch` |
-| Home | GET `/home`, GET `/unread` |
-| Conversations | GET `/conversations`, GET `/{id}`, GET `/{id}/messages`, POST messages/read/archive/mute |
-| Attachments | POST `/messages/{id}/attachments`, GET signed download |
-| Email | inbox/sent/drafts/show/send/read/star |
-| Appointments | today/upcoming/show/confirm/cancel/reschedule |
-| Notifications | list/read/read-all/preferences |
-| Devices | POST/DELETE `/devices` |
-| Sessions | GET/DELETE `/sessions` |
+| Area | Endpoints |
+|------|-----------|
+| Auth | login, logout, me, forgot-password, reset-password, social, PATCH profile, PUT password, POST avatar |
+| Workspace | workspaces, switch |
+| Home | `/home`, `/unread`, `/search` |
+| Conversations | list/messages/send/read/archive/mute + attachments |
+| Email | accounts, inbox/sent/drafts, show/send/read/star |
+| Channels / Plan | `/channels`, `/plan`, `/plans`, `/branding` |
+| Appointments / Customers / Notifications / AI / Devices / Sessions | as in `docs/mobile-api.md` |
 
-**Not invented:** no endpoints beyond docs/mobile-api.md.
+**Rule:** do not invent endpoints beyond the Mobile API docs.
 
 ## 2) Architecture
-
-Clean-ish feature-first + layered core:
 
 ```
 UI (Screens/Widgets)
   → Controllers/Notifiers (Riverpod)
     → Repositories
-      → ApiClient (Dio)
-      → LocalCache (Hive) / SecureStore
-RealtimeService (abstract) + PushService (abstract)
+      → ApiClient (Dio) + onUnauthorized stream
+      → LocalCache (Hive) / SecureStore / PrefsStore
+RealtimeService + PushService (abstract)
 ```
 
-## 3) Folder layout
+## 3) Auth session & 401
 
-`apps/hasim/lib/{core,features,realtime,push,router}`
+`ApiClient` emits `unauthorizedEvents` (and optional callback) on HTTP 401.  
+`AuthController` listens and clears token/workspace without circular DI.
 
-## 4) State management
+## 4) Theming & l10n
 
-**Riverpod** — testable, scalable, no BuildContext coupling.
+- `AppTheme.light()` / `AppTheme.dark()` — brand `#06C2A4`, Cairo  
+- `ThemeModeController` → SharedPreferences (`light`/`dark`/`system`)  
+- `flutter gen-l10n`: `lib/l10n/app_ar.arb` primary, `app_en.arb` stubs  
+- RTL forced in `HasimApp` builder
 
-## 5) Local storage
+## 5) Navigation
 
-- `flutter_secure_storage` → token
-- `shared_preferences` → workspace id, API base URL
-- `Hive` → conversation/message/email list cache for offline-first feel
-- `cached_network_image` → images
+`initialLocation: /splash` → `/login` or `/home` after bootstrap.
 
-## 6) Realtime strategy
+Tabs: الرئيسية · المحادثات · البريد · الحجوزات · المزيد
 
-1. Prefer Laravel private channels when `PUSHER_*` / Reverb configured.
-2. Default: **smart polling** (conversations list + open thread) — honest fallback because backend broadcast is often `log` locally.
-3. Abstract `RealtimeService` so switching to Pusher/Reverb does not rewrite UI.
+Extra routes: profile, plans, channels, notification-preferences, customers/:id, forgot/reset password.
 
-## 7) Navigation
+## 6) Local cache
 
-`go_router` + Shell with bottom tabs:
+Hive boxes `conversations_cache` / `messages_cache` — show cache first, refresh from network.
 
-Home · Conversations · Email · Bookings · More
+## 7) Google Sign-In
 
-Auth gate redirects to Login.
-
-## 8) Screens (v1)
-
-1. Login  
-2. Workspace picker / switcher  
-3. Home dashboard  
-4. Conversations list  
-5. Conversation thread (chat)  
-6. Attachment viewer / picker  
-7. Email list + detail + compose (API-backed)  
-8. Appointments list + detail + actions  
-9. Notifications  
-10. Settings / account / sessions / preferences  
-
-RTL Arabic + Cairo font from day one.
+See `GOOGLE_SIGNIN.md`. Missing client config surfaces Arabic snackbar «يحتاج إعداد Google» — never fakes success.

@@ -1,5 +1,5 @@
-
 import 'package:flutter/material.dart';
+import 'package:hasim/core/widgets/empty_state.dart';
 
 class AsyncBody extends StatelessWidget {
   const AsyncBody({
@@ -42,23 +42,7 @@ class AsyncBody extends StatelessWidget {
       );
     }
     if (isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.inbox_outlined, size: 48, color: Colors.grey.shade500),
-              const SizedBox(height: 12),
-              Text(emptyTitle, style: Theme.of(context).textTheme.titleMedium),
-              if (emptySubtitle != null) ...[
-                const SizedBox(height: 6),
-                Text(emptySubtitle!, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey.shade600)),
-              ],
-            ],
-          ),
-        ),
-      );
+      return EmptyState(title: emptyTitle, subtitle: emptySubtitle);
     }
     return child;
   }

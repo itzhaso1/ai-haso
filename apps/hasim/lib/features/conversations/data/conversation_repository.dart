@@ -101,7 +101,7 @@ class ConversationRepository {
     await _api.post(
       '/conversations/$conversationId/read',
       body: {
-        if (messageId != null) 'message_id': messageId,
+        'message_id': ?messageId,
       },
     );
   }

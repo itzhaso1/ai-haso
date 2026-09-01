@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:hasim/core/config/app_config.dart';
@@ -7,16 +9,20 @@ import 'package:hasim/core/storage/prefs_store.dart';
 import 'package:hasim/core/storage/secure_store.dart';
 import 'package:hasim/core/utils/idempotency.dart';
 
-typedef TokenReader = Future<String?> Function();
-typedef WorkspaceReader = int? Function();
+typedef UnauthorizedCallback = void Function();
+
+/// Broadcast stream for 401 responses — avoids circular Riverpod DI.
+final unauthorizedEvents = StreamController<void>.broadcast();
 
 class ApiClient {
   ApiClient({
     required SecureStore secureStore,
     required PrefsStore prefsStore,
     Dio? dio,
+    UnauthorizedCallback? onUnauthorized,
   })  : _secureStore = secureStore,
-        _prefsStore = prefsStore {
+        _prefsStore = prefsStore,
+        _onUnauthorized = onUnauthorized {
     final base = AppConfig.normalizeHostBase(
       prefsStore.apiBaseOverride ?? AppConfig.apiBase,
     );
@@ -48,6 +54,9 @@ class ApiClient {
           return handler.next(options);
         },
         onError: (error, handler) {
+          if (error.response?.statusCode == 401) {
+            _emitUnauthorized();
+          }
           return handler.next(error);
         },
       ),
@@ -56,9 +65,28 @@ class ApiClient {
 
   final SecureStore _secureStore;
   final PrefsStore _prefsStore;
+  UnauthorizedCallback? _onUnauthorized;
   late final Dio _dio;
+  bool _unauthorizedEmitted = false;
 
   Dio get raw => _dio;
+
+  void setOnUnauthorized(UnauthorizedCallback? callback) {
+    _onUnauthorized = callback;
+  }
+
+  void resetUnauthorizedGate() {
+    _unauthorizedEmitted = false;
+  }
+
+  void _emitUnauthorized() {
+    if (_unauthorizedEmitted) return;
+    _unauthorizedEmitted = true;
+    _onUnauthorized?.call();
+    if (!unauthorizedEvents.isClosed) {
+      unauthorizedEvents.add(null);
+    }
+  }
 
   /// Keep paths relative to `baseUrl` (`…/api/mobile/v1/`). Leading `/` would drop the prefix in some URI resolvers.
   String _rel(String path) {
@@ -124,6 +152,19 @@ class ApiClient {
     }
   }
 
+  Future<ApiResponse<T>> patch<T>(
+    String path, {
+    Object? body,
+    T Function(dynamic raw)? mapData,
+  }) async {
+    try {
+      final res = await _dio.patch<Map<String, dynamic>>(_rel(path), data: body);
+      return ApiResponse.fromJson(res.data ?? {}, mapData);
+    } on DioException catch (e) {
+      throw _mapDio(e);
+    }
+  }
+
   Future<ApiResponse<T>> delete<T>(
     String path, {
     T Function(dynamic raw)? mapData,
@@ -161,6 +202,9 @@ class ApiClient {
   ApiException _mapDio(DioException e) {
     final status = e.response?.statusCode;
     final data = e.response?.data;
+    if (status == 401) {
+      _emitUnauthorized();
+    }
     if (data is Map<String, dynamic>) {
       final message = data['message']?.toString();
       if (message != null && message.isNotEmpty) {

@@ -30,7 +30,7 @@ class DeviceRepository {
       'token': token,
       'provider': provider,
       'platform': platform,
-      if (deviceName != null) 'device_name': deviceName,
+      'device_name': ?deviceName,
     });
     if (!res.success) throw ApiException(res.message ?? 'تعذر تسجيل الجهاز.');
   }

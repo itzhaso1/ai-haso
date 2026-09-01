@@ -1,10 +1,12 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hasim/core/widgets/async_body.dart';
+import 'package:hasim/core/utils/greeting.dart';
+import 'package:hasim/core/utils/relative_time.dart';
+import 'package:hasim/core/widgets/skeleton_list.dart';
 import 'package:hasim/features/auth/providers/auth_controller.dart';
 import 'package:hasim/features/home/providers/home_controller.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -14,33 +16,164 @@ class HomeScreen extends ConsumerWidget {
     final auth = ref.watch(authControllerProvider);
     final home = ref.watch(homeControllerProvider);
     final snap = home.snapshot;
+    final greeting = greetingFor();
 
     return Scaffold(
       appBar: AppBar(
         title: Text(auth.workspace?.name ?? 'حاسم'),
         actions: [
           IconButton(onPressed: () => context.push('/workspaces'), icon: const Icon(Icons.swap_horiz)),
-          IconButton(onPressed: () => context.push('/notifications'), icon: const Icon(Icons.notifications_outlined)),
+          IconButton(
+            onPressed: () => context.push('/notifications'),
+            icon: Badge(
+              isLabelVisible: (snap?.unreadNotifications ?? 0) > 0,
+              label: Text('${snap?.unreadNotifications ?? 0}'),
+              child: const Icon(Icons.notifications_outlined),
+            ),
+          ),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: () => ref.read(homeControllerProvider.notifier).refresh(),
-        child: AsyncBody(
-          loading: home.loading && snap == null,
-          error: home.error,
-          isEmpty: false,
-          onRetry: () => ref.read(homeControllerProvider.notifier).refresh(),
-          child: ListView(
-            padding: const EdgeInsets.all(16),
+        child: home.loading && snap == null
+            ? const SkeletonCards()
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+                children: [
+                  if (home.error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(home.error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                    ),
+                  Text(
+                    '$greeting ${auth.user?.name ?? ''}',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 4),
+                  Text('نظرة سريعة على نشاط اليوم', style: TextStyle(color: Colors.grey.shade700)),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      _StatChip(
+                        title: 'محادثات',
+                        value: '${snap?.unreadConversations ?? 0}',
+                        icon: Icons.chat_bubble_outline,
+                        onTap: () => context.go('/conversations'),
+                      ),
+                      _StatChip(
+                        title: 'بريد',
+                        value: '${snap?.unreadEmail ?? 0}',
+                        icon: Icons.mail_outline,
+                        onTap: () => context.go('/email'),
+                      ),
+                      _StatChip(
+                        title: 'حجوزات',
+                        value: '${snap?.todaysBookingsCount ?? 0}',
+                        icon: Icons.event_available,
+                        onTap: () => context.go('/appointments'),
+                      ),
+                      _StatChip(
+                        title: 'إشعارات',
+                        value: '${snap?.unreadNotifications ?? 0}',
+                        icon: Icons.notifications_active_outlined,
+                        onTap: () => context.push('/notifications'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
+                  Text('إجراءات سريعة', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 10),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _QuickAction(label: 'محادثات', icon: Icons.forum_outlined, onTap: () => context.go('/conversations')),
+                        _QuickAction(label: 'بريد جديد', icon: Icons.edit_outlined, onTap: () => context.push('/email/compose')),
+                        _QuickAction(label: 'الحجوزات', icon: Icons.calendar_today_outlined, onTap: () => context.go('/appointments')),
+                        _QuickAction(label: 'القنوات', icon: Icons.hub_outlined, onTap: () => context.push('/channels')),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  Text('أحدث المحادثات', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  if (home.recentConversations.isEmpty)
+                    Text('لا توجد محادثات حديثة', style: TextStyle(color: Colors.grey.shade600))
+                  else
+                    ...home.recentConversations.map(
+                      (c) => ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        onTap: () => context.push('/conversations/${c.id}'),
+                        leading: CircleAvatar(
+                          backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                          child: Text(c.title.isNotEmpty ? c.title[0] : '#'),
+                        ),
+                        title: Text(c.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(c.preview, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        trailing: Text(relativeTimeAr(c.lastMessageAt), style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  Text('حجوزات اليوم', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  if (home.todaysAppointments.isEmpty)
+                    Text('لا توجد حجوزات اليوم', style: TextStyle(color: Colors.grey.shade600))
+                  else
+                    ...home.todaysAppointments.take(5).map((a) {
+                      final time = a.startsAt == null ? '' : DateFormat('HH:mm').format(a.startsAt!.toLocal());
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        onTap: () => context.push('/appointments/${a.id}'),
+                        leading: const Icon(Icons.event),
+                        title: Text(a.customerName ?? a.bookingNumber ?? 'حجز #${a.id}'),
+                        subtitle: Text('${a.serviceName ?? a.statusLabel} · $time'),
+                      );
+                    }),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class _StatChip extends StatelessWidget {
+  const _StatChip({
+    required this.title,
+    required this.value,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String title;
+  final String value;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return Material(
+      color: Theme.of(context).cardTheme.color ?? Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          width: 150,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('مرحباً ${auth.user?.name ?? ''}', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 4),
-              Text('نظرة سريعة على نشاط اليوم', style: TextStyle(color: Colors.grey.shade700)),
-              const SizedBox(height: 16),
-              _Card(title: 'محادثات غير مقروءة', value: '${snap?.unreadConversations ?? 0}', icon: Icons.chat_bubble_outline, onTap: () => context.go('/conversations')),
-              _Card(title: 'بريد جديد', value: '${snap?.unreadEmail ?? 0}', icon: Icons.mail_outline, onTap: () => context.go('/email')),
-              _Card(title: 'حجوزات اليوم', value: '${snap?.todaysBookingsCount ?? 0}', icon: Icons.event_available, onTap: () => context.go('/appointments')),
-              _Card(title: 'إشعارات', value: '${snap?.unreadNotifications ?? 0}', icon: Icons.notifications_active_outlined, onTap: () => context.push('/notifications')),
+              Icon(icon, color: primary, size: 22),
+              const SizedBox(height: 10),
+              Text(value, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800, color: primary)),
+              Text(title, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
             ],
           ),
         ),
@@ -49,22 +182,20 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-class _Card extends StatelessWidget {
-  const _Card({required this.title, required this.value, required this.icon, required this.onTap});
-  final String title;
-  final String value;
+class _QuickAction extends StatelessWidget {
+  const _QuickAction({required this.label, required this.icon, required this.onTap});
+  final String label;
   final IconData icon;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        onTap: onTap,
-        leading: CircleAvatar(backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12), child: Icon(icon, color: Theme.of(context).colorScheme.primary)),
-        title: Text(title),
-        trailing: Text(value, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.primary)),
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(end: 8),
+      child: ActionChip(
+        avatar: Icon(icon, size: 18),
+        label: Text(label),
+        onPressed: onTap,
       ),
     );
   }

@@ -7,6 +7,7 @@ class PrefsStore {
 
   static const _workspaceKey = 'workspace_id';
   static const _apiBaseKey = 'api_base_override';
+  static const _themeModeKey = 'theme_mode';
 
   int? get workspaceId {
     final v = _prefs.getInt(_workspaceKey);
@@ -29,5 +30,12 @@ class PrefsStore {
     } else {
       await _prefs.setString(_apiBaseKey, value);
     }
+  }
+
+  /// `light` | `dark` | `system`
+  String get themeMode => _prefs.getString(_themeModeKey) ?? 'system';
+
+  Future<void> setThemeMode(String mode) async {
+    await _prefs.setString(_themeModeKey, mode);
   }
 }

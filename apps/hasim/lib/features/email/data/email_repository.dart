@@ -9,7 +9,7 @@ class EmailRepository {
 
   Future<({List<EmailMessageModel> items, String? nextCursor})> _list(String path, {String? cursor, String? search}) async {
     final res = await _api.get(path, query: {
-      if (cursor != null) 'cursor': cursor,
+      'cursor': ?cursor,
       if (search != null && search.isNotEmpty) 'search': search,
       'per_page': 20,
     });
@@ -45,12 +45,17 @@ class EmailRepository {
         'to': to,
         'subject': subject,
         'body': body,
-        if (replyToMessageId != null) 'reply_to_message_id': replyToMessageId,
+        'reply_to_message_id': ?replyToMessageId,
       },
     );
     final map = asMap(res.data);
     if (map == null) throw ApiException(res.message ?? 'تعذر إرسال البريد.');
     return EmailMessageModel.fromJson(map);
+  }
+
+  Future<List<EmailAccountModel>> accounts() async {
+    final res = await _api.get('/emails/accounts');
+    return asMapList(res.data).map(EmailAccountModel.fromJson).toList();
   }
 
   Future<void> markRead(int id) async => _api.post('/emails/$id/read');

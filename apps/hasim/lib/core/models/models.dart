@@ -6,22 +6,50 @@ class UserModel extends Equatable {
     required this.name,
     this.email,
     this.phone,
+    this.locale,
+    this.timezone,
+    this.avatarUrl,
   });
 
   final int id;
   final String name;
   final String? email;
   final String? phone;
+  final String? locale;
+  final String? timezone;
+  final String? avatarUrl;
 
   factory UserModel.fromJson(Map<String, dynamic> json) => UserModel(
         id: (json['id'] as num).toInt(),
         name: json['name']?.toString() ?? '',
         email: json['email']?.toString(),
         phone: json['phone']?.toString(),
+        locale: json['locale']?.toString(),
+        timezone: json['timezone']?.toString(),
+        avatarUrl: json['avatar_url']?.toString(),
       );
 
+  UserModel copyWith({
+    String? name,
+    String? email,
+    String? phone,
+    String? locale,
+    String? timezone,
+    String? avatarUrl,
+  }) {
+    return UserModel(
+      id: id,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      phone: phone ?? this.phone,
+      locale: locale ?? this.locale,
+      timezone: timezone ?? this.timezone,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+    );
+  }
+
   @override
-  List<Object?> get props => [id, name, email, phone];
+  List<Object?> get props => [id, name, email, phone, avatarUrl];
 }
 
 class WorkspaceModel extends Equatable {
@@ -161,6 +189,8 @@ class MessageModel extends Equatable {
     bool? localPending,
     bool? localFailed,
     String? content,
+    List<MessageAttachmentModel>? attachments,
+    String? clientId,
   }) {
     return MessageModel(
       id: id ?? this.id,
@@ -172,12 +202,32 @@ class MessageModel extends Equatable {
       createdAt: createdAt,
       userName: userName,
       customerName: customerName,
-      attachments: attachments,
+      attachments: attachments ?? this.attachments,
       localPending: localPending ?? this.localPending,
       localFailed: localFailed ?? this.localFailed,
-      clientId: clientId,
+      clientId: clientId ?? this.clientId,
     );
   }
+
+  Map<String, dynamic> toCacheJson() => {
+        'id': id,
+        'conversation_id': conversationId,
+        'direction': direction,
+        'message_type': messageType,
+        'content': content,
+        'ai_generated': aiGenerated,
+        'created_at': createdAt?.toIso8601String(),
+        'attachments': attachments
+            .map((a) => {
+                  'id': a.id,
+                  'kind': a.kind,
+                  'original_name': a.originalName,
+                  'mime_type': a.mimeType,
+                  'size_bytes': a.sizeBytes,
+                  'download_url': a.downloadUrl,
+                })
+            .toList(),
+      };
 
   @override
   List<Object?> get props => [id, clientId, content, localPending, localFailed];
@@ -256,6 +306,26 @@ class ConversationModel extends Equatable {
       archived: json['archived'] == true,
     );
   }
+
+  Map<String, dynamic> toCacheJson() => {
+        'id': id,
+        'channel': channel,
+        'status': status,
+        'external_id': externalId,
+        'ai_enabled': aiEnabled,
+        'last_message_at': lastMessageAt?.toIso8601String(),
+        'unread_count': unreadCount,
+        'muted': muted,
+        'archived': archived,
+        if (customer != null)
+          'customer': {
+            'id': customer!.id,
+            'name': customer!.name,
+            'phone': customer!.phone,
+            'email': customer!.email,
+          },
+        if (lastMessage != null) 'last_message': lastMessage!.toCacheJson(),
+      };
 
   @override
   List<Object?> get props => [id, unreadCount, lastMessageAt, muted, archived];
@@ -530,4 +600,178 @@ Map<String, dynamic>? asMap(dynamic raw) {
     return raw;
   }
   return null;
+}
+
+class EmailAccountModel extends Equatable {
+  const EmailAccountModel({
+    required this.id,
+    required this.name,
+    required this.email,
+    this.brandColor,
+    this.logoUrl,
+  });
+
+  final int id;
+  final String name;
+  final String email;
+  final String? brandColor;
+  final String? logoUrl;
+
+  factory EmailAccountModel.fromJson(Map<String, dynamic> json) => EmailAccountModel(
+        id: (json['id'] as num).toInt(),
+        name: json['name']?.toString() ?? '',
+        email: json['email']?.toString() ?? '',
+        brandColor: json['brand_color']?.toString(),
+        logoUrl: json['logo_url']?.toString(),
+      );
+
+  @override
+  List<Object?> get props => [id];
+}
+
+class ChannelModel extends Equatable {
+  const ChannelModel({
+    required this.key,
+    required this.name,
+    this.icon,
+    this.connected = false,
+    this.status = 'disconnected',
+    this.statusLabel,
+    this.hint,
+    this.manageUrl,
+    this.canConnectInApp = false,
+  });
+
+  final String key;
+  final String name;
+  final String? icon;
+  final bool connected;
+  final String status;
+  final String? statusLabel;
+  final String? hint;
+  final String? manageUrl;
+  final bool canConnectInApp;
+
+  factory ChannelModel.fromJson(Map<String, dynamic> json) => ChannelModel(
+        key: json['key']?.toString() ?? '',
+        name: json['name']?.toString() ?? '',
+        icon: json['icon']?.toString(),
+        connected: json['connected'] == true,
+        status: json['status']?.toString() ?? 'disconnected',
+        statusLabel: json['status_label']?.toString(),
+        hint: json['hint']?.toString(),
+        manageUrl: json['manage_url']?.toString(),
+        canConnectInApp: json['can_connect_in_app'] == true,
+      );
+
+  @override
+  List<Object?> get props => [key, status, connected];
+}
+
+class PlanCatalogItem extends Equatable {
+  const PlanCatalogItem({
+    required this.id,
+    required this.code,
+    required this.name,
+    this.description,
+    this.tier,
+    this.billingPeriod,
+    this.price,
+    this.currency,
+    this.features = const [],
+    this.limits = const {},
+  });
+
+  final int id;
+  final String code;
+  final String name;
+  final String? description;
+  final String? tier;
+  final String? billingPeriod;
+  final num? price;
+  final String? currency;
+  final List<String> features;
+  final Map<String, dynamic> limits;
+
+  factory PlanCatalogItem.fromJson(Map<String, dynamic> json) => PlanCatalogItem(
+        id: (json['id'] as num?)?.toInt() ?? 0,
+        code: json['code']?.toString() ?? '',
+        name: json['name']?.toString() ?? '',
+        description: json['description']?.toString(),
+        tier: json['tier']?.toString(),
+        billingPeriod: json['billing_period']?.toString(),
+        price: json['price'] as num?,
+        currency: json['currency']?.toString(),
+        features: (json['features'] is List)
+            ? (json['features'] as List).map((e) => e.toString()).toList()
+            : const [],
+        limits: json['limits'] is Map<String, dynamic>
+            ? json['limits'] as Map<String, dynamic>
+            : const {},
+      );
+
+  @override
+  List<Object?> get props => [id, code];
+}
+
+class PlanSnapshot extends Equatable {
+  const PlanSnapshot({
+    this.features = const [],
+    this.limits = const {},
+    this.meters = const {},
+    this.raw = const {},
+  });
+
+  final List<String> features;
+  final Map<String, dynamic> limits;
+  final Map<String, dynamic> meters;
+  final Map<String, dynamic> raw;
+
+  factory PlanSnapshot.fromJson(Map<String, dynamic> json) {
+    final featuresRaw = json['features'];
+    List<String> features = const [];
+    if (featuresRaw is List) {
+      features = featuresRaw.map((e) => e.toString()).toList();
+    } else if (featuresRaw is Map) {
+      features = featuresRaw.entries
+          .where((e) => e.value == true)
+          .map((e) => e.key.toString())
+          .toList();
+    }
+    return PlanSnapshot(
+      features: features,
+      limits: json['limits'] is Map<String, dynamic>
+          ? json['limits'] as Map<String, dynamic>
+          : const {},
+      meters: json['meters'] is Map<String, dynamic>
+          ? json['meters'] as Map<String, dynamic>
+          : const {},
+      raw: json,
+    );
+  }
+
+  @override
+  List<Object?> get props => [features, limits, meters];
+}
+
+class PlansCatalog extends Equatable {
+  const PlansCatalog({
+    this.plans = const [],
+    this.comparison = const [],
+  });
+
+  final List<PlanCatalogItem> plans;
+  final List<Map<String, dynamic>> comparison;
+
+  factory PlansCatalog.fromJson(Map<String, dynamic> json) {
+    final plans = asMapList(json['plans']).map(PlanCatalogItem.fromJson).toList();
+    final comparisonRaw = json['comparison'] ?? json['comparison_rows'];
+    final comparison = comparisonRaw is List
+        ? comparisonRaw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+        : <Map<String, dynamic>>[];
+    return PlansCatalog(plans: plans, comparison: comparison);
+  }
+
+  @override
+  List<Object?> get props => [plans, comparison];
 }
