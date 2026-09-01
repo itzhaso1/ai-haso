@@ -111,6 +111,9 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
     final invoices = _asMaps(_data?['invoices']);
     final byHour = _asMaps(_data?['sales_by_hour']);
     final customers = _asMaps(_data?['customer_summary']);
+    final recentOps = _asMaps(_data?['recent_operations']);
+    final closedOrders = _asMaps(_data?['closed_orders']);
+    final allOrders = _asMaps(_data?['all_orders']);
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -179,6 +182,19 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
                 ((summary['tax_total'] as num?) ?? 0).toStringAsFixed(2),
                 'ضرائب',
               ),
+              _metric('${summary['total_quantity'] ?? 0}', 'كميات'),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'حسب القناة',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
               _metric(
                 '${summary['table_orders_count'] ?? channels['table'] ?? 0}',
                 'طاولات',
@@ -191,10 +207,20 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
                 '${summary['delivery_orders_count'] ?? channels['delivery'] ?? 0}',
                 'توصيل',
               ),
-              _metric('${summary['total_quantity'] ?? 0}', 'كميات'),
+              if (channels.isNotEmpty)
+                for (final entry in channels.entries)
+                  if (entry.key != 'table' &&
+                      entry.key != 'takeaway' &&
+                      entry.key != 'delivery')
+                    _metric('${entry.value}', '${entry.key}'),
             ],
           ),
-          if (payments.isNotEmpty) ...[
+          if (payments.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 16),
+              child: HsEmpty(title: 'لا توجد طرق دفع مسجّلة لهذا اليوم.'),
+            )
+          else ...[
             const SizedBox(height: 16),
             const Text(
               'طرق الدفع',
@@ -234,19 +260,20 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
                 '${item['product_name']}',
                 '× ${item['quantity']} · ${((item['sales'] as num?) ?? 0).toStringAsFixed(2)}',
               ),
-          if (byHour.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            const Text(
-              'المبيعات حسب الساعة',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 8),
+          const SizedBox(height: 16),
+          const Text(
+            'المبيعات حسب الساعة',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          if (byHour.isEmpty)
+            const HsEmpty(title: 'لا توجد مبيعات حسب الساعة.')
+          else
             for (final row in byHour)
               _rowCard(
                 '${row['hour']}',
-                '${row['orders_count']} طلب · ${((row['total_sales'] as num?) ?? 0).toStringAsFixed(2)}',
+                '${row['orders_count']} طلب · ${((row['sales_total'] as num?) ?? (row['total_sales'] as num?) ?? 0).toStringAsFixed(2)}',
               ),
-          ],
           if (customers.isNotEmpty) ...[
             const SizedBox(height: 16),
             const Text(
@@ -260,20 +287,63 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
                 '${row['orders_count']} · ${((row['total_sales'] as num?) ?? 0).toStringAsFixed(2)}',
               ),
           ],
-          if (invoices.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            const Text(
-              'فواتير اليوم',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 8),
+          const SizedBox(height: 16),
+          const Text(
+            'فواتير اليوم',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          if (invoices.isEmpty)
+            const HsEmpty(title: 'لا توجد فواتير لهذا اليوم.')
+          else
             for (final inv in invoices)
               _rowCard(
                 '${inv['invoice_number']} · ${inv['table']?['name'] ?? '—'}',
                 ((inv['total_amount'] as num?) ?? 0).toStringAsFixed(2),
                 highlight: true,
               ),
-          ],
+          const SizedBox(height: 16),
+          const Text(
+            'الطلبات المغلقة',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          if (closedOrders.isEmpty)
+            const HsEmpty(title: 'لا توجد طلبات مغلقة.')
+          else
+            for (final order in closedOrders.take(30))
+              _rowCard(
+                '#${order['order_number'] ?? order['id']} · ${order['table']?['name'] ?? order['order_type'] ?? '—'}',
+                ((order['total_amount'] as num?) ?? 0).toStringAsFixed(2),
+              ),
+          const SizedBox(height: 16),
+          const Text(
+            'كل الطلبات',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          if (allOrders.isEmpty)
+            const HsEmpty(title: 'لا توجد طلبات لهذا اليوم.')
+          else
+            for (final order in allOrders.take(40))
+              _rowCard(
+                '#${order['order_number'] ?? order['id']} · ${order['pos_status'] ?? '—'} · ${order['placed_at'] ?? ''}',
+                ((order['total_amount'] as num?) ?? 0).toStringAsFixed(2),
+              ),
+          const SizedBox(height: 16),
+          const Text(
+            'آخر العمليات',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          if (recentOps.isEmpty)
+            const HsEmpty(title: 'لا توجد عمليات مسجّلة.')
+          else
+            for (final log in recentOps)
+              _rowCard(
+                '${log['action'] ?? '—'} · ${log['entity_type'] ?? ''} #${log['entity_id'] ?? ''}',
+                '${log['user']?['name'] ?? 'النظام'} · ${log['occurred_at'] ?? ''}',
+              ),
         ],
       ),
     );

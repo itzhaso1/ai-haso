@@ -12,6 +12,9 @@ class CashierPermissions {
   static bool canManageTables(Map<String, dynamic>? p) =>
       can(p, 'tables.manage') || can(p, 'pos.manage');
 
+  static bool canManageMenu(Map<String, dynamic>? p) =>
+      can(p, 'menu.manage') || can(p, 'pos.manage') || can(p, 'workspace.manage');
+
   static bool canCreateOrders(Map<String, dynamic>? p) =>
       can(p, 'orders.create') || can(p, 'orders.manage') || can(p, 'pos.use');
 

@@ -555,7 +555,13 @@ class _TopNav extends ConsumerWidget {
       (_PosSection.orders, 'الطلبات'),
       (_PosSection.kitchen, 'المطبخ'),
       (_PosSection.invoices, 'الفواتير'),
-      (_PosSection.items, 'إدارة الأصناف'),
+      if (CashierPermissions.canManageMenu(
+        CashierPermissions.resolve(
+          ref.watch(cashierPermissionsProvider),
+          ref.watch(authControllerProvider).valueOrNull?.permissions,
+        ),
+      ))
+        (_PosSection.items, 'إدارة الأصناف'),
       if (CashierPermissions.canViewReports(
         CashierPermissions.resolve(
           ref.watch(cashierPermissionsProvider),

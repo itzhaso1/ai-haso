@@ -112,6 +112,40 @@ class CashierApiClient {
     }
   }
 
+  Future<Map<String, dynamic>> patch(
+    String path, {
+    Map<String, dynamic>? data,
+  }) async {
+    try {
+      final response = await _dio.patch(path, data: data);
+      return _unwrap(response);
+    } on DioException catch (e) {
+      throw _mapError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> postMultipart(
+    String path, {
+    required FormData data,
+    String? idempotencyKey,
+  }) async {
+    try {
+      final response = await _dio.post(
+        path,
+        data: data,
+        options: Options(
+          contentType: 'multipart/form-data',
+          headers: {
+            if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey,
+          },
+        ),
+      );
+      return _unwrap(response);
+    } on DioException catch (e) {
+      throw _mapError(e);
+    }
+  }
+
   Future<Map<String, dynamic>> delete(String path) async {
     try {
       final response = await _dio.delete(path);
@@ -147,24 +181,61 @@ class CashierApiClient {
   }
 
   ApiException _mapError(DioException e) {
+    final status = e.response?.statusCode;
     final data = e.response?.data;
-    if (data is Map && data['message'] is String) {
-      return ApiException(
-        data['message'] as String,
-        statusCode: e.response?.statusCode,
-        errors: data['errors'] is Map
-            ? Map<String, dynamic>.from(data['errors'] as Map)
-            : null,
-      );
+    Map<String, dynamic>? errors;
+    if (data is Map && data['errors'] is Map) {
+      errors = Map<String, dynamic>.from(data['errors'] as Map);
     }
+
+    String? serverMessage;
+    if (data is Map && data['message'] is String) {
+      serverMessage = data['message'] as String;
+    }
+
+    // Prefer field-level 422 validation messages when present.
+    if (status == 422 && errors != null && errors.isNotEmpty) {
+      final parts = <String>[];
+      for (final entry in errors.entries) {
+        final value = entry.value;
+        if (value is List && value.isNotEmpty) {
+          parts.add(value.first.toString());
+        } else if (value != null) {
+          parts.add(value.toString());
+        }
+      }
+      if (parts.isNotEmpty) {
+        return ApiException(parts.join('\n'), statusCode: status, errors: errors);
+      }
+    }
+
+    if (serverMessage != null && serverMessage.trim().isNotEmpty) {
+      return ApiException(serverMessage, statusCode: status, errors: errors);
+    }
+
     if (e.type == DioExceptionType.connectionError ||
-        e.type == DioExceptionType.connectionTimeout) {
+        e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.receiveTimeout) {
       return ApiException(
-        'تعذر الاتصال بالخادم. تم حفظ العملية محليًا وستتم مزامنتها لاحقًا.',
+        'تعذر الاتصال بالخادم. تحقق من الإنترنت وحاول مجددًا.',
         statusCode: 0,
       );
     }
-    return ApiException('تعذر إكمال الطلب.', statusCode: e.response?.statusCode);
+    return ApiException(
+      switch (status) {
+        400 => 'طلب غير صالح.',
+        401 => 'انتهت الجلسة. سجّل الدخول مجددًا.',
+        403 => 'لا تملك صلاحية تنفيذ هذه العملية.',
+        404 => 'العنصر غير موجود.',
+        409 => 'تعارض في حالة الطلب. حدّث الصفحة وحاول مجددًا.',
+        422 => 'تعذر التحقق من البيانات المرسلة.',
+        429 => 'محاولات كثيرة. انتظر قليلًا ثم أعد المحاولة.',
+        500 || 502 || 503 => 'خطأ في الخادم. حاول لاحقًا.',
+        _ => 'تعذر إكمال الطلب.',
+      },
+      statusCode: status,
+      errors: errors,
+    );
   }
 }
 

@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/cashier_api.dart';
 import '../../core/audio/menu_sound_service.dart';
+import '../../core/auth/auth_controller.dart';
+import '../../core/permissions/cashier_permissions.dart';
+import '../../core/permissions/permissions_provider.dart';
 import '../../core/printing/printer_service.dart';
 import '../../core/realtime/pos_event_source.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/widgets/hasim_widgets.dart';
+import '../cart/cart_controller.dart';
 
-/// Cashier settings — sound, realtime mode, printer configuration.
+/// Cashier settings — POS settings via API + local printer/realtime.
 class SettingsPanel extends ConsumerStatefulWidget {
   const SettingsPanel({super.key});
 
@@ -17,11 +22,22 @@ class SettingsPanel extends ConsumerStatefulWidget {
 
 class _SettingsPanelState extends ConsumerState<SettingsPanel> {
   var _sound = true;
+  var _delivery = true;
   var _ready = false;
+  var _savingPos = false;
+  final _tax = TextEditingController(text: '0');
+  final _currency = TextEditingController(text: 'SAR');
   PrinterProfile? _profile;
   final _name = TextEditingController(text: 'طابعة الشبكة');
   final _address = TextEditingController();
   PrinterTransport _transport = PrinterTransport.network;
+
+  Map<String, dynamic> get _perms => CashierPermissions.resolve(
+        ref.read(cashierPermissionsProvider),
+        ref.read(authControllerProvider).valueOrNull?.permissions,
+      );
+
+  bool get _canManagePos => CashierPermissions.canManageMenu(_perms);
 
   @override
   void initState() {
@@ -31,6 +47,8 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
 
   @override
   void dispose() {
+    _tax.dispose();
+    _currency.dispose();
     _name.dispose();
     _address.dispose();
     super.dispose();
@@ -39,10 +57,31 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
   Future<void> _load() async {
     final sound = ref.read(menuSoundServiceProvider);
     final printer = await ref.read(printerServiceFutureProvider.future);
-    await Future<void>.delayed(Duration.zero);
+    Map<String, dynamic>? settings;
+    try {
+      final bootstrap = await ref.read(cashierApiProvider).get('/bootstrap');
+      if (bootstrap['settings'] is Map) {
+        settings = Map<String, dynamic>.from(bootstrap['settings'] as Map);
+      }
+    } catch (_) {
+      // Keep local defaults if bootstrap fails.
+    }
     if (!mounted) return;
     setState(() {
-      _sound = sound.enabled;
+      if (settings != null) {
+        _tax.text =
+            ((settings['tax_rate'] as num?) ?? 0).toStringAsFixed(2);
+        _currency.text = '${settings['currency'] ?? 'SAR'}';
+        _sound = settings['sound_enabled'] == true ||
+            settings['new_order_sound'] == true;
+        _delivery = settings['enable_delivery'] != false;
+        ref.read(menuSoundServiceProvider).setEnabled(_sound);
+        ref
+            .read(cartControllerProvider.notifier)
+            .setTaxRate(((settings['tax_rate'] as num?) ?? 0).toDouble());
+      } else {
+        _sound = sound.enabled;
+      }
       _profile = printer.selected;
       if (_profile != null) {
         _name.text = _profile!.name;
@@ -51,6 +90,59 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
       }
       _ready = true;
     });
+  }
+
+  Future<void> _savePosSettings() async {
+    if (!_canManagePos) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا تملك صلاحية تحديث إعدادات الكاشير.')),
+      );
+      return;
+    }
+    final tax = double.tryParse(_tax.text.trim());
+    if (tax == null || tax < 0 || tax > 100) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('نسبة الضريبة غير صالحة.')),
+      );
+      return;
+    }
+    setState(() => _savingPos = true);
+    try {
+      final data = await ref.read(cashierApiProvider).patch(
+        '/settings/pos',
+        data: {
+          'tax_rate': tax,
+          'new_order_sound': _sound,
+          'enable_delivery': _delivery,
+          'currency': _currency.text.trim().toUpperCase(),
+        },
+      );
+      await ref.read(menuSoundServiceProvider).setEnabled(_sound);
+      ref.read(cartControllerProvider.notifier).setTaxRate(
+            ((data['tax_rate'] as num?) ?? tax).toDouble(),
+          );
+      if (!mounted) return;
+      setState(() {
+        _savingPos = false;
+        _tax.text = ((data['tax_rate'] as num?) ?? tax).toStringAsFixed(2);
+        _currency.text = '${data['currency'] ?? _currency.text}';
+        _sound = data['sound_enabled'] == true || data['new_order_sound'] == true;
+        _delivery = data['enable_delivery'] == true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم حفظ إعدادات الكاشير على الخادم.')),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _savingPos = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _savingPos = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.toString())));
+    }
   }
 
   Future<void> _savePrinter() async {
@@ -80,6 +172,13 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final canManage = CashierPermissions.canManageMenu(
+      CashierPermissions.resolve(
+        ref.watch(cashierPermissionsProvider),
+        ref.watch(authControllerProvider).valueOrNull?.permissions,
+      ),
+    );
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -89,24 +188,70 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
         ),
         const SizedBox(height: 12),
         HsCard(
-          child: SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text(
-              'صوت طلبات المنيو',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-            subtitle: const Text(
-              'تشغيل تنبيه عند وصول طلب جديد من المنيو.',
-              style: TextStyle(fontSize: 12, color: HasimColors.muted),
-            ),
-            value: _sound,
-            activeThumbColor: HasimColors.cta,
-            onChanged: !_ready
-                ? null
-                : (v) async {
-                    setState(() => _sound = v);
-                    await ref.read(menuSoundServiceProvider).setEnabled(v);
-                  },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'إعدادات الكاشير (Laravel)',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                canManage
+                    ? 'تُحفظ عبر PATCH /settings/pos'
+                    : 'عرض فقط — تحتاج menu.manage للتعديل',
+                style: const TextStyle(fontSize: 12, color: HasimColors.muted),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _tax,
+                enabled: canManage && _ready && !_savingPos,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'نسبة الضريبة %',
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _currency,
+                enabled: canManage && _ready && !_savingPos,
+                decoration: const InputDecoration(
+                  labelText: 'العملة',
+                  isDense: true,
+                ),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text(
+                  'صوت طلبات المنيو',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                value: _sound,
+                activeThumbColor: HasimColors.cta,
+                onChanged: (!canManage || !_ready || _savingPos)
+                    ? null
+                    : (v) => setState(() => _sound = v),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text(
+                  'تفعيل التوصيل',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                value: _delivery,
+                activeThumbColor: HasimColors.cta,
+                onChanged: (!canManage || !_ready || _savingPos)
+                    ? null
+                    : (v) => setState(() => _delivery = v),
+              ),
+              if (canManage)
+                HsPrimaryButton(
+                  label: _savingPos ? 'جاري الحفظ…' : 'حفظ إعدادات الكاشير',
+                  onPressed: (!_ready || _savingPos) ? null : _savePosSettings,
+                ),
+            ],
           ),
         ),
         const SizedBox(height: 12),
@@ -143,7 +288,7 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
               ),
               const SizedBox(height: 4),
               const Text(
-                'Pusher/Reverb مُجهّز معماريًا عبر PosEventSource. لن يُفعَّل بدون credentials حقيقية — Polling يبقى fallback.',
+                'Polling هو المصدر الافتراضي. Pusher/Reverb لن يُفعَّل بدون credentials.',
                 style: TextStyle(fontSize: 12, color: HasimColors.muted),
               ),
             ],

@@ -326,7 +326,7 @@ class _OrdersListState extends ConsumerState<OrdersList> {
                               ),
                             ),
                             Text(
-                              'الوقت: ${order['created_at'] ?? '—'} · المصدر: ${(order['source'] as String?)?.toUpperCase() ?? '—'}',
+                              'الوقت: ${order['placed_at'] ?? order['created_at'] ?? '—'} · المصدر: ${(order['source'] as String?)?.toUpperCase() ?? '—'}',
                               style: const TextStyle(
                                 fontSize: 11,
                                 color: HasimColors.muted,

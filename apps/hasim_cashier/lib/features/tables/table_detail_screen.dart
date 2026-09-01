@@ -1,10 +1,11 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
-import '../../core/navigation/pos_shell_nav.dart';
 import '../../core/offline/conflict_strategy.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
@@ -13,8 +14,8 @@ import '../../core/printing/printer_service.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
 import '../../core/widgets/hasim_widgets.dart';
-import '../cart/cart_controller.dart';
 import 'table_action_wizards.dart';
+import 'table_add_order_sheet.dart';
 import 'table_order_editor.dart';
 import 'table_workspace.dart';
 
@@ -32,6 +33,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
   Map<String, dynamic>? _detail;
   List<Map<String, dynamic>> _allTables = const [];
   var _loading = true;
+  var _closing = false;
   String? _error;
   String _filter = 'all';
   final _search = TextEditingController();
@@ -179,10 +181,102 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
 
   bool _canMutateOrder(Map<String, dynamic> order) {
     final status = order['pos_status'] as String?;
+    // Mirror Laravel assertOrderMutable: not cancelled/completed/paid/invoiced.
     return status != 'cancelled' &&
         status != 'completed' &&
         order['payment_status'] != 'paid' &&
         order['pos_cashier_invoice_id'] == null;
+  }
+
+  String _openedAtLabel() {
+    final opened = _detail?['opened_at'] as String?;
+    if (opened == null || opened.isEmpty) return '—';
+    final at = DateTime.tryParse(opened);
+    if (at == null) return opened;
+    final local = at.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${local.year}-${two(local.month)}-${two(local.day)} '
+        '${two(local.hour)}:${two(local.minute)}';
+  }
+
+  Future<void> _showQr() async {
+    if (!await _ensureOnline()) return;
+    final url = _detail?['menu_url'] as String?;
+    final token = _detail?['qr_token'] as String?;
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('QR المنيو'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              url ?? 'لا يوجد رابط QR لهذه الطاولة.',
+              style: const TextStyle(fontSize: 12),
+            ),
+            if (token != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Token: $token',
+                style: const TextStyle(fontSize: 11, color: HasimColors.muted),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          if (url != null)
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: url));
+                if (!ctx.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('تم نسخ رابط المنيو.')),
+                );
+              },
+              child: const Text('نسخ الرابط'),
+            ),
+          if (_canManageTables)
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await _regenerateQr();
+              },
+              child: const Text('تجديد QR'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إغلاق'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _regenerateQr() async {
+    if (!_canManageTables) return;
+    if (!await _ensureOnline()) return;
+    try {
+      final data = await ref
+          .read(cashierApiProvider)
+          .post('/tables/${widget.tableId}/qr/regenerate');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            data['menu_url'] != null
+                ? 'تم تجديد QR.\n${data['menu_url']}'
+                : 'تم تجديد QR.',
+          ),
+        ),
+      );
+      await _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   Future<void> _openSession() async {
@@ -204,31 +298,43 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
     }
   }
 
-  void _addOrder() {
+  Future<void> _addOrder() async {
     if (!_hasSession) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('افتح الجلسة أولًا قبل إضافة طلب.')),
       );
       return;
     }
-    ref.read(cartControllerProvider.notifier).setChannel(OrderChannel.table);
-    ref.read(cartControllerProvider.notifier).setTable(widget.tableId);
-    // Keep workspace id so after checkout we return here.
-    openTableWorkspace(ref, widget.tableId);
-    requestPosShellTab(ref, PosShellTab.cashier);
+    if (!await _ensureOnline()) return;
+    final created = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (ctx) => TableAddOrderSheet(
+        tableId: widget.tableId,
+        tableName: '${_detail?['name'] ?? 'الطاولة'}',
+      ),
+    );
+    if (created == null) return;
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'أضف المنتجات ثم أنشئ الطلب — سيُحفظ على ${_detail?['name'] ?? 'الطاولة'} مباشرة بدون فاتورة.',
+          'تم حفظ الطلب #${created['order_number'] ?? created['id']} على الطاولة.',
         ),
       ),
     );
+    await _load();
   }
 
   Future<void> _editOrder(Map<String, dynamic> order) async {
     if (!_canMutateOrder(order)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('لا يمكن تعديل هذا الطلب.')),
+        const SnackBar(
+          content: Text(
+            'لا يمكن تعديل طلب مدفوع أو مرتبط بفاتورة أو مكتمل/ملغي.',
+          ),
+        ),
       );
       return;
     }
@@ -249,7 +355,11 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
   Future<void> _deleteOrder(Map<String, dynamic> order) async {
     if (!_canMutateOrder(order)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('لا يمكن حذف هذا الطلب.')),
+        const SnackBar(
+          content: Text(
+            'لا يمكن حذف طلب مدفوع أو مرتبط بفاتورة أو مكتمل/ملغي.',
+          ),
+        ),
       );
       return;
     }
@@ -472,7 +582,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
   }
 
   Future<void> _closeSession() async {
-    if (!_hasSession || !_canManageTables) return;
+    if (!_hasSession || !_canManageTables || _closing) return;
     if (!await _ensureOnline()) return;
     final result = await showDialog<CloseTableResult>(
       context: context,
@@ -485,9 +595,20 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
         total: ((_detail?['total'] as num?) ?? 0).toDouble(),
         ordersCount: (_detail?['orders_count'] as num?)?.toInt() ??
             _orders.where((o) => o['pos_status'] != 'cancelled').length,
+        orders: _orders
+            .where((o) => o['pos_status'] != 'cancelled')
+            .map(
+              (o) => {
+                'label': '#${o['order_number'] ?? o['id']}',
+                'total': ((o['total_amount'] as num?) ?? 0).toDouble(),
+              },
+            )
+            .toList(),
       ),
     );
     if (result == null) return;
+    setState(() => _closing = true);
+    final idempotencyKey = const Uuid().v4();
     try {
       final data = await ref.read(cashierApiProvider).post(
         '/tables/${widget.tableId}/sessions/$_sessionId/close',
@@ -495,6 +616,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
           if (result.paymentMethod != null)
             'payment_method': result.paymentMethod,
         },
+        idempotencyKey: idempotencyKey,
       );
       if (!mounted) return;
       final invoice = data['invoice'] is Map
@@ -510,8 +632,14 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       closeTableWorkspace(ref);
     } on ApiException catch (e) {
       if (!mounted) return;
+      setState(() => _closing = false);
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _closing = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -528,7 +656,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, 'skip'),
-            child: const Text('بدون فاتورة'),
+            child: const Text('تم بدون طباعة'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, 'print'),
@@ -751,6 +879,13 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
                 : 'لا توجد جلسة نشطة',
             style: const TextStyle(fontSize: 12, color: HasimColors.muted),
           ),
+          if (_hasSession) ...[
+            const SizedBox(height: 4),
+            Text(
+              'وقت الفتح: ${_openedAtLabel()}',
+              style: const TextStyle(fontSize: 12, color: HasimColors.muted),
+            ),
+          ],
           if ((_detail!['notes'] as String?)?.isNotEmpty == true) ...[
             const SizedBox(height: 4),
             Text(
@@ -878,6 +1013,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
             _action('إضافة طلب', Icons.add_circle_outline, _addOrder),
             _action('إضافة ملاحظة', Icons.sticky_note_2_outlined, _editNote),
             _action('خصم', Icons.percent, _applyDiscount),
+            _action('QR المنيو', Icons.qr_code_2_outlined, _showQr),
             _action(
               'نقل الطاولة',
               Icons.swap_horiz,
@@ -897,6 +1033,8 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
               danger: true,
             ),
           ],
+          if (!_hasSession)
+            _action('QR المنيو', Icons.qr_code_2_outlined, _showQr),
         ],
       ),
     );
@@ -1134,6 +1272,7 @@ class CloseTableFlow extends StatefulWidget {
     required this.tax,
     required this.total,
     required this.ordersCount,
+    this.orders = const [],
   });
 
   final String tableName;
@@ -1142,6 +1281,7 @@ class CloseTableFlow extends StatefulWidget {
   final double tax;
   final double total;
   final int ordersCount;
+  final List<Map<String, dynamic>> orders;
 
   @override
   State<CloseTableFlow> createState() => _CloseTableFlowState();
@@ -1155,6 +1295,8 @@ class _CloseTableFlowState extends State<CloseTableFlow> {
     ('cash', 'نقداً'),
     ('card', 'بطاقة'),
     ('transfer', 'تحويل'),
+    ('cashier', 'كاشير'),
+    ('pay_now', 'ادفع الآن'),
     ('pay_later', 'آجل'),
   ];
 
@@ -1166,7 +1308,7 @@ class _CloseTableFlowState extends State<CloseTableFlow> {
         borderRadius: BorderRadius.circular(HasimRadius.lg),
       ),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
+        constraints: const BoxConstraints(maxWidth: 420, maxHeight: 640),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -1187,41 +1329,83 @@ class _CloseTableFlowState extends State<CloseTableFlow> {
                 style: const TextStyle(color: HasimColors.muted),
               ),
               const SizedBox(height: 12),
-              if (_step == 0) ...[
-                _row('عدد الطلبات', '${widget.ordersCount}'),
-                _row('المجموع الفرعي', widget.subtotal.toStringAsFixed(2)),
-                _row('الخصم', widget.discount.toStringAsFixed(2)),
-                _row('الضريبة', widget.tax.toStringAsFixed(2)),
-                _row('الإجمالي', widget.total.toStringAsFixed(2), bold: true),
-                const SizedBox(height: 8),
-                const Text(
-                  'سيتم إنشاء فاتورة نهائية عند الإغلاق فقط.',
-                  style: TextStyle(fontSize: 12, color: HasimColors.muted),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: _step == 0
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _row('عدد الطلبات', '${widget.ordersCount}'),
+                            if (widget.orders.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              for (final order in widget.orders)
+                                _row(
+                                  '${order['label']}',
+                                  ((order['total'] as num?) ?? 0)
+                                      .toStringAsFixed(2),
+                                ),
+                              const Divider(),
+                            ],
+                            _row(
+                              'المجموع الفرعي',
+                              widget.subtotal.toStringAsFixed(2),
+                            ),
+                            _row('الخصم', widget.discount.toStringAsFixed(2)),
+                            _row('الضريبة', widget.tax.toStringAsFixed(2)),
+                            _row(
+                              'الإجمالي',
+                              widget.total.toStringAsFixed(2),
+                              bold: true,
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'سيتم إنشاء فاتورة نهائية عند الإغلاق فقط.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: HasimColors.muted,
+                              ),
+                            ),
+                          ],
+                        )
+                      : _step == 1
+                          ? Column(
+                              children: [
+                                for (final m in _methods)
+                                  RadioListTile<String>(
+                                    value: m.$1,
+                                    groupValue: _payment,
+                                    title: Text(m.$2),
+                                    onChanged: (v) =>
+                                        setState(() => _payment = v ?? 'cash'),
+                                  ),
+                              ],
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'الدفع: ${_methods.firstWhere((e) => e.$1 == _payment).$2}',
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'الإجمالي النهائي: ${widget.total.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    color: HasimColors.ctaDark,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'بعد التأكيد تُغلق الجلسة وتُصدر فاتورة الكاشير مرة واحدة.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: HasimColors.muted,
+                                  ),
+                                ),
+                              ],
+                            ),
                 ),
-              ] else if (_step == 1) ...[
-                for (final m in _methods)
-                  RadioListTile<String>(
-                    value: m.$1,
-                    groupValue: _payment,
-                    title: Text(m.$2),
-                    onChanged: (v) => setState(() => _payment = v ?? 'cash'),
-                  ),
-              ] else ...[
-                Text('الدفع: ${_methods.firstWhere((e) => e.$1 == _payment).$2}'),
-                const SizedBox(height: 6),
-                Text(
-                  'الإجمالي النهائي: ${widget.total.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    color: HasimColors.ctaDark,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'بعد التأكيد تُغلق الجلسة وتُصدر فاتورة الكاشير.',
-                  style: TextStyle(fontSize: 12, color: HasimColors.muted),
-                ),
-              ],
+              ),
               const SizedBox(height: 16),
               Row(
                 children: [
