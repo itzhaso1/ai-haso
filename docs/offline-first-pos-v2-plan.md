@@ -2,7 +2,7 @@
 
 **Branch:** `cursor/offline-first-pos-v2-757c`  
 **Base:** `cursor/cashier-ui-ux-fix-757c` @ `54806df`  
-**Status:** Phase 1 in progress
+**Status:** Phase 2 complete (Tables UI ← Local SQLite via TablesRepository)
 
 ## Audit summary (current = Online POS + durable outbox)
 
@@ -45,10 +45,13 @@ Laravel stays Source of Truth. UI must not depend on API for daily POS reads/wri
 - Keep existing Hive pending-order path working (dual-run).
 - Focused unit tests: schema isolation, initial sync readiness, device id.
 
-### Phase 2 — Local-first catalog/tables UI
-- Wire Tables board + Add Order sheet to repositories/streams.
-- Remove direct catalog Hive reads from feature screens where repository covers them.
-- Background pull refresh on reconnect (still full snapshot until Phase 4).
+## Phase 2 — Tables UI from Local DB (done)
+- `TablesRepository`: list/get/replace/upsert + `loadBoard` / `loadTableDetail`
+- `TablesBoard` and `TableDetailScreen` read SQLite first via repository
+- No UI `if offline`; remote refresh is repository best-effort
+- Hive table cache still dual-written by repository
+- Close / payment / invoice / open-session mutations unchanged (online)
+
 
 ### Phase 3 — Orders local-first + Sync Queue
 - Create/edit/delete orders as SQLite transactions + `sync_queue` rows.

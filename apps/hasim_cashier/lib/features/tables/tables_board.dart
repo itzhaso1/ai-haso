@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/config/app_config.dart';
+import '../../core/local_db/local_db_providers.dart';
 import '../../core/network/cashier_link.dart';
-import '../../core/offline/offline_store.dart';
 import '../../core/pos/pos_labels.dart';
 import '../../core/realtime/pos_event_source.dart';
 import '../../core/theme/hasim_colors.dart';
@@ -13,7 +13,7 @@ import '../../core/widgets/hasim_widgets.dart';
 import 'table_detail_screen.dart';
 import 'table_workspace.dart';
 
-/// Tables board — tap a card to enter the full table workspace (no sidebar).
+/// Tables board — Local DB first via [TablesRepository]. No UI offline branching.
 class TablesBoard extends ConsumerStatefulWidget {
   const TablesBoard({super.key});
 
@@ -45,9 +45,9 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
     _source?.dispose();
     _source = PollingPosEventSource(
       interval: Duration(seconds: AppConfig.tablesPollSeconds),
+      // Polling is a sync concern — UI still loads Local DB without this.
       enabled: () => ref.read(cashierLinkProvider).isOnline,
       poll: () async {
-        // Skip while a table detail is open — detail owns its own refresh.
         if (!mounted || ref.read(openTableIdProvider) != null) {
           return const <PosEvent>[];
         }
@@ -59,59 +59,49 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
   }
 
   Future<void> _load({bool silent = false}) async {
-    if (!silent && mounted) {
+    final workspaceId = ref.read(workspaceIdProvider);
+    if (workspaceId == null || workspaceId <= 0) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _tables = const [];
+        _error = silent ? null : 'لا توجد مساحة عمل محددة.';
+      });
+      return;
+    }
+
+    final repo = ref.read(tablesRepositoryProvider);
+
+    // 1) Local SQLite first — works with internet fully offline.
+    final local = await repo.listTables(workspaceId);
+    if (!mounted) return;
+    if (local.isNotEmpty) {
+      setState(() {
+        _tables = local;
+        _loading = false;
+        _error = null;
+      });
+    } else if (!silent) {
       setState(() {
         _loading = true;
         _error = null;
       });
     }
-    try {
-      final data = await ref.read(cashierApiProvider).get('/tables');
-      final list = <Map<String, dynamic>>[];
-      if (data['tables'] is List) {
-        for (final item in data['tables'] as List) {
-          if (item is Map) list.add(Map<String, dynamic>.from(item));
-        }
-      }
-      if (!mounted) return;
-      await OfflineStore.instance.cacheTables(
-        list,
-        workspaceId: ref.read(workspaceIdProvider),
-      );
-      if (silent && _sameBoardSnapshot(_tables, list)) {
-        return;
-      }
-      setState(() {
-        _tables = list;
-        _loading = false;
-        _error = null;
-      });
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      final cached = OfflineStore.instance.readTables(
-        workspaceId: ref.read(workspaceIdProvider),
-      );
-      if (cached.isNotEmpty && _tables.isEmpty) {
-        setState(() {
-          _tables = cached;
-          _loading = false;
-          _error = silent ? null : e.message;
-        });
-        return;
-      }
-      if (silent) return;
-      setState(() {
-        _loading = false;
-        _error = e.message;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      if (silent) return;
-      setState(() {
-        _loading = false;
-        _error = e.toString();
-      });
+
+    // 2) Repository best-effort remote refresh (no UI if-offline).
+    final next = await repo.loadBoard(workspaceId);
+    if (!mounted) return;
+    if (silent && _sameBoardSnapshot(_tables, next)) {
+      if (_loading) setState(() => _loading = false);
+      return;
     }
+    setState(() {
+      _tables = next;
+      _loading = false;
+      _error = next.isEmpty
+          ? 'لا توجد طاولات محفوظة محليًا. أكمل Initial Sync مرة واحدة وأنت متصل.'
+          : null;
+    });
   }
 
   bool _sameBoardSnapshot(
@@ -227,7 +217,10 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
     final hasSession = table['session_id'] != null;
     final total = ((table['total'] as num?) ?? 0).toDouble();
     final orders = table['open_orders_count'] ?? table['orders_count'] ?? 0;
-    final id = (table['id'] as num).toInt();
+    final id = (table['id'] as num?)?.toInt();
+    if (id == null) {
+      return const SizedBox.shrink();
+    }
 
     return Material(
       color: Colors.white,
@@ -258,7 +251,7 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
                       ),
                     ),
                   ),
-                  Icon(
+                  const Icon(
                     Icons.chevron_left,
                     color: HasimColors.muted,
                     size: 20,
@@ -297,7 +290,7 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
                   ),
                 ),
               const SizedBox(height: 4),
-              Text(
+              const Text(
                 'اضغط للدخول',
                 style: TextStyle(
                   fontSize: 10,

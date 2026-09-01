@@ -8,6 +8,7 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/offline/conflict_strategy.dart';
 import '../../core/offline/offline_store.dart';
 import '../../core/offline/sync_engine.dart';
+import '../../core/local_db/local_db_providers.dart';
 import '../../core/network/cashier_link.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
@@ -204,67 +205,57 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       _loading = true;
       _error = null;
     });
-    try {
-      final detail = await ref
-          .read(cashierApiProvider)
-          .get('/tables/${widget.tableId}');
-      final tablesData = await ref.read(cashierApiProvider).get('/tables');
-      final list = <Map<String, dynamic>>[];
-      if (tablesData['tables'] is List) {
-        for (final t in tablesData['tables'] as List) {
-          if (t is Map) list.add(Map<String, dynamic>.from(t));
-        }
-      }
-      if (!mounted) return;
-      await OfflineStore.instance.cacheTableDetail(
-        widget.tableId,
-        detail,
-        workspaceId: _workspaceId,
-      );
-      if (list.isNotEmpty) {
-        await OfflineStore.instance.cacheTables(
-          list,
-          workspaceId: _workspaceId,
-        );
-      }
+    final workspaceId = _workspaceId;
+    if (workspaceId == null || workspaceId <= 0) {
       setState(() {
-        _detail = detail;
-        _allTables = list;
         _loading = false;
+        _error = 'لا توجد مساحة عمل محددة.';
       });
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      _applyCachedTable(e.message);
-    } catch (e) {
-      if (!mounted) return;
-      _applyCachedTable(e.toString());
+      return;
     }
-  }
 
-  void _applyCachedTable(String error) {
-    final cached = OfflineStore.instance.readTableDetail(
-          widget.tableId,
-          workspaceId: _workspaceId,
-        ) ??
-        OfflineStore.instance.tableFromBoardCache(
-          widget.tableId,
-          workspaceId: _workspaceId,
-        );
-    final pending = _workspaceId == null
-        ? const <PendingOrder>[]
-        : OfflineStore.instance.unsyncedOrders(
-            tableId: widget.tableId,
-            workspaceId: _workspaceId,
-          );
-    if (cached != null) {
+    final repo = ref.read(tablesRepositoryProvider);
+
+    // Local SQLite first — works fully offline.
+    final localDetail = await repo.getTable(workspaceId, widget.tableId);
+    final localBoard = await repo.listTables(workspaceId);
+    if (!mounted) return;
+    if (localDetail != null) {
       setState(() {
-        _detail = cached;
-        _allTables = OfflineStore.instance.readTables(workspaceId: _workspaceId);
+        _detail = localDetail;
+        _allTables = localBoard;
+        _loading = false;
+        _error = null;
+      });
+    }
+
+    // Repository best-effort remote refresh (no UI if-offline).
+    final refreshed = await repo.loadTableDetail(workspaceId, widget.tableId);
+    final board = await repo.listTables(workspaceId);
+    if (!mounted) return;
+    if (refreshed != null) {
+      setState(() {
+        _detail = refreshed;
+        _allTables = board;
         _loading = false;
         _error = null;
       });
       return;
     }
+
+    if (_detail != null) {
+      setState(() {
+        _loading = false;
+        _error = null;
+      });
+      return;
+    }
+
+    // Pending local orders can still open a minimal shell (Hive outbox).
+    final pending = OfflineStore.instance.unsyncedOrders(
+      tableId: widget.tableId,
+      workspaceId: workspaceId,
+    );
     if (pending.isNotEmpty) {
       setState(() {
         _detail = {
@@ -273,14 +264,17 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
           'status': 'occupied',
           'orders': const [],
         };
+        _allTables = board;
         _loading = false;
         _error = null;
       });
       return;
     }
+
     setState(() {
       _loading = false;
-      _error = error;
+      _error =
+          'الطاولة غير متاحة محليًا. أكمل Initial Sync مرة واحدة وأنت متصل.';
     });
   }
 

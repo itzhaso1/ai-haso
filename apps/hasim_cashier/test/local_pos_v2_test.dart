@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hasim_cashier/core/local_db/app_database.dart';
 import 'package:hasim_cashier/core/local_db/workspace_scope.dart';
 import 'package:hasim_cashier/core/repositories/catalog_repository.dart';
 import 'package:hasim_cashier/core/repositories/sync_queue_repository.dart';
+import 'package:hasim_cashier/core/repositories/tables_repository.dart';
 import 'package:hasim_cashier/core/sync/sync_engine_v2.dart';
 
 void main() {
@@ -184,5 +187,105 @@ void main() {
       () => const WorkspaceScope(0).assertValid(),
       throwsA(isA<StateError>()),
     );
+  });
+
+  test('tables board reads Local DB with workspace isolation', () async {
+    final now = DateTime.now();
+    await db.into(db.localTables).insert(
+          LocalTablesCompanion.insert(
+            localId: TablesRepository.tableLocalId(1, 7),
+            workspaceId: 1,
+            serverId: const Value(7),
+            name: 'طاولة أ',
+            status: const Value('occupied'),
+            sessionServerId: const Value(100),
+            payloadJson: Value(
+              jsonEncode({
+                'id': 7,
+                'name': 'طاولة أ',
+                'status': 'occupied',
+                'session_id': 100,
+                'total': 25.5,
+                'orders_count': 2,
+              }),
+            ),
+            updatedAt: now,
+          ),
+        );
+    await db.into(db.localTables).insert(
+          LocalTablesCompanion.insert(
+            localId: TablesRepository.tableLocalId(2, 7),
+            workspaceId: 2,
+            serverId: const Value(7),
+            name: 'طاولة ب',
+            status: const Value('available'),
+            payloadJson: Value(
+              jsonEncode({
+                'id': 7,
+                'name': 'طاولة ب',
+                'status': 'available',
+              }),
+            ),
+            updatedAt: now,
+          ),
+        );
+
+    final repo = TablesRepository(db);
+    final a = await repo.listTables(1);
+    final b = await repo.listTables(2);
+    expect(a.single['name'], 'طاولة أ');
+    expect(a.single['status'], 'occupied');
+    expect(a.single['session_id'], 100);
+    expect(a.single['total'], 25.5);
+    expect(b.single['name'], 'طاولة ب');
+    expect(b.single['status'], 'available');
+    expect(await repo.listTables(3), isEmpty);
+  });
+
+  test('loadBoard without API returns local tables (offline-capable)', () async {
+    await db.into(db.localTables).insert(
+          LocalTablesCompanion.insert(
+            localId: TablesRepository.tableLocalId(9, 3),
+            workspaceId: 9,
+            serverId: const Value(3),
+            name: 'محلية',
+            updatedAt: DateTime.now(),
+            payloadJson: Value(jsonEncode({'id': 3, 'name': 'محلية'})),
+          ),
+        );
+    // No API client — repository must still serve SQLite.
+    final repo = TablesRepository(db);
+    final board = await repo.loadBoard(9);
+    expect(board, hasLength(1));
+    expect(board.single['id'], 3);
+    expect(board.single['name'], 'محلية');
+  });
+
+  test('table detail payload preserved when board refresh is thinner', () async {
+    final repo = TablesRepository(db);
+    await repo.upsertTableDetail(1, 5, {
+      'id': 5,
+      'name': 'VIP',
+      'status': 'occupied',
+      'session_id': 55,
+      'orders': [
+        {'id': 1, 'order_number': 'T-1'},
+      ],
+      'total': 40,
+    });
+    await repo.replaceBoard(1, [
+      {
+        'id': 5,
+        'name': 'VIP',
+        'status': 'occupied',
+        'session_id': 55,
+        'orders_count': 1,
+      },
+    ]);
+    final detail = await repo.getTable(1, 5);
+    expect(detail != null, isTrue);
+    expect(detail!['orders'], isA<List>());
+    expect((detail['orders'] as List), hasLength(1));
+    expect(detail['total'], 40);
   });
 }

@@ -7,6 +7,7 @@ import '../local_db/initial_sync_service.dart';
 import '../local_db/workspace_scope.dart';
 import '../repositories/catalog_repository.dart';
 import '../repositories/sync_queue_repository.dart';
+import '../repositories/tables_repository.dart';
 
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase.open();
@@ -24,6 +25,13 @@ final deviceIdProvider = FutureProvider<String>((ref) async {
 
 final catalogRepositoryProvider = Provider<CatalogRepository>((ref) {
   return CatalogRepository(ref.watch(appDatabaseProvider));
+});
+
+final tablesRepositoryProvider = Provider<TablesRepository>((ref) {
+  return TablesRepository(
+    ref.watch(appDatabaseProvider),
+    api: ref.watch(cashierApiProvider),
+  );
 });
 
 final syncQueueRepositoryProvider = Provider<SyncQueueRepository>((ref) {

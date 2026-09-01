@@ -136,8 +136,9 @@ class InitialSyncService {
 
       for (final table in tables) {
         final serverId = (table['id'] as num?)?.toInt();
-        final localId =
-            serverId != null ? 'table_$serverId' : 'table_${_uuid.v4()}';
+        final localId = serverId != null
+            ? 'w${workspaceId}_table_$serverId'
+            : 'w${workspaceId}_table_${_uuid.v4()}';
         await _db.into(_db.localTables).insertOnConflictUpdate(
               LocalTablesCompanion.insert(
                 localId: localId,
