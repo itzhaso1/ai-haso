@@ -8,6 +8,7 @@ import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/navigation/pos_shell_nav.dart';
 import '../../core/network/cashier_link.dart';
+import '../../core/local_db/local_db_providers.dart';
 import '../../core/offline/offline_store.dart';
 import '../../core/offline/sync_engine.dart';
 import '../../core/permissions/cashier_permissions.dart';
@@ -131,8 +132,19 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       }
       await OfflineStore.instance.cacheBootstrap(data);
       _applyBootstrapPayload(data, fromCache: false);
+      final workspaceId = ref.read(workspaceIdProvider);
+      if (workspaceId != null) {
+        try {
+          await ref.read(initialSyncServiceProvider).ensureReady(workspaceId);
+          ref.invalidate(localPosReadyProvider(workspaceId));
+          ref.invalidate(catalogItemsProvider);
+          ref.invalidate(categoriesProvider);
+        } catch (_) {
+          // Keep POS online path; offline readiness stays gated until sync succeeds.
+        }
+      }
       await ref.read(syncEngineProvider).flushPendingOrders(
-            workspaceId: ref.read(workspaceIdProvider),
+            workspaceId: workspaceId,
           );
       _refreshPending();
     } on ApiException catch (e) {

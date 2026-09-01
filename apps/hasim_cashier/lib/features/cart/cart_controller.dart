@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
+import '../../core/local_db/local_db_providers.dart';
 import '../../core/offline/offline_store.dart';
 
 @immutable
@@ -193,6 +194,12 @@ final catalogItemsProvider =
     FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final api = ref.watch(cashierApiProvider);
   final workspaceId = ref.watch(workspaceIdProvider);
+  // Offline-First v2: Local DB is the preferred catalog source.
+  if (workspaceId != null && workspaceId > 0) {
+    final local =
+        await ref.read(catalogRepositoryProvider).products(workspaceId);
+    if (local.isNotEmpty) return local;
+  }
   try {
     final data = await api.get('/catalog/items', query: {'per_page': 100});
     final items = data['items'];
@@ -215,6 +222,11 @@ final categoriesProvider =
     FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final api = ref.watch(cashierApiProvider);
   final workspaceId = ref.watch(workspaceIdProvider);
+  if (workspaceId != null && workspaceId > 0) {
+    final local =
+        await ref.read(catalogRepositoryProvider).categories(workspaceId);
+    if (local.isNotEmpty) return local;
+  }
   try {
     final data = await api.get('/catalog/categories');
     final categories = data['categories'];
