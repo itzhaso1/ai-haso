@@ -35,14 +35,15 @@ Primary CTA in cashier cart: **emerald-600** filled. Brand teal used for categor
 | Cart panel / ملخص الطلب | `_CartPanel` | MATCHED |
 | Order types طاولة/خارجي/توصيل | `_OrderTypeChip` | MATCHED |
 | Success modal optional print | `_SuccessOrderDialog` | MATCHED |
-| Tables board + details | `_TablesBoard` | MATCHED (core; ⋯ advanced actions PARTIAL) |
-| Running orders | `_OrdersList` | MATCHED |
-| Menu new-order toast | `_MenuOrdersFeed` + snackbar | MATCHED (chime via UI toast; audioplayers wiring PARTIAL) |
+| Tables board + details | `TablesBoard` | MATCHED |
+| Table actions (open/close/transfer/merge/split) | dialogs + ⋯ menu | MATCHED |
+| Running orders | `OrdersList` | MATCHED |
+| Menu new-order toast + sound | `MenuOrdersFeed` + `MenuSoundService` | MATCHED |
 | Login guest brand | `LoginScreen` | MATCHED |
 | Splash | `_Splash` | MATCHED |
 | Offline / pending sync | `ConnectionBanner` | MATCHED |
 | Kitchen / Items admin / Invoice pages | — | MISSING (not in this remake phase) |
-| Table show full actions UI | details + add order | PARTIAL (API transfer/merge/split exist; dialogs later) |
+| Native ESC/POS printing | success dialog option only | PARTIAL |
 
 ## RTL cashier home (web)
 

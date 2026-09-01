@@ -94,15 +94,17 @@ Widgets: `HasimPrimaryButton`, `HasimSecondaryButton`, `HasimTextField`, `HasimE
 
 ---
 
-## 11. Screens التي ما زالت مختلفة (PARTIAL)
+## PARTIAL / MISSING بعد جولة المطابقة الثانية
 
-| شاشة | السبب |
-|------|--------|
-| فواتير / مطبخ / عملاء كاملة | لم تُبنَ كشاشات مستقلة بعد (روابط API موجودة جزئيًا) |
-| حوارات نقل/دمج/تقسيم طاولة | الأزرار موجودة على الويب؛ Flutter يحتاج dialogs كاملة فوق الـ API الجاهز |
-| صوت طلبات المنيو من ملف | تبديل الإعدادات موجود؛ يحتاج `audioplayers` + asset |
-| فلاتر طلبات الويب المتقدمة | تبسيط للحالة الحالية |
-| طباعة أصلية ESC/POS | خيار بعد النجاح موجود؛ الطباعة الأصلية لاحقًا |
+| شاشة / ميزة | الحالة | ملاحظة |
+|-------------|--------|--------|
+| Table ⋯ + خيارات (فتح/إغلاق/نقل/دمج/تقسيم) | **MATCHED** | `TablesBoard` + dialogs على API الحالي |
+| Menu sound | **MATCHED** | `audioplayers` + `assets/sounds/menu_order.wav` + SharedPreferences |
+| Orders status Arabic + items | **MATCHED** | `OrdersList` + تحديث الحالة عبر API |
+| Menu order cards + حالات | **MATCHED** | New/Accepted/Preparing/Ready… |
+| فواتير / مطبخ / عملاء admin | **PARTIAL/MISSING** | خارج نطاق مطابقة كاشير أساسي؛ API فواتير موجود جزئيًا |
+| طباعة ESC/POS أصلية | **PARTIAL** | خيار بعد النجاح موجود؛ مسار طباعة أصلي لاحقًا |
+| Echo realtime | **PARTIAL** | polling 3s لطلبات المنيو |
 
 ---
 
