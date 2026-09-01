@@ -277,18 +277,6 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
                 ),
               ),
-              if (canManage)
-                HsOutlineButton(
-                  label: '+ تصنيف',
-                  onPressed: () => _editCategory(),
-                ),
-              if (canManage) ...[
-                const SizedBox(width: 8),
-                HsPrimaryButton(
-                  label: '+ صنف',
-                  onPressed: () => _editItem(),
-                ),
-              ],
             ],
           ),
           if (!canManage) ...[
@@ -296,6 +284,25 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
             const Text(
               'عرض فقط — تحتاج صلاحية menu.manage للتعديل.',
               style: TextStyle(fontSize: 12, color: HasimColors.muted),
+            ),
+          ] else ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: HsOutlineButton(
+                    label: '+ إضافة تصنيف',
+                    onPressed: () => _editCategory(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: HsPrimaryButton(
+                    label: '+ إضافة منتج',
+                    onPressed: () => _editItem(),
+                  ),
+                ),
+              ],
             ),
           ],
           const SizedBox(height: 12),

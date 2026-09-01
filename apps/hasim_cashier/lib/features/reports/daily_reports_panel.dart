@@ -18,6 +18,7 @@ class DailyReportsPanel extends ConsumerStatefulWidget {
 
 class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
   Map<String, dynamic>? _data;
+  Map<String, dynamic> _liveChannelStats = const {};
   var _loading = true;
   String? _error;
   late DateTime _date;
@@ -26,7 +27,10 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
   void initState() {
     super.initState();
     _date = DateTime.now();
-    _load();
+    // Defer to after first frame so providers are ready (avoids blank first paint).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _load();
+    });
   }
 
   String get _q => DateFormat('yyyy-MM-dd').format(_date);
@@ -38,31 +42,49 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
 
   Future<void> _load() async {
     if (!CashierPermissions.canViewReports(_perms)) {
+      if (!mounted) return;
       setState(() {
         _loading = false;
         _error = null;
         _data = null;
+        _liveChannelStats = const {};
       });
       return;
     }
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final data = await ref
-          .read(cashierApiProvider)
-          .get('/reports/daily', query: {'date': _q});
+      final api = ref.read(cashierApiProvider);
+      final data = await api.get('/reports/daily', query: {'date': _q});
+      Map<String, dynamic> live = const {};
+      try {
+        final channel = await api.get('/orders/channel-stats');
+        if (channel['stats'] is Map) {
+          live = Map<String, dynamic>.from(channel['stats'] as Map);
+        } else if (channel['channel_stats'] is Map) {
+          live = Map<String, dynamic>.from(channel['channel_stats'] as Map);
+        }
+      } catch (_) {
+        // Daily report still usable without live open-counts.
+      }
+      if (!mounted) return;
       setState(() {
         _data = data;
+        _liveChannelStats = live;
         _loading = false;
+        _error = null;
       });
     } on ApiException catch (e) {
+      if (!mounted) return;
       setState(() {
         _loading = false;
         _error = e.message;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _loading = false;
         _error = e.toString();
@@ -86,7 +108,21 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
         ),
       );
     }
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loading) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 12),
+            Text(
+              'جاري تحميل التقرير…',
+              style: TextStyle(color: HasimColors.muted),
+            ),
+          ],
+        ),
+      );
+    }
     if (_error != null) {
       return Padding(
         padding: const EdgeInsets.all(16),
@@ -99,12 +135,24 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
       );
     }
 
-    final summary = _data?['summary'] is Map
-        ? Map<String, dynamic>.from(_data!['summary'] as Map)
-        : <String, dynamic>{};
-    final channels = _data?['channel_stats'] is Map
-        ? Map<String, dynamic>.from(_data!['channel_stats'] as Map)
-        : <String, dynamic>{};
+    try {
+      return _buildReportBody();
+    } catch (e) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: HsEmpty(
+          title: 'تعذر عرض التقرير',
+          subtitle: e.toString(),
+          actionLabel: 'إعادة المحاولة',
+          onAction: _load,
+        ),
+      );
+    }
+  }
+
+  Widget _buildReportBody() {
+    final summary = _asMap(_data?['summary']);
+    final channels = _asMap(_data?['channel_stats']);
     final top = _asMaps(_data?['top_items']);
     final byType = _asMaps(_data?['quantity_by_type']);
     final payments = _asMaps(_data?['payment_methods']);
@@ -118,6 +166,7 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         children: [
           Row(
@@ -155,34 +204,48 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
             ],
           ),
           const SizedBox(height: 12),
+          const Text(
+            'إحصائيات الطلبات',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          _channelOverviewCards(
+            summary: summary,
+            channels: channels,
+            live: _liveChannelStats,
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'الملخص',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
               _metric(
-                ((summary['invoice_sales_total'] as num?) ??
-                        (summary['invoices_total'] as num?) ??
-                        0)
+                _num(summary['invoice_sales_total'] ?? summary['invoices_total'])
                     .toStringAsFixed(2),
                 'إجمالي المبيعات',
                 highlight: true,
               ),
-              _metric('${summary['invoices_count'] ?? 0}', 'فواتير'),
-              _metric('${summary['orders_count'] ?? 0}', 'طلبات'),
-              _metric('${summary['open_orders_count'] ?? 0}', 'مفتوحة'),
-              _metric('${summary['completed_orders_count'] ?? 0}', 'مكتملة'),
-              _metric('${summary['cancelled_orders_count'] ?? 0}', 'ملغاة'),
-              _metric('${summary['paid_orders_count'] ?? 0}', 'مدفوعة'),
-              _metric('${summary['unpaid_orders_count'] ?? 0}', 'غير مدفوعة'),
+              _metric('${_int(summary['invoices_count'])}', 'فواتير'),
+              _metric('${_int(summary['orders_count'])}', 'طلبات'),
+              _metric('${_int(summary['open_orders_count'])}', 'مفتوحة'),
+              _metric('${_int(summary['completed_orders_count'])}', 'مكتملة'),
+              _metric('${_int(summary['cancelled_orders_count'])}', 'ملغاة'),
+              _metric('${_int(summary['paid_orders_count'])}', 'مدفوعة'),
+              _metric('${_int(summary['unpaid_orders_count'])}', 'غير مدفوعة'),
               _metric(
-                ((summary['discount_total'] as num?) ?? 0).toStringAsFixed(2),
+                _num(summary['discount_total']).toStringAsFixed(2),
                 'خصومات',
               ),
               _metric(
-                ((summary['tax_total'] as num?) ?? 0).toStringAsFixed(2),
+                _num(summary['tax_total']).toStringAsFixed(2),
                 'ضرائب',
               ),
-              _metric('${summary['total_quantity'] ?? 0}', 'كميات'),
+              _metric('${_int(summary['total_quantity'])}', 'كميات'),
             ],
           ),
           const SizedBox(height: 16),
@@ -196,23 +259,17 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
             runSpacing: 8,
             children: [
               _metric(
-                '${summary['table_orders_count'] ?? channels['table'] ?? 0}',
+                '${_int(summary['table_orders_count'] ?? channels['table'])}',
                 'طاولات',
               ),
               _metric(
-                '${summary['takeaway_orders_count'] ?? channels['takeaway'] ?? 0}',
+                '${_int(summary['takeaway_orders_count'] ?? channels['takeaway'])}',
                 'خارجي',
               ),
               _metric(
-                '${summary['delivery_orders_count'] ?? channels['delivery'] ?? 0}',
+                '${_int(summary['delivery_orders_count'] ?? channels['delivery'])}',
                 'توصيل',
               ),
-              if (channels.isNotEmpty)
-                for (final entry in channels.entries)
-                  if (entry.key != 'table' &&
-                      entry.key != 'takeaway' &&
-                      entry.key != 'delivery')
-                    _metric('${entry.value}', '${entry.key}'),
             ],
           ),
           if (payments.isEmpty)
@@ -229,8 +286,8 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
             const SizedBox(height: 8),
             for (final row in payments)
               _rowCard(
-                '${row['method']}',
-                '× ${row['orders_count']}',
+                _str(row['method']),
+                '× ${_str(row['orders_count'])}',
               ),
           ],
           if (byType.isNotEmpty) ...[
@@ -242,8 +299,8 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
             const SizedBox(height: 8),
             for (final row in byType)
               _rowCard(
-                '${row['item_type']}',
-                '× ${row['quantity']} · ${((row['sales'] as num?) ?? 0).toStringAsFixed(2)}',
+                _str(row['item_type']),
+                '× ${_str(row['quantity'])} · ${_num(row['sales']).toStringAsFixed(2)}',
               ),
           ],
           const SizedBox(height: 16),
@@ -257,8 +314,8 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
           else
             for (final item in top)
               _rowCard(
-                '${item['product_name']}',
-                '× ${item['quantity']} · ${((item['sales'] as num?) ?? 0).toStringAsFixed(2)}',
+                _str(item['product_name']),
+                '× ${_str(item['quantity'])} · ${_num(item['sales']).toStringAsFixed(2)}',
               ),
           const SizedBox(height: 16),
           const Text(
@@ -271,8 +328,8 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
           else
             for (final row in byHour)
               _rowCard(
-                '${row['hour']}',
-                '${row['orders_count']} طلب · ${((row['sales_total'] as num?) ?? (row['total_sales'] as num?) ?? 0).toStringAsFixed(2)}',
+                _str(row['hour']),
+                '${_str(row['orders_count'])} طلب · ${_num(row['sales_total'] ?? row['total_sales']).toStringAsFixed(2)}',
               ),
           if (customers.isNotEmpty) ...[
             const SizedBox(height: 16),
@@ -283,8 +340,8 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
             const SizedBox(height: 8),
             for (final row in customers.take(15))
               _rowCard(
-                '${row['customer_name']} · ${row['customer_phone']}',
-                '${row['orders_count']} · ${((row['total_sales'] as num?) ?? 0).toStringAsFixed(2)}',
+                '${_str(row['customer_name'])} · ${_str(row['customer_phone'])}',
+                '${_str(row['orders_count'])} · ${_num(row['total_sales']).toStringAsFixed(2)}',
               ),
           ],
           const SizedBox(height: 16),
@@ -298,8 +355,8 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
           else
             for (final inv in invoices)
               _rowCard(
-                '${inv['invoice_number']} · ${inv['table']?['name'] ?? '—'}',
-                ((inv['total_amount'] as num?) ?? 0).toStringAsFixed(2),
+                '${_str(inv['invoice_number'])} · ${_nestedName(inv['table'])}',
+                _num(inv['total_amount']).toStringAsFixed(2),
                 highlight: true,
               ),
           const SizedBox(height: 16),
@@ -313,8 +370,8 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
           else
             for (final order in closedOrders.take(30))
               _rowCard(
-                '#${order['order_number'] ?? order['id']} · ${order['table']?['name'] ?? order['order_type'] ?? '—'}',
-                ((order['total_amount'] as num?) ?? 0).toStringAsFixed(2),
+                '#${_str(order['order_number'] ?? order['id'])} · ${_nestedName(order['table'], fallback: _str(order['order_type']))}',
+                _num(order['total_amount']).toStringAsFixed(2),
               ),
           const SizedBox(height: 16),
           const Text(
@@ -327,8 +384,8 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
           else
             for (final order in allOrders.take(40))
               _rowCard(
-                '#${order['order_number'] ?? order['id']} · ${order['pos_status'] ?? '—'} · ${order['placed_at'] ?? ''}',
-                ((order['total_amount'] as num?) ?? 0).toStringAsFixed(2),
+                '#${_str(order['order_number'] ?? order['id'])} · ${_str(order['pos_status'])} · ${_str(order['placed_at'])}',
+                _num(order['total_amount']).toStringAsFixed(2),
               ),
           const SizedBox(height: 16),
           const Text(
@@ -341,12 +398,118 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
           else
             for (final log in recentOps)
               _rowCard(
-                '${log['action'] ?? '—'} · ${log['entity_type'] ?? ''} #${log['entity_id'] ?? ''}',
-                '${log['user']?['name'] ?? 'النظام'} · ${log['occurred_at'] ?? ''}',
+                '${_str(log['action'])} · ${_str(log['entity_type'])} #${_str(log['entity_id'])}',
+                '${_nestedName(log['user'], fallback: 'النظام')} · ${_str(log['occurred_at'])}',
               ),
+          const SizedBox(height: 24),
         ],
       ),
     );
+  }
+
+  Widget _channelOverviewCards({
+    required Map<String, dynamic> summary,
+    required Map<String, dynamic> channels,
+    required Map<String, dynamic> live,
+  }) {
+    final cards = <(String, int, int, bool)>[
+      (
+        'اليوم · داخل المطعم (طاولة)',
+        _int(summary['table_orders_count'] ?? channels['table'] ?? live['table']),
+        _int(live['open_table']),
+        false,
+      ),
+      (
+        'اليوم · طلب خارجي',
+        _int(summary['takeaway_orders_count'] ??
+            channels['takeaway'] ??
+            live['takeaway']),
+        _int(live['open_takeaway']),
+        false,
+      ),
+      (
+        'اليوم · توصيل',
+        _int(summary['delivery_orders_count'] ??
+            channels['delivery'] ??
+            live['delivery']),
+        _int(live['open_delivery']),
+        false,
+      ),
+      (
+        'إجمالي طلبات اليوم',
+        _int(summary['orders_count'] ?? live['total']),
+        _int(live['open_total'] ?? summary['open_orders_count']),
+        true,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, c) {
+        final cols = c.maxWidth >= 900
+            ? 4
+            : c.maxWidth >= 520
+                ? 2
+                : 1;
+        return GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: cols,
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          childAspectRatio: 2.4,
+          children: [
+            for (final card in cards)
+              HsCard(
+                color: card.$4 ? const Color(0xFFECFDF5) : HasimColors.surface,
+                borderColor:
+                    card.$4 ? const Color(0xFFA7F3D0) : HasimColors.border,
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      card.$1,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: card.$4
+                            ? HasimColors.ctaDark
+                            : HasimColors.muted,
+                      ),
+                    ),
+                    Text(
+                      '${card.$2}',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: card.$4
+                            ? const Color(0xFF065F46)
+                            : HasimColors.ink,
+                      ),
+                    ),
+                    Text(
+                      'مفتوحة الآن: ${card.$3}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: card.$4
+                            ? HasimColors.ctaDark
+                            : HasimColors.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Map<String, dynamic> _asMap(dynamic raw) {
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return const {};
   }
 
   List<Map<String, dynamic>> _asMaps(dynamic raw) {
@@ -355,6 +518,28 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
         .whereType<Map>()
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
+  }
+
+  num _num(dynamic value) {
+    if (value is num) return value;
+    if (value is String) return num.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  int _int(dynamic value) => _num(value).toInt();
+
+  String _str(dynamic value) {
+    if (value == null) return '—';
+    final s = value.toString().trim();
+    return s.isEmpty ? '—' : s;
+  }
+
+  String _nestedName(dynamic value, {String fallback = '—'}) {
+    if (value is Map) {
+      final name = value['name'];
+      if (name != null && '$name'.trim().isNotEmpty) return '$name';
+    }
+    return fallback;
   }
 
   Widget _metric(String value, String label, {bool highlight = false}) {

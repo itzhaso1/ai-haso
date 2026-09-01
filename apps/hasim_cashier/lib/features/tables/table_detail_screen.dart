@@ -781,8 +781,9 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
               ? Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SizedBox(
-                      width: 340,
+                    // RTL: first child = right = table info (larger share).
+                    Expanded(
+                      flex: 5,
                       child: ListView(
                         padding: const EdgeInsets.all(12),
                         children: [
@@ -793,7 +794,11 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
                       ),
                     ),
                     const VerticalDivider(width: 1),
-                    Expanded(child: _ordersPanel()),
+                    // Orders panel — smaller share.
+                    Expanded(
+                      flex: 4,
+                      child: _ordersPanel(),
+                    ),
                   ],
                 )
               : ListView(
@@ -804,7 +809,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
                     _actionsCard(),
                     const SizedBox(height: 10),
                     SizedBox(
-                      height: MediaQuery.sizeOf(context).height * 0.55,
+                      height: MediaQuery.sizeOf(context).height * 0.45,
                       child: _ordersPanel(),
                     ),
                   ],
@@ -1007,25 +1012,44 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
             ),
           ),
-          if (!_hasSession)
-            _action('فتح جلسة', Icons.lock_open_outlined, _openSession)
-          else ...[
-            _action('إضافة طلب', Icons.add_circle_outline, _addOrder),
-            _action('إضافة ملاحظة', Icons.sticky_note_2_outlined, _editNote),
-            _action('خصم', Icons.percent, _applyDiscount),
+          if (!_hasSession) ...[
+            _action('فتح جلسة', Icons.lock_open_outlined, _openSession),
             _action('QR المنيو', Icons.qr_code_2_outlined, _showQr),
-            _action(
-              'نقل الطاولة',
-              Icons.swap_horiz,
-              () => _transferOrMerge(merge: false),
-            ),
-            _action(
-              'دمج طاولة',
-              Icons.merge_type,
-              () => _transferOrMerge(merge: true),
-            ),
-            _action('تقسيم الحساب', Icons.call_split, _splitBill),
+          ] else ...[
+            _action('إضافة طلب', Icons.add_circle_outline, _addOrder),
             _action('إغلاق الطاولة', Icons.lock_outline, _closeSession),
+            Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                initiallyExpanded: false,
+                tilePadding: const EdgeInsets.symmetric(horizontal: 8),
+                childrenPadding: EdgeInsets.zero,
+                title: const Text(
+                  'المزيد',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                ),
+                children: [
+                  _action(
+                    'إضافة ملاحظة',
+                    Icons.sticky_note_2_outlined,
+                    _editNote,
+                  ),
+                  _action('خصم', Icons.percent, _applyDiscount),
+                  _action('QR المنيو', Icons.qr_code_2_outlined, _showQr),
+                  _action(
+                    'نقل الطاولة',
+                    Icons.swap_horiz,
+                    () => _transferOrMerge(merge: false),
+                  ),
+                  _action(
+                    'دمج طاولة',
+                    Icons.merge_type,
+                    () => _transferOrMerge(merge: true),
+                  ),
+                  _action('تقسيم الحساب', Icons.call_split, _splitBill),
+                ],
+              ),
+            ),
             _action(
               'إلغاء الطاولة',
               Icons.delete_outline,
@@ -1033,8 +1057,6 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
               danger: true,
             ),
           ],
-          if (!_hasSession)
-            _action('QR المنيو', Icons.qr_code_2_outlined, _showQr),
         ],
       ),
     );

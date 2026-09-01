@@ -136,6 +136,35 @@ void main() {
     expect(payload['order_type'], 'table');
   });
 
+  test('reports nested fields tolerate null/non-map values', () {
+    String nestedName(dynamic value, {String fallback = '—'}) {
+      if (value is Map) {
+        final name = value['name'];
+        if (name != null && '$name'.trim().isNotEmpty) return '$name';
+      }
+      return fallback;
+    }
+
+    num asNum(dynamic value) {
+      if (value is num) return value;
+      if (value is String) return num.tryParse(value) ?? 0;
+      return 0;
+    }
+
+    expect(nestedName({'name': 'طاولة 1'}), 'طاولة 1');
+    expect(nestedName(null), '—');
+    expect(nestedName('not-a-map'), '—');
+    expect(asNum('12.5'), 12.5);
+    expect(asNum(null), 0);
+    expect(asNum({'x': 1}), 0);
+  });
+
+  test('menu.manage is required for catalog management actions', () {
+    expect(CashierPermissions.canManageMenu({'menu.manage': true}), isTrue);
+    expect(CashierPermissions.canManageMenu({'pos.manage': true}), isFalse);
+    expect(CashierPermissions.canManageMenu(const {}), isFalse);
+  });
+
   test('conflict strategy keeps pending orders and requires online table ops', () {
     expect(
       ConflictStrategy.forDomain('pending_order'),

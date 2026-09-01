@@ -55,7 +55,6 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
   var _selectedCategoryId = 0;
   final _search = TextEditingController();
   Map<String, dynamic>? _bootstrap;
-  Map<String, dynamic> _channelStats = const {};
   var _online = true;
   var _pendingSync = 0;
   String? _bootstrapError;
@@ -130,9 +129,8 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       }
       setState(() {
         _bootstrap = data;
-        _channelStats = data['channel_stats'] is Map
-            ? Map<String, dynamic>.from(data['channel_stats'] as Map)
-            : {};
+        // channel_stats remain available via Reports (/orders/channel-stats
+        // + /reports/daily) — not shown on the operational cashier home.
       });
       if (data['permissions'] is Map) {
         ref.read(cashierPermissionsProvider.notifier).state =
@@ -233,7 +231,6 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
                         isTablet: isTablet,
                         search: _search,
                         selectedCategoryId: _selectedCategoryId,
-                        channelStats: _channelStats,
                         onCategory: (id) =>
                             setState(() => _selectedCategoryId = id),
                         onSearchChanged: () => setState(() {}),
@@ -628,92 +625,12 @@ class _TopNav extends ConsumerWidget {
   }
 }
 
-class _ChannelStats extends StatelessWidget {
-  const _ChannelStats({required this.stats});
-
-  final Map<String, dynamic> stats;
-
-  int _n(String key) => (stats[key] as num?)?.toInt() ?? 0;
-
-  @override
-  Widget build(BuildContext context) {
-    final cards = [
-      ('اليوم · داخل المطعم (طاولة)', _n('table'), _n('open_table'), false),
-      ('اليوم · طلب خارجي', _n('takeaway'), _n('open_takeaway'), false),
-      ('اليوم · توصيل', _n('delivery'), _n('open_delivery'), false),
-      ('إجمالي طلبات اليوم', _n('total'), _n('open_total'), true),
-    ];
-    return LayoutBuilder(
-      builder: (context, c) {
-        final cols = c.maxWidth >= 900
-            ? 4
-            : c.maxWidth >= 520
-                ? 2
-                : 1;
-        return GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: cols,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-          childAspectRatio: 2.6,
-          children: [
-            for (final card in cards)
-              HsCard(
-                color: card.$4 ? const Color(0xFFECFDF5) : HasimColors.surface,
-                borderColor:
-                    card.$4 ? const Color(0xFFA7F3D0) : HasimColors.border,
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      card.$1,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: card.$4
-                            ? HasimColors.ctaDark
-                            : HasimColors.muted,
-                      ),
-                    ),
-                    Text(
-                      '${card.$2}',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: card.$4
-                            ? const Color(0xFF065F46)
-                            : HasimColors.ink,
-                      ),
-                    ),
-                    Text(
-                      'مفتوحة الآن: ${card.$3}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: card.$4
-                            ? HasimColors.ctaDark
-                            : HasimColors.muted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-}
-
 class _CashierHome extends ConsumerWidget {
   const _CashierHome({
     required this.isDesktop,
     required this.isTablet,
     required this.search,
     required this.selectedCategoryId,
-    required this.channelStats,
     required this.onCategory,
     required this.onSearchChanged,
     required this.onCheckout,
@@ -724,7 +641,6 @@ class _CashierHome extends ConsumerWidget {
   final bool isTablet;
   final TextEditingController search;
   final int selectedCategoryId;
-  final Map<String, dynamic> channelStats;
   final ValueChanged<int> onCategory;
   final VoidCallback onSearchChanged;
   final Future<void> Function() onCheckout;
@@ -738,8 +654,6 @@ class _CashierHome extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(HasimSpacing.md),
       children: [
-        _ChannelStats(stats: channelStats),
-        const SizedBox(height: HasimSpacing.md),
         if (isDesktop || isTablet)
           SizedBox(
             height: MediaQuery.sizeOf(context).height - 220,
