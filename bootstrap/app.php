@@ -23,10 +23,8 @@ return Application::configure(basePath: dirname(__DIR__))
                 ->prefix('platform')
                 ->group(base_path('routes/platform.php'));
 
-            Route::middleware('api')
-                ->prefix('api/mobile/v1')
-                ->name('mobile.v1.')
-                ->group(base_path('routes/mobile.php'));
+            // Mobile API v1 is loaded from routes/api.php (prefix: api/mobile/v1)
+            // so it is always registered with the primary api route file.
         },
     )
     ->withBroadcasting(

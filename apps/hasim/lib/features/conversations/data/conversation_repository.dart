@@ -76,7 +76,7 @@ class ConversationRepository {
     final headers = {'Idempotency-Key': key};
     try {
       final res = await _api.raw.post<Map<String, dynamic>>(
-        '/conversations/$conversationId/messages',
+        'conversations/$conversationId/messages',
         data: {
           'content': content,
           'message_type': 'text',

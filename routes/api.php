@@ -74,3 +74,14 @@ Route::middleware(['auth:sanctum', 'workspace.resolve', 'workspace.member'])
 
 Route::post('/webhooks/payments/{provider}', [PaymentWebhookController::class, 'handle'])
     ->middleware('throttle:120,1');
+
+/*
+|--------------------------------------------------------------------------
+| Hasim Mobile API v1
+|--------------------------------------------------------------------------
+| Final paths: /api/mobile/v1/...
+| (Laravel already prefixes this file with /api + api middleware.)
+*/
+Route::prefix('mobile/v1')
+    ->name('mobile.v1.')
+    ->group(base_path('routes/mobile.php'));

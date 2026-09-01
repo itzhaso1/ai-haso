@@ -17,11 +17,14 @@ class ApiClient {
     Dio? dio,
   })  : _secureStore = secureStore,
         _prefsStore = prefsStore {
-    final base = prefsStore.apiBaseOverride ?? AppConfig.apiBase;
+    final base = AppConfig.normalizeHostBase(
+      prefsStore.apiBaseOverride ?? AppConfig.apiBase,
+    );
     _dio = dio ??
         Dio(
           BaseOptions(
-            baseUrl: '$base/api/mobile/v1',
+            // Trailing slash required: Dio must keep /api/mobile/v1/ as path prefix.
+            baseUrl: '$base/api/mobile/v1/',
             connectTimeout: const Duration(seconds: 20),
             receiveTimeout: const Duration(seconds: 30),
             headers: {
@@ -57,8 +60,18 @@ class ApiClient {
 
   Dio get raw => _dio;
 
+  /// Keep paths relative to `baseUrl` (`…/api/mobile/v1/`). Leading `/` would drop the prefix in some URI resolvers.
+  String _rel(String path) {
+    var p = path.trim();
+    while (p.startsWith('/')) {
+      p = p.substring(1);
+    }
+    return p;
+  }
+
   void updateBaseUrl(String apiBase) {
-    _dio.options.baseUrl = '$apiBase/api/mobile/v1';
+    final host = AppConfig.normalizeHostBase(apiBase);
+    _dio.options.baseUrl = '$host/api/mobile/v1/';
   }
 
   Future<ApiResponse<T>> get<T>(
@@ -67,7 +80,7 @@ class ApiClient {
     T Function(dynamic raw)? mapData,
   }) async {
     try {
-      final res = await _dio.get<Map<String, dynamic>>(path, queryParameters: query);
+      final res = await _dio.get<Map<String, dynamic>>(_rel(path), queryParameters: query);
       return ApiResponse.fromJson(res.data ?? {}, mapData);
     } on DioException catch (e) {
       throw _mapDio(e);
@@ -87,7 +100,7 @@ class ApiClient {
         headers['Idempotency-Key'] = newIdempotencyKey();
       }
       final res = await _dio.post<Map<String, dynamic>>(
-        path,
+        _rel(path),
         data: body,
         queryParameters: query,
         options: Options(headers: headers),
@@ -104,7 +117,7 @@ class ApiClient {
     T Function(dynamic raw)? mapData,
   }) async {
     try {
-      final res = await _dio.put<Map<String, dynamic>>(path, data: body);
+      final res = await _dio.put<Map<String, dynamic>>(_rel(path), data: body);
       return ApiResponse.fromJson(res.data ?? {}, mapData);
     } on DioException catch (e) {
       throw _mapDio(e);
@@ -116,7 +129,7 @@ class ApiClient {
     T Function(dynamic raw)? mapData,
   }) async {
     try {
-      final res = await _dio.delete<Map<String, dynamic>>(path);
+      final res = await _dio.delete<Map<String, dynamic>>(_rel(path));
       return ApiResponse.fromJson(res.data ?? {}, mapData);
     } on DioException catch (e) {
       throw _mapDio(e);
@@ -135,7 +148,7 @@ class ApiClient {
         headers['Idempotency-Key'] = newIdempotencyKey();
       }
       final res = await _dio.post<Map<String, dynamic>>(
-        path,
+        _rel(path),
         data: formData,
         options: Options(headers: headers, contentType: 'multipart/form-data'),
       );
