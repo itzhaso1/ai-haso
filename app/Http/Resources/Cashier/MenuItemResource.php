@@ -31,6 +31,7 @@ class MenuItemResource extends JsonResource
             'currency' => $this->currency ?: 'SAR',
             'image_url' => $imageUrl,
             'is_active' => (bool) $this->is_active,
+            'availability' => $this->is_active ? 'available' : 'unavailable',
             'sort_order' => (int) $this->sort_order,
             'category' => $this->whenLoaded('category', fn () => $this->category ? [
                 'id' => $this->category->id,

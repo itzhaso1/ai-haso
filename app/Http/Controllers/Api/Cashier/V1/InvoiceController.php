@@ -69,6 +69,13 @@ class InvoiceController extends CashierController
             && $invoice->orders->isNotEmpty()
             && ! $invoice->orders->contains(fn ($order) => $order->payment_status === 'paid');
 
+        $taxAmount = (float) $invoice->orders->sum('tax_amount');
+        $paymentMethods = $invoice->orders
+            ->map(fn ($order) => data_get($order->metadata, 'payment_method'))
+            ->filter()
+            ->unique()
+            ->values();
+
         return $this->ok([
             'invoice' => [
                 'id' => $invoice->id,
@@ -77,11 +84,17 @@ class InvoiceController extends CashierController
                 'currency' => $invoice->currency,
                 'subtotal' => (float) $invoice->subtotal,
                 'discount_amount' => (float) $invoice->discount_amount,
+                'tax_amount' => $taxAmount,
                 'total_amount' => (float) $invoice->total_amount,
+                'payment_method' => $paymentMethods->count() === 1
+                    ? $paymentMethods->first()
+                    : ($paymentMethods->isEmpty() ? null : $paymentMethods->implode(', ')),
                 'closed_at' => optional($invoice->closed_at)?->toIso8601String(),
                 'notes' => data_get($invoice->metadata, 'notes'),
                 'editable' => $editable,
+                'store_name' => $workspace->name,
                 'table' => $invoice->table ? ['id' => $invoice->table->id, 'name' => $invoice->table->name] : null,
+                'closer' => $invoice->closer ? ['id' => $invoice->closer->id, 'name' => $invoice->closer->name] : null,
                 'items' => $invoice->items->map(fn ($item) => [
                     'id' => $item->id,
                     'item_name' => $item->item_name,

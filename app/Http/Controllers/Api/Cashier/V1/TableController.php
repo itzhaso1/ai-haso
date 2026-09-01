@@ -14,6 +14,7 @@ use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use RuntimeException;
 
@@ -56,6 +57,35 @@ class TableController extends CashierController
             'tables' => $tables->map(fn (DiningTable $table) => $this->tablePayload($table, $workspace))->values(),
             'generated_at' => now()->toIso8601String(),
         ]);
+    }
+
+    public function store(Request $request): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $this->authorizeCashier($request, $workspace, 'tables.manage');
+        $this->ensurePos($workspace);
+
+        $validated = $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('dining_tables', 'name')->where(fn ($query) => $query->where('workspace_id', $workspace->id)),
+            ],
+        ]);
+
+        $table = DiningTable::query()->create([
+            'name' => $validated['name'],
+            'status' => 'available',
+            'qr_token' => Str::random(48),
+        ]);
+
+        return $this->ok([
+            'id' => $table->id,
+            'name' => $table->name,
+            'status' => $table->status,
+            'qr_token' => $table->qr_token,
+        ], message: 'تم إنشاء الطاولة بنجاح.', status: 201);
     }
 
     public function show(Request $request, DiningTable $table): JsonResponse
@@ -223,6 +253,25 @@ class TableController extends CashierController
         return $this->ok(message: 'تم تطبيق الخصم على الجلسة.');
     }
 
+    public function updateNote(Request $request, DiningTable $table, TableSession $session): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $this->authorizeCashier($request, $workspace);
+        $this->ensureSession($table, $session);
+
+        $validated = $request->validate([
+            'notes' => ['required', 'string', 'max:2000'],
+        ]);
+
+        try {
+            $this->posOrderService->applySessionNote($session, $validated['notes']);
+        } catch (RuntimeException $exception) {
+            return $this->fail($exception->getMessage(), 422);
+        }
+
+        return $this->ok(message: 'تم حفظ الملاحظة.');
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -231,8 +280,10 @@ class TableController extends CashierController
         $openSession = $table->sessions->first();
         $orders = $openSession?->orders ?? collect();
         $lines = $orders->flatMap(fn ($order) => $order->items->map(fn ($item) => [
+            'id' => $item->id,
             'name' => $item->product_name ?? 'صنف',
             'quantity' => (int) $item->quantity,
+            'unit_price' => (float) ($item->unit_price ?? 0),
             'total' => (float) ($item->total_amount ?? 0),
         ]));
 
@@ -241,10 +292,17 @@ class TableController extends CashierController
             'name' => $table->name,
             'status' => $table->status,
             'session_id' => $openSession?->id,
+            'session_status' => $openSession?->status,
             'opened_at' => optional($openSession?->opened_at)?->toIso8601String(),
             'customer_name' => optional($orders->first()?->customer)->name,
+            'open_orders_count' => $orders->count(),
+            'items_count' => (int) $lines->sum('quantity'),
             'lines' => $lines->values(),
             'total' => (float) $lines->sum('total'),
+            'notes' => optional(
+                $orders->first(fn ($order) => filled($order->notes))
+            )?->notes
+                ?? data_get($orders->first()?->metadata, 'session_note'),
             'menu_url' => url('/menu/'.$workspace->slug.'/table/'.$table->qr_token),
             'qr_token' => $table->qr_token,
         ];

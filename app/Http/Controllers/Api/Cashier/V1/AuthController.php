@@ -176,6 +176,13 @@ class AuthController extends CashierController
             'user' => new UserResource($user),
             'workspace' => $workspace ? new WorkspaceResource($workspace) : null,
             'workspaces' => WorkspaceResource::collection($workspaces),
+            'permissions' => $workspace ? $this->permissionMap($user, $workspace) : [],
+            'pos_enabled' => $workspace
+                ? $this->featureAccessService->workspaceHasFeature($workspace, 'pos')
+                : false,
+            'entitlements' => $workspace
+                ? $this->featureAccessService->entitlementsSnapshot($workspace)
+                : null,
         ]);
     }
 

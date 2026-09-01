@@ -22,6 +22,7 @@ import '../kitchen/kitchen_board.dart';
 import '../offline/sync_queue_panel.dart';
 import '../orders/menu_orders_feed.dart';
 import '../orders/orders_list.dart';
+import '../reports/daily_reports_panel.dart';
 import '../settings/settings_panel.dart';
 import '../tables/tables_board.dart';
 
@@ -654,7 +655,7 @@ class _CashierHome extends ConsumerWidget {
                 // RTL: first = RIGHT = categories
                 if (isDesktop)
                   SizedBox(
-                    width: 200,
+                    width: 180,
                     child: HsCard(
                       padding: const EdgeInsets.all(8),
                       child: categories.when(
@@ -697,10 +698,11 @@ class _CashierHome extends ConsumerWidget {
                       ),
                     ),
                   ),
-                if (isDesktop) const SizedBox(width: 12),
+                if (isDesktop) const SizedBox(width: 10),
                 Expanded(
                   flex: 7,
                   child: HsCard(
+                    padding: const EdgeInsets.all(10),
                     child: _ProductsPanel(
                       search: search,
                       selectedCategoryId: selectedCategoryId,
@@ -710,9 +712,9 @@ class _CashierHome extends ConsumerWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 SizedBox(
-                  width: isDesktop ? 300 : 280,
+                  width: isDesktop ? 280 : 260,
                   child: _CartPanel(onCheckout: onCheckout),
                 ),
               ],
@@ -835,11 +837,11 @@ class _ProductsPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final items = ref.watch(catalogItemsProvider);
     final width = MediaQuery.sizeOf(context).width;
-    final crossAxis = width >= 1400
+    final crossAxis = width >= 1500
         ? 5
-        : width >= 1100
+        : width >= 1200
             ? 4
-            : width >= 700
+            : width >= 900
                 ? 3
                 : 2;
 
@@ -926,9 +928,9 @@ class _ProductsPanel extends ConsumerWidget {
     return GridView.builder(
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: crossAxis,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
-        childAspectRatio: 0.78,
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        childAspectRatio: 0.72,
       ),
       itemCount: items.length,
       itemBuilder: (context, index) {
@@ -936,11 +938,15 @@ class _ProductsPanel extends ConsumerWidget {
         final id = (item['id'] as num?)?.toInt() ?? 0;
         final name = (item['name'] as String?) ?? '';
         final price = (item['price'] as num?)?.toDouble() ?? 0;
+        final available = item['is_active'] != false &&
+            item['availability'] != 'unavailable';
         return ProductCard(
           name: name,
           priceLabel: price.toStringAsFixed(2),
           currency: (item['currency'] as String?) ?? 'SAR',
           imageUrl: item['image_url'] as String?,
+          sku: item['sku'] as String?,
+          available: available,
           onAdd: () {
             ref.read(cartControllerProvider.notifier).addItem(
                   menuItemId: id,

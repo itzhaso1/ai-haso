@@ -649,7 +649,6 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
     final selected = _selected?['id'] == table['id'];
     final occupied = table['status'] == 'occupied';
     final menuOpen = _openMenuId == table['id'];
-    final lines = table['lines'] is List ? (table['lines'] as List).length : 0;
     final total = ((table['total'] as num?) ?? 0).toDouble();
     final hasSession = table['session_id'] != null;
 
@@ -692,10 +691,10 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
                     ),
                   ),
                   const Spacer(),
-                  Text(
-                    'الطلبات النشطة: $lines',
-                    style: const TextStyle(fontSize: 11, color: HasimColors.muted),
-                  ),
+                    Text(
+                      'الطلبات النشطة: ${table['open_orders_count'] ?? (table['lines'] is List ? (table['lines'] as List).length : 0)}',
+                      style: const TextStyle(fontSize: 11, color: HasimColors.muted),
+                    ),
                   if (total > 0)
                     Text(
                       'الإجمالي: ${total.toStringAsFixed(2)}',

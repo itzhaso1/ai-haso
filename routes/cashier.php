@@ -5,8 +5,10 @@ use App\Http\Controllers\Api\Cashier\V1\BootstrapController;
 use App\Http\Controllers\Api\Cashier\V1\CatalogController;
 use App\Http\Controllers\Api\Cashier\V1\CustomerController;
 use App\Http\Controllers\Api\Cashier\V1\InvoiceController;
+use App\Http\Controllers\Api\Cashier\V1\KitchenController;
 use App\Http\Controllers\Api\Cashier\V1\OrderController;
 use App\Http\Controllers\Api\Cashier\V1\PlanController;
+use App\Http\Controllers\Api\Cashier\V1\ReportController;
 use App\Http\Controllers\Api\Cashier\V1\ReturnController;
 use App\Http\Controllers\Api\Cashier\V1\TableController;
 use App\Http\Controllers\Api\Cashier\V1\WorkspaceController;
@@ -50,9 +52,13 @@ Route::middleware([
 
     Route::get('/catalog/categories', [CatalogController::class, 'categories']);
     Route::get('/catalog/items', [CatalogController::class, 'items']);
+    Route::get('/catalog/items/{item}', [CatalogController::class, 'show']);
 
     Route::get('/customers', [CustomerController::class, 'index']);
     Route::post('/customers', [CustomerController::class, 'store'])->middleware('throttle:mobile-write');
+
+    Route::get('/kitchen/orders', [KitchenController::class, 'index']);
+    Route::get('/reports/daily', [ReportController::class, 'daily']);
 
     Route::get('/orders', [OrderController::class, 'index']);
     Route::post('/orders', [OrderController::class, 'store'])->middleware('throttle:mobile-write');
@@ -65,6 +71,7 @@ Route::middleware([
     Route::post('/returns/{return}/refund', [ReturnController::class, 'markRefunded'])->middleware('throttle:mobile-write');
 
     Route::get('/tables', [TableController::class, 'index']);
+    Route::post('/tables', [TableController::class, 'store'])->middleware('throttle:mobile-write');
     Route::get('/tables/{table}', [TableController::class, 'show']);
     Route::post('/tables/{table}/sessions/open', [TableController::class, 'openSession'])->middleware('throttle:mobile-write');
     Route::post('/tables/{table}/sessions/{session}/close', [TableController::class, 'closeSession'])->middleware('throttle:mobile-write');
@@ -73,6 +80,7 @@ Route::middleware([
     Route::post('/tables/{table}/sessions/{session}/merge', [TableController::class, 'merge'])->middleware('throttle:mobile-write');
     Route::post('/tables/{table}/sessions/{session}/split', [TableController::class, 'split'])->middleware('throttle:mobile-write');
     Route::post('/tables/{table}/sessions/{session}/discount', [TableController::class, 'applyDiscount'])->middleware('throttle:mobile-write');
+    Route::post('/tables/{table}/sessions/{session}/note', [TableController::class, 'updateNote'])->middleware('throttle:mobile-write');
 
     Route::get('/invoices', [InvoiceController::class, 'index']);
     Route::get('/invoices/{invoice}', [InvoiceController::class, 'show']);

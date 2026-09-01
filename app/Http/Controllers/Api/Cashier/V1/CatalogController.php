@@ -100,6 +100,19 @@ class CatalogController extends CashierController
         ]);
     }
 
+    public function show(Request $request, PosMenuItem $item): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $this->authorizeCashier($request, $workspace);
+        $this->ensurePos($workspace);
+
+        $item->load(['category:id,name']);
+
+        return $this->ok([
+            'item' => new MenuItemResource($item),
+        ]);
+    }
+
     private function ensurePos(\App\Models\Workspace $workspace): void
     {
         if (! $this->featureAccessService->workspaceHasFeature($workspace, 'pos')) {

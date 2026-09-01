@@ -42,18 +42,11 @@ class _KitchenBoardState extends ConsumerState<KitchenBoard> {
       _error = null;
     });
     try {
-      final data = await ref
-          .read(cashierApiProvider)
-          .get('/orders', query: {'status': 'running'});
+      final data = await ref.read(cashierApiProvider).get('/kitchen/orders');
       final list = <Map<String, dynamic>>[];
       if (data['orders'] is List) {
         for (final item in data['orders'] as List) {
-          if (item is! Map) continue;
-          final map = Map<String, dynamic>.from(item);
-          // Kitchen focuses on table-linked prep orders.
-          if (map['dining_table_id'] != null || map['table'] != null) {
-            list.add(map);
-          }
+          if (item is Map) list.add(Map<String, dynamic>.from(item));
         }
       }
       setState(() {

@@ -90,6 +90,50 @@ class CashierApiV1Test extends TestCase
         $this->assertSame(1, Order::query()->where('client_reference', $clientRef)->count());
     }
 
+    public function test_cashier_kitchen_reports_table_store_and_me_permissions(): void
+    {
+        $this->seed(FoundationSeeder::class);
+        [$owner, $workspace] = $this->createWorkspaceOwner('store');
+
+        $login = $this->postJson('/api/cashier/v1/auth/login', [
+            'email_or_phone' => $owner->email,
+            'password' => 'password',
+            'device_name' => 'كاشير حاسم test',
+            'device_type' => 'cashier',
+        ])->assertOk();
+
+        $token = $login->json('data.token');
+        $headers = ['X-Workspace-Id' => (string) $workspace->id];
+
+        $me = $this->withToken($token)
+            ->withHeaders($headers)
+            ->getJson('/api/cashier/v1/auth/me')
+            ->assertOk()
+            ->json('data');
+
+        $permissions = $me['permissions'] ?? [];
+        $this->assertTrue((bool) ($permissions['orders.manage'] ?? false));
+        $this->assertTrue((bool) ($me['pos_enabled'] ?? false));
+
+        $this->withToken($token)
+            ->withHeaders($headers)
+            ->getJson('/api/cashier/v1/kitchen/orders')
+            ->assertOk()
+            ->assertJsonStructure(['data' => ['orders', 'statuses']]);
+
+        $this->withToken($token)
+            ->withHeaders($headers)
+            ->getJson('/api/cashier/v1/reports/daily')
+            ->assertOk()
+            ->assertJsonStructure(['data' => ['summary', 'top_items', 'date']]);
+
+        $this->withToken($token)
+            ->withHeaders($headers)
+            ->postJson('/api/cashier/v1/tables', ['name' => 'طاولة اختبار API'])
+            ->assertCreated()
+            ->assertJsonPath('data.name', 'طاولة اختبار API');
+    }
+
     public function test_cashier_rejects_workspace_without_pos_feature(): void
     {
         $this->seed(FoundationSeeder::class);
