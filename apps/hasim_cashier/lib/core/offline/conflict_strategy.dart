@@ -34,7 +34,15 @@ class ConflictStrategy {
         'catalog' || 'inventory' || 'tables' || 'product_availability' =>
           ConflictPolicy.serverWins,
         'pending_order' => ConflictPolicy.keepLocalPending,
-        'table_action' || 'refund' || 'invoice_edit' =>
+        'table_action' ||
+        'refund' ||
+        'invoice_edit' ||
+        'payment' ||
+        'close_table' ||
+        'transfer' ||
+        'merge' ||
+        'split' ||
+        'discount' =>
           ConflictPolicy.requireOnline,
         _ => ConflictPolicy.serverWins,
       };

@@ -33,6 +33,7 @@ class KitchenController extends CashierController
             ->with(['items', 'table:id,name', 'customer:id,name,phone'])
             ->whereIn('source', ['pos', 'qr_menu'])
             ->whereNotNull('dining_table_id')
+            ->whereNull('pos_cashier_invoice_id')
             ->whereIn('pos_status', ['new', 'accepted', 'preparing', 'ready'])
             ->latest('id')
             ->limit(50)

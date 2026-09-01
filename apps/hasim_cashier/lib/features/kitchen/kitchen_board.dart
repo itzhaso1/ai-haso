@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/pos/pos_labels.dart';
+import '../../core/realtime/pos_event_source.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
 import '../../core/widgets/hasim_widgets.dart';
@@ -19,6 +20,7 @@ class _KitchenBoardState extends ConsumerState<KitchenBoard> {
   List<Map<String, dynamic>> _orders = const [];
   var _loading = true;
   String? _error;
+  PollingPosEventSource? _source;
 
   static const _statusOptions = [
     'new',
@@ -34,13 +36,33 @@ class _KitchenBoardState extends ConsumerState<KitchenBoard> {
   void initState() {
     super.initState();
     _load();
+    _startPolling();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  @override
+  void dispose() {
+    _source?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _startPolling() async {
+    _source = PollingPosEventSource(
+      interval: const Duration(seconds: 5),
+      poll: () async {
+        await _load(silent: true);
+        return const <PosEvent>[];
+      },
+    );
+    await _source!.start();
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent && mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final data = await ref.read(cashierApiProvider).get('/kitchen/orders');
       final list = <Map<String, dynamic>>[];
@@ -49,16 +71,20 @@ class _KitchenBoardState extends ConsumerState<KitchenBoard> {
           if (item is Map) list.add(Map<String, dynamic>.from(item));
         }
       }
+      if (!mounted) return;
       setState(() {
         _orders = list;
         _loading = false;
+        _error = null;
       });
     } on ApiException catch (e) {
+      if (!mounted || silent) return;
       setState(() {
         _loading = false;
         _error = e.message;
       });
     } catch (e) {
+      if (!mounted || silent) return;
       setState(() {
         _loading = false;
         _error = e.toString();

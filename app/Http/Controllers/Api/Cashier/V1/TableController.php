@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Cashier\Concerns\AuthorizesCashier;
 use App\Http\Controllers\Api\Cashier\Concerns\ResolvesCashierWorkspace;
 use App\Http\Resources\Cashier\OrderResource;
 use App\Models\DiningTable;
+use App\Models\Order;
 use App\Models\TableSession;
 use App\Services\Feature\FeatureAccessService;
 use App\Services\Pos\PosOrderService;
@@ -104,7 +105,25 @@ class TableController extends CashierController
             ]),
         ]);
 
-        return $this->ok($this->tablePayload($table, $workspace, detailed: true));
+        $payload = $this->tablePayload($table, $workspace, detailed: true);
+        $payload['sessions'] = $this->sessionsHistory($table);
+
+        return $this->ok($payload);
+    }
+
+    /**
+     * Latest sessions for a table (Web show loads latest 20).
+     */
+    public function sessions(Request $request, DiningTable $table): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $this->authorizeCashier($request, $workspace, 'tables.manage');
+        $this->ensurePos($workspace);
+
+        return $this->ok([
+            'table_id' => $table->id,
+            'sessions' => $this->sessionsHistory($table),
+        ]);
     }
 
     public function openSession(Request $request, DiningTable $table): JsonResponse
@@ -129,8 +148,16 @@ class TableController extends CashierController
         $user = $this->authorizeCashier($request, $workspace, 'tables.manage');
         $this->ensureSession($table, $session);
 
+        $validated = $request->validate([
+            'payment_method' => ['nullable', 'string', 'in:cash,card,cashier,pay_now,pay_later,transfer'],
+        ]);
+
         try {
-            $invoice = $this->posOrderService->closeSession($session, (int) $user->id);
+            $invoice = $this->posOrderService->closeSession(
+                $session,
+                (int) $user->id,
+                $validated['payment_method'] ?? null,
+            );
         } catch (RuntimeException $exception) {
             return $this->fail($exception->getMessage(), 422);
         }
@@ -140,7 +167,10 @@ class TableController extends CashierController
                 'id' => $invoice->id,
                 'invoice_number' => $invoice->invoice_number,
                 'total_amount' => (float) $invoice->total_amount,
+                'subtotal' => (float) $invoice->subtotal,
+                'discount_amount' => (float) $invoice->discount_amount,
                 'currency' => $invoice->currency,
+                'payment_method' => $validated['payment_method'] ?? null,
             ] : null,
         ], message: $invoice ? 'تم إغلاق الجلسة وإصدار فاتورة.' : 'تم إغلاق الجلسة.');
     }
@@ -213,14 +243,15 @@ class TableController extends CashierController
     public function split(Request $request, DiningTable $table, TableSession $session): JsonResponse
     {
         $workspace = $this->requireWorkspace($this->workspaceContext);
-        $user = $this->authorizeCashier($request, $workspace, 'tables.manage');
+        // Web SoT: orders.manage + groups min:2
+        $user = $this->authorizeCashier($request, $workspace, 'orders.manage');
         $this->ensureSession($table, $session);
 
         $validated = $request->validate([
-            'groups' => ['required', 'array', 'min:1'],
+            'groups' => ['required', 'array', 'min:2'],
             'groups.*.items' => ['required', 'array', 'min:1'],
             'groups.*.items.*.order_item_id' => ['required', 'integer'],
-            'groups.*.items.*.quantity' => ['required', 'integer', 'min:1'],
+            'groups.*.items.*.quantity' => ['required', 'integer', 'min:0'],
         ]);
 
         try {
@@ -237,7 +268,8 @@ class TableController extends CashierController
     public function applyDiscount(Request $request, DiningTable $table, TableSession $session): JsonResponse
     {
         $workspace = $this->requireWorkspace($this->workspaceContext);
-        $this->authorizeCashier($request, $workspace, 'tables.manage');
+        // Web SoT: orders.manage (not tables.manage)
+        $this->authorizeCashier($request, $workspace, 'orders.manage');
         $this->ensureSession($table, $session);
 
         $validated = $request->validate([
@@ -253,10 +285,58 @@ class TableController extends CashierController
         return $this->ok(message: 'تم تطبيق الخصم على الجلسة.');
     }
 
+    public function update(Request $request, DiningTable $table): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $this->authorizeCashier($request, $workspace, 'tables.manage');
+        $this->ensurePos($workspace);
+
+        $validated = $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('dining_tables', 'name')
+                    ->where(fn ($query) => $query->where('workspace_id', $workspace->id))
+                    ->ignore($table->id),
+            ],
+            'status' => ['nullable', 'string', Rule::in(['available', 'occupied', 'reserved', 'cleaning', 'closed'])],
+        ]);
+
+        $table->update([
+            'name' => $validated['name'],
+            'status' => $validated['status'] ?? $table->status,
+        ]);
+
+        return $this->ok([
+            'id' => $table->id,
+            'name' => $table->name,
+            'status' => $table->status,
+            'qr_token' => $table->qr_token,
+        ], message: 'تم تحديث بيانات الطاولة.');
+    }
+
+    public function regenerateQr(Request $request, DiningTable $table): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $this->authorizeCashier($request, $workspace, 'tables.manage');
+        $this->ensurePos($workspace);
+
+        $table->update([
+            'qr_token' => Str::random(48),
+        ]);
+
+        return $this->ok([
+            'id' => $table->id,
+            'qr_token' => $table->qr_token,
+            'menu_url' => url('/menu/'.$workspace->slug.'/table/'.$table->qr_token),
+        ], message: 'تم إنشاء رمز QR جديد للطاولة.');
+    }
+
     public function updateNote(Request $request, DiningTable $table, TableSession $session): JsonResponse
     {
         $workspace = $this->requireWorkspace($this->workspaceContext);
-        $this->authorizeCashier($request, $workspace);
+        $this->authorizeCashier($request, $workspace, 'orders.manage');
         $this->ensureSession($table, $session);
 
         $validated = $request->validate([
@@ -287,6 +367,7 @@ class TableController extends CashierController
             'total' => (float) ($item->total_amount ?? 0),
         ]));
 
+        $billable = $orders->where('pos_status', '!=', 'cancelled');
         $payload = [
             'id' => $table->id,
             'name' => $table->name,
@@ -295,10 +376,17 @@ class TableController extends CashierController
             'session_status' => $openSession?->status,
             'opened_at' => optional($openSession?->opened_at)?->toIso8601String(),
             'customer_name' => optional($orders->first()?->customer)->name,
-            'open_orders_count' => $orders->count(),
+            // Align with Web withCount: active kitchen statuses only (not cancelled/completed).
+            'open_orders_count' => $orders
+                ->whereIn('pos_status', ['new', 'accepted', 'preparing', 'ready', 'delivered'])
+                ->count(),
+            'orders_count' => $billable->count(),
             'items_count' => (int) $lines->sum('quantity'),
             'lines' => $lines->values(),
-            'total' => (float) $lines->sum('total'),
+            'subtotal' => (float) $billable->sum('subtotal'),
+            'discount_amount' => (float) $billable->sum('discount_amount'),
+            'tax_amount' => (float) $billable->sum('tax_amount'),
+            'total' => (float) $billable->sum(fn ($o) => (float) $o->total_amount),
             'notes' => optional(
                 $orders->first(fn ($order) => filled($order->notes))
             )?->notes
@@ -309,9 +397,48 @@ class TableController extends CashierController
 
         if ($detailed) {
             $payload['orders'] = OrderResource::collection($orders);
+            $payload['session_open'] = $openSession !== null && $openSession->status === 'open';
         }
 
         return $payload;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function sessionsHistory(DiningTable $table, int $limit = 20): array
+    {
+        $sessions = TableSession::query()
+            ->where('dining_table_id', $table->id)
+            ->withCount([
+                'orders as orders_count' => fn ($query) => $query
+                    ->whereIn('source', ['pos', 'qr_menu'])
+                    ->where('pos_status', '!=', 'cancelled'),
+            ])
+            ->latest('id')
+            ->limit($limit)
+            ->get();
+
+        return $sessions->map(function (TableSession $session) {
+            $billable = Order::query()
+                ->where('table_session_id', $session->id)
+                ->whereIn('source', ['pos', 'qr_menu'])
+                ->where('pos_status', '!=', 'cancelled')
+                ->get(['id', 'subtotal', 'discount_amount', 'tax_amount', 'total_amount', 'pos_cashier_invoice_id']);
+
+            return [
+                'id' => $session->id,
+                'status' => $session->status,
+                'opened_at' => optional($session->opened_at)?->toIso8601String(),
+                'closed_at' => optional($session->closed_at)?->toIso8601String(),
+                'orders_count' => (int) ($session->orders_count ?? $billable->count()),
+                'subtotal' => (float) $billable->sum('subtotal'),
+                'discount_amount' => (float) $billable->sum('discount_amount'),
+                'tax_amount' => (float) $billable->sum('tax_amount'),
+                'total' => (float) $billable->sum(fn ($order) => (float) $order->total_amount),
+                'invoiced' => $billable->contains(fn ($order) => $order->pos_cashier_invoice_id !== null),
+            ];
+        })->values()->all();
     }
 
     private function ensurePos(\App\Models\Workspace $workspace): void

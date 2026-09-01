@@ -17,7 +17,8 @@ trait AuthorizesCashier
             throw new HttpResponseException($this->fail('غير مصرح.', 401));
         }
 
-        if ($user->can($permission) || $user->can('workspace.manage') || $user->can('pos.manage')) {
+        // Align with Web PosBaseController::authorizePos — do NOT grant via pos.manage alone.
+        if ($user->can($permission) || $user->can('workspace.manage')) {
             return $user;
         }
 
@@ -45,9 +46,9 @@ trait AuthorizesCashier
             ->wherePivotIn('membership_role', ['owner', 'admin', 'manager', 'agent', 'receptionist'])
             ->exists();
 
+        // Same truth source as Web: Spatie permission OR workspace.manage OR elevated membership.
         $can = fn (string $permission): bool => $user->can($permission)
             || $user->can('workspace.manage')
-            || $user->can('pos.manage')
             || $elevated;
 
         return [
@@ -58,6 +59,7 @@ trait AuthorizesCashier
             'orders.discount' => $can('orders.manage'),
             'tables.manage' => $can('tables.manage'),
             'reports.view' => $can('reports.view'),
+            'menu.manage' => $can('menu.manage'),
             'pos.manage' => $can('pos.manage'),
             // Shifts are not implemented in Laravel yet.
             'shifts.manage' => false,

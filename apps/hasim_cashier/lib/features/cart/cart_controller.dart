@@ -80,12 +80,13 @@ class CartState {
     String? notes,
     double? taxRate,
     bool clearTable = false,
+    bool clearCustomer = false,
   }) {
     return CartState(
       lines: lines ?? this.lines,
       channel: channel ?? this.channel,
       tableId: clearTable ? null : (tableId ?? this.tableId),
-      customerId: customerId ?? this.customerId,
+      customerId: clearCustomer ? null : (customerId ?? this.customerId),
       discountAmount: discountAmount ?? this.discountAmount,
       notes: notes ?? this.notes,
       taxRate: taxRate ?? this.taxRate,
@@ -106,6 +107,10 @@ class CartController extends StateNotifier<CartState> {
   }
 
   void setTable(int? tableId) => state = state.copyWith(tableId: tableId);
+
+  void setCustomer(int? customerId) => state = customerId == null
+      ? state.copyWith(clearCustomer: true)
+      : state.copyWith(customerId: customerId);
 
   void addItem({
     required int menuItemId,

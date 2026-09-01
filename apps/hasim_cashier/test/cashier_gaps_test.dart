@@ -27,6 +27,115 @@ void main() {
     expect(CashierPermissions.canCreateOrders(allowed), isTrue);
   });
 
+  test('menu.manage gates catalog and POS settings independently', () {
+    expect(CashierPermissions.canManageMenu(const {}), isFalse);
+    expect(
+      CashierPermissions.canManageMenu({'menu.manage': true}),
+      isTrue,
+    );
+    expect(
+      CashierPermissions.canManageMenu({'orders.manage': true}),
+      isFalse,
+    );
+    // Backend AuthorizesCashier does not grant menu via pos.manage alone.
+    expect(
+      CashierPermissions.canManageMenu({'pos.manage': true}),
+      isFalse,
+    );
+    expect(
+      CashierPermissions.canManageMenu({'workspace.manage': true}),
+      isTrue,
+    );
+  });
+
+  test('orders.manage / tables.manage / reports.view are independent', () {
+    expect(
+      CashierPermissions.canCreateOrders({'orders.manage': true}),
+      isTrue,
+    );
+    expect(
+      CashierPermissions.canManageTables({'orders.manage': true}),
+      isFalse,
+    );
+    expect(
+      CashierPermissions.canManageTables({'tables.manage': true}),
+      isTrue,
+    );
+    // Backend does not grant tables via pos.manage alone.
+    expect(
+      CashierPermissions.canManageTables({'pos.manage': true}),
+      isFalse,
+    );
+    expect(
+      CashierPermissions.canViewReports({'reports.view': true}),
+      isTrue,
+    );
+    expect(
+      CashierPermissions.canViewReports({'tables.manage': true}),
+      isFalse,
+    );
+  });
+
+  test('reports permission uses session fallback when bootstrap empty', () {
+    expect(CashierPermissions.canViewReports(const {}), isFalse);
+    expect(
+      CashierPermissions.canViewReports({'reports.view': true}),
+      isTrue,
+    );
+    expect(
+      CashierPermissions.canViewReports({'orders.manage': true}),
+      isTrue,
+    );
+    final resolved = CashierPermissions.resolve(
+      const {},
+      {'reports.view': true, 'orders.manage': true},
+    );
+    expect(CashierPermissions.canViewReports(resolved), isTrue);
+  });
+
+  test('hourly sales prefer sales_total over total_sales', () {
+    num hourSales(Map<String, dynamic> row) =>
+        (row['sales_total'] as num?) ?? (row['total_sales'] as num?) ?? 0;
+    expect(hourSales({'sales_total': 42, 'total_sales': 1}), 42);
+    expect(hourSales({'total_sales': 7}), 7);
+    expect(hourSales({}), 0);
+  });
+
+  test('table order mutation mirrors assertOrderMutable rules', () {
+    bool canMutate(Map<String, dynamic> order) {
+      final status = order['pos_status'] as String?;
+      return status != 'cancelled' &&
+          status != 'completed' &&
+          order['payment_status'] != 'paid' &&
+          order['pos_cashier_invoice_id'] == null;
+    }
+
+    expect(canMutate({'pos_status': 'new', 'payment_status': 'unpaid'}), isTrue);
+    expect(canMutate({'pos_status': 'cancelled'}), isFalse);
+    expect(canMutate({'pos_status': 'completed'}), isFalse);
+    expect(canMutate({'pos_status': 'new', 'payment_status': 'paid'}), isFalse);
+    expect(
+      canMutate({'pos_status': 'new', 'pos_cashier_invoice_id': 9}),
+      isFalse,
+    );
+  });
+
+  test('table add-order payload is save-only (no invoice/print flags)', () {
+    final payload = <String, dynamic>{
+      'order_type': 'table',
+      'dining_table_id': 1,
+      'client_reference': 'ref-1',
+      'notes': null,
+      'items': [
+        {'pos_menu_item_id': 10, 'quantity': 2},
+      ],
+    };
+    expect(payload.containsKey('create_invoice'), isFalse);
+    expect(payload.containsKey('print'), isFalse);
+    expect(payload.containsKey('payment_method'), isFalse);
+    expect(payload['order_type'], 'table');
+  });
+
   test('conflict strategy keeps pending orders and requires online table ops', () {
     expect(
       ConflictStrategy.forDomain('pending_order'),
@@ -34,6 +143,14 @@ void main() {
     );
     expect(
       ConflictStrategy.forDomain('table_action'),
+      ConflictPolicy.requireOnline,
+    );
+    expect(
+      ConflictStrategy.forDomain('close_table'),
+      ConflictPolicy.requireOnline,
+    );
+    expect(
+      ConflictStrategy.forDomain('payment'),
       ConflictPolicy.requireOnline,
     );
     expect(

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
+import '../../core/permissions/cashier_permissions.dart';
+import '../../core/permissions/permissions_provider.dart';
 import '../../core/pos/pos_labels.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
@@ -83,6 +85,90 @@ class _OrdersListState extends ConsumerState<OrdersList> {
       await ref.read(cashierApiProvider).post(
         '/orders/$id/status',
         data: {'pos_status': status},
+      );
+      await _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _createInvoice(Map<String, dynamic> order) async {
+    final id = (order['id'] as num?)?.toInt();
+    if (id == null) return;
+    try {
+      final data =
+          await ref.read(cashierApiProvider).post('/orders/$id/invoice');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'تم إنشاء الفاتورة ${data['invoice_number'] ?? data['invoice_id']}',
+          ),
+        ),
+      );
+      await _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _returnOrder(Map<String, dynamic> order) async {
+    final perms = ref.read(cashierPermissionsProvider);
+    if (!CashierPermissions.canRefund(perms)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا تملك صلاحية المرتجعات.')),
+      );
+      return;
+    }
+    final id = (order['id'] as num?)?.toInt();
+    if (id == null) return;
+    final items = order['items'] is List
+        ? (order['items'] as List).whereType<Map>().toList()
+        : <Map>[];
+    if (items.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('مرتجع / استرداد'),
+        content: Text(
+          'سيتم تسجيل مرتجع لكل أصناف الطلب #${order['order_number'] ?? id} '
+          'وتمييزه كمسترد مباشرة إن سمحت الصلاحية.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('تأكيد المرتجع'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref.read(cashierApiProvider).post(
+        '/orders/$id/returns',
+        data: {
+          'reason': 'مرتجع من تطبيق الكاشير',
+          'mark_refunded': true,
+          'items': [
+            for (final item in items)
+              {
+                'order_item_id': item['id'],
+                'qty': item['quantity'],
+              },
+          ],
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم تسجيل المرتجع والاسترداد.')),
       );
       await _load();
     } on ApiException catch (e) {
@@ -240,7 +326,7 @@ class _OrdersListState extends ConsumerState<OrdersList> {
                               ),
                             ),
                             Text(
-                              'الوقت: ${order['created_at'] ?? '—'} · المصدر: ${(order['source'] as String?)?.toUpperCase() ?? '—'}',
+                              'الوقت: ${order['placed_at'] ?? order['created_at'] ?? '—'} · المصدر: ${(order['source'] as String?)?.toUpperCase() ?? '—'}',
                               style: const TextStyle(
                                 fontSize: 11,
                                 color: HasimColors.muted,
@@ -272,7 +358,7 @@ class _OrdersListState extends ConsumerState<OrdersList> {
                               ),
                             ],
                             const SizedBox(height: 10),
-                            Row(
+            Row(
                               children: [
                                 Expanded(
                                   child: Container(
@@ -323,6 +409,27 @@ class _OrdersListState extends ConsumerState<OrdersList> {
                                     fontWeight: FontWeight.w900,
                                   ),
                                 ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                if (order['pos_cashier_invoice_id'] == null)
+                                  OutlinedButton.icon(
+                                    onPressed: () => _createInvoice(order),
+                                    icon: const Icon(Icons.receipt_long, size: 16),
+                                    label: const Text('فاتورة'),
+                                  ),
+                                if (CashierPermissions.canRefund(
+                                  ref.watch(cashierPermissionsProvider),
+                                ))
+                                  OutlinedButton.icon(
+                                    onPressed: () => _returnOrder(order),
+                                    icon: const Icon(Icons.undo, size: 16),
+                                    label: const Text('مرتجع'),
+                                  ),
                               ],
                             ),
                           ],

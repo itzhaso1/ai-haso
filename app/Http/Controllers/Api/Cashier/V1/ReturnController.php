@@ -42,10 +42,14 @@ class ReturnController extends CashierController
             'items.*.order_item_id' => ['required', 'integer'],
             'items.*.qty' => ['required', 'integer', 'min:1'],
             'items.*.amount' => ['nullable', 'numeric', 'min:0'],
+            'mark_refunded' => ['nullable', 'boolean'],
         ]);
 
         try {
             $return = $this->posReturnService->createReturn($workspace, $order, $validated, $user);
+            if (! empty($validated['mark_refunded'])) {
+                $return = $this->posReturnService->markRefunded($return, $user);
+            }
         } catch (RuntimeException $exception) {
             return $this->fail($exception->getMessage(), 422);
         }

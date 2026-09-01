@@ -6,10 +6,12 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
+import '../../core/navigation/pos_shell_nav.dart';
 import '../../core/offline/offline_store.dart';
 import '../../core/offline/sync_engine.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
+import '../../core/printing/printer_service.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
 import '../../core/theme/hasim_spacing.dart';
@@ -25,6 +27,7 @@ import '../orders/orders_list.dart';
 import '../reports/daily_reports_panel.dart';
 import '../settings/settings_panel.dart';
 import '../tables/tables_board.dart';
+import '../tables/table_workspace.dart';
 
 enum _PosSection {
   cashier,
@@ -102,6 +105,16 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
   }
 
   Future<void> _loadBootstrap() async {
+    // Seed permissions from auth session immediately so reports/nav aren't
+    // hidden while bootstrap is in-flight (root cause of missing reports).
+    final sessionPerms =
+        ref.read(authControllerProvider).valueOrNull?.permissions;
+    if (sessionPerms != null &&
+        sessionPerms.isNotEmpty &&
+        ref.read(cashierPermissionsProvider).isEmpty) {
+      ref.read(cashierPermissionsProvider.notifier).state =
+          Map<String, dynamic>.from(sessionPerms);
+    }
     try {
       final data = await ref.read(cashierApiProvider).get('/bootstrap');
       if (!mounted) return;
@@ -145,6 +158,28 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<PosShellTab?>(posShellNavProvider, (prev, next) {
+      if (next == null) return;
+      setState(() {
+        _section = switch (next) {
+          PosShellTab.cashier => _PosSection.cashier,
+          PosShellTab.tables => _PosSection.tables,
+          PosShellTab.orders => _PosSection.orders,
+          PosShellTab.menu => _PosSection.menu,
+          PosShellTab.kitchen => _PosSection.kitchen,
+          PosShellTab.invoices => _PosSection.invoices,
+          PosShellTab.customers => _PosSection.customers,
+          PosShellTab.items => _PosSection.items,
+          PosShellTab.reports => _PosSection.reports,
+          PosShellTab.sync => _PosSection.sync,
+          PosShellTab.settings => _PosSection.settings,
+        };
+      });
+      Future.microtask(
+        () => ref.read(posShellNavProvider.notifier).state = null,
+      );
+    });
+
     final width = MediaQuery.sizeOf(context).width;
     final isDesktop = width >= 1100;
     final isTablet = width >= 800 && width < 1100;
@@ -257,7 +292,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     final cart = ref.read(cartControllerProvider);
     if (cart.lines.isEmpty) return;
     final perms = ref.read(cashierPermissionsProvider);
-    if (!CashierPermissions.canCreateOrders(perms) && perms.isNotEmpty) {
+    if (!CashierPermissions.canCreateOrders(perms)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('لا تملك صلاحية إنشاء طلبات.')),
       );
@@ -270,6 +305,8 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       return;
     }
 
+    final wasTable = cart.channel == OrderChannel.table;
+    final tableId = cart.tableId;
     final clientRef = const Uuid().v4();
     final payload = ref.read(cartControllerProvider.notifier).toOrderPayload(
           clientReference: clientRef,
@@ -283,6 +320,24 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           );
       ref.read(cartControllerProvider.notifier).clear();
       if (!mounted) return;
+
+      // Table session orders: save only — no invoice/print dialog.
+      // Invoice is created only when closing the table.
+      if (wasTable) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'تم حفظ الطلب #${data['order_number'] ?? data['id']} على الطاولة.',
+            ),
+          ),
+        );
+        if (tableId != null) {
+          openTableWorkspace(ref, tableId);
+          requestPosShellTab(ref, PosShellTab.tables);
+        }
+        return;
+      }
+
       await showDialog<void>(
         context: context,
         barrierDismissible: false,
@@ -291,13 +346,40 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           onPrint: () async {
             Navigator.pop(context);
             try {
-              await ref
+              final invoiceData = await ref
                   .read(cashierApiProvider)
                   .post('/orders/${data['id']}/invoice');
               if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('تم إنشاء الفاتورة')),
-              );
+              final invoiceId = invoiceData['invoice_id'];
+              Map<String, dynamic>? invoice;
+              if (invoiceId != null) {
+                final show = await ref
+                    .read(cashierApiProvider)
+                    .get('/invoices/$invoiceId');
+                invoice = show['invoice'] is Map
+                    ? Map<String, dynamic>.from(show['invoice'] as Map)
+                    : null;
+              }
+              if (!context.mounted) return;
+              if (invoice != null) {
+                final printer =
+                    await ref.read(printerServiceFutureProvider.future);
+                final result = await printer.printInvoice(invoice);
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      result.success
+                          ? 'تم إنشاء الفاتورة وطباعتها.'
+                          : 'تم إنشاء الفاتورة. ${result.message}',
+                    ),
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('تم إنشاء الفاتورة.')),
+                );
+              }
             } on ApiException catch (e) {
               if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
@@ -469,12 +551,24 @@ class _TopNav extends ConsumerWidget {
     final items = <(_PosSection, String)>[
       (_PosSection.cashier, 'الكاشير'),
       (_PosSection.tables, 'الطاولات'),
-      (_PosSection.menu, 'Menu'),
+      (_PosSection.menu, 'طلبات المنيو'),
       (_PosSection.orders, 'الطلبات'),
       (_PosSection.kitchen, 'المطبخ'),
       (_PosSection.invoices, 'الفواتير'),
-      (_PosSection.items, 'إدارة الأصناف'),
-      (_PosSection.reports, 'التقارير اليومية'),
+      if (CashierPermissions.canManageMenu(
+        CashierPermissions.resolve(
+          ref.watch(cashierPermissionsProvider),
+          ref.watch(authControllerProvider).valueOrNull?.permissions,
+        ),
+      ))
+        (_PosSection.items, 'إدارة الأصناف'),
+      if (CashierPermissions.canViewReports(
+        CashierPermissions.resolve(
+          ref.watch(cashierPermissionsProvider),
+          ref.watch(authControllerProvider).valueOrNull?.permissions,
+        ),
+      ))
+        (_PosSection.reports, 'التقارير'),
       (_PosSection.customers, 'العملاء'),
       (_PosSection.sync, 'المزامنة'),
       (_PosSection.settings, 'الإعدادات'),
@@ -960,15 +1054,65 @@ class _ProductsPanel extends ConsumerWidget {
   }
 }
 
-class _CartPanel extends ConsumerWidget {
+class _CartPanel extends ConsumerStatefulWidget {
   const _CartPanel({required this.onCheckout});
 
   final Future<void> Function() onCheckout;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_CartPanel> createState() => _CartPanelState();
+}
+
+class _CartPanelState extends ConsumerState<_CartPanel> {
+  List<Map<String, dynamic>> _tables = const [];
+  List<Map<String, dynamic>> _customers = const [];
+  final _notesController = TextEditingController();
+  var _metaLoaded = false;
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _ensureMeta() async {
+    if (_metaLoaded) return;
+    _metaLoaded = true;
+    try {
+      final tablesData = await ref.read(cashierApiProvider).get('/tables');
+      final customersData =
+          await ref.read(cashierApiProvider).get('/customers');
+      if (!mounted) return;
+      setState(() {
+        _tables = (tablesData['tables'] is List)
+            ? (tablesData['tables'] as List)
+                .whereType<Map>()
+                .map((e) => Map<String, dynamic>.from(e))
+                .toList()
+            : const [];
+        final raw = customersData['customers'] ?? customersData['value'];
+        _customers = (raw is List)
+            ? raw
+                .whereType<Map>()
+                .map((e) => Map<String, dynamic>.from(e))
+                .toList()
+            : const [];
+      });
+    } catch (_) {
+      // Offline / permission — cart still works for takeaway.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cart = ref.watch(cartControllerProvider);
     final notifier = ref.read(cartControllerProvider.notifier);
+    if (cart.notes != null &&
+        cart.notes!.isNotEmpty &&
+        _notesController.text != cart.notes) {
+      _notesController.text = cart.notes!;
+    }
+    _ensureMeta();
 
     return HsCard(
       child: Column(
@@ -999,7 +1143,63 @@ class _CartPanel extends ConsumerWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 10),
+          if (cart.channel == OrderChannel.table) ...[
+            const SizedBox(height: 8),
+            DropdownButtonFormField<int>(
+              value: _tables.any((t) => (t['id'] as num).toInt() == cart.tableId)
+                  ? cart.tableId
+                  : null,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'الطاولة',
+                isDense: true,
+              ),
+              items: [
+                for (final t in _tables)
+                  DropdownMenuItem(
+                    value: (t['id'] as num).toInt(),
+                    child: Text('${t['name']}'),
+                  ),
+              ],
+              onChanged: (v) => notifier.setTable(v),
+            ),
+          ],
+          const SizedBox(height: 8),
+          DropdownButtonFormField<int?>(
+            value: _customers.any(
+                      (c) => (c['id'] as num).toInt() == cart.customerId,
+                    )
+                ? cart.customerId
+                : null,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'العميل (اختياري)',
+              isDense: true,
+            ),
+            items: [
+              const DropdownMenuItem<int?>(
+                value: null,
+                child: Text('بدون عميل'),
+              ),
+              for (final c in _customers)
+                DropdownMenuItem(
+                  value: (c['id'] as num).toInt(),
+                  child: Text('${c['name'] ?? c['phone'] ?? c['id']}'),
+                ),
+            ],
+            onChanged: notifier.setCustomer,
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _notesController,
+            decoration: const InputDecoration(
+              labelText: 'ملاحظات',
+              isDense: true,
+            ),
+            maxLines: 2,
+            onChanged: notifier.setNotes,
+          ),
+          const SizedBox(height: 8),
           TextField(
             enabled: CashierPermissions.canDiscount(
               ref.watch(cashierPermissionsProvider),
@@ -1078,6 +1278,13 @@ class _CartPanel extends ConsumerWidget {
                                               ),
                                             ),
                                           ),
+                                          Text(
+                                            line.unitPrice.toStringAsFixed(2),
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              color: HasimColors.muted,
+                                            ),
+                                          ),
                                           TextButton(
                                             onPressed: () => notifier
                                                 .removeItem(line.menuItemId),
@@ -1150,7 +1357,8 @@ class _CartPanel extends ConsumerWidget {
           const SizedBox(height: 10),
           HsPrimaryButton(
             label: 'إنشاء الطلب',
-            onPressed: cart.lines.isEmpty ? null : () => onCheckout(),
+            onPressed:
+                cart.lines.isEmpty ? null : () => widget.onCheckout(),
           ),
           const SizedBox(height: 6),
           HsOutlineButton(
@@ -1159,7 +1367,7 @@ class _CartPanel extends ConsumerWidget {
                 ? null
                 : () {
                     notifier.setChannel(OrderChannel.takeaway);
-                    onCheckout();
+                    widget.onCheckout();
                   },
           ),
         ],
@@ -1303,7 +1511,7 @@ class _SuccessOrderDialog extends StatelessWidget {
             HsPrimaryButton(label: 'طباعة الفاتورة', onPressed: onPrint),
             const SizedBox(height: 8),
             HsOutlineButton(
-              label: 'متابعة بدون طباعة',
+              label: 'بدون فاتورة',
               onPressed: onContinue,
             ),
           ],
