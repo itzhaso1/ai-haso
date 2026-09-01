@@ -19,4 +19,9 @@ class PosCashierInvoicePolicy
     {
         return $this->hasMembership($user, $invoice->workspace);
     }
+
+    public function update(User $user, PosCashierInvoice $invoice): bool
+    {
+        return $this->hasMembership($user, $invoice->workspace);
+    }
 }

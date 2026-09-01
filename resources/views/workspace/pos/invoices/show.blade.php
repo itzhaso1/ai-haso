@@ -11,8 +11,16 @@
                         الموظف: {{ $invoice->closer?->name ?: '—' }} •
                         الإغلاق: {{ $invoice->closed_at?->format('Y-m-d H:i') }}
                     </p>
+                    @if(data_get($invoice->metadata, 'notes'))
+                        <p class="mt-1 text-xs text-slate-600">ملاحظة: {{ data_get($invoice->metadata, 'notes') }}</p>
+                    @endif
                 </div>
-                <a href="{{ route('workspace.pos.invoices.print', $invoice) }}" target="_blank" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">طباعة</a>
+                <div class="flex flex-wrap gap-2">
+                    @if($canEdit ?? false)
+                        <a href="{{ route('workspace.pos.invoices.edit', $invoice) }}" class="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">تعديل الفاتورة</a>
+                    @endif
+                    <a href="{{ route('workspace.pos.invoices.print', $invoice) }}" target="_blank" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700">طباعة</a>
+                </div>
             </div>
         </article>
 
@@ -44,15 +52,15 @@
 
             <div class="mt-4 grid gap-2 sm:grid-cols-3">
                 <div class="rounded-lg bg-slate-50 p-3 text-sm">
-                    <p class="text-xs text-slate-500">Subtotal</p>
+                    <p class="text-xs text-slate-500">المجموع الفرعي</p>
                     <p class="font-bold">{{ number_format((float) $invoice->subtotal, 2) }}</p>
                 </div>
                 <div class="rounded-lg bg-slate-50 p-3 text-sm">
-                    <p class="text-xs text-slate-500">Discount</p>
+                    <p class="text-xs text-slate-500">الخصم</p>
                     <p class="font-bold">{{ number_format((float) $invoice->discount_amount, 2) }}</p>
                 </div>
                 <div class="rounded-lg bg-slate-50 p-3 text-sm">
-                    <p class="text-xs text-slate-500">Total</p>
+                    <p class="text-xs text-slate-500">الإجمالي</p>
                     <p class="font-bold">{{ number_format((float) $invoice->total_amount, 2) }} {{ $invoice->currency }}</p>
                 </div>
             </div>

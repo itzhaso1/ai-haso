@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
 use App\Models\PosCashierInvoice;
+use App\Models\PosCashierInvoiceItem;
 use App\Models\PosCustomerSession;
 use App\Models\PosMenuItem;
 use App\Models\TableSession;
@@ -823,6 +824,289 @@ class PosOrderService
 
             return $invoice;
         });
+    }
+
+    /**
+     * تعديل فاتورة كاشير مغلقة مع مزامنة الطلبات المرتبطة.
+     *
+     * @param  array<string,mixed>  $payload
+     */
+    public function updateCashierInvoice(PosCashierInvoice $invoice, array $payload, ?User $actor = null): PosCashierInvoice
+    {
+        if ($invoice->status !== 'closed') {
+            throw new RuntimeException('يمكن تعديل الفواتير المغلقة فقط.');
+        }
+
+        return DB::transaction(function () use ($invoice, $payload, $actor): PosCashierInvoice {
+            $locked = PosCashierInvoice::query()
+                ->whereKey($invoice->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $orders = Order::query()
+                ->where('pos_cashier_invoice_id', $locked->id)
+                ->whereIn('source', ['pos', 'qr_menu'])
+                ->with('items')
+                ->lockForUpdate()
+                ->get();
+
+            if ($orders->isEmpty()) {
+                throw new RuntimeException('لا توجد طلبات مرتبطة بهذه الفاتورة.');
+            }
+
+            if ($orders->contains(fn (Order $order): bool => $order->payment_status === 'paid')) {
+                throw new RuntimeException('لا يمكن تعديل فاتورة مرتبطة بطلب مدفوع. استخدم المرتجعات.');
+            }
+
+            $incomingItems = collect($payload['items'] ?? []);
+            if ($incomingItems->isEmpty()) {
+                throw new RuntimeException('يجب إرسال عناصر للتعديل.');
+            }
+
+            $invoiceItems = $locked->items()->get()->keyBy('id');
+            $workspace = Workspace::withoutGlobalScopes()->find($locked->workspace_id);
+
+            foreach ($incomingItems as $line) {
+                $itemId = (int) ($line['id'] ?? 0);
+                $invoiceItem = $invoiceItems->get($itemId);
+                if (! $invoiceItem) {
+                    continue;
+                }
+
+                $this->syncOrderItemsForInvoiceLine(
+                    orders: $orders,
+                    invoiceItem: $invoiceItem,
+                    remove: (bool) ($line['remove'] ?? false),
+                    quantity: max(1, (int) ($line['quantity'] ?? $invoiceItem->quantity)),
+                    unitPrice: max(0, (float) ($line['unit_price'] ?? $invoiceItem->unit_price)),
+                    lineDiscount: max(0, (float) ($line['discount_amount'] ?? $invoiceItem->discount_amount)),
+                );
+            }
+
+            $orders = $orders->map(function (Order $order) use ($workspace): ?Order {
+                $fresh = $order->fresh(['items']);
+                if (! $fresh) {
+                    return null;
+                }
+
+                if ($fresh->items->isEmpty()) {
+                    $fresh->update([
+                        'pos_cashier_invoice_id' => null,
+                        'pos_status' => 'cancelled',
+                        'status' => 'cancelled',
+                        'fulfillment_status' => 'cancelled',
+                        'subtotal' => 0,
+                        'discount_amount' => 0,
+                        'tax_amount' => 0,
+                        'total_amount' => 0,
+                    ]);
+                    event(new \App\Events\OrderCancelled($fresh->fresh(['items', 'table', 'tableSession', 'customer'])));
+
+                    return null;
+                }
+
+                $subtotal = round((float) $fresh->items->sum('total_amount'), 2);
+                $discountAmount = max(0, (float) $fresh->discount_amount);
+                $taxAmount = $this->calculateTaxAmount($workspace, $subtotal, $discountAmount);
+                $fresh->update([
+                    'subtotal' => $subtotal,
+                    'discount_amount' => $discountAmount,
+                    'tax_amount' => $taxAmount,
+                    'total_amount' => max(0, round($subtotal - $discountAmount + $taxAmount, 2)),
+                ]);
+
+                return $fresh->fresh(['items']);
+            })->filter()->values();
+
+            if ($orders->isEmpty()) {
+                throw new RuntimeException('لا يمكن حذف كل أصناف الفاتورة. استخدم المرتجعات.');
+            }
+
+            $itemsSubtotal = round((float) $orders->sum(fn (Order $order) => (float) $order->subtotal), 2);
+            $discountAmount = max(0, (float) ($payload['discount_amount'] ?? $locked->discount_amount));
+            if (array_key_exists('discount_percent', $payload) && $payload['discount_percent'] !== null && $payload['discount_percent'] !== '') {
+                $discountAmount = $this->percentToAmount((float) $payload['discount_percent'], $itemsSubtotal);
+            }
+
+            $this->distributeInvoiceDiscountToOrders($orders, $discountAmount, $workspace);
+            $orders = Order::query()
+                ->where('pos_cashier_invoice_id', $locked->id)
+                ->where('pos_status', '!=', 'cancelled')
+                ->with('items')
+                ->get();
+
+            if ($orders->isEmpty()) {
+                throw new RuntimeException('لا يمكن حذف كل أصناف الفاتورة. استخدم المرتجعات.');
+            }
+
+            $subtotal = round((float) $orders->sum(fn (Order $order) => (float) $order->subtotal), 2);
+            $discount = round((float) $orders->sum(fn (Order $order) => (float) $order->discount_amount), 2);
+            $total = round((float) $orders->sum(fn (Order $order) => (float) $order->total_amount), 2);
+
+            $metadata = is_array($locked->metadata) ? $locked->metadata : [];
+            if (array_key_exists('notes', $payload)) {
+                $notes = trim((string) ($payload['notes'] ?? ''));
+                if ($notes === '') {
+                    unset($metadata['notes']);
+                } else {
+                    $metadata['notes'] = mb_substr($notes, 0, 500);
+                }
+            }
+            $metadata['orders_count'] = $orders->count();
+            $metadata['orders'] = $orders->pluck('order_number')->values()->all();
+            $metadata['edited_at'] = now()->toIso8601String();
+            if ($actor) {
+                $metadata['edited_by_user_id'] = $actor->id;
+            }
+
+            $locked->update([
+                'subtotal' => $subtotal,
+                'discount_amount' => $discount,
+                'total_amount' => $total,
+                'currency' => $this->resolveCurrencyFromOrders($orders),
+                'metadata' => $metadata,
+            ]);
+
+            $this->rebuildCashierInvoiceItems($locked, $orders);
+
+            foreach ($orders as $order) {
+                event(new \App\Events\OrderUpdated($order->fresh(['items', 'table', 'tableSession', 'customer'])));
+            }
+
+            $this->auditPosAction('pos.cashier_invoice.updated', $locked->fresh(['items']), $actor, [
+                'invoice_number' => $locked->invoice_number,
+                'total_amount' => $total,
+            ]);
+
+            return $locked->fresh(['items', 'orders', 'table', 'session', 'closer']);
+        });
+    }
+
+    /**
+     * @param  Collection<int, Order>  $orders
+     */
+    private function syncOrderItemsForInvoiceLine(
+        Collection $orders,
+        PosCashierInvoiceItem $invoiceItem,
+        bool $remove,
+        int $quantity = 1,
+        float $unitPrice = 0,
+        float $lineDiscount = 0,
+    ): void {
+        $orderIds = $orders->pluck('id')->all();
+        $matches = OrderItem::query()
+            ->whereIn('order_id', $orderIds)
+            ->get()
+            ->filter(fn (OrderItem $item): bool => $this->orderItemMatchesInvoiceLine($item, $invoiceItem))
+            ->values();
+
+        if ($matches->isEmpty()) {
+            throw new RuntimeException('تعذر مزامنة أحد أصناف الفاتورة مع الطلبات.');
+        }
+
+        if ($remove) {
+            OrderItem::query()->whereIn('id', $matches->pluck('id')->all())->delete();
+
+            return;
+        }
+
+        $primary = $matches->first();
+        $extraIds = $matches->skip(1)->pluck('id')->all();
+        if ($extraIds !== []) {
+            OrderItem::query()->whereIn('id', $extraIds)->delete();
+        }
+
+        $lineTotal = max(0, round(($quantity * $unitPrice) - $lineDiscount, 2));
+        $primary->update([
+            'quantity' => $quantity,
+            'unit_price' => $unitPrice,
+            'discount_amount' => $lineDiscount,
+            'total_amount' => $lineTotal,
+        ]);
+    }
+
+    private function orderItemMatchesInvoiceLine(OrderItem $item, PosCashierInvoiceItem $invoiceItem): bool
+    {
+        return (string) $item->pos_menu_item_id === (string) $invoiceItem->pos_menu_item_id
+            && (string) $item->product_name === (string) $invoiceItem->item_name
+            && (string) $item->item_type === (string) $invoiceItem->item_type
+            && (string) $item->variant_name === (string) $invoiceItem->size_label
+            && round((float) $item->unit_price, 2) === round((float) $invoiceItem->unit_price, 2);
+    }
+
+    /**
+     * @param  Collection<int, Order>  $orders
+     */
+    private function distributeInvoiceDiscountToOrders(Collection $orders, float $discountAmount, ?Workspace $workspace): void
+    {
+        $discountAmount = max(0, round($discountAmount, 2));
+        $subtotal = round((float) $orders->sum(fn (Order $order) => (float) $order->subtotal), 2);
+
+        if ($discountAmount > $subtotal) {
+            $discountAmount = $subtotal;
+        }
+
+        $remaining = $discountAmount;
+        $lastIndex = $orders->count() - 1;
+
+        foreach ($orders->values() as $index => $order) {
+            $orderSubtotal = (float) $order->subtotal;
+            if ($index === $lastIndex) {
+                $share = max(0, round($remaining, 2));
+            } elseif ($subtotal <= 0) {
+                $share = 0.0;
+            } else {
+                $share = round($discountAmount * ($orderSubtotal / $subtotal), 2);
+                $share = min($share, $remaining);
+                $remaining = round($remaining - $share, 2);
+            }
+
+            $taxAmount = $this->calculateTaxAmount($workspace, $orderSubtotal, $share);
+            $order->update([
+                'discount_amount' => $share,
+                'tax_amount' => $taxAmount,
+                'total_amount' => max(0, round($orderSubtotal - $share + $taxAmount, 2)),
+            ]);
+        }
+    }
+
+    /**
+     * @param  Collection<int, Order>  $orders
+     */
+    private function rebuildCashierInvoiceItems(PosCashierInvoice $invoice, Collection $orders): void
+    {
+        $invoice->items()->delete();
+
+        $itemGroups = OrderItem::query()
+            ->whereIn('order_id', $orders->pluck('id')->all())
+            ->get()
+            ->groupBy(fn (OrderItem $item): string => implode('|', [
+                (string) $item->pos_menu_item_id,
+                (string) $item->product_name,
+                (string) $item->item_type,
+                (string) $item->variant_name,
+                (string) $item->unit_price,
+            ]));
+
+        foreach ($itemGroups as $group) {
+            $first = $group->first();
+            if (! $first) {
+                continue;
+            }
+
+            $invoice->items()->create([
+                'workspace_id' => $invoice->workspace_id,
+                'pos_cashier_invoice_id' => $invoice->id,
+                'pos_menu_item_id' => $first->pos_menu_item_id,
+                'item_name' => $first->product_name,
+                'item_type' => $first->item_type,
+                'size_label' => $first->variant_name,
+                'quantity' => (int) $group->sum('quantity'),
+                'unit_price' => $first->unit_price,
+                'discount_amount' => round((float) $group->sum('discount_amount'), 2),
+                'total_amount' => round((float) $group->sum('total_amount'), 2),
+            ]);
+        }
     }
 
     private function ensureOpenSession(DiningTable $table): TableSession

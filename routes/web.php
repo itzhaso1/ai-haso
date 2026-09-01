@@ -514,6 +514,8 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
 
             Route::get('invoices', [PosCashierInvoiceController::class, 'index'])->name('invoices.index');
             Route::get('invoices/{invoice}', [PosCashierInvoiceController::class, 'show'])->name('invoices.show');
+            Route::get('invoices/{invoice}/edit', [PosCashierInvoiceController::class, 'edit'])->name('invoices.edit');
+            Route::put('invoices/{invoice}', [PosCashierInvoiceController::class, 'update'])->name('invoices.update');
             Route::get('invoices/{invoice}/print', [PosCashierInvoiceController::class, 'print'])->name('invoices.print');
             Route::get('reports/daily', [PosReportController::class, 'daily'])->name('reports.daily');
 
