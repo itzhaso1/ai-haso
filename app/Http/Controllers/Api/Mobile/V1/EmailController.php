@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\Mobile\V1;
 
+use App\Exceptions\FeatureNotAvailableException;
+use App\Exceptions\UsageLimitExceededException;
 use App\Http\Controllers\Api\Mobile\Concerns\ResolvesMobileWorkspace;
 use App\Http\Controllers\Api\Mobile\MobileController;
 use App\Http\Resources\Mobile\EmailMessageResource;
@@ -68,6 +70,8 @@ class EmailController extends MobileController
 
         try {
             $message = $this->mobileEmailService->send($workspace, $request->user(), $validated);
+        } catch (FeatureNotAvailableException|UsageLimitExceededException $exception) {
+            return $this->fail($exception->getMessage(), 402);
         } catch (RuntimeException $exception) {
             return $this->fail($exception->getMessage(), 422);
         }

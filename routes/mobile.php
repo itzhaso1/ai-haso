@@ -10,11 +10,15 @@ use App\Http\Controllers\Api\Mobile\V1\ConversationController;
 use App\Http\Controllers\Api\Mobile\V1\CustomerController;
 use App\Http\Controllers\Api\Mobile\V1\DeviceController;
 use App\Http\Controllers\Api\Mobile\V1\DeviceSessionController;
+use App\Http\Controllers\Api\Mobile\V1\EmailCampaignController;
+use App\Http\Controllers\Api\Mobile\V1\EmailContactController;
+use App\Http\Controllers\Api\Mobile\V1\EmailContactGroupController;
 use App\Http\Controllers\Api\Mobile\V1\EmailController;
 use App\Http\Controllers\Api\Mobile\V1\HomeController;
 use App\Http\Controllers\Api\Mobile\V1\NotificationController;
 use App\Http\Controllers\Api\Mobile\V1\PlanController;
 use App\Http\Controllers\Api\Mobile\V1\SearchController;
+use App\Http\Controllers\Api\Mobile\V1\StoryController;
 use App\Http\Controllers\Api\Mobile\V1\UnreadController;
 use App\Http\Controllers\Api\Mobile\V1\WorkspaceController;
 use Illuminate\Support\Facades\Route;
@@ -81,6 +85,37 @@ Route::middleware([
     Route::post('/emails', [EmailController::class, 'send'])->middleware('throttle:mobile-email');
     Route::post('/emails/{emailMessage}/read', [EmailController::class, 'read']);
     Route::post('/emails/{emailMessage}/star', [EmailController::class, 'star']);
+
+    Route::post('/email/campaigns', [EmailCampaignController::class, 'store'])
+        ->middleware('throttle:mobile-email');
+    Route::get('/email/campaigns/{campaign}', [EmailCampaignController::class, 'show']);
+    Route::post('/email/campaigns/{campaign}/cancel', [EmailCampaignController::class, 'cancel'])
+        ->middleware('throttle:mobile-write');
+
+    Route::get('/contacts/recent-recipients', [EmailContactController::class, 'recentRecipients']);
+    Route::get('/contacts', [EmailContactController::class, 'index']);
+    Route::post('/contacts', [EmailContactController::class, 'store'])->middleware('throttle:mobile-write');
+    Route::get('/contacts/{contact}', [EmailContactController::class, 'show']);
+    Route::patch('/contacts/{contact}', [EmailContactController::class, 'update'])->middleware('throttle:mobile-write');
+    Route::delete('/contacts/{contact}', [EmailContactController::class, 'destroy'])->middleware('throttle:mobile-write');
+    Route::post('/contacts/{contact}/favorite', [EmailContactController::class, 'favorite'])
+        ->middleware('throttle:mobile-write');
+
+    Route::get('/contact-groups', [EmailContactGroupController::class, 'index']);
+    Route::post('/contact-groups', [EmailContactGroupController::class, 'store'])->middleware('throttle:mobile-write');
+    Route::patch('/contact-groups/{group}', [EmailContactGroupController::class, 'update'])
+        ->middleware('throttle:mobile-write');
+    Route::delete('/contact-groups/{group}', [EmailContactGroupController::class, 'destroy'])
+        ->middleware('throttle:mobile-write');
+    Route::post('/contact-groups/{group}/members', [EmailContactGroupController::class, 'syncMembers'])
+        ->middleware('throttle:mobile-write');
+
+    Route::get('/stories', [StoryController::class, 'index']);
+    Route::post('/stories', [StoryController::class, 'store'])->middleware('throttle:mobile-attachments');
+    Route::get('/stories/{story}', [StoryController::class, 'show']);
+    Route::post('/stories/{story}/view', [StoryController::class, 'view'])->middleware('throttle:mobile-write');
+    Route::delete('/stories/{story}', [StoryController::class, 'destroy'])->middleware('throttle:mobile-write');
+    Route::get('/stories/{story}/viewers', [StoryController::class, 'viewers']);
 
     Route::get('/channels', [ChannelController::class, 'index']);
     Route::get('/plan', [PlanController::class, 'current']);

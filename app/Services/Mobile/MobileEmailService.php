@@ -7,6 +7,7 @@ use App\Models\EmailMessage;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Email\WorkspaceEmailSender;
+use App\Services\Feature\FeatureAccessService;
 use Illuminate\Contracts\Pagination\CursorPaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,7 @@ class MobileEmailService
 {
     public function __construct(
         private readonly WorkspaceEmailSender $workspaceEmailSender,
+        private readonly FeatureAccessService $featureAccessService,
     ) {}
 
     /**
@@ -115,6 +117,15 @@ class MobileEmailService
             throw new RuntimeException('يرجى تحديد مستلم واحد على الأقل.');
         }
 
+        // Entitlement check before send (metered per recipient). Campaigns meter separately.
+        $this->featureAccessService->assertCanUse(
+            $actor,
+            $workspace,
+            'email',
+            'email_sends',
+            count($recipients),
+        );
+
         $threadKey = $replyToMessage?->thread_key ?: ($replyToMessage?->message_id ?: Str::uuid()->toString());
 
         $message = DB::transaction(function () use ($workspace, $emailAccount, $data, $replyToMessage, $threadKey, $recipients): EmailMessage {
@@ -134,6 +145,9 @@ class MobileEmailService
         });
 
         $this->workspaceEmailSender->send($message);
+
+        // Consume after successful send — not in WorkspaceEmailSender (avoids double-count with campaigns).
+        $this->featureAccessService->consumeUsage($workspace, 'email_sends', count($recipients), enforce: false);
 
         return $message->refresh()->load(['account', 'attachments']);
     }

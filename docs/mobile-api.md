@@ -89,9 +89,51 @@ Channels are opaque strings from core (`whatsapp`, `web`, `manual`, …). App do
 | GET | `/emails/sent` |
 | GET | `/emails/drafts` |
 | GET | `/emails/{id}` |
-| POST | `/emails` | send via `WorkspaceEmailSender` |
+| POST | `/emails` | send via `WorkspaceEmailSender`; consumes `email_sends` (+1 per recipient) |
 | POST | `/emails/{id}/read` |
 | POST | `/emails/{id}/star` |
+
+## Stories
+
+Ephemeral workspace stories (24h default, max 168h). `ExpireStoriesJob` runs hourly.
+
+| Method | URL | Notes |
+|--------|-----|-------|
+| GET | `/stories` | Visible active stories for current user |
+| POST | `/stories` | multipart: `type` text\|image\|video; text needs `body_text`; media needs `file` |
+| GET | `/stories/{id}` | |
+| POST | `/stories/{id}/view` | Mark viewed (increments once) |
+| DELETE | `/stories/{id}` | Author only |
+| GET | `/stories/{id}/viewers` | Author only |
+
+Visibility: `workspace` \| `selected` (+ `selected_user_ids`) \| `hidden` (+ `hidden_user_ids`).
+
+## Email contacts & groups
+
+Address book separate from CRM customers.
+
+| Method | URL | Notes |
+|--------|-----|-------|
+| GET | `/contacts` | `q`/`search`, `favorite`, cursor |
+| POST | `/contacts` | Duplicate `normalized_email` → 422 |
+| GET | `/contacts/recent-recipients` | Parsed from outbound `EmailMessage.recipient` |
+| GET/PATCH/DELETE | `/contacts/{id}` | |
+| POST | `/contacts/{id}/favorite` | Toggle |
+| GET/POST | `/contact-groups` | |
+| PATCH/DELETE | `/contact-groups/{id}` | Delete detaches members only |
+| POST | `/contact-groups/{id}/members` | Body: `contact_ids[]` sync |
+
+## Email campaigns (bulk)
+
+One `EmailMessage` per recipient (privacy). Asserts feature `email` + meter `email_sends` for recipient count before queue.
+
+| Method | URL | Notes |
+|--------|-----|-------|
+| POST | `/email/campaigns` | `email_account_id`, `subject`, `body`, `contact_ids?`, `group_ids?`, `all_contacts?`, `emails?[]`, `confirm_all?` |
+| GET | `/email/campaigns/{id}` | Status / counts |
+| POST | `/email/campaigns/{id}/cancel` | Skips pending recipients |
+
+Jobs: `ProcessEmailCampaignJob` → `SendCampaignRecipientJob` (consumes `email_sends` +1 on success).
 
 ## Channels / plan / branding
 

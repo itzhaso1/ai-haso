@@ -1,8 +1,9 @@
 <?php
 
-use App\Services\Appointments\AppointmentReminderService;
-use App\Models\Website\WebsiteDomain;
+use App\Jobs\Stories\ExpireStoriesJob;
 use App\Jobs\SyncDomainStatusJob;
+use App\Models\Website\WebsiteDomain;
+use App\Services\Appointments\AppointmentReminderService;
 use App\Services\Finance\InvoiceService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -65,6 +66,7 @@ Artisan::command('finance:invoices:integrity-report', function () {
 Schedule::command('appointments:reminders:prepare')->everyFiveMinutes();
 Schedule::command('appointments:reminders:dispatch')->everyMinute();
 Schedule::command('finance:invoices:refresh-payment-status')->hourly();
+Schedule::job(new ExpireStoriesJob)->hourly();
 
 Artisan::command('domains:sync-status', function () {
     $count = 0;
