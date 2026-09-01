@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Feature\Pos;
 
-use App\Models\DiningTable;
 use App\Models\Order;
 use App\Models\PosCashierInvoice;
 use App\Models\PosMenuItem;
@@ -168,7 +167,7 @@ class PosCashierInvoiceEditTest extends TestCase
         }
 
         $plan = \App\Models\Plan::query()
-            ->where('workspace_type' => $workspaceType)
+            ->where('workspace_type', $workspaceType)
             ->where('is_active', true)
             ->orderByDesc('price')
             ->first();
