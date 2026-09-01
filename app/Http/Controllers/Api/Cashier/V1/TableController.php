@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Cashier\Concerns\AuthorizesCashier;
 use App\Http\Controllers\Api\Cashier\Concerns\ResolvesCashierWorkspace;
 use App\Http\Resources\Cashier\OrderResource;
 use App\Models\DiningTable;
+use App\Models\Order;
 use App\Models\TableSession;
 use App\Services\Feature\FeatureAccessService;
 use App\Services\Pos\PosOrderService;
@@ -104,7 +105,25 @@ class TableController extends CashierController
             ]),
         ]);
 
-        return $this->ok($this->tablePayload($table, $workspace, detailed: true));
+        $payload = $this->tablePayload($table, $workspace, detailed: true);
+        $payload['sessions'] = $this->sessionsHistory($table);
+
+        return $this->ok($payload);
+    }
+
+    /**
+     * Latest sessions for a table (Web show loads latest 20).
+     */
+    public function sessions(Request $request, DiningTable $table): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $this->authorizeCashier($request, $workspace, 'tables.manage');
+        $this->ensurePos($workspace);
+
+        return $this->ok([
+            'table_id' => $table->id,
+            'sessions' => $this->sessionsHistory($table),
+        ]);
     }
 
     public function openSession(Request $request, DiningTable $table): JsonResponse
@@ -382,6 +401,44 @@ class TableController extends CashierController
         }
 
         return $payload;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function sessionsHistory(DiningTable $table, int $limit = 20): array
+    {
+        $sessions = TableSession::query()
+            ->where('dining_table_id', $table->id)
+            ->withCount([
+                'orders as orders_count' => fn ($query) => $query
+                    ->whereIn('source', ['pos', 'qr_menu'])
+                    ->where('pos_status', '!=', 'cancelled'),
+            ])
+            ->latest('id')
+            ->limit($limit)
+            ->get();
+
+        return $sessions->map(function (TableSession $session) {
+            $billable = Order::query()
+                ->where('table_session_id', $session->id)
+                ->whereIn('source', ['pos', 'qr_menu'])
+                ->where('pos_status', '!=', 'cancelled')
+                ->get(['id', 'subtotal', 'discount_amount', 'tax_amount', 'total_amount', 'pos_cashier_invoice_id']);
+
+            return [
+                'id' => $session->id,
+                'status' => $session->status,
+                'opened_at' => optional($session->opened_at)?->toIso8601String(),
+                'closed_at' => optional($session->closed_at)?->toIso8601String(),
+                'orders_count' => (int) ($session->orders_count ?? $billable->count()),
+                'subtotal' => (float) $billable->sum('subtotal'),
+                'discount_amount' => (float) $billable->sum('discount_amount'),
+                'tax_amount' => (float) $billable->sum('tax_amount'),
+                'total' => (float) $billable->sum(fn ($order) => (float) $order->total_amount),
+                'invoiced' => $billable->contains(fn ($order) => $order->pos_cashier_invoice_id !== null),
+            ];
+        })->values()->all();
     }
 
     private function ensurePos(\App\Models\Workspace $workspace): void

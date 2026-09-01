@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\Cashier\V1\OrderController;
 use App\Http\Controllers\Api\Cashier\V1\PlanController;
 use App\Http\Controllers\Api\Cashier\V1\ReportController;
 use App\Http\Controllers\Api\Cashier\V1\ReturnController;
+use App\Http\Controllers\Api\Cashier\V1\SettingsController;
 use App\Http\Controllers\Api\Cashier\V1\TableController;
 use App\Http\Controllers\Api\Cashier\V1\WorkspaceController;
 use Illuminate\Support\Facades\Route;
@@ -51,8 +52,18 @@ Route::middleware([
     Route::get('/plans', [PlanController::class, 'index']);
 
     Route::get('/catalog/categories', [CatalogController::class, 'categories']);
+    Route::post('/catalog/categories', [CatalogController::class, 'storeCategory'])->middleware('throttle:mobile-write');
+    Route::put('/catalog/categories/{category}', [CatalogController::class, 'updateCategory'])->middleware('throttle:mobile-write');
+    Route::delete('/catalog/categories/{category}', [CatalogController::class, 'destroyCategory'])->middleware('throttle:mobile-write');
+
     Route::get('/catalog/items', [CatalogController::class, 'items']);
+    Route::post('/catalog/items', [CatalogController::class, 'storeItem'])->middleware('throttle:mobile-write');
     Route::get('/catalog/items/{item}', [CatalogController::class, 'show']);
+    Route::put('/catalog/items/{item}', [CatalogController::class, 'updateItem'])->middleware('throttle:mobile-write');
+    Route::delete('/catalog/items/{item}', [CatalogController::class, 'destroyItem'])->middleware('throttle:mobile-write');
+
+    Route::patch('/settings/pos', [SettingsController::class, 'updatePos'])->middleware('throttle:mobile-write');
+    Route::post('/settings/menu-slider', [SettingsController::class, 'updateMenuSlider'])->middleware('throttle:mobile-write');
 
     Route::get('/customers', [CustomerController::class, 'index']);
     Route::post('/customers', [CustomerController::class, 'store'])->middleware('throttle:mobile-write');
@@ -76,6 +87,7 @@ Route::middleware([
     Route::get('/tables', [TableController::class, 'index']);
     Route::post('/tables', [TableController::class, 'store'])->middleware('throttle:mobile-write');
     Route::get('/tables/{table}', [TableController::class, 'show']);
+    Route::get('/tables/{table}/sessions', [TableController::class, 'sessions']);
     Route::put('/tables/{table}', [TableController::class, 'update'])->middleware('throttle:mobile-write');
     Route::post('/tables/{table}/qr/regenerate', [TableController::class, 'regenerateQr'])->middleware('throttle:mobile-write');
     Route::post('/tables/{table}/sessions/open', [TableController::class, 'openSession'])->middleware('throttle:mobile-write');

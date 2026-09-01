@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use Database\Seeders\FoundationSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class CashierApiV1Test extends TestCase
@@ -41,6 +42,7 @@ class CashierApiV1Test extends TestCase
         $this->assertTrue((bool) $bootstrap->json('data.pos_enabled'));
         $permissions = $bootstrap->json('data.permissions') ?? [];
         $this->assertTrue((bool) ($permissions['orders.manage'] ?? false));
+        $this->assertTrue((bool) ($permissions['menu.manage'] ?? false));
 
         $this->withToken($token)
             ->withHeaders(['X-Workspace-Id' => (string) $workspace->id])
@@ -51,7 +53,7 @@ class CashierApiV1Test extends TestCase
 
         $clientRef = 'cashier-test-'.uniqid();
 
-        $this->withToken($token)
+        $created = $this->withToken($token)
             ->withHeaders([
                 'X-Workspace-Id' => (string) $workspace->id,
                 'Idempotency-Key' => $clientRef,
@@ -67,6 +69,9 @@ class CashierApiV1Test extends TestCase
             ->assertJsonPath('success', true)
             ->assertJsonPath('data.order_type', 'takeaway')
             ->assertJsonPath('message', 'تم إنشاء الطلب بنجاح.');
+
+        $this->assertNotNull($created->json('data.placed_at'));
+        $this->assertNotNull($created->json('data.created_at'));
 
         $order = Order::query()->where('client_reference', $clientRef)->firstOrFail();
         $this->assertNull($order->table_session_id);
@@ -88,6 +93,13 @@ class CashierApiV1Test extends TestCase
             ->assertJsonPath('data.id', $order->id);
 
         $this->assertSame(1, Order::query()->where('client_reference', $clientRef)->count());
+
+        $this->withToken($token)
+            ->withHeaders(['X-Workspace-Id' => (string) $workspace->id])
+            ->getJson('/api/cashier/v1/orders/'.$order->id)
+            ->assertOk()
+            ->assertJsonPath('data.id', $order->id)
+            ->assertJsonStructure(['data' => ['placed_at', 'created_at', 'items']]);
     }
 
     public function test_cashier_kitchen_reports_table_store_and_me_permissions(): void
@@ -324,6 +336,217 @@ class CashierApiV1Test extends TestCase
             ->getJson('/api/cashier/v1/catalog/items')
             ->assertStatus(403)
             ->assertJsonPath('message', 'الكاشير غير متاح في باقتك الحالية');
+    }
+
+    public function test_cashier_catalog_settings_reports_and_table_sessions(): void
+    {
+        $this->seed(FoundationSeeder::class);
+        [$owner, $workspace] = $this->createWorkspaceOwner('store');
+
+        $login = $this->postJson('/api/cashier/v1/auth/login', [
+            'email_or_phone' => $owner->email,
+            'password' => 'password',
+            'device_name' => 'كاشير حاسم test',
+            'device_type' => 'cashier',
+        ])->assertOk();
+
+        $token = $login->json('data.token');
+        $headers = ['X-Workspace-Id' => (string) $workspace->id];
+
+        $bootstrap = $this->withToken($token)
+            ->withHeaders($headers)
+            ->getJson('/api/cashier/v1/bootstrap')
+            ->assertOk();
+        $permissions = $bootstrap->json('data.permissions') ?? [];
+        $this->assertTrue((bool) ($permissions['menu.manage'] ?? false));
+        $this->assertTrue((bool) ($permissions['orders.manage'] ?? false));
+        $this->assertArrayHasKey('pos.manage', $permissions);
+
+        $category = $this->withToken($token)
+            ->withHeaders($headers)
+            ->postJson('/api/cashier/v1/catalog/categories', [
+                'name' => 'مشروبات '.uniqid(),
+                'is_active' => true,
+                'sort_order' => 1,
+            ])
+            ->assertCreated()
+            ->json('data');
+
+        $this->assertNotEmpty($category['id']);
+
+        $this->withToken($token)
+            ->withHeaders($headers)
+            ->putJson('/api/cashier/v1/catalog/categories/'.$category['id'], [
+                'name' => $category['name'].' محدث',
+                'is_active' => true,
+                'sort_order' => 2,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.sort_order', 2);
+
+        $item = $this->withToken($token)
+            ->withHeaders($headers)
+            ->postJson('/api/cashier/v1/catalog/items', [
+                'name' => 'عصير برتقال',
+                'sku' => 'SKU-OJ-'.uniqid(),
+                'barcode' => 'BC-OJ-'.uniqid(),
+                'item_type' => 'مشروب',
+                'pos_item_category_id' => $category['id'],
+                'size_label' => 'وسط',
+                'description' => 'طازج',
+                'price' => 9.5,
+                'currency' => 'SAR',
+                'is_active' => true,
+                'sort_order' => 1,
+            ])
+            ->assertCreated()
+            ->json('data.item');
+        $this->assertEquals(9.5, (float) $item['price']);
+
+        $updated = $this->withToken($token)
+            ->withHeaders($headers)
+            ->putJson('/api/cashier/v1/catalog/items/'.$item['id'], [
+                'name' => 'عصير برتقال كبير',
+                'sku' => $item['sku'],
+                'barcode' => $item['barcode'],
+                'item_type' => 'مشروب',
+                'pos_item_category_id' => $category['id'],
+                'size_label' => 'كبير',
+                'description' => 'طازج',
+                'price' => 12,
+                'currency' => 'SAR',
+                'is_active' => true,
+                'sort_order' => 1,
+            ])
+            ->assertOk()
+            ->json('data.item');
+        $this->assertEquals(12.0, (float) $updated['price']);
+
+        $this->withToken($token)
+            ->withHeaders($headers)
+            ->deleteJson('/api/cashier/v1/catalog/categories/'.$category['id'])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'لا يمكن حذف تصنيف مرتبط بأصناف. انقل الأصناف أولاً.');
+
+        $this->withToken($token)
+            ->withHeaders($headers)
+            ->deleteJson('/api/cashier/v1/catalog/items/'.$item['id'])
+            ->assertOk();
+
+        $this->withToken($token)
+            ->withHeaders($headers)
+            ->deleteJson('/api/cashier/v1/catalog/categories/'.$category['id'])
+            ->assertOk();
+
+        $settings = $this->withToken($token)
+            ->withHeaders($headers)
+            ->patchJson('/api/cashier/v1/settings/pos', [
+                'tax_rate' => 15,
+                'new_order_sound' => true,
+                'enable_delivery' => true,
+                'currency' => 'SAR',
+            ])
+            ->assertOk()
+            ->json('data');
+
+        $this->assertEquals(15.0, (float) $settings['tax_rate']);
+        $this->assertTrue((bool) $settings['enable_delivery']);
+        $this->assertTrue((bool) $settings['sound_enabled']);
+        $this->assertSame('SAR', $settings['currency']);
+
+        $plain = User::factory()->create(['password' => bcrypt('password')]);
+        $workspace->users()->attach($plain->id, [
+            'membership_role' => 'member',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        Sanctum::actingAs($plain);
+        $this->withHeaders($headers)
+            ->patchJson('/api/cashier/v1/settings/pos', [
+                'tax_rate' => 5,
+            ])
+            ->assertStatus(403);
+
+        $this->withHeaders($headers)
+            ->postJson('/api/cashier/v1/catalog/categories', ['name' => 'ممنوع'])
+            ->assertStatus(403);
+
+        Sanctum::actingAs($owner);
+        $activeItem = $this->makeItem($workspace, 20);
+        $table = \App\Models\DiningTable::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'طاولة جلسات '.uniqid(),
+            'status' => 'available',
+            'qr_token' => \Illuminate\Support\Str::random(48),
+        ]);
+
+        $create = $this->withToken($token)
+            ->withHeaders($headers + ['Idempotency-Key' => 'sess-hist-'.uniqid()])
+            ->postJson('/api/cashier/v1/orders', [
+                'order_type' => 'table',
+                'dining_table_id' => $table->id,
+                'client_reference' => 'sess-order-'.uniqid(),
+                'items' => [['pos_menu_item_id' => $activeItem->id, 'quantity' => 1]],
+            ])
+            ->assertCreated();
+
+        $sessionId = (int) $create->json('data.table_session_id');
+        $orderId = (int) $create->json('data.id');
+
+        $this->withToken($token)
+            ->withHeaders($headers)
+            ->postJson("/api/cashier/v1/tables/{$table->id}/sessions/{$sessionId}/close", [
+                'payment_method' => 'cash',
+            ])
+            ->assertOk();
+
+        $show = $this->withToken($token)
+            ->withHeaders($headers)
+            ->getJson('/api/cashier/v1/tables/'.$table->id)
+            ->assertOk();
+
+        $this->assertIsArray($show->json('data.sessions'));
+        $this->assertGreaterThanOrEqual(1, count($show->json('data.sessions')));
+
+        $this->withToken($token)
+            ->withHeaders($headers)
+            ->getJson('/api/cashier/v1/tables/'.$table->id.'/sessions')
+            ->assertOk()
+            ->assertJsonPath('data.table_id', $table->id)
+            ->assertJsonStructure(['data' => ['sessions' => [['id', 'status', 'opened_at', 'total']]]]);
+
+        $this->withToken($token)
+            ->withHeaders($headers)
+            ->getJson('/api/cashier/v1/orders/'.$orderId)
+            ->assertOk()
+            ->assertJsonStructure(['data' => ['placed_at']]);
+
+        $report = $this->withToken($token)
+            ->withHeaders($headers)
+            ->getJson('/api/cashier/v1/reports/daily')
+            ->assertOk()
+            ->assertJsonStructure(['data' => [
+                'summary',
+                'channel_stats',
+                'quantity_by_type',
+                'top_items',
+                'sales_by_hour',
+                'customer_summary',
+                'recent_operations',
+                'closed_orders',
+                'all_orders',
+                'invoices',
+                'payment_methods',
+            ]])
+            ->json('data');
+
+        $this->assertGreaterThanOrEqual(1, count($report['all_orders']));
+        $this->assertGreaterThanOrEqual(1, count($report['closed_orders']));
+        foreach ($report['sales_by_hour'] as $row) {
+            $this->assertArrayHasKey('sales_total', $row);
+            $this->assertArrayNotHasKey('total_sales', $row);
+        }
     }
 
     private function makeItem(Workspace $workspace, float $price = 10): PosMenuItem

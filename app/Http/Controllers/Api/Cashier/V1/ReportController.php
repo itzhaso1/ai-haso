@@ -5,9 +5,15 @@ namespace App\Http\Controllers\Api\Cashier\V1;
 use App\Http\Controllers\Api\Cashier\CashierController;
 use App\Http\Controllers\Api\Cashier\Concerns\AuthorizesCashier;
 use App\Http\Controllers\Api\Cashier\Concerns\ResolvesCashierWorkspace;
+use App\Models\AuditLog;
+use App\Models\DiningTable;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\PosCashierInvoice;
+use App\Models\PosCashierInvoiceItem;
+use App\Models\PosItemCategory;
+use App\Models\PosMenuItem;
+use App\Models\TableSession;
 use App\Services\Feature\FeatureAccessService;
 use App\Services\Pos\PosOrderStatsService;
 use App\Support\Tenancy\WorkspaceContext;
@@ -43,7 +49,7 @@ class ReportController extends CashierController
             ->get();
 
         $orders = Order::query()
-            ->with(['customer:id,name,phone', 'table:id,name'])
+            ->with(['customer:id,name,phone', 'table:id,name', 'items'])
             ->whereIn('source', ['pos', 'qr_menu'])
             ->whereDate('placed_at', $date)
             ->latest('id')
@@ -86,6 +92,42 @@ class ReportController extends CashierController
         $salesByHour = $this->buildSalesByHour($orders->whereNotNull('pos_cashier_invoice_id'));
         $customerSummary = $this->buildCustomerSummary($orders);
 
+        $recentOperations = AuditLog::query()
+            ->with('user:id,name')
+            ->whereDate('occurred_at', $date)
+            ->whereIn('entity_type', [
+                Order::class,
+                OrderItem::class,
+                DiningTable::class,
+                TableSession::class,
+                PosMenuItem::class,
+                PosItemCategory::class,
+                PosCashierInvoice::class,
+                PosCashierInvoiceItem::class,
+            ])
+            ->latest('occurred_at')
+            ->limit(30)
+            ->get()
+            ->map(fn (AuditLog $log) => [
+                'id' => $log->id,
+                'action' => $log->action,
+                'entity_type' => class_basename((string) $log->entity_type),
+                'entity_id' => $log->entity_id,
+                'user' => $log->user ? ['id' => $log->user->id, 'name' => $log->user->name] : null,
+                'occurred_at' => optional($log->occurred_at)?->toIso8601String(),
+                'meta' => $log->meta,
+            ])
+            ->values();
+
+        $closedOrders = $orders
+            ->whereNotNull('pos_cashier_invoice_id')
+            ->values()
+            ->map(fn (Order $order) => $this->orderSummaryPayload($order));
+
+        $allOrders = $orders
+            ->values()
+            ->map(fn (Order $order) => $this->orderSummaryPayload($order));
+
         return $this->ok([
             'date' => $date,
             'summary' => [
@@ -125,6 +167,9 @@ class ReportController extends CashierController
             'top_items' => $topItems,
             'sales_by_hour' => $salesByHour,
             'customer_summary' => $customerSummary,
+            'recent_operations' => $recentOperations,
+            'closed_orders' => $closedOrders,
+            'all_orders' => $allOrders,
             'invoices' => $cashierInvoices->map(fn (PosCashierInvoice $invoice) => [
                 'id' => $invoice->id,
                 'invoice_number' => $invoice->invoice_number,
@@ -135,6 +180,42 @@ class ReportController extends CashierController
                 'closer' => $invoice->closer ? ['id' => $invoice->closer->id, 'name' => $invoice->closer->name] : null,
             ])->values(),
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function orderSummaryPayload(Order $order): array
+    {
+        return [
+            'id' => $order->id,
+            'order_number' => $order->order_number,
+            'source' => $order->source,
+            'order_type' => $order->order_type,
+            'pos_status' => $order->pos_status,
+            'payment_status' => $order->payment_status,
+            'currency' => $order->currency,
+            'subtotal' => (float) $order->subtotal,
+            'discount_amount' => (float) $order->discount_amount,
+            'tax_amount' => (float) $order->tax_amount,
+            'total_amount' => (float) $order->total_amount,
+            'payment_method' => data_get($order->metadata, 'payment_method'),
+            'pos_cashier_invoice_id' => $order->pos_cashier_invoice_id,
+            'placed_at' => optional($order->placed_at)?->toIso8601String(),
+            'customer' => $order->customer ? [
+                'id' => $order->customer->id,
+                'name' => $order->customer->name,
+                'phone' => $order->customer->phone,
+            ] : [
+                'id' => null,
+                'name' => data_get($order->metadata, 'customer_name', 'Walk-in'),
+                'phone' => data_get($order->metadata, 'customer_phone'),
+            ],
+            'table' => $order->table ? [
+                'id' => $order->table->id,
+                'name' => $order->table->name,
+            ] : null,
+        ];
     }
 
     /**
@@ -170,6 +251,8 @@ class ReportController extends CashierController
     }
 
     /**
+     * Web SoT key: sales_total (PosReportController::buildSalesByHour).
+     *
      * @param  Collection<int, Order>  $orders
      * @return list<array<string, mixed>>
      */
@@ -180,7 +263,7 @@ class ReportController extends CashierController
             ->map(fn (Collection $group, string $hour): array => [
                 'hour' => $hour,
                 'orders_count' => $group->count(),
-                'total_sales' => (float) $group->sum(fn (Order $order) => (float) $order->total_amount),
+                'sales_total' => (float) $group->sum(fn (Order $order) => (float) $order->total_amount),
             ])
             ->sortKeys()
             ->values()

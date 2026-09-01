@@ -33,6 +33,7 @@ class OrderResource extends JsonResource
             'table_session_id' => $this->table_session_id,
             'pos_cashier_invoice_id' => $this->pos_cashier_invoice_id,
             'customer_id' => $this->customer_id,
+            'placed_at' => optional($this->placed_at)?->toIso8601String(),
             'created_at' => optional($this->created_at)?->toIso8601String(),
             'table' => $this->whenLoaded('table', fn () => $this->table ? [
                 'id' => $this->table->id,
