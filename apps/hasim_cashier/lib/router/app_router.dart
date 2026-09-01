@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/auth/auth_controller.dart';
+import '../core/theme/hasim_colors.dart';
+import '../core/theme/hasim_theme.dart';
 import '../features/auth/login_screen.dart';
 import '../features/auth/pos_blocked_screen.dart';
 import '../features/auth/workspace_picker_screen.dart';
@@ -17,7 +19,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final loggingIn = state.matchedLocation == '/login';
       final picking = state.matchedLocation == '/workspaces';
-      final blocked = state.matchedLocation == '/pos-blocked';
       final splash = state.matchedLocation == '/splash';
 
       if (auth.isLoading) {
@@ -29,14 +30,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return loggingIn ? null : '/login';
       }
 
-      final workspaces = session.workspaces;
-      final needsPick = session.workspace == null && workspaces.length > 1;
+      final needsPick =
+          session.workspace == null && session.workspaces.length > 1;
       if (needsPick) {
         return picking ? null : '/workspaces';
-      }
-
-      if (session.workspace != null && session.posEnabled == false && !blocked) {
-        // Soft gate: bootstrap will confirm; allow home then block there if needed.
       }
 
       if (loggingIn || splash || picking) {
@@ -73,17 +70,69 @@ class _Splash extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('كاشير حاسم', style: TextStyle(fontWeight: FontWeight.w800)),
-          ],
+    return Scaffold(
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [HasimColors.brandSoft, Colors.white],
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 88,
+                height: 88,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: HasimColors.border),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x1406C2A4),
+                      blurRadius: 24,
+                      offset: Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: const Text(
+                  'ح',
+                  style: TextStyle(
+                    fontSize: 42,
+                    fontWeight: FontWeight.w900,
+                    color: HasimColors.brand,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'كاشير حاسم',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: HasimColors.ink,
+                ),
+              ),
+              const SizedBox(height: 18),
+              const SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: HasimColors.brand,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
+
+/// Expose theme helper for MaterialApp.
+ThemeData hasimCashierTheme() => HasimTheme.light();

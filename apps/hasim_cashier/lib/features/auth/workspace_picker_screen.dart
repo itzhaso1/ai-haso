@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
+import '../../core/theme/hasim_colors.dart';
+import '../../core/widgets/hasim_widgets.dart';
 
 class WorkspacePickerScreen extends ConsumerStatefulWidget {
   const WorkspacePickerScreen({super.key});
@@ -82,32 +84,64 @@ class _WorkspacePickerScreenState extends ConsumerState<WorkspacePickerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: HasimColors.page,
       appBar: AppBar(title: const Text('اختر مساحة العمل')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!))
+              ? Center(child: HsEmpty(title: _error!))
               : ListView.separated(
                   padding: const EdgeInsets.all(16),
                   itemCount: _items.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 8),
                   itemBuilder: (context, index) {
                     final ws = _items[index];
                     final posEnabled = ws['pos_enabled'] != false;
-                    return ListTile(
-                      shape: RoundedRectangleBorder(
+                    return Material(
+                      color: HasimColors.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      child: InkWell(
                         borderRadius: BorderRadius.circular(14),
-                        side: const BorderSide(color: Color(0xFFE2E8F0)),
+                        onTap: () => _select(ws),
+                        child: Ink(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: HasimColors.border),
+                          ),
+                          padding: const EdgeInsets.all(14),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      (ws['name'] as String?) ?? 'Workspace',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    Text(
+                                      posEnabled
+                                          ? 'الكاشير متاح'
+                                          : 'الكاشير غير متاح في الباقة',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: posEnabled
+                                            ? HasimColors.ctaDark
+                                            : HasimColors.muted,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(Icons.chevron_left),
+                            ],
+                          ),
+                        ),
                       ),
-                      title: Text(
-                        (ws['name'] as String?) ?? 'Workspace',
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      subtitle: Text(
-                        posEnabled ? 'الكاشير متاح' : 'الكاشير غير متاح في الباقة',
-                      ),
-                      trailing: const Icon(Icons.chevron_left),
-                      onTap: () => _select(ws),
                     );
                   },
                 ),

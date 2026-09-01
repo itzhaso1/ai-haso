@@ -32,6 +32,14 @@ class CartLine {
 
 enum OrderChannel { table, takeaway, delivery }
 
+extension OrderChannelLabel on OrderChannel {
+  String get labelAr => switch (this) {
+        OrderChannel.table => 'طاولة',
+        OrderChannel.takeaway => 'خارجي',
+        OrderChannel.delivery => 'توصيل',
+      };
+}
+
 class CartState {
   const CartState({
     this.lines = const [],

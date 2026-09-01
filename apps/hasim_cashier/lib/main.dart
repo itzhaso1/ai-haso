@@ -5,7 +5,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import 'core/config/app_config.dart';
 import 'core/offline/offline_store.dart';
-import 'core/theme/cashier_theme.dart';
+import 'core/theme/hasim_theme.dart';
 import 'router/app_router.dart';
 
 Future<void> main() async {
@@ -24,7 +24,7 @@ class HasimCashierApp extends ConsumerWidget {
     return MaterialApp.router(
       title: AppConfig.appName,
       debugShowCheckedModeBanner: false,
-      theme: CashierTheme.light(),
+      theme: HasimTheme.light(),
       locale: const Locale('ar'),
       supportedLocales: const [Locale('ar'), Locale('en')],
       localizationsDelegates: const [
