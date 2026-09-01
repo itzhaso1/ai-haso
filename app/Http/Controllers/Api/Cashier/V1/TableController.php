@@ -213,14 +213,15 @@ class TableController extends CashierController
     public function split(Request $request, DiningTable $table, TableSession $session): JsonResponse
     {
         $workspace = $this->requireWorkspace($this->workspaceContext);
-        $user = $this->authorizeCashier($request, $workspace, 'tables.manage');
+        // Web SoT: orders.manage + groups min:2
+        $user = $this->authorizeCashier($request, $workspace, 'orders.manage');
         $this->ensureSession($table, $session);
 
         $validated = $request->validate([
-            'groups' => ['required', 'array', 'min:1'],
+            'groups' => ['required', 'array', 'min:2'],
             'groups.*.items' => ['required', 'array', 'min:1'],
             'groups.*.items.*.order_item_id' => ['required', 'integer'],
-            'groups.*.items.*.quantity' => ['required', 'integer', 'min:1'],
+            'groups.*.items.*.quantity' => ['required', 'integer', 'min:0'],
         ]);
 
         try {
@@ -237,7 +238,8 @@ class TableController extends CashierController
     public function applyDiscount(Request $request, DiningTable $table, TableSession $session): JsonResponse
     {
         $workspace = $this->requireWorkspace($this->workspaceContext);
-        $this->authorizeCashier($request, $workspace, 'tables.manage');
+        // Web SoT: orders.manage (not tables.manage)
+        $this->authorizeCashier($request, $workspace, 'orders.manage');
         $this->ensureSession($table, $session);
 
         $validated = $request->validate([
@@ -253,10 +255,58 @@ class TableController extends CashierController
         return $this->ok(message: 'تم تطبيق الخصم على الجلسة.');
     }
 
+    public function update(Request $request, DiningTable $table): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $this->authorizeCashier($request, $workspace, 'tables.manage');
+        $this->ensurePos($workspace);
+
+        $validated = $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('dining_tables', 'name')
+                    ->where(fn ($query) => $query->where('workspace_id', $workspace->id))
+                    ->ignore($table->id),
+            ],
+            'status' => ['nullable', 'string', Rule::in(['available', 'occupied', 'reserved', 'cleaning', 'closed'])],
+        ]);
+
+        $table->update([
+            'name' => $validated['name'],
+            'status' => $validated['status'] ?? $table->status,
+        ]);
+
+        return $this->ok([
+            'id' => $table->id,
+            'name' => $table->name,
+            'status' => $table->status,
+            'qr_token' => $table->qr_token,
+        ], message: 'تم تحديث بيانات الطاولة.');
+    }
+
+    public function regenerateQr(Request $request, DiningTable $table): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $this->authorizeCashier($request, $workspace, 'tables.manage');
+        $this->ensurePos($workspace);
+
+        $table->update([
+            'qr_token' => Str::random(48),
+        ]);
+
+        return $this->ok([
+            'id' => $table->id,
+            'qr_token' => $table->qr_token,
+            'menu_url' => url('/menu/'.$workspace->slug.'/table/'.$table->qr_token),
+        ], message: 'تم إنشاء رمز QR جديد للطاولة.');
+    }
+
     public function updateNote(Request $request, DiningTable $table, TableSession $session): JsonResponse
     {
         $workspace = $this->requireWorkspace($this->workspaceContext);
-        $this->authorizeCashier($request, $workspace);
+        $this->authorizeCashier($request, $workspace, 'orders.manage');
         $this->ensureSession($table, $session);
 
         $validated = $request->validate([
@@ -295,7 +345,10 @@ class TableController extends CashierController
             'session_status' => $openSession?->status,
             'opened_at' => optional($openSession?->opened_at)?->toIso8601String(),
             'customer_name' => optional($orders->first()?->customer)->name,
-            'open_orders_count' => $orders->count(),
+            // Align with Web withCount: active kitchen statuses only (not cancelled/completed).
+            'open_orders_count' => $orders
+                ->whereIn('pos_status', ['new', 'accepted', 'preparing', 'ready', 'delivered'])
+                ->count(),
             'items_count' => (int) $lines->sum('quantity'),
             'lines' => $lines->values(),
             'total' => (float) $lines->sum('total'),

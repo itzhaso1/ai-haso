@@ -81,37 +81,53 @@ class _MenuOrdersFeedState extends ConsumerState<MenuOrdersFeed> {
       });
     }
     try {
-      final data = await ref
+      final data = await ref.read(cashierApiProvider).get(
+        '/orders/recent-menu',
+        query: {
+          'after_id': _lastSeenId ?? 0,
+        },
+      );
+      // Full board still uses running menu list for status management.
+      final board = await ref
           .read(cashierApiProvider)
           .get('/orders', query: {'status': 'menu', 'per_page': 50});
       final list = <Map<String, dynamic>>[];
-      if (data['orders'] is List) {
-        for (final item in data['orders'] as List) {
+      if (board['orders'] is List) {
+        for (final item in board['orders'] as List) {
           if (item is Map) list.add(Map<String, dynamic>.from(item));
         }
       }
-      if (list.isNotEmpty) {
-        final newest = (list.first['id'] as num?)?.toInt();
-        if (_lastSeenId != null &&
-            newest != null &&
-            newest != _lastSeenId &&
-            mounted) {
-          final table = list.first['table']?['name'] ?? '—';
-          final number = list.first['order_number'] ?? newest;
-          if (_soundEnabled) {
-            await ref.read(menuSoundServiceProvider).playNewOrder();
+      final incremental = <Map<String, dynamic>>[];
+      if (data['orders'] is List) {
+        for (final item in data['orders'] as List) {
+          if (item is Map) {
+            incremental.add(Map<String, dynamic>.from(item));
           }
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('طلب جديد من طاولة $table #$number'),
-              duration: const Duration(milliseconds: 4200),
-              backgroundColor: HasimColors.ink,
-            ),
-          );
         }
-        _lastSeenId ??= newest;
-        if (_lastSeenId != newest) _lastSeenId = newest;
+      }
+      final latestId = (data['latest_id'] as num?)?.toInt();
+      if (_lastSeenId != null &&
+          incremental.isNotEmpty &&
+          mounted &&
+          silent) {
+        final newest = incremental.first;
+        final table = newest['table_name'] ?? newest['table']?['name'] ?? '—';
+        final number = newest['order_number'] ?? newest['id'];
+        if (_soundEnabled) {
+          await ref.read(menuSoundServiceProvider).playNewOrder();
+        }
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('طلب منيو جديد #$number — طاولة $table'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      if (latestId != null && latestId > 0) {
+        _lastSeenId = latestId;
+      } else if (list.isNotEmpty) {
+        _lastSeenId = (list.first['id'] as num?)?.toInt() ?? _lastSeenId;
       }
       final newCount =
           list.where((o) => o['pos_status'] == 'new').length;

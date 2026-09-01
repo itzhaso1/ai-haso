@@ -69,7 +69,9 @@ class BootstrapController extends CashierController
             'settings' => [
                 'tax_rate' => (float) data_get($workspace->settings ?? [], 'pos.tax_rate', 0),
                 'currency' => data_get($workspace->settings ?? [], 'pos.currency', 'SAR'),
-                'sound_enabled' => (bool) data_get($workspace->settings ?? [], 'pos.sound_enabled', true),
+                // Web SoT key: pos.new_order_sound (PosSettingsController / CashierController).
+                'sound_enabled' => (bool) data_get($workspace->settings ?? [], 'pos.new_order_sound', true),
+                'enable_delivery' => (bool) data_get($workspace->settings ?? [], 'pos.enable_delivery', true),
             ],
             'channel_stats' => $channelStats,
             'plans_url' => url('/workspace/billing'),

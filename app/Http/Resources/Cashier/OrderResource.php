@@ -26,6 +26,7 @@ class OrderResource extends JsonResource
             'discount_amount' => (float) $this->discount_amount,
             'tax_amount' => (float) $this->tax_amount,
             'total_amount' => (float) $this->total_amount,
+            'payment_method' => data_get($this->metadata, 'payment_method'),
             'notes' => $this->notes,
             'client_reference' => $this->client_reference,
             'dining_table_id' => $this->dining_table_id,

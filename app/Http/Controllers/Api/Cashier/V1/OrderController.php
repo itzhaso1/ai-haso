@@ -12,6 +12,7 @@ use App\Http\Resources\Cashier\OrderResource;
 use App\Models\Order;
 use App\Services\Feature\FeatureAccessService;
 use App\Services\Pos\PosOrderService;
+use App\Services\Pos\PosOrderStatsService;
 use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
@@ -27,6 +28,7 @@ class OrderController extends CashierController
         private readonly WorkspaceContext $workspaceContext,
         private readonly FeatureAccessService $featureAccessService,
         private readonly PosOrderService $posOrderService,
+        private readonly PosOrderStatsService $posOrderStatsService,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -66,6 +68,59 @@ class OrderController extends CashierController
             'per_page' => $orders->perPage(),
             'total' => $orders->total(),
             'last_page' => $orders->lastPage(),
+        ]);
+    }
+
+    /**
+     * Incremental menu/QR orders poll — mirrors Web `orders/recent-menu?after_id=`.
+     */
+    public function recentMenu(Request $request): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $this->authorizeCashier($request, $workspace);
+        $this->ensurePos($workspace);
+
+        $afterId = max(0, (int) $request->query('after_id', 0));
+
+        $orders = Order::query()
+            ->with(['table:id,name', 'items:id,order_id,product_name,quantity,total_amount'])
+            ->where('source', 'qr_menu')
+            ->when($afterId > 0, fn ($query) => $query->where('id', '>', $afterId))
+            ->latest('id')
+            ->limit(20)
+            ->get();
+
+        $payload = $orders->map(fn (Order $order) => [
+            'id' => $order->id,
+            'order_number' => $order->order_number,
+            'pos_status' => $order->pos_status,
+            'table_name' => $order->table?->name,
+            'dining_table_id' => $order->dining_table_id,
+            'notes' => $order->notes,
+            'total_amount' => (float) $order->total_amount,
+            'currency' => $order->currency,
+            'placed_at' => optional($order->placed_at)?->toIso8601String(),
+            'items' => $order->items->map(fn ($item) => [
+                'name' => $item->product_name,
+                'quantity' => (int) $item->quantity,
+                'total_amount' => (float) $item->total_amount,
+            ])->values(),
+        ])->values();
+
+        return $this->ok([
+            'orders' => $payload,
+            'latest_id' => (int) ($payload->max('id') ?? $afterId),
+        ]);
+    }
+
+    public function channelStats(Request $request): JsonResponse
+    {
+        $workspace = $this->requireWorkspace($this->workspaceContext);
+        $this->authorizeCashier($request, $workspace);
+        $this->ensurePos($workspace);
+
+        return $this->ok([
+            'stats' => $this->posOrderStatsService->channelCounts(),
         ]);
     }
 

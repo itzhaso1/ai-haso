@@ -61,6 +61,8 @@ Route::middleware([
     Route::get('/reports/daily', [ReportController::class, 'daily']);
 
     Route::get('/orders', [OrderController::class, 'index']);
+    Route::get('/orders/recent-menu', [OrderController::class, 'recentMenu'])->middleware('throttle:mobile-api');
+    Route::get('/orders/channel-stats', [OrderController::class, 'channelStats']);
     Route::post('/orders', [OrderController::class, 'store'])->middleware('throttle:mobile-write');
     Route::get('/orders/{order}', [OrderController::class, 'show']);
     Route::post('/orders/{order}/status', [OrderController::class, 'updateStatus'])->middleware('throttle:mobile-write');
@@ -73,6 +75,8 @@ Route::middleware([
     Route::get('/tables', [TableController::class, 'index']);
     Route::post('/tables', [TableController::class, 'store'])->middleware('throttle:mobile-write');
     Route::get('/tables/{table}', [TableController::class, 'show']);
+    Route::put('/tables/{table}', [TableController::class, 'update'])->middleware('throttle:mobile-write');
+    Route::post('/tables/{table}/qr/regenerate', [TableController::class, 'regenerateQr'])->middleware('throttle:mobile-write');
     Route::post('/tables/{table}/sessions/open', [TableController::class, 'openSession'])->middleware('throttle:mobile-write');
     Route::post('/tables/{table}/sessions/{session}/close', [TableController::class, 'closeSession'])->middleware('throttle:mobile-write');
     Route::post('/tables/{table}/sessions/{session}/cancel', [TableController::class, 'cancelSession'])->middleware('throttle:mobile-write');

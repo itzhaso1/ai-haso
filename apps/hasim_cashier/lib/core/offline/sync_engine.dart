@@ -15,6 +15,15 @@ class SyncEngine {
 
   Future<int> flushPendingOrders() async {
     var synced = 0;
+    // Recover stuck "syncing" rows (e.g. app killed mid-flush) so Retry works.
+    for (final record in _store.pendingOrders()) {
+      final localId = record['local_id'] as String?;
+      if (localId == null) continue;
+      if (record['status'] == SyncStatus.syncing.name) {
+        await _store.retry(localId);
+      }
+    }
+
     for (final record in _store.pendingOrders()) {
       final localId = record['local_id'] as String?;
       final payload = record['payload'];

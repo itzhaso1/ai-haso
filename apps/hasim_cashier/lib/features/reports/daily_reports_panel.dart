@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api/cashier_api.dart';
+import '../../core/permissions/cashier_permissions.dart';
+import '../../core/permissions/permissions_provider.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/widgets/hasim_widgets.dart';
 
@@ -56,6 +58,16 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final perms = ref.watch(cashierPermissionsProvider);
+    if (!CashierPermissions.canViewReports(perms)) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: HsEmpty(
+          title: 'غير مصرح',
+          subtitle: 'لا تملك صلاحية عرض التقارير (reports.view).',
+        ),
+      );
+    }
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
       return Padding(
@@ -73,6 +85,15 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
         : <String, dynamic>{};
     final top = _data?['top_items'] is List
         ? (_data!['top_items'] as List).whereType<Map>()
+        : const Iterable<Map>.empty();
+    final byType = _data?['quantity_by_type'] is List
+        ? (_data!['quantity_by_type'] as List).whereType<Map>()
+        : const Iterable<Map>.empty();
+    final channels = _data?['channel_stats'] is Map
+        ? Map<String, dynamic>.from(_data!['channel_stats'] as Map)
+        : <String, dynamic>{};
+    final invoices = _data?['invoices'] is List
+        ? (_data!['invoices'] as List).whereType<Map>()
         : const Iterable<Map>.empty();
 
     return ListView(
@@ -103,63 +124,56 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
           ],
         ),
         const SizedBox(height: 12),
-        Row(
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            Expanded(
-              child: HsCard(
-                child: Column(
-                  children: [
-                    Text(
-                      '${summary['invoices_count'] ?? 0}',
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const Text('فواتير', style: TextStyle(color: HasimColors.muted)),
-                  ],
-                ),
-              ),
+            _metric('${summary['invoices_count'] ?? 0}', 'فواتير'),
+            _metric(
+              ((summary['invoices_total'] as num?) ?? 0).toStringAsFixed(2),
+              'إجمالي الفواتير',
+              highlight: true,
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: HsCard(
-                child: Column(
-                  children: [
-                    Text(
-                      ((summary['invoices_total'] as num?) ?? 0)
-                          .toStringAsFixed(2),
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        color: HasimColors.ctaDark,
-                      ),
-                    ),
-                    const Text('إجمالي الفواتير',
-                        style: TextStyle(color: HasimColors.muted)),
-                  ],
-                ),
-              ),
+            _metric('${summary['orders_count'] ?? 0}', 'طلبات'),
+            _metric('${summary['paid_orders_count'] ?? 0}', 'مدفوع'),
+            _metric('${summary['unpaid_orders_count'] ?? 0}', 'غير مدفوع'),
+            _metric('${summary['table_orders_count'] ?? channels['table'] ?? 0}', 'طاولة'),
+            _metric(
+              '${summary['takeaway_orders_count'] ?? channels['takeaway'] ?? 0}',
+              'خارجي',
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: HsCard(
-                child: Column(
-                  children: [
-                    Text(
-                      '${summary['orders_count'] ?? 0}',
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const Text('طلبات', style: TextStyle(color: HasimColors.muted)),
-                  ],
-                ),
-              ),
+            _metric(
+              '${summary['delivery_orders_count'] ?? channels['delivery'] ?? 0}',
+              'توصيل',
             ),
           ],
         ),
+        if (byType.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          const Text(
+            'الكميات حسب النوع',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          for (final row in byType)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: HsCard(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Expanded(child: Text('${row['item_type']}')),
+                    Text('× ${row['quantity']}'),
+                    const SizedBox(width: 12),
+                    Text(
+                      ((row['sales'] as num?) ?? 0).toStringAsFixed(2),
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
         const SizedBox(height: 16),
         const Text(
           'الأصناف الأكثر مبيعًا',
@@ -192,7 +206,67 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
                 ),
               ),
             ),
+        if (invoices.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          const Text(
+            'فواتير اليوم',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          for (final inv in invoices)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: HsCard(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${inv['invoice_number']}',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    Text('${inv['table']?['name'] ?? '—'}'),
+                    const SizedBox(width: 12),
+                    Text(
+                      ((inv['total_amount'] as num?) ?? 0).toStringAsFixed(2),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        color: HasimColors.ctaDark,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ],
+    );
+  }
+
+  Widget _metric(String value, String label, {bool highlight = false}) {
+    return SizedBox(
+      width: 110,
+      child: HsCard(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                color: highlight ? HasimColors.ctaDark : HasimColors.ink,
+              ),
+            ),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 11, color: HasimColors.muted),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

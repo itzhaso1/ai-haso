@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
+
 import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
+import '../../core/navigation/pos_shell_nav.dart';
 import '../../core/offline/conflict_strategy.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
@@ -128,6 +131,13 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
   Future<void> _openSession() async {
     final id = _tableId;
     if (id == null) return;
+    if (!_canManageTables) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا تملك صلاحية إدارة الطاولات.')),
+      );
+      return;
+    }
+    if (!await _ensureOnlineForTableAction()) return;
     try {
       await ref.read(cashierApiProvider).post('/tables/$id/sessions/open');
       if (!mounted) return;
@@ -151,11 +161,26 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
     return CashierPermissions.canManageTables(session?.permissions);
   }
 
-  Future<void> _ensureOnlineForTableAction() async {
-    if (ConflictStrategy.forDomain('table_action') ==
+  Future<bool> _ensureOnlineForTableAction() async {
+    if (ConflictStrategy.forDomain('table_action') !=
         ConflictPolicy.requireOnline) {
-      // Table mutations are online-only by policy (Laravel SoT).
+      return true;
     }
+    final result = await Connectivity().checkConnectivity();
+    final offline = result.isEmpty ||
+        result.every((r) => r == ConnectivityResult.none);
+    if (offline) {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'عمليات الطاولات تتطلب اتصالًا بالإنترنت (Laravel هو مصدر الحقيقة).',
+          ),
+        ),
+      );
+      return false;
+    }
+    return true;
   }
 
   Future<void> _closeSession() async {
@@ -168,7 +193,7 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
       );
       return;
     }
-    await _ensureOnlineForTableAction();
+    if (!await _ensureOnlineForTableAction()) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => CloseTableWizard(
@@ -196,6 +221,13 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
     final tableId = _tableId;
     final sessionId = _sessionId;
     if (tableId == null || sessionId == null) return;
+    if (!_canManageTables) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا تملك صلاحية إدارة الطاولات.')),
+      );
+      return;
+    }
+    if (!await _ensureOnlineForTableAction()) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -238,6 +270,7 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
       );
       return;
     }
+    if (!await _ensureOnlineForTableAction()) return;
     final others = _tables
         .where((t) => t['id'] != tableId)
         .map((t) => Map<String, dynamic>.from(t))
@@ -281,6 +314,7 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
       );
       return;
     }
+    if (!await _ensureOnlineForTableAction()) return;
     final items = _splitItems;
     if (items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -297,27 +331,158 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
       builder: (ctx) => SplitBillWizard(items: items, sessionTotal: total),
     );
     if (selected == null || selected.isEmpty) return;
+
+    // Laravel requires ≥2 groups covering 100% of item quantities.
+    final selectedById = <int, int>{};
+    for (final row in selected) {
+      final id = (row['order_item_id'] as num).toInt();
+      selectedById[id] = (row['quantity'] as num).toInt();
+    }
+    final groupA = <Map<String, dynamic>>[];
+    final groupB = <Map<String, dynamic>>[];
+    for (final item in items) {
+      final id = (item['order_item_id'] as num).toInt();
+      final maxQty = (item['quantity'] as num).toInt();
+      final qtyA = selectedById[id] ?? 0;
+      final qtyB = maxQty - qtyA;
+      if (qtyA > 0) {
+        groupA.add({'order_item_id': id, 'quantity': qtyA});
+      }
+      if (qtyB > 0) {
+        groupB.add({'order_item_id': id, 'quantity': qtyB});
+      }
+    }
+    if (groupA.isEmpty || groupB.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'يجب فصل جزء من الأصناف مع الإبقاء على جزء آخر (حسابان على الأقل).',
+          ),
+        ),
+      );
+      return;
+    }
+
     try {
       await ref.read(cashierApiProvider).post(
         '/tables/$tableId/sessions/$sessionId/split',
         data: {
           'groups': [
-            {
-              'items': selected
-                  .map(
-                    (e) => {
-                      'order_item_id': e['order_item_id'],
-                      'quantity': e['quantity'],
-                    },
-                  )
-                  .toList(),
-            },
+            {'items': groupA},
+            {'items': groupB},
           ],
         },
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم تقسيم الحساب.')),
+      );
+      await _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _editNote() async {
+    final tableId = _tableId;
+    final sessionId = _sessionId;
+    if (tableId == null || sessionId == null) return;
+    if (!await _ensureOnlineForTableAction()) return;
+    final controller = TextEditingController(
+      text: '${_detail?['notes'] ?? _selected?['notes'] ?? ''}',
+    );
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ملاحظة الجلسة'),
+        content: TextField(
+          controller: controller,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            hintText: 'اكتب ملاحظة للطاولة / الجلسة',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref.read(cashierApiProvider).post(
+        '/tables/$tableId/sessions/$sessionId/note',
+        data: {'notes': controller.text.trim()},
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم حفظ الملاحظة.')),
+      );
+      await _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _applyDiscount() async {
+    final tableId = _tableId;
+    final sessionId = _sessionId;
+    if (tableId == null || sessionId == null) return;
+    final perms = ref.read(cashierPermissionsProvider);
+    if (!CashierPermissions.canDiscount(perms) && perms.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا تملك صلاحية تطبيق خصم.')),
+      );
+      return;
+    }
+    if (!await _ensureOnlineForTableAction()) return;
+    final controller = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('خصم الجلسة'),
+        content: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            labelText: 'مبلغ الخصم',
+            hintText: '0.00',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('تطبيق'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final amount = double.tryParse(controller.text.trim()) ?? -1;
+    if (amount < 0) return;
+    try {
+      await ref.read(cashierApiProvider).post(
+        '/tables/$tableId/sessions/$sessionId/discount',
+        data: {'discount_amount': amount},
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم تطبيق الخصم.')),
       );
       await _load();
     } on ApiException catch (e) {
@@ -338,8 +503,11 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
     }
     ref.read(cartControllerProvider.notifier).setChannel(OrderChannel.table);
     ref.read(cartControllerProvider.notifier).setTable(id);
+    requestPosShellTab(ref, PosShellTab.cashier);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('تم اختيار ${_selected?['name']} — انتقل للكاشير')),
+      SnackBar(
+        content: Text('تم اختيار ${_selected?['name']} — أكمل الطلب من الكاشير'),
+      ),
     );
   }
 
@@ -422,6 +590,16 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
               label: 'إضافة طلب',
               icon: Icons.add_circle_outline,
               onTap: _addOrderForTable,
+            ),
+            _ActionTile(
+              label: 'ملاحظة الجلسة',
+              icon: Icons.sticky_note_2_outlined,
+              onTap: _editNote,
+            ),
+            _ActionTile(
+              label: 'خصم الجلسة',
+              icon: Icons.percent,
+              onTap: _applyDiscount,
             ),
             _ActionTile(
               label: 'نقل الطاولة',
@@ -526,6 +704,13 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
                 Text(
                   'العميل: ${selected['customer_name']}',
                   style: const TextStyle(fontSize: 12),
+                ),
+              ],
+              if ((selected['notes'] as String?)?.isNotEmpty == true) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'ملاحظة: ${selected['notes']}',
+                  style: const TextStyle(fontSize: 12, color: HasimColors.muted),
                 ),
               ],
               const SizedBox(height: 12),

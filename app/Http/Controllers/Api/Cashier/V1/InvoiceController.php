@@ -34,24 +34,37 @@ class InvoiceController extends CashierController
 
         $date = $request->date('date')?->toDateString() ?? now()->toDateString();
         $invoices = PosCashierInvoice::query()
-            ->with(['table:id,name', 'closer:id,name'])
+            ->with(['table:id,name', 'closer:id,name', 'orders'])
             ->whereDate('closed_at', $date)
             ->latest('id')
             ->paginate(20);
 
         return $this->ok([
-            'invoices' => $invoices->getCollection()->map(fn (PosCashierInvoice $invoice) => [
-                'id' => $invoice->id,
-                'invoice_number' => $invoice->invoice_number,
-                'status' => $invoice->status,
-                'currency' => $invoice->currency,
-                'subtotal' => (float) $invoice->subtotal,
-                'discount_amount' => (float) $invoice->discount_amount,
-                'total_amount' => (float) $invoice->total_amount,
-                'closed_at' => optional($invoice->closed_at)?->toIso8601String(),
-                'table' => $invoice->table ? ['id' => $invoice->table->id, 'name' => $invoice->table->name] : null,
-                'closer' => $invoice->closer ? ['id' => $invoice->closer->id, 'name' => $invoice->closer->name] : null,
-            ])->values(),
+            'invoices' => $invoices->getCollection()->map(function (PosCashierInvoice $invoice) {
+                $taxAmount = (float) $invoice->orders->sum('tax_amount');
+                $paymentMethods = $invoice->orders
+                    ->map(fn ($order) => data_get($order->metadata, 'payment_method'))
+                    ->filter()
+                    ->unique()
+                    ->values();
+
+                return [
+                    'id' => $invoice->id,
+                    'invoice_number' => $invoice->invoice_number,
+                    'status' => $invoice->status,
+                    'currency' => $invoice->currency,
+                    'subtotal' => (float) $invoice->subtotal,
+                    'discount_amount' => (float) $invoice->discount_amount,
+                    'tax_amount' => $taxAmount,
+                    'total_amount' => (float) $invoice->total_amount,
+                    'payment_method' => $paymentMethods->count() === 1
+                        ? $paymentMethods->first()
+                        : ($paymentMethods->isEmpty() ? null : $paymentMethods->implode(', ')),
+                    'closed_at' => optional($invoice->closed_at)?->toIso8601String(),
+                    'table' => $invoice->table ? ['id' => $invoice->table->id, 'name' => $invoice->table->name] : null,
+                    'closer' => $invoice->closer ? ['id' => $invoice->closer->id, 'name' => $invoice->closer->name] : null,
+                ];
+            })->values(),
         ], meta: [
             'date' => $date,
             'current_page' => $invoices->currentPage(),
@@ -63,6 +76,7 @@ class InvoiceController extends CashierController
     {
         $workspace = $this->requireWorkspace($this->workspaceContext);
         $this->authorizeCashier($request, $workspace);
+        $this->ensurePos($workspace);
         $invoice->load(['items', 'table', 'closer', 'orders']);
 
         $editable = $invoice->status === 'closed'
@@ -113,6 +127,7 @@ class InvoiceController extends CashierController
     {
         $workspace = $this->requireWorkspace($this->workspaceContext);
         $user = $this->authorizeCashier($request, $workspace);
+        $this->ensurePos($workspace);
 
         try {
             $updated = $this->posOrderService->updateCashierInvoice($invoice, $request->validated(), $user);

@@ -125,13 +125,44 @@ class CashierApiV1Test extends TestCase
             ->withHeaders($headers)
             ->getJson('/api/cashier/v1/reports/daily')
             ->assertOk()
-            ->assertJsonStructure(['data' => ['summary', 'top_items', 'date']]);
+            ->assertJsonStructure(['data' => [
+                'summary' => [
+                    'invoices_count',
+                    'orders_count',
+                    'paid_orders_count',
+                    'unpaid_orders_count',
+                ],
+                'top_items',
+                'quantity_by_type',
+                'channel_stats',
+                'date',
+            ]]);
 
         $this->withToken($token)
             ->withHeaders($headers)
             ->postJson('/api/cashier/v1/tables', ['name' => 'طاولة اختبار API'])
             ->assertCreated()
             ->assertJsonPath('data.name', 'طاولة اختبار API');
+
+        $this->withToken($token)
+            ->withHeaders($headers)
+            ->getJson('/api/cashier/v1/orders/channel-stats')
+            ->assertOk()
+            ->assertJsonStructure(['data' => ['stats']]);
+
+        $this->withToken($token)
+            ->withHeaders($headers)
+            ->getJson('/api/cashier/v1/orders/recent-menu?after_id=0')
+            ->assertOk()
+            ->assertJsonStructure(['data' => ['orders', 'latest_id']]);
+
+        $bootstrapSettings = $this->withToken($token)
+            ->withHeaders($headers)
+            ->getJson('/api/cashier/v1/bootstrap')
+            ->assertOk()
+            ->json('data.settings');
+        $this->assertArrayHasKey('sound_enabled', $bootstrapSettings);
+        $this->assertArrayHasKey('enable_delivery', $bootstrapSettings);
     }
 
     public function test_cashier_rejects_workspace_without_pos_feature(): void
