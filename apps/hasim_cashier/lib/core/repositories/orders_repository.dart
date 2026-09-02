@@ -17,8 +17,8 @@ class OrdersRepository {
     this._queue, {
     OfflineStore? offlineStore,
     String Function()? newItemId,
-  })  : _hive = offlineStore ?? OfflineStore.instance,
-        _newItemId = newItemId ?? (() => const Uuid().v4());
+  }) : _hive = offlineStore ?? OfflineStore.instance,
+       _newItemId = newItemId ?? (() => const Uuid().v4());
 
   final AppDatabase _db;
   final SyncQueueRepository _queue;
@@ -53,11 +53,13 @@ class OrdersRepository {
       throw ArgumentError('items required');
     }
 
-    final existing = await (_db.select(_db.localOrders)
-          ..where((t) =>
-              t.workspaceId.equals(workspaceId) &
-              t.clientReference.equals(key)))
-        .getSingleOrNull();
+    final existing =
+        await (_db.select(_db.localOrders)..where(
+              (t) =>
+                  t.workspaceId.equals(workspaceId) &
+                  t.clientReference.equals(key),
+            ))
+            .getSingleOrNull();
     if (existing != null) {
       return _orderToDisplay(existing, await _itemsFor(existing.localId));
     }
@@ -74,7 +76,9 @@ class OrdersRepository {
     );
 
     await _db.transaction(() async {
-      await _db.into(_db.localOrders).insert(
+      await _db
+          .into(_db.localOrders)
+          .insert(
             LocalOrdersCompanion.insert(
               localId: key,
               workspaceId: workspaceId,
@@ -96,7 +100,9 @@ class OrdersRepository {
             ),
           );
       for (final item in normalized) {
-        await _db.into(_db.localOrderItems).insert(
+        await _db
+            .into(_db.localOrderItems)
+            .insert(
               LocalOrderItemsCompanion.insert(
                 localId: '${item['local_id']}',
                 workspaceId: workspaceId,
@@ -118,7 +124,8 @@ class OrdersRepository {
                 discountAmount: Value(
                   (item['discount_amount'] as num?)?.toDouble() ?? 0,
                 ),
-                totalAmount: (item['total_amount'] as num?)?.toDouble() ??
+                totalAmount:
+                    (item['total_amount'] as num?)?.toDouble() ??
                     ((item['quantity'] as num).toDouble() *
                         ((item['unit_price'] as num?)?.toDouble() ?? 0)),
                 updatedAt: now,
@@ -142,9 +149,9 @@ class OrdersRepository {
       );
     });
 
-    final order = await (_db.select(_db.localOrders)
-          ..where((t) => t.localId.equals(key)))
-        .getSingle();
+    final order = await (_db.select(
+      _db.localOrders,
+    )..where((t) => t.localId.equals(key))).getSingle();
     return _orderToDisplay(order, await _itemsFor(key));
   }
 
@@ -164,11 +171,13 @@ class OrdersRepository {
     final normalized = _normalizeItems(items);
     if (normalized.isEmpty) throw ArgumentError('items required');
 
-    final existing = await (_db.select(_db.localOrders)
-          ..where((t) =>
-              t.workspaceId.equals(workspaceId) &
-              t.clientReference.equals(key)))
-        .getSingleOrNull();
+    final existing =
+        await (_db.select(_db.localOrders)..where(
+              (t) =>
+                  t.workspaceId.equals(workspaceId) &
+                  t.clientReference.equals(key),
+            ))
+            .getSingleOrNull();
     if (existing != null) {
       return _orderToDisplay(existing, await _itemsFor(existing.localId));
     }
@@ -185,7 +194,9 @@ class OrdersRepository {
     );
 
     await _db.transaction(() async {
-      await _db.into(_db.localOrders).insert(
+      await _db
+          .into(_db.localOrders)
+          .insert(
             LocalOrdersCompanion.insert(
               localId: key,
               workspaceId: workspaceId,
@@ -205,7 +216,9 @@ class OrdersRepository {
             ),
           );
       for (final item in normalized) {
-        await _db.into(_db.localOrderItems).insert(
+        await _db
+            .into(_db.localOrderItems)
+            .insert(
               LocalOrderItemsCompanion.insert(
                 localId: '${item['local_id']}',
                 workspaceId: workspaceId,
@@ -227,7 +240,8 @@ class OrdersRepository {
                 discountAmount: Value(
                   (item['discount_amount'] as num?)?.toDouble() ?? 0,
                 ),
-                totalAmount: (item['total_amount'] as num?)?.toDouble() ??
+                totalAmount:
+                    (item['total_amount'] as num?)?.toDouble() ??
                     ((item['quantity'] as num).toDouble() *
                         ((item['unit_price'] as num?)?.toDouble() ?? 0)),
                 updatedAt: now,
@@ -251,9 +265,9 @@ class OrdersRepository {
       );
     });
 
-    final order = await (_db.select(_db.localOrders)
-          ..where((t) => t.localId.equals(key)))
-        .getSingle();
+    final order = await (_db.select(
+      _db.localOrders,
+    )..where((t) => t.localId.equals(key))).getSingle();
     return _orderToDisplay(order, await _itemsFor(key));
   }
 
@@ -282,27 +296,30 @@ class OrdersRepository {
     );
 
     await _db.transaction(() async {
-      await (_db.update(_db.localOrders)
-            ..where((t) =>
-                t.localId.equals(localId) &
-                t.workspaceId.equals(workspaceId)))
+      await (_db.update(_db.localOrders)..where(
+            (t) =>
+                t.localId.equals(localId) & t.workspaceId.equals(workspaceId),
+          ))
           .write(
-        LocalOrdersCompanion(
-          notes: Value(notes),
-          subtotal: Value(totals.subtotal),
-          totalAmount: Value(totals.subtotal),
-          syncStatus: const Value('pending'),
-          lastError: const Value(null),
-          updatedAt: Value(now),
-        ),
-      );
-      await (_db.delete(_db.localOrderItems)
-            ..where((t) =>
+            LocalOrdersCompanion(
+              notes: Value(notes),
+              subtotal: Value(totals.subtotal),
+              totalAmount: Value(totals.subtotal),
+              syncStatus: const Value('pending'),
+              lastError: const Value(null),
+              updatedAt: Value(now),
+            ),
+          );
+      await (_db.delete(_db.localOrderItems)..where(
+            (t) =>
                 t.orderLocalId.equals(localId) &
-                t.workspaceId.equals(workspaceId)))
+                t.workspaceId.equals(workspaceId),
+          ))
           .go();
       for (final item in normalized) {
-        await _db.into(_db.localOrderItems).insert(
+        await _db
+            .into(_db.localOrderItems)
+            .insert(
               LocalOrderItemsCompanion.insert(
                 localId: '${item['local_id']}',
                 workspaceId: workspaceId,
@@ -324,7 +341,8 @@ class OrdersRepository {
                 discountAmount: Value(
                   (item['discount_amount'] as num?)?.toDouble() ?? 0,
                 ),
-                totalAmount: (item['total_amount'] as num?)?.toDouble() ??
+                totalAmount:
+                    (item['total_amount'] as num?)?.toDouble() ??
                     ((item['quantity'] as num).toDouble() *
                         ((item['unit_price'] as num?)?.toDouble() ?? 0)),
                 updatedAt: now,
@@ -366,15 +384,16 @@ class OrdersRepository {
       if (!cancelled) {
         throw StateError('cannot cancel sync_queue for $localId');
       }
-      await (_db.delete(_db.localOrderItems)
-            ..where((t) =>
+      await (_db.delete(_db.localOrderItems)..where(
+            (t) =>
                 t.orderLocalId.equals(localId) &
-                t.workspaceId.equals(workspaceId)))
+                t.workspaceId.equals(workspaceId),
+          ))
           .go();
-      await (_db.delete(_db.localOrders)
-            ..where((t) =>
-                t.localId.equals(localId) &
-                t.workspaceId.equals(workspaceId)))
+      await (_db.delete(_db.localOrders)..where(
+            (t) =>
+                t.localId.equals(localId) & t.workspaceId.equals(workspaceId),
+          ))
           .go();
     });
 
@@ -386,12 +405,15 @@ class OrdersRepository {
     required int tableId,
   }) async {
     if (workspaceId <= 0 || tableId <= 0) return const [];
-    final rows = await (_db.select(_db.localOrders)
-          ..where((t) =>
-              t.workspaceId.equals(workspaceId) &
-              t.tableServerId.equals(tableId))
-          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
-        .get();
+    final rows =
+        await (_db.select(_db.localOrders)
+              ..where(
+                (t) =>
+                    t.workspaceId.equals(workspaceId) &
+                    t.tableServerId.equals(tableId),
+              )
+              ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+            .get();
     final out = <Map<String, dynamic>>[];
     for (final row in rows) {
       out.add(_orderToDisplay(row, await _itemsFor(row.localId)));
@@ -461,11 +483,13 @@ class OrdersRepository {
       if (pending.workspaceId != workspaceId) continue;
       final key = pending.idempotencyKey.trim();
       if (key.isEmpty) continue;
-      final existing = await (_db.select(_db.localOrders)
-            ..where((t) =>
-                t.workspaceId.equals(workspaceId) &
-                t.clientReference.equals(key)))
-          .getSingleOrNull();
+      final existing =
+          await (_db.select(_db.localOrders)..where(
+                (t) =>
+                    t.workspaceId.equals(workspaceId) &
+                    t.clientReference.equals(key),
+              ))
+              .getSingleOrNull();
       if (existing != null) {
         try {
           await _hive.markSynced(key);
@@ -508,13 +532,16 @@ class OrdersRepository {
     int limit = 100,
   }) async {
     if (workspaceId <= 0) return const [];
-    final rows = await (_db.select(_db.localOrders)
-          ..where((t) =>
-              t.workspaceId.equals(workspaceId) &
-              t.posStatus.isNotIn(['cancelled', 'completed']))
-          ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)])
-          ..limit(limit))
-        .get();
+    final rows =
+        await (_db.select(_db.localOrders)
+              ..where(
+                (t) =>
+                    t.workspaceId.equals(workspaceId) &
+                    t.posStatus.isNotIn(['cancelled']),
+              )
+              ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)])
+              ..limit(limit))
+            .get();
     final out = <Map<String, dynamic>>[];
     for (final row in rows) {
       out.add(_orderToDisplay(row, await _itemsFor(row.localId)));
@@ -540,18 +567,18 @@ class OrdersRepository {
       ..['client_reference'] = order.clientReference;
 
     await _db.transaction(() async {
-      await (_db.update(_db.localOrders)
-            ..where((t) =>
-                t.localId.equals(localId) &
-                t.workspaceId.equals(workspaceId)))
+      await (_db.update(_db.localOrders)..where(
+            (t) =>
+                t.localId.equals(localId) & t.workspaceId.equals(workspaceId),
+          ))
           .write(
-        LocalOrdersCompanion(
-          notes: Value(apiPayload['notes'] as String? ?? order.notes),
-          syncStatus: const Value('pending'),
-          lastError: const Value(null),
-          updatedAt: Value(DateTime.now()),
-        ),
-      );
+            LocalOrdersCompanion(
+              notes: Value(apiPayload['notes'] as String? ?? order.notes),
+              syncStatus: const Value('pending'),
+              lastError: const Value(null),
+              updatedAt: Value(DateTime.now()),
+            ),
+          );
       final existing = await _queue.findOpenOp(
         workspaceId: workspaceId,
         entityType: 'order',
@@ -594,17 +621,17 @@ class OrdersRepository {
     if (order.syncStatus == 'syncing') return false;
 
     await _db.transaction(() async {
-      await (_db.update(_db.localOrders)
-            ..where((t) =>
-                t.localId.equals(localId) &
-                t.workspaceId.equals(workspaceId)))
+      await (_db.update(_db.localOrders)..where(
+            (t) =>
+                t.localId.equals(localId) & t.workspaceId.equals(workspaceId),
+          ))
           .write(
-        LocalOrdersCompanion(
-          posStatus: const Value('cancelled'),
-          syncStatus: const Value('pending'),
-          updatedAt: Value(DateTime.now()),
-        ),
-      );
+            LocalOrdersCompanion(
+              posStatus: const Value('cancelled'),
+              syncStatus: const Value('pending'),
+              updatedAt: Value(DateTime.now()),
+            ),
+          );
       await _queue.enqueue(
         workspaceId: workspaceId,
         deviceId: deviceId.trim(),
@@ -626,9 +653,10 @@ class OrdersRepository {
     required int workspaceId,
     required int serverId,
   }) {
-    return (_db.select(_db.localOrders)
-          ..where((t) =>
-              t.workspaceId.equals(workspaceId) & t.serverId.equals(serverId)))
+    return (_db.select(_db.localOrders)..where(
+          (t) =>
+              t.workspaceId.equals(workspaceId) & t.serverId.equals(serverId),
+        ))
         .getSingleOrNull();
   }
 
@@ -673,7 +701,9 @@ class OrdersRepository {
     };
 
     await _db.transaction(() async {
-      await _db.into(_db.localInvoices).insert(
+      await _db
+          .into(_db.localInvoices)
+          .insert(
             LocalInvoicesCompanion.insert(
               localId: invoiceLocalId,
               workspaceId: workspaceId,
@@ -685,7 +715,9 @@ class OrdersRepository {
               createdAt: now,
             ),
           );
-      await _db.into(_db.localPayments).insert(
+      await _db
+          .into(_db.localPayments)
+          .insert(
             LocalPaymentsCompanion.insert(
               localId: _newItemId(),
               workspaceId: workspaceId,
@@ -699,17 +731,18 @@ class OrdersRepository {
               createdAt: now,
             ),
           );
-      await (_db.update(_db.localOrders)
-            ..where((t) =>
+      await (_db.update(_db.localOrders)..where(
+            (t) =>
                 t.localId.equals(orderLocalId) &
-                t.workspaceId.equals(workspaceId)))
+                t.workspaceId.equals(workspaceId),
+          ))
           .write(
-        LocalOrdersCompanion(
-          paymentStatus: const Value('paid'),
-          posStatus: const Value('completed'),
-          updatedAt: Value(now),
-        ),
-      );
+            LocalOrdersCompanion(
+              paymentStatus: const Value('paid'),
+              posStatus: const Value('completed'),
+              updatedAt: Value(now),
+            ),
+          );
       await _queue.enqueue(
         workspaceId: workspaceId,
         deviceId: deviceId.trim(),
@@ -730,22 +763,21 @@ class OrdersRepository {
   }
 
   Future<LocalOrder?> _getScopedOrder(int workspaceId, String localId) {
-    return (_db.select(_db.localOrders)
-          ..where((t) =>
-              t.workspaceId.equals(workspaceId) & t.localId.equals(localId)))
+    return (_db.select(_db.localOrders)..where(
+          (t) => t.workspaceId.equals(workspaceId) & t.localId.equals(localId),
+        ))
         .getSingleOrNull();
   }
 
   Future<List<LocalOrderItem>> _itemsFor(String orderLocalId) {
-    return (_db.select(_db.localOrderItems)
-          ..where((t) =>
-              t.orderLocalId.equals(orderLocalId) & t.isRemoved.equals(false)))
+    return (_db.select(_db.localOrderItems)..where(
+          (t) =>
+              t.orderLocalId.equals(orderLocalId) & t.isRemoved.equals(false),
+        ))
         .get();
   }
 
-  List<Map<String, dynamic>> _normalizeItems(
-    List<Map<String, dynamic>> items,
-  ) {
+  List<Map<String, dynamic>> _normalizeItems(List<Map<String, dynamic>> items) {
     final out = <Map<String, dynamic>>[];
     for (final raw in items) {
       final qty = asIntOr(raw['quantity']);
@@ -803,15 +835,15 @@ class OrdersRepository {
     LocalOrder order,
     List<LocalOrderItem> items,
   ) {
-    final unsynced = order.syncStatus == 'pending' ||
+    final unsynced =
+        order.syncStatus == 'pending' ||
         order.syncStatus == 'syncing' ||
         order.syncStatus == 'failed';
     return {
       'id': order.serverId ?? order.localId,
       'local_id': order.localId,
       'is_local_pending': unsynced,
-      'order_number':
-          order.serverId != null ? '${order.serverId}' : 'محلي',
+      'order_number': order.serverId != null ? '${order.serverId}' : 'محلي',
       'pos_status': order.posStatus,
       'payment_status': order.paymentStatus,
       'sync_status': order.syncStatus,
@@ -864,9 +896,9 @@ class OrdersRepository {
           : LocalIds.product(workspaceId, productServerId);
       int? catalogProductId;
       if (productLocalId != null) {
-        final product = await (_db.select(_db.localProducts)
-              ..where((t) => t.localId.equals(productLocalId)))
-            .getSingleOrNull();
+        final product = await (_db.select(
+          _db.localProducts,
+        )..where((t) => t.localId.equals(productLocalId))).getSingleOrNull();
         if (product != null) {
           try {
             final payload = jsonDecode(product.payloadJson);
@@ -875,18 +907,22 @@ class OrdersRepository {
             }
           } catch (_) {}
           if (product.stock != null) {
-            await (_db.update(_db.localProducts)
-                  ..where((t) => t.localId.equals(productLocalId)))
-                .write(
+            await (_db.update(
+              _db.localProducts,
+            )..where((t) => t.localId.equals(productLocalId))).write(
               LocalProductsCompanion(
-                stock: Value((product.stock! - qty).clamp(0, 1000000000).toInt()),
+                stock: Value(
+                  (product.stock! - qty).clamp(0, 1000000000).toInt(),
+                ),
                 updatedAt: Value(now),
               ),
             );
           }
         }
       }
-      await _db.into(_db.localStockMovements).insert(
+      await _db
+          .into(_db.localStockMovements)
+          .insert(
             LocalStockMovementsCompanion.insert(
               localId: _newItemId(),
               workspaceId: workspaceId,

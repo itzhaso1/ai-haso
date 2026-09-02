@@ -4,7 +4,12 @@ import 'app_database.dart';
 
 /// Fail-closed workspace scope for every local POS query/write.
 class WorkspaceScope {
-  const WorkspaceScope(this.workspaceId, {this.deviceId, this.accountId, this.userId});
+  const WorkspaceScope(
+    this.workspaceId, {
+    this.deviceId,
+    this.accountId,
+    this.userId,
+  });
 
   final int workspaceId;
   final String? deviceId;
@@ -20,15 +25,20 @@ class WorkspaceScope {
 
 extension WorkspaceScopedDb on AppDatabase {
   Future<bool> hasInitialSync(int workspaceId) async {
-    final row = await (select(syncMetadata)
-          ..where((t) =>
-              t.workspaceId.equals(workspaceId) &
-              t.key.equals(SyncMetaKeys.initialSyncCompleted)))
-        .getSingleOrNull();
+    final row =
+        await (select(syncMetadata)..where(
+              (t) =>
+                  t.workspaceId.equals(workspaceId) &
+                  t.key.equals(SyncMetaKeys.initialSyncCompleted),
+            ))
+            .getSingleOrNull();
     return row?.value == '1';
   }
 
-  Future<void> markInitialSyncCompleted(int workspaceId, {String? deviceId}) async {
+  Future<void> markInitialSyncCompleted(
+    int workspaceId, {
+    String? deviceId,
+  }) async {
     await into(syncMetadata).insertOnConflictUpdate(
       SyncMetadataCompanion.insert(
         key: SyncMetaKeys.initialSyncCompleted,
@@ -41,16 +51,27 @@ extension WorkspaceScopedDb on AppDatabase {
   }
 
   Future<String?> readCursor(int workspaceId) async {
-    final row = await (select(syncMetadata)
-          ..where((t) =>
-              t.workspaceId.equals(workspaceId) &
-              t.key.equals(SyncMetaKeys.syncCursor)))
-        .getSingleOrNull();
+    final row =
+        await (select(syncMetadata)..where(
+              (t) =>
+                  t.workspaceId.equals(workspaceId) &
+                  t.key.equals(SyncMetaKeys.syncCursor),
+            ))
+            .getSingleOrNull();
     return row?.value;
   }
 
-  Future<void> writeCursor(int workspaceId, String cursor, {String? deviceId}) async {
-    await writeMeta(workspaceId, SyncMetaKeys.syncCursor, cursor, deviceId: deviceId);
+  Future<void> writeCursor(
+    int workspaceId,
+    String cursor, {
+    String? deviceId,
+  }) async {
+    await writeMeta(
+      workspaceId,
+      SyncMetaKeys.syncCursor,
+      cursor,
+      deviceId: deviceId,
+    );
   }
 
   Future<void> writeMeta(
@@ -71,9 +92,11 @@ extension WorkspaceScopedDb on AppDatabase {
   }
 
   Future<String?> readMeta(int workspaceId, String key) async {
-    final row = await (select(syncMetadata)
-          ..where((t) => t.workspaceId.equals(workspaceId) & t.key.equals(key)))
-        .getSingleOrNull();
+    final row =
+        await (select(syncMetadata)..where(
+              (t) => t.workspaceId.equals(workspaceId) & t.key.equals(key),
+            ))
+            .getSingleOrNull();
     return row?.value;
   }
 
@@ -116,8 +139,13 @@ extension WorkspaceScopedDb on AppDatabase {
     return row.read(count) ?? 0;
   }
 
-  /// Offline POS is allowed only after Initial Sync (or existing local catalog).
+  /// Standalone is ready after a local store exists (empty catalog is valid).
+  /// Connected workspaces remain ready after Initial Sync or local products.
   Future<bool> isOfflinePosReady(int workspaceId) async {
+    final store = await (select(
+      localStores,
+    )..where((t) => t.workspaceId.equals(workspaceId))).getSingleOrNull();
+    if (store != null) return true;
     if (await hasInitialSync(workspaceId)) return true;
     return (await productCount(workspaceId)) > 0;
   }

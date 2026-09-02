@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -25,29 +26,27 @@ class PrinterProfile {
   final int paperChars;
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'transport': transport.name,
-        'address': address,
-        'paper_chars': paperChars,
-      };
+    'id': id,
+    'name': name,
+    'transport': transport.name,
+    'address': address,
+    'paper_chars': paperChars,
+  };
 
   factory PrinterProfile.fromJson(Map<String, dynamic> json) => PrinterProfile(
-        id: json['id'] as String? ?? 'default',
-        name: json['name'] as String? ?? 'طابعة',
-        transport: PrinterTransport.values.firstWhere(
-          (e) => e.name == json['transport'],
-          orElse: () => PrinterTransport.network,
-        ),
-        address: json['address'] as String?,
-        paperChars: (json['paper_chars'] as num?)?.toInt() ?? 32,
-      );
+    id: json['id'] as String? ?? 'default',
+    name: json['name'] as String? ?? 'طابعة',
+    transport: PrinterTransport.values.firstWhere(
+      (e) => e.name == json['transport'],
+      orElse: () => PrinterTransport.network,
+    ),
+    address: json['address'] as String?,
+    paperChars: (json['paper_chars'] as num?)?.toInt() ?? 32,
+  );
 }
 
 class PrintJobResult {
-  const PrintJobResult.ok()
-      : success = true,
-        message = 'تمت الطباعة.';
+  const PrintJobResult.ok() : success = true, message = 'تمت الطباعة.';
   const PrintJobResult.fail(this.message) : success = false;
 
   final bool success;
@@ -90,8 +89,8 @@ class EscPosReceiptBuilder {
     }
     out.add(_line('-' * charsPerLine));
     final subtotal = ((invoice['subtotal'] as num?) ?? 0).toStringAsFixed(2);
-    final discount =
-        ((invoice['discount_amount'] as num?) ?? 0).toStringAsFixed(2);
+    final discount = ((invoice['discount_amount'] as num?) ?? 0)
+        .toStringAsFixed(2);
     final total = ((invoice['total_amount'] as num?) ?? 0).toStringAsFixed(2);
     out.add(_line(_pad('المجموع الفرعي', subtotal)));
     out.add(_line(_pad('الخصم', discount)));
@@ -166,6 +165,97 @@ class UnconfiguredPrinterGateway implements PrinterTransportGateway {
   }
 }
 
+class NetworkPrinterGateway implements PrinterTransportGateway {
+  @override
+  Future<List<PrinterProfile>> discover(PrinterTransport transport) async {
+    return const [];
+  }
+
+  @override
+  Future<PrintJobResult> send(Uint8List bytes, PrinterProfile profile) async {
+    final raw = profile.address?.trim() ?? '';
+    if (raw.isEmpty) {
+      return const PrintJobResult.fail('عنوان طابعة الشبكة فارغ.');
+    }
+    try {
+      final parts = raw.split(':');
+      final host = parts.first;
+      final port = parts.length > 1 ? int.tryParse(parts[1]) ?? 9100 : 9100;
+      final socket = await Socket.connect(
+        host,
+        port,
+        timeout: const Duration(seconds: 5),
+      );
+      socket.add(bytes);
+      await socket.flush();
+      await socket.close();
+      return const PrintJobResult.ok();
+    } catch (e) {
+      return PrintJobResult.fail('فشل الاتصال بطابعة الشبكة: $e');
+    }
+  }
+}
+
+class BluetoothPrinterGateway implements PrinterTransportGateway {
+  @override
+  Future<List<PrinterProfile>> discover(PrinterTransport transport) async {
+    return const [];
+  }
+
+  @override
+  Future<PrintJobResult> send(Uint8List bytes, PrinterProfile profile) async {
+    return const PrintJobResult.fail(
+      'طابعة Bluetooth غير مُفعّلة على هذه المنصة. استخدم طابعة شبكة TCP:9100.',
+    );
+  }
+}
+
+class UsbPrinterGateway implements PrinterTransportGateway {
+  @override
+  Future<List<PrinterProfile>> discover(PrinterTransport transport) async {
+    return const [];
+  }
+
+  @override
+  Future<PrintJobResult> send(Uint8List bytes, PrinterProfile profile) async {
+    return const PrintJobResult.fail(
+      'طابعة USB غير مُفعّلة على هذه المنصة. استخدم طابعة شبكة TCP:9100.',
+    );
+  }
+}
+
+class CompositePrinterGateway implements PrinterTransportGateway {
+  CompositePrinterGateway({
+    NetworkPrinterGateway? network,
+    BluetoothPrinterGateway? bluetooth,
+    UsbPrinterGateway? usb,
+  }) : _network = network ?? NetworkPrinterGateway(),
+       _bluetooth = bluetooth ?? BluetoothPrinterGateway(),
+       _usb = usb ?? UsbPrinterGateway();
+
+  final NetworkPrinterGateway _network;
+  final BluetoothPrinterGateway _bluetooth;
+  final UsbPrinterGateway _usb;
+
+  PrinterTransportGateway _for(PrinterTransport transport) {
+    return switch (transport) {
+      PrinterTransport.network || PrinterTransport.system => _network,
+      PrinterTransport.bluetooth => _bluetooth,
+      PrinterTransport.usb => _usb,
+    };
+  }
+
+  @override
+  Future<List<PrinterProfile>> discover(PrinterTransport transport) {
+    return _for(transport).discover(transport);
+  }
+
+  @override
+  Future<PrintJobResult> send(Uint8List bytes, PrinterProfile profile) {
+    return _for(profile.transport).send(bytes, profile);
+  }
+}
+
 class PrinterService {
   PrinterService(this._gateway, this._prefs);
 
@@ -225,8 +315,9 @@ class PrinterService {
         'عنوان الطابعة فارغ (IP / MAC / USB). الطابعة تعتبر غير متصلة.',
       );
     }
-    final bytes = EscPosReceiptBuilder(charsPerLine: profile.paperChars)
-        .buildInvoice(invoice);
+    final bytes = EscPosReceiptBuilder(
+      charsPerLine: profile.paperChars,
+    ).buildInvoice(invoice);
     return _gateway.send(bytes, profile);
   }
 
@@ -236,14 +327,16 @@ class PrinterService {
 }
 
 final printerGatewayProvider = Provider<PrinterTransportGateway>((ref) {
-  return UnconfiguredPrinterGateway();
+  return CompositePrinterGateway();
 });
 
 final printerServiceProvider = Provider<PrinterService>((ref) {
   throw UnimplementedError('Initialize SharedPreferences before use.');
 });
 
-final printerServiceFutureProvider = FutureProvider<PrinterService>((ref) async {
+final printerServiceFutureProvider = FutureProvider<PrinterService>((
+  ref,
+) async {
   final prefs = await SharedPreferences.getInstance();
   return PrinterService(ref.watch(printerGatewayProvider), prefs);
 });

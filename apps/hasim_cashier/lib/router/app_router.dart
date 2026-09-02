@@ -7,7 +7,9 @@ import '../core/theme/hasim_colors.dart';
 import '../core/theme/hasim_theme.dart';
 import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/login_screen.dart';
+import '../features/auth/pin_login_screen.dart';
 import '../features/auth/pos_blocked_screen.dart';
+import '../features/auth/standalone_setup_screen.dart';
 import '../features/auth/workspace_picker_screen.dart';
 import '../features/home/shell_screen.dart';
 
@@ -27,6 +29,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final splash = state.matchedLocation == '/splash';
       final forgot = state.matchedLocation == '/forgot-password';
       final reset = state.matchedLocation == '/reset-password';
+      final pin = state.matchedLocation == '/pin';
+      final setup = state.matchedLocation == '/standalone-setup';
 
       if (auth.isLoading) {
         return splash ? null : '/splash';
@@ -34,7 +38,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       final session = auth.valueOrNull;
       if (session == null) {
-        if (loggingIn || forgot || reset) return null;
+        if (loggingIn || forgot || reset || pin || setup) return null;
         return '/login';
       }
 
@@ -44,7 +48,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return picking ? null : '/workspaces';
       }
 
-      if (loggingIn || splash || picking || forgot || reset) {
+      if (loggingIn || splash || picking || forgot || reset || pin || setup) {
         return '/home';
       }
       return null;
@@ -52,6 +56,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: '/splash', builder: (_, __) => const _Splash()),
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+      GoRoute(path: '/pin', builder: (_, __) => const PinLoginScreen()),
+      GoRoute(
+        path: '/standalone-setup',
+        builder: (_, __) => const StandaloneSetupScreen(),
+      ),
       GoRoute(
         path: '/forgot-password',
         builder: (_, __) => const ForgotPasswordScreen(),

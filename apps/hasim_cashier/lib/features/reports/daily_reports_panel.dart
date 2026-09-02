@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/local_db/local_db_providers.dart';
+import '../../core/pos/application/pos_providers.dart';
 import '../../core/network/cashier_link.dart';
 import '../../core/offline/offline_store.dart';
 import '../../core/permissions/cashier_permissions.dart';
@@ -69,6 +70,23 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
     }
 
     try {
+      final session = ref.read(authControllerProvider).valueOrNull;
+      if (session?.isLocalMode == true) {
+        final workspaceId = ref.read(workspaceIdProvider);
+        if (workspaceId != null) {
+          final local = await ref
+              .read(localReportsServiceProvider)
+              .daily(workspaceId: workspaceId, date: _date);
+          if (!mounted) return;
+          setState(() {
+            _data = local;
+            _loading = false;
+            _stale = false;
+            _error = null;
+          });
+        }
+        return;
+      }
       final api = ref.read(cashierApiProvider);
       final data = await api.get('/reports/daily', query: {'date': _q});
       Map<String, dynamic> live = const {};
@@ -182,8 +200,7 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
         padding: EdgeInsets.all(16),
         child: HsEmpty(
           title: 'غير مصرح بعرض التقارير',
-          subtitle:
-              'لا تملك صلاحية reports.view. تواصل مع مدير مساحة العمل.',
+          subtitle: 'لا تملك صلاحية reports.view. تواصل مع مدير مساحة العمل.',
         ),
       );
     }
@@ -254,8 +271,10 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
                   children: [
                     const Text(
                       'التقارير اليومية',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                     Text(
                       _stale
@@ -297,18 +316,16 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
             live: _liveChannelStats,
           ),
           const SizedBox(height: 16),
-          const Text(
-            'الملخص',
-            style: TextStyle(fontWeight: FontWeight.w800),
-          ),
+          const Text('الملخص', style: TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
               _metric(
-                _num(summary['invoice_sales_total'] ?? summary['invoices_total'])
-                    .toStringAsFixed(2),
+                _num(
+                  summary['invoice_sales_total'] ?? summary['invoices_total'],
+                ).toStringAsFixed(2),
                 'إجمالي المبيعات',
                 highlight: true,
               ),
@@ -323,10 +340,7 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
                 _num(summary['discount_total']).toStringAsFixed(2),
                 'خصومات',
               ),
-              _metric(
-                _num(summary['tax_total']).toStringAsFixed(2),
-                'ضريبة',
-              ),
+              _metric(_num(summary['tax_total']).toStringAsFixed(2), 'ضريبة'),
               _metric('${_int(summary['total_quantity'])}', 'كميات'),
             ],
           ),
@@ -367,10 +381,7 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
             ),
             const SizedBox(height: 8),
             for (final row in payments)
-              _rowCard(
-                _str(row['method']),
-                '× ${_str(row['orders_count'])}',
-              ),
+              _rowCard(_str(row['method']), '× ${_str(row['orders_count'])}'),
           ],
           if (byType.isNotEmpty) ...[
             const SizedBox(height: 16),
@@ -497,23 +508,29 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
     final cards = <(String, int, int, bool)>[
       (
         'اليوم · داخل المطعم (طاولة)',
-        _int(summary['table_orders_count'] ?? channels['table'] ?? live['table']),
+        _int(
+          summary['table_orders_count'] ?? channels['table'] ?? live['table'],
+        ),
         _int(live['open_table']),
         false,
       ),
       (
         'اليوم · طلب خارجي',
-        _int(summary['takeaway_orders_count'] ??
-            channels['takeaway'] ??
-            live['takeaway']),
+        _int(
+          summary['takeaway_orders_count'] ??
+              channels['takeaway'] ??
+              live['takeaway'],
+        ),
         _int(live['open_takeaway']),
         false,
       ),
       (
         'اليوم · توصيل',
-        _int(summary['delivery_orders_count'] ??
-            channels['delivery'] ??
-            live['delivery']),
+        _int(
+          summary['delivery_orders_count'] ??
+              channels['delivery'] ??
+              live['delivery'],
+        ),
         _int(live['open_delivery']),
         false,
       ),
@@ -527,15 +544,15 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
 
     return LayoutBuilder(
       builder: (context, c) {
-        final maxW = c.maxWidth.isFinite ? c.maxWidth : MediaQuery.sizeOf(context).width;
+        final maxW = c.maxWidth.isFinite
+            ? c.maxWidth
+            : MediaQuery.sizeOf(context).width;
         final cols = maxW >= 900
             ? 4
             : maxW >= 520
-                ? 2
-                : 1;
-        final width = cols == 1
-            ? maxW
-            : (maxW - (8 * (cols - 1))) / cols;
+            ? 2
+            : 1;
+        final width = cols == 1 ? maxW : (maxW - (8 * (cols - 1))) / cols;
         final cardW = width.isFinite && width > 0 ? width : maxW;
         return Wrap(
           spacing: 8,
@@ -545,9 +562,12 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
               SizedBox(
                 width: cardW,
                 child: HsCard(
-                  color: card.$4 ? const Color(0xFFECFDF5) : HasimColors.surface,
-                  borderColor:
-                      card.$4 ? const Color(0xFFA7F3D0) : HasimColors.border,
+                  color: card.$4
+                      ? const Color(0xFFECFDF5)
+                      : HasimColors.surface,
+                  borderColor: card.$4
+                      ? const Color(0xFFA7F3D0)
+                      : HasimColors.border,
                   padding: const EdgeInsets.all(12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

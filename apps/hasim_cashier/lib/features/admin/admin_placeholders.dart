@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
+import '../../core/local_db/local_db_providers.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
+import '../../core/pos/application/pos_providers.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/widgets/hasim_widgets.dart';
 import '../cart/cart_controller.dart';
@@ -25,9 +27,9 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
   final _search = TextEditingController();
 
   Map<String, dynamic> get _perms => CashierPermissions.resolve(
-        ref.read(cashierPermissionsProvider),
-        ref.read(authControllerProvider).valueOrNull?.permissions,
-      );
+    ref.read(cashierPermissionsProvider),
+    ref.read(authControllerProvider).valueOrNull?.permissions,
+  );
 
   bool get _canManage => CashierPermissions.canManageMenu(_perms);
 
@@ -49,10 +51,33 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
       _error = null;
     });
     try {
+      final session = ref.read(authControllerProvider).valueOrNull;
+      final standalone = session?.isLocalMode == true;
+      final workspaceId = ref.read(workspaceIdProvider);
+      if (standalone && workspaceId != null) {
+        final items = await ref
+            .read(catalogRepositoryProvider)
+            .products(workspaceId);
+        final cats = await ref
+            .read(catalogRepositoryProvider)
+            .categories(workspaceId);
+        if (!mounted) return;
+        setState(() {
+          _items = items;
+          _categories = cats;
+          _loading = false;
+        });
+        ref.invalidate(catalogItemsProvider);
+        return;
+      }
       final api = ref.read(cashierApiProvider);
       final itemsData = await api.get(
         '/catalog/items',
-        query: {'active_only': false, 'per_page': 100, 'q': _search.text.trim()},
+        query: {
+          'active_only': false,
+          'per_page': 100,
+          'q': _search.text.trim(),
+        },
       );
       final catsData = await api.get('/catalog/categories');
       final items = <Map<String, dynamic>>[];
@@ -93,13 +118,53 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
     if (!_canManage) return;
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (ctx) => _ItemFormDialog(
-        categories: _categories,
-        existing: existing,
-      ),
+      builder: (ctx) =>
+          _ItemFormDialog(categories: _categories, existing: existing),
     );
     if (result == null) return;
     try {
+      final session = ref.read(authControllerProvider).valueOrNull;
+      final workspaceId = ref.read(workspaceIdProvider);
+      if (session?.isLocalMode == true && workspaceId != null) {
+        final admin = ref.read(catalogAdminServiceProvider);
+        if (existing == null) {
+          await admin.createProduct(
+            workspaceId: workspaceId,
+            name: '${result['name']}',
+            price: (result['price'] as num?)?.toDouble() ?? 0,
+            sku: result['sku'] as String?,
+            barcode: result['barcode'] as String?,
+            cost: (result['cost'] as num?)?.toDouble() ?? 0,
+            taxRate: (result['tax_rate'] as num?)?.toDouble() ?? 0,
+            stock: (result['stock'] as num?)?.toInt(),
+            trackStock: result['track_stock'] == true,
+            categoryLocalId: result['category_local_id'] as String?,
+          );
+        } else {
+          await admin.updateProduct(
+            workspaceId: workspaceId,
+            localId: '${existing['local_id'] ?? existing['id']}',
+            name: '${result['name']}',
+            price: (result['price'] as num?)?.toDouble(),
+            sku: result['sku'] as String?,
+            barcode: result['barcode'] as String?,
+            cost: (result['cost'] as num?)?.toDouble(),
+            stock: (result['stock'] as num?)?.toInt(),
+          );
+        }
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              existing == null
+                  ? 'تمت إضافة الصنف محلياً.'
+                  : 'تم تحديث الصنف محلياً.',
+            ),
+          ),
+        );
+        await _load();
+        return;
+      }
       final api = ref.read(cashierApiProvider);
       if (existing == null) {
         await api.post('/catalog/items', data: result);
@@ -109,14 +174,17 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(existing == null ? 'تمت إضافة الصنف.' : 'تم تحديث الصنف.'),
+          content: Text(
+            existing == null ? 'تمت إضافة الصنف.' : 'تم تحديث الصنف.',
+          ),
         ),
       );
       await _load();
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -146,8 +214,9 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
       await _load();
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -196,6 +265,20 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
       'sort_order': existing?['sort_order'] ?? 0,
     };
     try {
+      final session = ref.read(authControllerProvider).valueOrNull;
+      final workspaceId = ref.read(workspaceIdProvider);
+      if (session?.isLocalMode == true && workspaceId != null) {
+        if (existing == null) {
+          await ref
+              .read(catalogAdminServiceProvider)
+              .createCategory(
+                workspaceId: workspaceId,
+                name: payload['name'] as String,
+              );
+        }
+        await _load();
+        return;
+      }
       final api = ref.read(cashierApiProvider);
       if (existing == null) {
         await api.post('/catalog/categories', data: payload);
@@ -205,8 +288,9 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
       await _load();
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -238,8 +322,9 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
       await _load();
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -342,7 +427,10 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: HsCard(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   child: Row(
                     children: [
                       Expanded(
@@ -370,10 +458,7 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
                 ),
               ),
           const SizedBox(height: 16),
-          const Text(
-            'الأصناف',
-            style: TextStyle(fontWeight: FontWeight.w800),
-          ),
+          const Text('الأصناف', style: TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
           if (_items.isEmpty)
             const HsEmpty(title: 'لا توجد أصناف.')
@@ -391,8 +476,9 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
                           children: [
                             Text(
                               '${item['name']}',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w800),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                             Text(
                               [
@@ -476,7 +562,8 @@ class _ItemFormDialogState extends State<_ItemFormDialog> {
       text: ((e?['price'] as num?) ?? 0).toStringAsFixed(2),
     );
     _currency = TextEditingController(text: '${e?['currency'] ?? 'SAR'}');
-    _categoryId = (e?['pos_item_category_id'] as num?)?.toInt() ??
+    _categoryId =
+        (e?['pos_item_category_id'] as num?)?.toInt() ??
         (e?['category'] is Map
             ? ((e!['category'] as Map)['id'] as num?)?.toInt()
             : null);
@@ -512,8 +599,9 @@ class _ItemFormDialogState extends State<_ItemFormDialog> {
               ),
               TextField(
                 controller: _price,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: const InputDecoration(labelText: 'السعر'),
               ),
               TextField(
@@ -581,14 +669,19 @@ class _ItemFormDialogState extends State<_ItemFormDialog> {
             Navigator.pop(context, {
               'name': _name.text.trim(),
               'sku': _sku.text.trim().isEmpty ? null : _sku.text.trim(),
-              'barcode':
-                  _barcode.text.trim().isEmpty ? null : _barcode.text.trim(),
-              'item_type': _type.text.trim().isEmpty ? 'عام' : _type.text.trim(),
+              'barcode': _barcode.text.trim().isEmpty
+                  ? null
+                  : _barcode.text.trim(),
+              'item_type': _type.text.trim().isEmpty
+                  ? 'عام'
+                  : _type.text.trim(),
               'pos_item_category_id': _categoryId,
-              'size_label':
-                  _size.text.trim().isEmpty ? null : _size.text.trim(),
-              'description':
-                  _desc.text.trim().isEmpty ? null : _desc.text.trim(),
+              'size_label': _size.text.trim().isEmpty
+                  ? null
+                  : _size.text.trim(),
+              'description': _desc.text.trim().isEmpty
+                  ? null
+                  : _desc.text.trim(),
               'price': price,
               'currency': _currency.text.trim().isEmpty
                   ? 'SAR'

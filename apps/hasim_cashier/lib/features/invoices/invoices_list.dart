@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api/cashier_api.dart';
+import '../../core/auth/auth_controller.dart';
 import '../../core/local_db/local_db_providers.dart';
 import '../../core/printing/printer_service.dart';
 import '../../core/theme/hasim_colors.dart';
@@ -62,11 +63,21 @@ class _InvoicesListState extends ConsumerState<InvoicesList> {
     }
 
     try {
+      final session = ref.read(authControllerProvider).valueOrNull;
+      if (session?.isLocalMode == true) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _stale = false;
+          _workspaceName =
+              session?.workspace?['name'] as String? ?? 'متجر محلي';
+        });
+        return;
+      }
       final boot = await ref.read(cashierApiProvider).get('/bootstrap');
-      final data = await ref.read(cashierApiProvider).get(
-        '/invoices',
-        query: {'date': _dateQuery},
-      );
+      final data = await ref
+          .read(cashierApiProvider)
+          .get('/invoices', query: {'date': _dateQuery});
       final list = <Map<String, dynamic>>[];
       if (data['invoices'] is List) {
         for (final item in data['invoices'] as List) {
@@ -127,16 +138,16 @@ class _InvoicesListState extends ConsumerState<InvoicesList> {
     final localId = '${invoice['local_id'] ?? ''}';
     Map<String, dynamic>? local;
     if (workspaceId != null && localId.isNotEmpty) {
-      local = await ref.read(localFinanceRepositoryProvider).getInvoice(
-            workspaceId: workspaceId,
-            localId: localId,
-          );
+      local = await ref
+          .read(localFinanceRepositoryProvider)
+          .getInvoice(workspaceId: workspaceId, localId: localId);
     }
     final serverId = asInt(invoice['id'] ?? invoice['server_id']);
     if (serverId != null && serverId > 0) {
       try {
-        final data =
-            await ref.read(cashierApiProvider).get('/invoices/$serverId');
+        final data = await ref
+            .read(cashierApiProvider)
+            .get('/invoices/$serverId');
         if (!mounted) return;
         final inv = data['invoice'] is Map
             ? Map<String, dynamic>.from(data['invoice'] as Map)
@@ -186,8 +197,10 @@ class _InvoicesListState extends ConsumerState<InvoicesList> {
                   children: [
                     const Text(
                       'فواتير الكاشير المغلقة',
-                      style:
-                          TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -214,92 +227,88 @@ class _InvoicesListState extends ConsumerState<InvoicesList> {
           child: _loading && _invoices.isEmpty
               ? const Center(child: CircularProgressIndicator())
               : _error != null && _invoices.isEmpty
-                  ? Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: HsEmpty(
-                        title: 'تعذر تحميل الفواتير',
-                        subtitle: _error,
-                        actionLabel: 'إعادة المحاولة',
-                        onAction: _load,
-                      ),
-                    )
-                  : _invoices.isEmpty
-                      ? const Padding(
-                          padding: EdgeInsets.all(16),
-                          child: HsEmpty(
-                            title: 'لا توجد فواتير لهذا التاريخ.',
-                            subtitle:
-                                'الفواتير المحلية تظهر هنا بعد إغلاق الطاولة أو طلب خارجي.',
-                          ),
-                        )
-                      : _selected != null
-                          ? _InvoiceDetail(
-                              invoice: _selected!,
-                              onBack: () => setState(() => _selected = null),
-                              onPrint: () => _printSelected(reprint: false),
-                              onReprint: () => _printSelected(reprint: true),
-                            )
-                          : RefreshIndicator(
-                              onRefresh: _load,
-                              child: ListView.separated(
-                                padding: const EdgeInsets.all(12),
-                                itemCount: _invoices.length,
-                                separatorBuilder: (_, _) =>
-                                    const SizedBox(height: 8),
-                                itemBuilder: (context, index) {
-                                  final inv = _invoices[index];
-                                  return HsCard(
-                                    child: InkWell(
-                                      onTap: () => _openInvoice(inv),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 4,
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    '${inv['invoice_number'] ?? inv['local_id'] ?? '—'}',
-                                                    style: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w800,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 2),
-                                                  Text(
-                                                    inv['table'] is Map
-                                                        ? 'طاولة: ${inv['table']['name'] ?? '—'}'
-                                                        : (inv['is_local'] ==
-                                                                true
-                                                            ? 'محلية — بانتظار المزامنة'
-                                                            : 'فاتورة'),
-                                                    style: const TextStyle(
-                                                      fontSize: 12,
-                                                      color: HasimColors.muted,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            Text(
-                                              asDoubleOr(inv['total_amount'])
-                                                  .toStringAsFixed(2),
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w900,
-                                              ),
-                                            ),
-                                          ],
+              ? Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: HsEmpty(
+                    title: 'تعذر تحميل الفواتير',
+                    subtitle: _error,
+                    actionLabel: 'إعادة المحاولة',
+                    onAction: _load,
+                  ),
+                )
+              : _invoices.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: HsEmpty(
+                    title: 'لا توجد فواتير لهذا التاريخ.',
+                    subtitle:
+                        'الفواتير المحلية تظهر هنا بعد إغلاق الطاولة أو طلب خارجي.',
+                  ),
+                )
+              : _selected != null
+              ? _InvoiceDetail(
+                  invoice: _selected!,
+                  onBack: () => setState(() => _selected = null),
+                  onPrint: () => _printSelected(reprint: false),
+                  onReprint: () => _printSelected(reprint: true),
+                )
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: _invoices.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final inv = _invoices[index];
+                      return HsCard(
+                        child: InkWell(
+                          onTap: () => _openInvoice(inv),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '${inv['invoice_number'] ?? inv['local_id'] ?? '—'}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
                                         ),
                                       ),
-                                    ),
-                                  );
-                                },
-                              ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        inv['table'] is Map
+                                            ? 'طاولة: ${inv['table']['name'] ?? '—'}'
+                                            : (inv['is_local'] == true
+                                                  ? 'محلية — بانتظار المزامنة'
+                                                  : 'فاتورة'),
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: HasimColors.muted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Text(
+                                  asDoubleOr(
+                                    inv['total_amount'],
+                                  ).toStringAsFixed(2),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ],
                             ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
         ),
       ],
     );
@@ -346,15 +355,14 @@ class _InvoiceDetail extends StatelessWidget {
             ),
             OutlinedButton(onPressed: onPrint, child: const Text('طباعة')),
             const SizedBox(width: 8),
-            OutlinedButton(
-              onPressed: onReprint,
-              child: const Text('إعادة'),
-            ),
+            OutlinedButton(onPressed: onReprint, child: const Text('إعادة')),
           ],
         ),
         const SizedBox(height: 8),
         Text('${invoice['store_name'] ?? 'كاشير حاسم'}'),
-        Text('التاريخ: ${invoice['closed_at'] ?? invoice['created_at'] ?? '—'}'),
+        Text(
+          'التاريخ: ${invoice['closed_at'] ?? invoice['created_at'] ?? '—'}',
+        ),
         Text('الطاولة: ${invoice['table']?['name'] ?? '—'}'),
         if (payment != null) Text('الدفع: $payment'),
         const Divider(),

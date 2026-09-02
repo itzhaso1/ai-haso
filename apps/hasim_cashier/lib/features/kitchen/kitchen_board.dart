@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
+import '../../core/auth/auth_controller.dart';
 import '../../core/config/app_config.dart';
 import '../../core/network/cashier_link.dart';
 import '../../core/offline/offline_store.dart';
+import '../../core/pos/application/pos_providers.dart';
 import '../../core/pos/pos_labels.dart';
+import '../../core/pos/pos_mode.dart';
 import '../../core/realtime/pos_event_source.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
@@ -67,6 +70,26 @@ class _KitchenBoardState extends ConsumerState<KitchenBoard> {
         _error = null;
       });
     }
+    final workspaceId = ref.read(workspaceIdProvider);
+    if (workspaceId != null && workspaceId > 0) {
+      await for (final local
+          in ref
+              .read(kitchenLocalServiceProvider)
+              .watchActive(workspaceId)
+              .take(1)) {
+        if (!mounted) return;
+        setState(() {
+          _orders = local;
+          _loading = false;
+          _error = null;
+        });
+      }
+    }
+    final session = ref.read(authControllerProvider).valueOrNull;
+    if (session?.isLocalMode == true ||
+        PosMode.isStandaloneToken(session?.token)) {
+      return;
+    }
     try {
       final data = await ref.read(cashierApiProvider).get('/kitchen/orders');
       final list = <Map<String, dynamic>>[];
@@ -77,47 +100,47 @@ class _KitchenBoardState extends ConsumerState<KitchenBoard> {
       }
       if (!mounted) return;
       await OfflineStore.instance.cacheKitchen(list);
-      setState(() {
-        _orders = list;
-        _loading = false;
-        _error = null;
-      });
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      final cached = OfflineStore.instance.readKitchen();
-      if (cached.isNotEmpty && _orders.isEmpty) {
+      if (list.isNotEmpty) {
         setState(() {
-          _orders = cached;
+          _orders = list;
           _loading = false;
-          _error = silent ? null : e.message;
+          _error = null;
         });
-        return;
       }
-      if (silent) return;
-      setState(() {
-        _loading = false;
-        _error = e.message;
-      });
+    } on ApiException catch (e) {
+      if (!mounted || silent) return;
+      if (_orders.isEmpty) {
+        setState(() {
+          _loading = false;
+          _error = e.message;
+        });
+      }
     } catch (e) {
       if (!mounted || silent) return;
-      setState(() {
-        _loading = false;
-        _error = e.toString();
-      });
+      if (_orders.isEmpty) {
+        setState(() {
+          _loading = false;
+          _error = e.toString();
+        });
+      }
     }
   }
 
-  Future<void> _updateStatus(int id, String status) async {
+  Future<void> _updateStatus(String localId, String status) async {
+    final workspaceId = ref.read(workspaceIdProvider);
+    if (workspaceId == null) return;
     try {
-      await ref.read(cashierApiProvider).post(
-        '/orders/$id/status',
-        data: {'pos_status': status},
-      );
+      await ref
+          .read(kitchenLocalServiceProvider)
+          .updateStatus(
+            workspaceId: workspaceId,
+            orderLocalId: localId,
+            status: status,
+          );
       await _load();
-    } on ApiException catch (e) {
+    } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 
@@ -211,7 +234,7 @@ class _KitchenBoardState extends ConsumerState<KitchenBoard> {
                               const SizedBox(height: 8),
                               for (final item in items)
                                 Text(
-                                  '• ${item['quantity']} × ${item['product_name']}'
+                                  '• ${item['quantity']} × ${item['item_name'] ?? item['product_name']}'
                                   '${item['variant_name'] != null ? ' - ${item['variant_name']}' : ''}',
                                   style: const TextStyle(fontSize: 12),
                                 ),
@@ -223,8 +246,9 @@ class _KitchenBoardState extends ConsumerState<KitchenBoard> {
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
                                   color: Colors.white,
-                                  borderRadius:
-                                      BorderRadius.circular(HasimRadius.sm),
+                                  borderRadius: BorderRadius.circular(
+                                    HasimRadius.sm,
+                                  ),
                                 ),
                                 child: Text(
                                   'ملاحظات: ${order['notes']}',
@@ -268,10 +292,13 @@ class _KitchenBoardState extends ConsumerState<KitchenBoard> {
                                             ),
                                         ],
                                         onChanged: (v) {
-                                          final id =
-                                              (order['id'] as num?)?.toInt();
-                                          if (v != null && id != null) {
-                                            _updateStatus(id, v);
+                                          final localId =
+                                              order['local_id'] as String? ??
+                                              order['id']?.toString();
+                                          if (v != null &&
+                                              localId != null &&
+                                              localId.isNotEmpty) {
+                                            _updateStatus(localId, v);
                                           }
                                         },
                                       ),

@@ -6,6 +6,9 @@ import '../../core/audio/menu_sound_service.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
+import '../../core/pos/application/pos_providers.dart';
+import '../../core/pos/pos_errors.dart';
+import '../../core/pos/pos_mode.dart';
 import '../../core/printing/printer_service.dart';
 import '../../core/realtime/pos_event_source.dart';
 import '../../core/theme/hasim_colors.dart';
@@ -33,9 +36,9 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
   PrinterTransport _transport = PrinterTransport.network;
 
   Map<String, dynamic> get _perms => CashierPermissions.resolve(
-        ref.read(cashierPermissionsProvider),
-        ref.read(authControllerProvider).valueOrNull?.permissions,
-      );
+    ref.read(cashierPermissionsProvider),
+    ref.read(authControllerProvider).valueOrNull?.permissions,
+  );
 
   bool get _canManagePos => CashierPermissions.canManageMenu(_perms);
 
@@ -69,10 +72,10 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
     if (!mounted) return;
     setState(() {
       if (settings != null) {
-        _tax.text =
-            ((settings['tax_rate'] as num?) ?? 0).toStringAsFixed(2);
+        _tax.text = ((settings['tax_rate'] as num?) ?? 0).toStringAsFixed(2);
         _currency.text = '${settings['currency'] ?? 'SAR'}';
-        _sound = settings['sound_enabled'] == true ||
+        _sound =
+            settings['sound_enabled'] == true ||
             settings['new_order_sound'] == true;
         _delivery = settings['enable_delivery'] != false;
         ref.read(menuSoundServiceProvider).setEnabled(_sound);
@@ -101,32 +104,57 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
     }
     final tax = double.tryParse(_tax.text.trim());
     if (tax == null || tax < 0 || tax > 100) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('نسبة الضريبة غير صالحة.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('نسبة الضريبة غير صالحة.')));
       return;
     }
     setState(() => _savingPos = true);
     try {
-      final data = await ref.read(cashierApiProvider).patch(
-        '/settings/pos',
-        data: {
-          'tax_rate': tax,
-          'new_order_sound': _sound,
-          'enable_delivery': _delivery,
-          'currency': _currency.text.trim().toUpperCase(),
-        },
-      );
-      await ref.read(menuSoundServiceProvider).setEnabled(_sound);
-      ref.read(cartControllerProvider.notifier).setTaxRate(
-            ((data['tax_rate'] as num?) ?? tax).toDouble(),
+      final session = ref.read(authControllerProvider).valueOrNull;
+      if (session?.isLocalMode == true ||
+          PosMode.isStandaloneToken(session?.token)) {
+        final store = await ref.read(localAuthServiceProvider).anyStore();
+        if (store != null) {
+          await ref
+              .read(localAuthServiceProvider)
+              .updateStore(
+                storeId: store.localId,
+                taxRate: tax,
+                currency: _currency.text.trim().toUpperCase(),
+              );
+        }
+        await ref.read(menuSoundServiceProvider).setEnabled(_sound);
+        ref.read(cartControllerProvider.notifier).setTaxRate(tax);
+        if (!mounted) return;
+        setState(() => _savingPos = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم حفظ إعدادات المتجر محلياً.')),
+        );
+        return;
+      }
+      final data = await ref
+          .read(cashierApiProvider)
+          .patch(
+            '/settings/pos',
+            data: {
+              'tax_rate': tax,
+              'new_order_sound': _sound,
+              'enable_delivery': _delivery,
+              'currency': _currency.text.trim().toUpperCase(),
+            },
           );
+      await ref.read(menuSoundServiceProvider).setEnabled(_sound);
+      ref
+          .read(cartControllerProvider.notifier)
+          .setTaxRate(((data['tax_rate'] as num?) ?? tax).toDouble());
       if (!mounted) return;
       setState(() {
         _savingPos = false;
         _tax.text = ((data['tax_rate'] as num?) ?? tax).toStringAsFixed(2);
         _currency.text = '${data['currency'] ?? _currency.text}';
-        _sound = data['sound_enabled'] == true || data['new_order_sound'] == true;
+        _sound =
+            data['sound_enabled'] == true || data['new_order_sound'] == true;
         _delivery = data['enable_delivery'] == true;
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -135,13 +163,15 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _savingPos = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
       setState(() => _savingPos = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -156,18 +186,229 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
     await printer.saveProfile(profile);
     if (!mounted) return;
     setState(() => _profile = profile);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تم حفظ إعدادات الطابعة.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('تم حفظ إعدادات الطابعة.')));
   }
 
   Future<void> _testPrint() async {
     final printer = await ref.read(printerServiceFutureProvider.future);
     final result = await printer.testPrint();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(result.message)),
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(result.message)));
+  }
+
+  Future<void> _openShift() async {
+    final workspaceId = ref.read(workspaceIdProvider);
+    final userId = ref.read(currentLocalUserIdProvider) ?? 'local';
+    if (workspaceId == null) return;
+    final opening = TextEditingController(text: '0');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('فتح وردية'),
+        content: TextField(
+          controller: opening,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(labelText: 'النقد الافتتاحي'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('فتح'),
+          ),
+        ],
+      ),
     );
+    if (ok != true) return;
+    try {
+      final id = await ref
+          .read(shiftServiceProvider)
+          .open(
+            workspaceId: workspaceId,
+            userId: userId,
+            openingCash: double.tryParse(opening.text) ?? 0,
+          );
+      ref.read(currentShiftIdProvider.notifier).state = id;
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('تم فتح الوردية.')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e is PosException ? e.messageAr : '$e')),
+      );
+    }
+  }
+
+  Future<void> _closeShift() async {
+    final workspaceId = ref.read(workspaceIdProvider);
+    var shiftId = ref.read(currentShiftIdProvider);
+    if (workspaceId == null) return;
+    shiftId ??= (await ref.read(shiftServiceProvider).currentOpen(workspaceId))
+        ?.localId;
+    if (shiftId == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('لا توجد وردية مفتوحة.')));
+      return;
+    }
+    final actual = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('إغلاق الوردية'),
+        content: TextField(
+          controller: actual,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(labelText: 'النقد الفعلي'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('إغلاق'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      final result = await ref
+          .read(shiftServiceProvider)
+          .close(
+            workspaceId: workspaceId,
+            shiftId: shiftId,
+            actualCash: double.tryParse(actual.text) ?? 0,
+          );
+      ref.read(currentShiftIdProvider.notifier).state = null;
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'المتوقع ${result['expected']} · الفعلي ${result['actual']} · الفرق ${result['difference']}',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e is PosException ? e.messageAr : '$e')),
+      );
+    }
+  }
+
+  Future<void> _addLocalTable() async {
+    final workspaceId = ref.read(workspaceIdProvider);
+    if (workspaceId == null) return;
+    final name = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('طاولة جديدة'),
+        content: TextField(
+          controller: name,
+          decoration: const InputDecoration(labelText: 'اسم / رقم الطاولة'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || name.text.trim().isEmpty) return;
+    await ref
+        .read(catalogAdminServiceProvider)
+        .createTable(workspaceId: workspaceId, name: name.text.trim());
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('تمت إضافة الطاولة محلياً.')));
+  }
+
+  Future<void> _exportBackup() async {
+    final workspaceId = ref.read(workspaceIdProvider);
+    if (workspaceId == null) return;
+    try {
+      final file = await ref
+          .read(backupServiceProvider)
+          .exportBackup(workspaceId: workspaceId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('تم التصدير: ${file.path}')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<void> _restoreBackup() async {
+    final workspaceId = ref.read(workspaceIdProvider);
+    if (workspaceId == null) return;
+    final backups = await ref.read(backupServiceProvider).listBackups();
+    if (backups.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا توجد نسخة احتياطية بعد. صدّر أولاً.')),
+      );
+      return;
+    }
+    final chosen = backups.first;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('استعادة النسخة؟'),
+        content: Text(
+          'سيتم أخذ نسخة أمان ثم الكتابة فوق البيانات من:\n${chosen.path}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('استعادة'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref
+          .read(backupServiceProvider)
+          .exportBackup(workspaceId: workspaceId);
+      await ref
+          .read(backupServiceProvider)
+          .restoreFile(chosen, confirmed: true);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('تمت الاستعادة.')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e is PosException ? e.messageAr : '$e')),
+      );
+    }
   }
 
   @override
@@ -192,6 +433,46 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
+                'الوردية والصندوق',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              HsPrimaryButton(label: 'فتح وردية', onPressed: _openShift),
+              const SizedBox(height: 8),
+              HsOutlineButton(label: 'إغلاق الوردية', onPressed: _closeShift),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        HsCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'نسخة احتياطية محلية',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              HsPrimaryButton(label: 'تصدير Backup', onPressed: _exportBackup),
+              const SizedBox(height: 8),
+              HsOutlineButton(
+                label: 'استعادة آخر نسخة',
+                onPressed: _restoreBackup,
+              ),
+              const SizedBox(height: 8),
+              HsOutlineButton(
+                label: 'إضافة طاولة محلية',
+                onPressed: _addLocalTable,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        HsCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
                 'إعدادات الكاشير (Laravel)',
                 style: TextStyle(fontWeight: FontWeight.w800),
               ),
@@ -206,8 +487,9 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
               TextField(
                 controller: _tax,
                 enabled: canManage && _ready && !_savingPos,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: const InputDecoration(
                   labelText: 'نسبة الضريبة %',
                   isDense: true,
@@ -374,7 +656,7 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'لا يتم ادعاء نجاح الطباعة بدون جهاز. بوابة الإرسال الحالية UnconfiguredPrinterGateway حتى ربط Native SDK.',
+                'طابعة الشبكة ترسل ESC/POS عبر TCP:9100. Bluetooth/USB يحتاج Native لاحقاً. فشل الطباعة لا يلغي البيع.',
                 style: TextStyle(fontSize: 11, color: HasimColors.muted),
               ),
             ],

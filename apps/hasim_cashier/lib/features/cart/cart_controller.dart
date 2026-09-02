@@ -1,32 +1,69 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/local_db/local_db_providers.dart';
+import '../../core/pos/application/draft_cart_store.dart';
+import '../../core/pos/application/pos_providers.dart';
+import '../../core/pos/domain/pricing_service.dart';
 
 @immutable
 class CartLine {
   const CartLine({
-    required this.menuItemId,
+    required this.productLocalId,
     required this.name,
     required this.unitPrice,
     required this.quantity,
+    this.menuItemId,
+    this.taxRate = 0,
+    this.cost = 0,
+    this.sku,
+    this.barcode,
+    this.itemDiscount = 0,
     this.note,
   });
 
-  final int menuItemId;
+  final String productLocalId;
+  final int? menuItemId;
   final String name;
   final double unitPrice;
   final int quantity;
+  final double taxRate;
+  final double cost;
+  final String? sku;
+  final String? barcode;
+  final double itemDiscount;
   final String? note;
 
   double get lineTotal => unitPrice * quantity;
 
-  CartLine copyWith({int? quantity, String? note}) => CartLine(
+  PricedLine toPriced() => PricedLine(
+    productLocalId: productLocalId,
+    productServerId: menuItemId,
+    name: name,
+    quantity: quantity,
+    unitPrice: unitPrice,
+    itemDiscount: itemDiscount,
+    taxRate: taxRate,
+    sku: sku,
+    barcode: barcode,
+    cost: cost,
+  );
+
+  CartLine copyWith({int? quantity, String? note, double? itemDiscount}) =>
+      CartLine(
+        productLocalId: productLocalId,
         menuItemId: menuItemId,
         name: name,
         unitPrice: unitPrice,
         quantity: quantity ?? this.quantity,
+        taxRate: taxRate,
+        cost: cost,
+        sku: sku,
+        barcode: barcode,
+        itemDiscount: itemDiscount ?? this.itemDiscount,
         note: note ?? this.note,
       );
 }
@@ -35,10 +72,10 @@ enum OrderChannel { table, takeaway, delivery }
 
 extension OrderChannelLabel on OrderChannel {
   String get labelAr => switch (this) {
-        OrderChannel.table => 'طاولة',
-        OrderChannel.takeaway => 'خارجي',
-        OrderChannel.delivery => 'توصيل',
-      };
+    OrderChannel.table => 'طاولة',
+    OrderChannel.takeaway => 'خارجي',
+    OrderChannel.delivery => 'توصيل',
+  };
 }
 
 class CartState {
@@ -46,8 +83,11 @@ class CartState {
     this.lines = const [],
     this.channel = OrderChannel.takeaway,
     this.tableId,
+    this.tableLocalId,
     this.customerId,
+    this.customerLocalId,
     this.discountAmount = 0,
+    this.discountPercent = 0,
     this.notes,
     this.taxRate = 0,
   });
@@ -55,28 +95,34 @@ class CartState {
   final List<CartLine> lines;
   final OrderChannel channel;
   final int? tableId;
+  final String? tableLocalId;
   final int? customerId;
+  final String? customerLocalId;
   final double discountAmount;
+  final double discountPercent;
   final String? notes;
   final double taxRate;
 
-  double get subtotal =>
-      lines.fold<double>(0, (sum, line) => sum + line.lineTotal);
+  PriceBreakdown get priced => const PricingService().quote(
+    lines: [for (final line in lines) line.toPriced()],
+    orderDiscountAmount: discountAmount,
+    orderDiscountPercent: discountPercent,
+    fallbackTaxRate: taxRate,
+  );
 
-  double get taxAmount {
-    final taxable = (subtotal - discountAmount).clamp(0, double.infinity);
-    return taxable * (taxRate / 100);
-  }
-
-  double get total =>
-      (subtotal - discountAmount + taxAmount).clamp(0, double.infinity);
+  double get subtotal => priced.subtotal;
+  double get taxAmount => priced.taxAmount;
+  double get total => priced.total;
 
   CartState copyWith({
     List<CartLine>? lines,
     OrderChannel? channel,
     int? tableId,
+    String? tableLocalId,
     int? customerId,
+    String? customerLocalId,
     double? discountAmount,
+    double? discountPercent,
     String? notes,
     double? taxRate,
     bool clearTable = false,
@@ -86,8 +132,13 @@ class CartState {
       lines: lines ?? this.lines,
       channel: channel ?? this.channel,
       tableId: clearTable ? null : (tableId ?? this.tableId),
+      tableLocalId: clearTable ? null : (tableLocalId ?? this.tableLocalId),
       customerId: clearCustomer ? null : (customerId ?? this.customerId),
+      customerLocalId: clearCustomer
+          ? null
+          : (customerLocalId ?? this.customerLocalId),
       discountAmount: discountAmount ?? this.discountAmount,
+      discountPercent: discountPercent ?? this.discountPercent,
       notes: notes ?? this.notes,
       taxRate: taxRate ?? this.taxRate,
     );
@@ -95,73 +146,208 @@ class CartState {
 }
 
 class CartController extends StateNotifier<CartState> {
-  CartController() : super(const CartState());
+  CartController({this.store, this.workspaceId}) : super(const CartState()) {
+    unawaited(_restore());
+  }
 
-  void setTaxRate(double rate) => state = state.copyWith(taxRate: rate);
+  final DraftCartStore? store;
+  final int? workspaceId;
+  var _hydrated = false;
+
+  Future<void> _restore() async {
+    final s = store;
+    final ws = workspaceId;
+    if (s == null || ws == null) {
+      _hydrated = true;
+      return;
+    }
+    final draft = await s.load(workspaceId: ws, channel: state.channel.name);
+    if (draft != null && draft.lines.isNotEmpty) {
+      state = CartState(
+        lines: [
+          for (final line in draft.lines)
+            CartLine(
+              productLocalId: line.productLocalId,
+              menuItemId: line.productServerId,
+              name: line.name,
+              unitPrice: line.unitPrice,
+              quantity: line.quantity,
+              taxRate: line.taxRate,
+              cost: line.cost,
+              sku: line.sku,
+              barcode: line.barcode,
+              itemDiscount: line.itemDiscount,
+            ),
+        ],
+        channel: switch (draft.channel) {
+          'table' => OrderChannel.table,
+          'delivery' => OrderChannel.delivery,
+          _ => OrderChannel.takeaway,
+        },
+        tableId: draft.tableServerId,
+        tableLocalId: draft.tableLocalId,
+        customerLocalId: draft.customerLocalId,
+        discountAmount: draft.discountAmount,
+        discountPercent: draft.discountPercent,
+        notes: draft.notes,
+        taxRate: draft.taxRate,
+      );
+    }
+    _hydrated = true;
+  }
+
+  void _persist() {
+    final s = store;
+    final ws = workspaceId;
+    if (!_hydrated || s == null || ws == null) return;
+    unawaited(
+      s.save(
+        workspaceId: ws,
+        channel: state.channel.name,
+        tableLocalId: state.tableLocalId,
+        tableServerId: state.tableId,
+        customerLocalId: state.customerLocalId,
+        notes: state.notes,
+        discountAmount: state.discountAmount,
+        discountPercent: state.discountPercent,
+        taxRate: state.taxRate,
+        lines: [for (final line in state.lines) line.toPriced()],
+      ),
+    );
+  }
+
+  void restore(CartState next) {
+    state = next;
+    _persist();
+  }
+
+  void setTaxRate(double rate) {
+    state = state.copyWith(taxRate: rate);
+    _persist();
+  }
 
   void setChannel(OrderChannel channel) {
     state = state.copyWith(
       channel: channel,
       clearTable: channel != OrderChannel.table,
     );
+    _persist();
   }
 
-  void setTable(int? tableId) => state = state.copyWith(tableId: tableId);
+  void setTable(int? tableId, {String? tableLocalId}) {
+    state = state.copyWith(tableId: tableId, tableLocalId: tableLocalId);
+    _persist();
+  }
 
-  void setCustomer(int? customerId) => state = customerId == null
-      ? state.copyWith(clearCustomer: true)
-      : state.copyWith(customerId: customerId);
+  void setCustomer(int? customerId, {String? customerLocalId}) {
+    if (customerId == null && customerLocalId == null) {
+      state = state.copyWith(clearCustomer: true);
+    } else {
+      state = state.copyWith(
+        customerId: customerId,
+        customerLocalId: customerLocalId,
+      );
+    }
+    _persist();
+  }
 
   void addItem({
-    required int menuItemId,
+    required String productLocalId,
     required String name,
     required double unitPrice,
+    int? menuItemId,
+    double taxRate = 0,
+    double cost = 0,
+    String? sku,
+    String? barcode,
   }) {
-    final existingIndex =
-        state.lines.indexWhere((line) => line.menuItemId == menuItemId);
+    final existingIndex = state.lines.indexWhere(
+      (line) => line.productLocalId == productLocalId,
+    );
     if (existingIndex >= 0) {
       final lines = [...state.lines];
       final current = lines[existingIndex];
       lines[existingIndex] = current.copyWith(quantity: current.quantity + 1);
       state = state.copyWith(lines: lines);
+      _persist();
       return;
     }
-    state = state.copyWith(lines: [
-      ...state.lines,
-      CartLine(
-        menuItemId: menuItemId,
-        name: name,
-        unitPrice: unitPrice,
-        quantity: 1,
-      ),
-    ]);
+    state = state.copyWith(
+      lines: [
+        ...state.lines,
+        CartLine(
+          productLocalId: productLocalId,
+          menuItemId: menuItemId,
+          name: name,
+          unitPrice: unitPrice,
+          quantity: 1,
+          taxRate: taxRate,
+          cost: cost,
+          sku: sku,
+          barcode: barcode,
+        ),
+      ],
+    );
+    _persist();
   }
 
-  void setQuantity(int menuItemId, int quantity) {
+  void setQuantity(String productLocalId, int quantity) {
     if (quantity <= 0) {
-      removeItem(menuItemId);
+      removeItem(productLocalId);
       return;
     }
     final lines = state.lines
-        .map((line) => line.menuItemId == menuItemId
-            ? line.copyWith(quantity: quantity)
-            : line)
+        .map(
+          (line) => line.productLocalId == productLocalId
+              ? line.copyWith(quantity: quantity)
+              : line,
+        )
         .toList();
     state = state.copyWith(lines: lines);
+    _persist();
   }
 
-  void removeItem(int menuItemId) {
+  void removeItem(String productLocalId) {
     state = state.copyWith(
-      lines: state.lines.where((line) => line.menuItemId != menuItemId).toList(),
+      lines: state.lines
+          .where((line) => line.productLocalId != productLocalId)
+          .toList(),
     );
+    _persist();
   }
 
-  void setDiscount(double amount) =>
-      state = state.copyWith(discountAmount: amount.clamp(0, double.infinity));
+  void setDiscount(double amount) {
+    state = state.copyWith(discountAmount: amount.clamp(0, double.infinity));
+    _persist();
+  }
 
-  void setNotes(String? notes) => state = state.copyWith(notes: notes);
+  void setDiscountPercent(double percent) {
+    state = state.copyWith(discountPercent: percent.clamp(0, 100));
+    _persist();
+  }
 
-  void clear() => state = CartState(taxRate: state.taxRate);
+  void setNotes(String? notes) {
+    state = state.copyWith(notes: notes);
+    _persist();
+  }
+
+  void clear() {
+    final tax = state.taxRate;
+    final channel = state.channel;
+    final tableLocalId = state.tableLocalId;
+    state = CartState(taxRate: tax, channel: channel);
+    final s = store;
+    final ws = workspaceId;
+    if (s != null && ws != null) {
+      unawaited(
+        s.clear(
+          workspaceId: ws,
+          channel: channel.name,
+          tableLocalId: tableLocalId,
+        ),
+      );
+    }
+  }
 
   Map<String, dynamic> toOrderPayload({required String clientReference}) {
     return {
@@ -174,61 +360,45 @@ class CartController extends StateNotifier<CartState> {
         'dining_table_id': state.tableId,
       if (state.customerId != null) 'customer_id': state.customerId,
       'discount_amount': state.discountAmount,
+      'discount_percent': state.discountPercent,
       if (state.notes != null && state.notes!.isNotEmpty) 'notes': state.notes,
       'client_reference': clientReference,
       'items': state.lines
-          .map((line) => {
-                'pos_menu_item_id': line.menuItemId,
-                'quantity': line.quantity,
-              })
+          .map(
+            (line) => {
+              'pos_menu_item_id': line.menuItemId,
+              'product_local_id': line.productLocalId,
+              'quantity': line.quantity,
+            },
+          )
           .toList(),
     };
   }
 }
 
-final cartControllerProvider =
-    StateNotifierProvider<CartController, CartState>((ref) => CartController());
+final cartControllerProvider = StateNotifierProvider<CartController, CartState>(
+  (ref) {
+    return CartController(
+      store: ref.watch(draftCartStoreProvider),
+      workspaceId: ref.watch(workspaceIdProvider),
+    );
+  },
+);
 
-final catalogItemsProvider =
-    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+final catalogItemsProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
   final workspaceId = ref.watch(workspaceIdProvider);
   if (workspaceId == null || workspaceId <= 0) return const [];
   final catalog = ref.read(catalogRepositoryProvider);
-  final local = await catalog.products(workspaceId);
-  // Best-effort remote refresh into Initial Sync path is owned by sync;
-  // providers stay local-first and never dual-write Hive.
-  if (local.isNotEmpty) return local;
-  try {
-    final data = await ref
-        .watch(cashierApiProvider)
-        .get('/catalog/items', query: {'per_page': 100});
-    final items = data['items'];
-    if (items is List) {
-      return items
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
-    }
-  } catch (_) {}
-  return local;
+  return catalog.products(workspaceId);
 });
 
-final categoriesProvider =
-    FutureProvider<List<Map<String, dynamic>>>((ref) async {
+final categoriesProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
   final workspaceId = ref.watch(workspaceIdProvider);
   if (workspaceId == null || workspaceId <= 0) return const [];
   final catalog = ref.read(catalogRepositoryProvider);
-  final local = await catalog.categories(workspaceId);
-  if (local.isNotEmpty) return local;
-  try {
-    final data = await ref.watch(cashierApiProvider).get('/catalog/categories');
-    final categories = data['categories'];
-    if (categories is List) {
-      return categories
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
-    }
-  } catch (_) {}
-  return local;
+  return catalog.categories(workspaceId);
 });

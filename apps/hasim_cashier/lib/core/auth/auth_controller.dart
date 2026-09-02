@@ -2,9 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../api/cashier_api.dart';
-import '../local_db/local_db_providers.dart';
-import '../local_db/local_demo_seed_service.dart';
 import '../offline/offline_store.dart';
+import '../pos/application/local_auth_service.dart';
+import '../pos/application/pos_providers.dart';
+import '../pos/pos_errors.dart';
+import '../pos/pos_mode.dart';
 
 const _tokenKey = 'cashier_token';
 const _workspaceKey = 'cashier_workspace_id';
@@ -51,11 +53,13 @@ class AuthRepository {
           : {'id': int.tryParse(workspaceRaw)},
       workspaces: const [],
       posEnabled: true,
-      isLocalMode: token == 'local-offline',
+      isLocalMode: PosMode.isStandaloneToken(token),
     );
   }
 
-  Future<AuthSession> _sessionFromLoginPayload(Map<String, dynamic> data) async {
+  Future<AuthSession> _sessionFromLoginPayload(
+    Map<String, dynamic> data,
+  ) async {
     final token = data['token'] as String? ?? '';
     await _storage.write(key: _tokenKey, value: token);
 
@@ -98,12 +102,15 @@ class AuthRepository {
     required String emailOrPhone,
     required String password,
   }) async {
-    final data = await _api.post('/auth/login', data: {
-      'email_or_phone': emailOrPhone,
-      'password': password,
-      'device_name': 'كاشير حاسم',
-      'device_type': 'cashier',
-    });
+    final data = await _api.post(
+      '/auth/login',
+      data: {
+        'email_or_phone': emailOrPhone,
+        'password': password,
+        'device_name': 'كاشير حاسم',
+        'device_type': 'cashier',
+      },
+    );
     return _sessionFromLoginPayload(data);
   }
 
@@ -111,19 +118,23 @@ class AuthRepository {
     required String provider,
     required String accessToken,
   }) async {
-    final data = await _api.post('/auth/social', data: {
-      'provider': provider,
-      'access_token': accessToken,
-      'device_name': 'كاشير حاسم',
-      'device_type': 'cashier',
-    });
+    final data = await _api.post(
+      '/auth/social',
+      data: {
+        'provider': provider,
+        'access_token': accessToken,
+        'device_name': 'كاشير حاسم',
+        'device_type': 'cashier',
+      },
+    );
     return _sessionFromLoginPayload(data);
   }
 
   Future<String> forgotPassword(String email) async {
-    final data = await _api.post('/auth/forgot-password', data: {
-      'email': email,
-    });
+    final data = await _api.post(
+      '/auth/forgot-password',
+      data: {'email': email},
+    );
     final message = data['message'];
     if (message is String && message.trim().isNotEmpty) return message;
     return 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.';
@@ -135,12 +146,15 @@ class AuthRepository {
     required String password,
     required String passwordConfirmation,
   }) async {
-    final data = await _api.post('/auth/reset-password', data: {
-      'email': email,
-      'token': token,
-      'password': password,
-      'password_confirmation': passwordConfirmation,
-    });
+    final data = await _api.post(
+      '/auth/reset-password',
+      data: {
+        'email': email,
+        'token': token,
+        'password': password,
+        'password_confirmation': passwordConfirmation,
+      },
+    );
     final message = data['message'];
     if (message is String && message.trim().isNotEmpty) return message;
     return 'تم إعادة تعيين كلمة المرور بنجاح.';
@@ -187,10 +201,24 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
       if (wid is int) {
         _ref.read(workspaceIdProvider.notifier).state = wid;
       }
+      if (PosMode.isStandaloneToken(restored.token)) {
+        final localAuth = _ref.read(localAuthServiceProvider);
+        final store = await localAuth.anyStore();
+        if (store != null) {
+          _ref.read(currentStoreIdProvider.notifier).state = store.localId;
+          _ref.read(posConnectedModeProvider.notifier).state =
+              store.connectedMode;
+          _ref.read(workspaceIdProvider.notifier).state = store.workspaceId;
+        }
+        if (restored.token.startsWith('standalone:')) {
+          _ref.read(currentLocalUserIdProvider.notifier).state = restored.token
+              .substring('standalone:'.length);
+        }
+      }
       final cached = _sessionFromCache(restored.token, restored.workspace);
       // Leave splash immediately — never block startup on /auth/me.
       state = AsyncValue.data(cached ?? restored);
-      if (restored.token == 'local-offline' ||
+      if (PosMode.isStandaloneToken(restored.token) ||
           (cached?.isLocalMode ?? restored.isLocalMode)) {
         // Local mode — never call Laravel /auth/me (would 401 and wipe session).
         if (cached != null && !cached.isLocalMode) {
@@ -307,27 +335,27 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
       entitlements: cached['entitlements'] is Map
           ? Map<String, dynamic>.from(cached['entitlements'] as Map)
           : null,
-      isLocalMode: cached['is_local_mode'] == true || token == 'local-offline',
+      isLocalMode:
+          cached['is_local_mode'] == true || PosMode.isStandaloneToken(token),
     );
   }
 
   Map<String, dynamic> _sessionToCache(AuthSession session) => {
-        'user': session.user,
-        'workspace': session.workspace,
-        'workspaces': session.workspaces,
-        'permissions': session.permissions,
-        'pos_enabled': session.posEnabled,
-        'entitlements': session.entitlements,
-        'is_local_mode': session.isLocalMode,
-      };
+    'user': session.user,
+    'workspace': session.workspace,
+    'workspaces': session.workspaces,
+    'permissions': session.permissions,
+    'pos_enabled': session.posEnabled,
+    'entitlements': session.entitlements,
+    'is_local_mode': session.isLocalMode,
+  };
 
   Future<void> login(String emailOrPhone, String password) async {
     // Keep previous session visible during login attempt — avoid splash remount loop.
     try {
-      final session = await _ref.read(authRepositoryProvider).login(
-            emailOrPhone: emailOrPhone,
-            password: password,
-          );
+      final session = await _ref
+          .read(authRepositoryProvider)
+          .login(emailOrPhone: emailOrPhone, password: password);
       await _applySession(session);
     } catch (e, st) {
       // Preserve logged-out state; surface error via thrown ApiException.
@@ -343,10 +371,9 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
     required String accessToken,
   }) async {
     try {
-      final session = await _ref.read(authRepositoryProvider).socialLogin(
-            provider: provider,
-            accessToken: accessToken,
-          );
+      final session = await _ref
+          .read(authRepositoryProvider)
+          .socialLogin(provider: provider, accessToken: accessToken);
       await _applySession(session);
     } catch (e, st) {
       if (state.valueOrNull == null) {
@@ -356,58 +383,79 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
     }
   }
 
-  /// Enter local POS without a Laravel account (demo / offline store mode).
-  Future<void> enterLocalMode() async {
-    const token = 'local-offline';
-    final cached = OfflineStore.instance.readSession();
-    final cachedWs = cached?['workspace'];
-    var workspaceId = LocalDemoSeedService.demoWorkspaceId;
-    if (cachedWs is Map && cachedWs['id'] != null) {
-      workspaceId = int.tryParse('${cachedWs['id']}') ?? workspaceId;
-    }
-    final deviceId =
-        await _ref.read(deviceIdentityProvider).getOrCreateDeviceId();
-    await LocalDemoSeedService(_ref.read(appDatabaseProvider)).ensureDemoWorkspace(
-      workspaceId: workspaceId,
-      deviceId: deviceId,
+  Future<void> bootstrapStandaloneStore({
+    required String storeName,
+    required String adminName,
+    required String username,
+    required String pin,
+    double taxRate = 0,
+  }) async {
+    final auth = _ref.read(localAuthServiceProvider);
+    final created = await auth.bootstrapStore(
+      storeName: storeName,
+      adminName: adminName,
+      username: username,
+      pin: pin,
+      taxRate: taxRate,
     );
+    await _applyStandaloneUser(created.user, created.store);
+  }
 
-    final permissions = <String, dynamic>{
-      'pos.use': true,
-      'pos.manage': true,
-      'orders.create': true,
-      'orders.manage': true,
-      'orders.discount': true,
-      'orders.refund': true,
-      'tables.manage': true,
-      'menu.manage': true,
-      'reports.view': true,
-      'workspace.manage': true,
-    };
+  Future<void> loginStandalonePin({
+    required String username,
+    required String pin,
+  }) async {
+    final auth = _ref.read(localAuthServiceProvider);
+    final store = await auth.anyStore();
+    if (store == null) {
+      throw const StoreNotFound();
+    }
+    final user = await auth.login(
+      workspaceId: store.workspaceId,
+      username: username,
+      pin: pin,
+    );
+    await _applyStandaloneUser(user, store);
+  }
+
+  Future<void> _applyStandaloneUser(dynamic user, dynamic store) async {
+    final token = 'standalone:${user.localId}';
+    final permissions = LocalAuthService.permissionsFor(user.role as String);
+    _ref.read(currentLocalUserIdProvider.notifier).state =
+        user.localId as String;
+    _ref.read(currentStoreIdProvider.notifier).state = store.localId as String;
+    _ref.read(posConnectedModeProvider.notifier).state =
+        store.connectedMode == true;
     final session = AuthSession(
       token: token,
-      user: const {'name': 'كاشير محلي', 'id': 0},
+      user: {
+        'id': user.localId,
+        'name': user.name,
+        'username': user.username,
+        'role': user.role,
+      },
       workspace: {
-        'id': workspaceId,
-        'name': 'متجر محلي',
+        'id': store.workspaceId,
+        'name': store.name,
         'pos_enabled': true,
+        'store_id': store.localId,
+        'tax_rate': store.taxRate,
+        'currency': store.currency,
+        'allow_negative_stock': store.allowNegativeStock,
       },
       workspaces: [
-        {
-          'id': workspaceId,
-          'name': 'متجر محلي',
-          'pos_enabled': true,
-        },
+        {'id': store.workspaceId, 'name': store.name, 'pos_enabled': true},
       ],
       permissions: permissions,
       posEnabled: true,
       isLocalMode: true,
     );
-    await _ref.read(authRepositoryProvider).persistWorkspace(workspaceId);
-    await _ref.read(secureStorageProvider).write(
-          key: 'cashier_token',
-          value: token,
-        );
+    await _ref
+        .read(authRepositoryProvider)
+        .persistWorkspace(store.workspaceId as int);
+    await _ref
+        .read(secureStorageProvider)
+        .write(key: 'cashier_token', value: token);
     await _applySession(session);
   }
 
@@ -421,7 +469,9 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
     required String password,
     required String passwordConfirmation,
   }) {
-    return _ref.read(authRepositoryProvider).resetPassword(
+    return _ref
+        .read(authRepositoryProvider)
+        .resetPassword(
           email: email,
           token: token,
           password: password,
@@ -441,29 +491,33 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
     Map<String, dynamic> permissions = const {};
     Map<String, dynamic>? entitlements;
     var posEnabled = workspace['pos_enabled'] == true;
-    Map<String, dynamic> resolvedWorkspace =
-        Map<String, dynamic>.from(workspace);
+    Map<String, dynamic> resolvedWorkspace = Map<String, dynamic>.from(
+      workspace,
+    );
 
     try {
-      final switched = await _ref.read(cashierApiProvider).post(
-        '/workspaces/switch',
-        data: {
-          'workspace_id': id,
-          'device_name': 'كاشير حاسم',
-          'device_type': 'cashier',
-        },
-      );
+      final switched = await _ref
+          .read(cashierApiProvider)
+          .post(
+            '/workspaces/switch',
+            data: {
+              'workspace_id': id,
+              'device_name': 'كاشير حاسم',
+              'device_type': 'cashier',
+            },
+          );
       if (switched['workspace'] is Map) {
-        resolvedWorkspace =
-            Map<String, dynamic>.from(switched['workspace'] as Map);
+        resolvedWorkspace = Map<String, dynamic>.from(
+          switched['workspace'] as Map,
+        );
       }
       if (switched['permissions'] is Map) {
-        permissions =
-            Map<String, dynamic>.from(switched['permissions'] as Map);
+        permissions = Map<String, dynamic>.from(switched['permissions'] as Map);
       }
       if (switched['entitlements'] is Map) {
-        entitlements =
-            Map<String, dynamic>.from(switched['entitlements'] as Map);
+        entitlements = Map<String, dynamic>.from(
+          switched['entitlements'] as Map,
+        );
       }
       if (switched.containsKey('pos_enabled')) {
         posEnabled = switched['pos_enabled'] == true;
@@ -485,8 +539,9 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
           user: current.user,
           workspace: resolvedWorkspace,
           workspaces: current.workspaces,
-          permissions:
-              permissions.isNotEmpty ? permissions : current.permissions,
+          permissions: permissions.isNotEmpty
+              ? permissions
+              : current.permissions,
           posEnabled: posEnabled,
           entitlements: entitlements ?? current.entitlements,
           isLocalMode: current.isLocalMode,
@@ -506,8 +561,9 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
     final current = state.valueOrNull;
     if (current == null) return;
 
-    final nextPerms =
-        permissions.isNotEmpty ? permissions : current.permissions;
+    final nextPerms = permissions.isNotEmpty
+        ? permissions
+        : current.permissions;
     final nextWorkspace = workspace ?? current.workspace;
     final nextEntitlements = entitlements ?? current.entitlements;
     final nextPos = posEnabled ?? current.posEnabled;
@@ -554,5 +610,5 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
 
 final authControllerProvider =
     StateNotifierProvider<AuthController, AsyncValue<AuthSession?>>((ref) {
-  return AuthController(ref);
-});
+      return AuthController(ref);
+    });

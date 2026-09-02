@@ -34,6 +34,19 @@ final dioProvider = Provider<Dio>((ref) {
         final token = ref.read(authTokenProvider);
         final workspaceId = ref.read(workspaceIdProvider);
         final deviceId = ref.read(deviceIdHeaderProvider);
+        if (token != null &&
+            token.isNotEmpty &&
+            (token.startsWith('standalone:') || token == 'local-offline')) {
+          handler.reject(
+            DioException(
+              requestOptions: options,
+              type: DioExceptionType.connectionError,
+              error: 'standalone_mode_no_network',
+              message: 'الوضع المحلي لا يتصل بـ Laravel.',
+            ),
+          );
+          return;
+        }
         if (token != null && token.isNotEmpty) {
           options.headers['Authorization'] = 'Bearer $token';
         }
@@ -50,7 +63,8 @@ final dioProvider = Provider<Dio>((ref) {
         handler.next(response);
       },
       onError: (error, handler) {
-        final status = error.response?.statusCode ??
+        final status =
+            error.response?.statusCode ??
             ((error.type == DioExceptionType.connectionError ||
                     error.type == DioExceptionType.connectionTimeout ||
                     error.type == DioExceptionType.receiveTimeout ||
@@ -60,7 +74,8 @@ final dioProvider = Provider<Dio>((ref) {
                 : null);
         if (status == 401) {
           final token = ref.read(authTokenProvider);
-          if (token != 'local-offline') {
+          if (token == null ||
+              (!token.startsWith('standalone:') && token != 'local-offline')) {
             ref.read(authTokenProvider.notifier).state = null;
           }
         }
@@ -201,11 +216,7 @@ class CashierApiClient {
     final data = map['data'];
     if (data is Map<String, dynamic>) return data;
     if (data is Map) return Map<String, dynamic>.from(data);
-    return {
-      'value': data,
-      'message': map['message'],
-      'meta': map['meta'],
-    };
+    return {'value': data, 'message': map['message'], 'meta': map['meta']};
   }
 
   ApiException _mapError(DioException e) {
@@ -233,7 +244,11 @@ class CashierApiClient {
         }
       }
       if (parts.isNotEmpty) {
-        return ApiException(parts.join('\n'), statusCode: status, errors: errors);
+        return ApiException(
+          parts.join('\n'),
+          statusCode: status,
+          errors: errors,
+        );
       }
     }
 

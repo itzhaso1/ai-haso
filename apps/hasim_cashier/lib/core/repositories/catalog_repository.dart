@@ -12,22 +12,30 @@ class CatalogRepository {
 
   Future<List<Map<String, dynamic>>> products(int workspaceId) async {
     if (workspaceId <= 0) return const [];
-    final rows = await (_db.select(_db.localProducts)
-          ..where((t) =>
-              t.workspaceId.equals(workspaceId) & t.isDeleted.equals(false))
-          ..orderBy([(t) => OrderingTerm.asc(t.name)]))
-        .get();
+    final rows =
+        await (_db.select(_db.localProducts)
+              ..where(
+                (t) =>
+                    t.workspaceId.equals(workspaceId) &
+                    t.isDeleted.equals(false),
+              )
+              ..orderBy([(t) => OrderingTerm.asc(t.name)]))
+            .get();
     return [
       for (final row in rows)
         {
           ..._safeMap(row.payloadJson),
-          'id': row.serverId,
+          'id': row.serverId ?? row.localId,
           'local_id': row.localId,
           'name': row.name,
           'sku': row.sku,
           'barcode': row.barcode,
           'item_type': row.itemType,
           'price': row.price,
+          'cost': row.cost,
+          'tax_rate': row.taxRate,
+          'stock': row.stock,
+          'category_local_id': row.categoryLocalId,
           'is_active': row.isActive,
           'pos_item_category_id': row.categoryServerId,
           'workspace_id': row.workspaceId,
@@ -37,15 +45,19 @@ class CatalogRepository {
 
   Future<List<Map<String, dynamic>>> categories(int workspaceId) async {
     if (workspaceId <= 0) return const [];
-    final rows = await (_db.select(_db.localCategories)
-          ..where((t) =>
-              t.workspaceId.equals(workspaceId) & t.isDeleted.equals(false))
-          ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
-        .get();
+    final rows =
+        await (_db.select(_db.localCategories)
+              ..where(
+                (t) =>
+                    t.workspaceId.equals(workspaceId) &
+                    t.isDeleted.equals(false),
+              )
+              ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
+            .get();
     return [
       for (final row in rows)
         {
-          'id': row.serverId,
+          'id': row.serverId ?? row.localId,
           'local_id': row.localId,
           'name': row.name,
           'sort_order': row.sortOrder,
@@ -57,14 +69,15 @@ class CatalogRepository {
 
   Future<List<Map<String, dynamic>>> tables(int workspaceId) async {
     if (workspaceId <= 0) return const [];
-    final rows = await (_db.select(_db.localTables)
-          ..where((t) => t.workspaceId.equals(workspaceId))
-          ..orderBy([(t) => OrderingTerm.asc(t.name)]))
-        .get();
+    final rows =
+        await (_db.select(_db.localTables)
+              ..where((t) => t.workspaceId.equals(workspaceId))
+              ..orderBy([(t) => OrderingTerm.asc(t.name)]))
+            .get();
     return [
       for (final row in rows)
         {
-          'id': row.serverId,
+          'id': row.serverId ?? row.localId,
           'local_id': row.localId,
           'name': row.name,
           'status': row.status,

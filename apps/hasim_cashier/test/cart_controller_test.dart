@@ -5,8 +5,18 @@ void main() {
   test('cart totals compute subtotal discount tax and total', () {
     final cart = CartController();
     cart.setTaxRate(10);
-    cart.addItem(menuItemId: 1, name: 'شاي', unitPrice: 10);
-    cart.addItem(menuItemId: 1, name: 'شاي', unitPrice: 10);
+    cart.addItem(
+      productLocalId: '1',
+      menuItemId: 1,
+      name: 'شاي',
+      unitPrice: 10,
+    );
+    cart.addItem(
+      productLocalId: '1',
+      menuItemId: 1,
+      name: 'شاي',
+      unitPrice: 10,
+    );
     cart.setDiscount(5);
 
     final state = cart.state;
@@ -30,5 +40,12 @@ void main() {
     cart.setChannel(OrderChannel.takeaway);
     expect(cart.state.tableId, isNull);
     expect(cart.state.channel, OrderChannel.takeaway);
+  });
+
+  test('delivery is not collapsed into takeaway', () {
+    final cart = CartController();
+    cart.setChannel(OrderChannel.delivery);
+    expect(cart.state.channel, OrderChannel.delivery);
+    expect(cart.toOrderPayload(clientReference: 'x')['order_type'], 'delivery');
   });
 }

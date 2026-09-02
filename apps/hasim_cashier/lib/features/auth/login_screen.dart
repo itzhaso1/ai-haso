@@ -6,6 +6,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
+import '../../core/pos/application/pos_providers.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
 import '../../core/theme/hasim_spacing.dart';
@@ -39,10 +40,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _error = null;
     });
     try {
-      await ref.read(authControllerProvider.notifier).login(
-            _identifier.text.trim(),
-            _password.text,
-          );
+      await ref
+          .read(authControllerProvider.notifier)
+          .login(_identifier.text.trim(), _password.text);
     } catch (e) {
       setState(() {
         _error = e is ApiException ? e.message : 'تعذر تسجيل الدخول.';
@@ -58,7 +58,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _error = null;
     });
     try {
-      await ref.read(authControllerProvider.notifier).enterLocalMode();
+      final store = await ref.read(localAuthServiceProvider).anyStore();
+      if (!mounted) return;
+      if (store == null) {
+        context.push('/standalone-setup');
+      } else {
+        context.push('/pin');
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = 'تعذر فتح الوضع المحلي: $e');
@@ -91,14 +97,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         }
         return;
       }
-      await ref.read(authControllerProvider.notifier).socialLogin(
-            provider: 'google',
-            accessToken: token,
-          );
+      await ref
+          .read(authControllerProvider.notifier)
+          .socialLogin(provider: 'google', accessToken: token);
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString().toLowerCase();
-      final needsSetup = msg.contains('client') ||
+      final needsSetup =
+          msg.contains('client') ||
           msg.contains('platform') ||
           msg.contains('missing') ||
           msg.contains('not been configured') ||
@@ -109,8 +115,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         _error = e is ApiException
             ? e.message
             : (needsSetup
-                ? 'يحتاج إعداد Google على هذا الجهاز.'
-                : 'تعذر تسجيل الدخول عبر Google.');
+                  ? 'يحتاج إعداد Google على هذا الجهاز.'
+                  : 'تعذر تسجيل الدخول عبر Google.');
       });
     } finally {
       if (mounted) setState(() => _googleBusy = false);
@@ -126,11 +132,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              HasimColors.brandSoft,
-              Color(0xFFF8FAFC),
-              Colors.white,
-            ],
+            colors: [HasimColors.brandSoft, Color(0xFFF8FAFC), Colors.white],
           ),
         ),
         child: SafeArea(
@@ -142,42 +144,47 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 children: [
                   const SizedBox(height: 24),
                   Column(
-                    children: [
-                      Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          color: HasimColors.surface,
-                          borderRadius: BorderRadius.circular(HasimRadius.lg),
-                          border: Border.all(color: HasimColors.border),
-                        ),
-                        alignment: Alignment.center,
-                        child: const Text(
-                          'ح',
-                          style: TextStyle(
-                            fontSize: 34,
-                            fontWeight: FontWeight.w900,
-                            color: HasimColors.brand,
+                        children: [
+                          Container(
+                            width: 72,
+                            height: 72,
+                            decoration: BoxDecoration(
+                              color: HasimColors.surface,
+                              borderRadius: BorderRadius.circular(
+                                HasimRadius.lg,
+                              ),
+                              border: Border.all(color: HasimColors.border),
+                            ),
+                            alignment: Alignment.center,
+                            child: const Text(
+                              'ح',
+                              style: TextStyle(
+                                fontSize: 34,
+                                fontWeight: FontWeight.w900,
+                                color: HasimColors.brand,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'حاسم',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w900,
-                          color: HasimColors.brand,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'كاشير حاسم',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ).animate().fadeIn(duration: 280.ms).slideY(begin: 0.06, end: 0),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'حاسم',
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w900,
+                              color: HasimColors.brand,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'كاشير حاسم',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      )
+                      .animate()
+                      .fadeIn(duration: 280.ms)
+                      .slideY(begin: 0.06, end: 0),
                   const SizedBox(height: 28),
                   HsCard(
                     padding: const EdgeInsets.all(HasimSpacing.lg),
@@ -239,10 +246,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
                               color: HasimColors.dangerSoft,
-                              borderRadius:
-                                  BorderRadius.circular(HasimRadius.sm),
-                              border:
-                                  Border.all(color: const Color(0xFFFECDD3)),
+                              borderRadius: BorderRadius.circular(
+                                HasimRadius.sm,
+                              ),
+                              border: Border.all(
+                                color: const Color(0xFFFECDD3),
+                              ),
                             ),
                             child: Text(
                               _error!,
@@ -261,8 +270,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             style: FilledButton.styleFrom(
                               backgroundColor: HasimColors.brand,
                               shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(HasimRadius.md),
+                                borderRadius: BorderRadius.circular(
+                                  HasimRadius.md,
+                                ),
                               ),
                             ),
                             onPressed: busy ? null : _submit,
@@ -284,12 +294,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           child: OutlinedButton.icon(
                             onPressed: busy ? null : _enterLocal,
                             icon: const Icon(Icons.storefront_outlined),
-                            label: const Text('دخول محلي بدون حساب'),
+                            label: const Text('كاشير محلي مستقل'),
                           ),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'للعمل أوفلاين مباشرة بدون تسجيل Laravel — مع بيانات تجريبية.',
+                          'يعمل بدون إنترنت وبدون Laravel. أنشئ متجراً محلياً أو ادخل بـ PIN.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 11,
@@ -301,8 +311,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           children: [
                             const Expanded(child: Divider()),
                             Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 10),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                              ),
                               child: Text(
                                 'أو',
                                 style: TextStyle(
@@ -327,8 +338,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       strokeWidth: 2,
                                     ),
                                   )
-                                : const Icon(Icons.g_mobiledata_rounded,
-                                    size: 28),
+                                : const Icon(
+                                    Icons.g_mobiledata_rounded,
+                                    size: 28,
+                                  ),
                             label: const Text('الدخول عبر Google'),
                           ),
                         ),

@@ -16,8 +16,13 @@ import '../../core/repositories/sync_queue_repository.dart';
 import '../../core/offline/offline_store.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
+import '../../core/pos/application/checkout_service.dart';
+import '../../core/pos/application/pos_providers.dart';
+import '../../core/pos/pos_errors.dart';
+import '../../core/pos/pos_mode.dart';
 import '../../core/printing/printer_service.dart';
 import '../../core/sync/pos_sync_coordinator.dart';
+import '../cart/payment_sheet.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
 import '../../core/theme/hasim_spacing.dart';
@@ -33,7 +38,6 @@ import '../orders/orders_list.dart';
 import '../reports/daily_reports_panel.dart';
 import '../settings/settings_panel.dart';
 import '../tables/tables_board.dart';
-import '../tables/table_workspace.dart';
 
 enum _PosSection {
   cashier,
@@ -58,7 +62,7 @@ class ShellScreen extends ConsumerStatefulWidget {
 
 class _ShellScreenState extends ConsumerState<ShellScreen> {
   _PosSection _section = _PosSection.cashier;
-  var _selectedCategoryId = 0;
+  String? _selectedCategoryId;
   final _search = TextEditingController();
   Map<String, dynamic>? _bootstrap;
   String? _bootstrapError;
@@ -69,6 +73,8 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
   String? _syncCursor;
   String? _syncDeviceId;
   Timer? _syncHeartbeat;
+  var _checkoutInFlight = false;
+  String? _checkoutClientRef;
 
   @override
   void initState() {
@@ -78,13 +84,21 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     _refreshPending();
     _syncHeartbeat = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
+      final session = ref.read(authControllerProvider).valueOrNull;
+      if (session?.isLocalMode == true ||
+          PosMode.isStandaloneToken(session?.token)) {
+        return;
+      }
       if (!ref.read(cashierLinkProvider).isOnline) return;
       final workspaceId = ref.read(workspaceIdProvider);
       if (workspaceId == null) return;
-      ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+      ref
+          .read(posSyncCoordinatorProvider)
+          .flushPendingOrders(
             workspaceId: workspaceId,
             deviceId: ref.read(deviceIdHeaderProvider),
-          ).then((_) => _refreshPending());
+          )
+          .then((_) => _refreshPending());
     });
   }
 
@@ -105,12 +119,15 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       ref.read(cashierLinkProvider.notifier).setDeviceOnline(nowOnline);
       if (nowOnline && wasOffline) {
         _loadBootstrap();
-        ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+        ref
+            .read(posSyncCoordinatorProvider)
+            .flushPendingOrders(
               workspaceId: ref.read(workspaceIdProvider),
               deviceId: ref.read(deviceIdHeaderProvider),
-            ).then((_) {
-          _refreshPending();
-        });
+            )
+            .then((_) {
+              _refreshPending();
+            });
       }
     });
   }
@@ -158,52 +175,14 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     });
   }
 
-  Future<Map<String, dynamic>> _enqueueLocalTableOrder({
-    required int tableId,
-    required int workspaceId,
-    required String clientRef,
-    required String? notes,
-    required List<Map<String, dynamic>> items,
-  }) async {
-    final deviceId =
-        await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
-    return ref.read(ordersRepositoryProvider).createTableOrder(
-          workspaceId: workspaceId,
-          deviceId: deviceId,
-          tableId: tableId,
-          clientReference: clientRef,
-          notes: notes,
-          items: items,
-        );
-  }
-
-  Future<Map<String, dynamic>> _enqueueLocalTakeawayOrder({
-    required int workspaceId,
-    required String clientRef,
-    required String? notes,
-    required List<Map<String, dynamic>> items,
-    int? customerServerId,
-  }) async {
-    final deviceId =
-        await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
-    return ref.read(ordersRepositoryProvider).createTakeawayOrder(
-          workspaceId: workspaceId,
-          deviceId: deviceId,
-          clientReference: clientRef,
-          notes: notes,
-          items: items,
-          customerServerId: customerServerId,
-        );
-  }
-
   Future<void> _migrateHiveOrders(int workspaceId) async {
     try {
-      final deviceId =
-          await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
-      await ref.read(ordersRepositoryProvider).migrateHivePending(
-            workspaceId: workspaceId,
-            deviceId: deviceId,
-          );
+      final deviceId = await ref
+          .read(deviceIdentityProvider)
+          .getOrCreateDeviceId();
+      await ref
+          .read(ordersRepositoryProvider)
+          .migrateHivePending(workspaceId: workspaceId, deviceId: deviceId);
     } catch (_) {}
   }
 
@@ -221,14 +200,34 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           Map<String, dynamic>.from(sessionPerms);
     }
     if (session?.isLocalMode == true || session?.token == 'local-offline') {
+      final store = await ref.read(localAuthServiceProvider).anyStore();
+      if (store != null) {
+        ref.read(currentStoreIdProvider.notifier).state = store.localId;
+        ref.read(posConnectedModeProvider.notifier).state = store.connectedMode;
+        ref.read(cartControllerProvider.notifier).setTaxRate(store.taxRate);
+      }
+      final workspaceId = ref.read(workspaceIdProvider);
+      if (workspaceId != null) {
+        final shift = await ref
+            .read(shiftServiceProvider)
+            .currentOpen(workspaceId);
+        if (shift != null) {
+          ref.read(currentShiftIdProvider.notifier).state = shift.localId;
+        }
+        final deviceId = await ref
+            .read(deviceIdentityProvider)
+            .getOrCreateDeviceId();
+        await ref
+            .read(hiveLegacyMigrationProvider)
+            .runIfNeeded(workspaceId: workspaceId, deviceId: deviceId);
+      }
       _applyBootstrapPayload({
         'pos_enabled': true,
         'permissions': sessionPerms ?? const {},
         'workspace': session?.workspace,
         'user': session?.user,
-        'settings': {'tax_rate': 0},
+        'settings': {'tax_rate': store?.taxRate ?? 0},
       }, fromCache: true);
-      final workspaceId = ref.read(workspaceIdProvider);
       if (workspaceId != null) {
         ref.invalidate(localPosReadyProvider(workspaceId));
         ref.invalidate(catalogItemsProvider);
@@ -251,16 +250,20 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       final workspaceId = ref.read(workspaceIdProvider);
       if (workspaceId != null) {
         try {
-          final deviceId =
-              await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
+          final deviceId = await ref
+              .read(deviceIdentityProvider)
+              .getOrCreateDeviceId();
           ref.read(deviceIdHeaderProvider.notifier).state = deviceId;
-          await ref.read(deviceRegistrationServiceProvider).register(
-                deviceId: deviceId,
-              );
-          final syncResult =
-              await ref.read(initialSyncServiceProvider).ensureReady(workspaceId);
+          await ref
+              .read(deviceRegistrationServiceProvider)
+              .register(deviceId: deviceId);
+          final syncResult = await ref
+              .read(initialSyncServiceProvider)
+              .ensureReady(workspaceId);
           if (!syncResult.fromCache) {
-            await ref.read(syncEngineV2Provider).anchorCursorToServerHead(
+            await ref
+                .read(syncEngineV2Provider)
+                .anchorCursorToServerHead(
                   workspaceId: workspaceId,
                   deviceId: deviceId,
                 );
@@ -274,10 +277,9 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
         }
       }
       final deviceId = ref.read(deviceIdHeaderProvider);
-      await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
-            workspaceId: workspaceId,
-            deviceId: deviceId,
-          );
+      await ref
+          .read(posSyncCoordinatorProvider)
+          .flushPendingOrders(workspaceId: workspaceId, deviceId: deviceId);
       _refreshPending();
     } on ApiException catch (e) {
       if (e.isUnauthorized) {
@@ -323,7 +325,9 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     if (data['permissions'] is Map) {
       final perms = Map<String, dynamic>.from(data['permissions'] as Map);
       ref.read(cashierPermissionsProvider.notifier).state = perms;
-      ref.read(authControllerProvider.notifier).applyBootstrapSnapshot(
+      ref
+          .read(authControllerProvider.notifier)
+          .applyBootstrapSnapshot(
             permissions: perms,
             workspace: data['workspace'] is Map
                 ? Map<String, dynamic>.from(data['workspace'] as Map)
@@ -380,9 +384,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
             workspaceName: workspaceName,
             cartCount: cart.lines.fold<int>(0, (s, l) => s + l.quantity),
             online: link.isOnline,
-            onCart: isDesktop
-                ? null
-                : () => _openCartSheet(context),
+            onCart: isDesktop ? null : () => _openCartSheet(context),
             onLogout: () async {
               await ref.read(authControllerProvider.notifier).logout();
               if (context.mounted) context.go('/login');
@@ -396,11 +398,12 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
                 );
                 return;
               }
-              final result =
-                  await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
-                        workspaceId: ref.read(workspaceIdProvider),
-                        deviceId: ref.read(deviceIdHeaderProvider),
-                      );
+              final result = await ref
+                  .read(posSyncCoordinatorProvider)
+                  .flushPendingOrders(
+                    workspaceId: ref.read(workspaceIdProvider),
+                    deviceId: ref.read(deviceIdHeaderProvider),
+                  );
               _refreshPending();
               if (!context.mounted) return;
               if (result.authRequired) {
@@ -433,37 +436,39 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
               _loadBootstrap();
               final workspaceId = ref.read(workspaceIdProvider);
               if (workspaceId != null) {
-                ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+                ref
+                    .read(posSyncCoordinatorProvider)
+                    .flushPendingOrders(
                       workspaceId: workspaceId,
                       deviceId: ref.read(deviceIdHeaderProvider),
-                    ).then((_) => _refreshPending());
+                    )
+                    .then((_) => _refreshPending());
               }
             },
           ),
           Expanded(
             child: switch (_section) {
-                    _PosSection.cashier => _CashierHome(
-                        isDesktop: isDesktop,
-                        isTablet: isTablet,
-                        search: _search,
-                        selectedCategoryId: _selectedCategoryId,
-                        onCategory: (id) =>
-                            setState(() => _selectedCategoryId = id),
-                        onSearchChanged: () => setState(() {}),
-                        onCheckout: _checkout,
-                        onOpenMobileCart: () => _openCartSheet(context),
-                      ),
-                    _PosSection.tables => const TablesBoard(),
-                    _PosSection.orders => const OrdersList(),
-                    _PosSection.menu => const MenuOrdersFeed(),
-                    _PosSection.kitchen => const KitchenBoard(),
-                    _PosSection.invoices => const InvoicesList(),
-                    _PosSection.customers => const CustomersPanel(),
-                    _PosSection.items => const ItemsAdminPanel(),
-                    _PosSection.reports => const DailyReportsPanel(),
-                    _PosSection.sync => const SyncQueuePanel(),
-                    _PosSection.settings => const SettingsPanel(),
-                  },
+              _PosSection.cashier => _CashierHome(
+                isDesktop: isDesktop,
+                isTablet: isTablet,
+                search: _search,
+                selectedCategoryId: _selectedCategoryId,
+                onCategory: (id) => setState(() => _selectedCategoryId = id),
+                onSearchChanged: () => setState(() {}),
+                onCheckout: _checkout,
+                onOpenMobileCart: () => _openCartSheet(context),
+              ),
+              _PosSection.tables => const TablesBoard(),
+              _PosSection.orders => const OrdersList(),
+              _PosSection.menu => const MenuOrdersFeed(),
+              _PosSection.kitchen => const KitchenBoard(),
+              _PosSection.invoices => const InvoicesList(),
+              _PosSection.customers => const CustomersPanel(),
+              _PosSection.items => const ItemsAdminPanel(),
+              _PosSection.reports => const DailyReportsPanel(),
+              _PosSection.sync => const SyncQueuePanel(),
+              _PosSection.settings => const SettingsPanel(),
+            },
           ),
         ],
       ),
@@ -502,6 +507,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
   }
 
   Future<void> _checkout() async {
+    if (_checkoutInFlight) return;
     final cart = ref.read(cartControllerProvider);
     if (cart.lines.isEmpty) return;
     final perms = ref.read(cashierPermissionsProvider);
@@ -511,158 +517,162 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       );
       return;
     }
-    if (cart.channel == OrderChannel.table && cart.tableId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('اختر طاولة لطلب الطاولة.')),
-      );
+    if (cart.channel == OrderChannel.table &&
+        cart.tableId == null &&
+        (cart.tableLocalId == null || cart.tableLocalId!.isEmpty)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('اختر طاولة لطلب الطاولة.')));
       return;
     }
 
-    final wasTable = cart.channel == OrderChannel.table;
-    final tableId = cart.tableId;
-    final clientRef = const Uuid().v4();
-    final lineItems = [
-      for (final line in cart.lines)
-        {
-          'pos_menu_item_id': line.menuItemId,
-          'name': line.name,
-          'quantity': line.quantity,
-          'unit_price': line.unitPrice,
-          'total_amount': line.lineTotal,
-        },
-    ];
     final workspaceId = ref.read(workspaceIdProvider);
     if (workspaceId == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('لا توجد مساحة عمل محددة.')));
+      return;
+    }
+
+    final session = ref.read(authControllerProvider).valueOrNull;
+    final standalone =
+        session?.isLocalMode == true ||
+        PosMode.isStandaloneToken(session?.token);
+
+    var shiftId = ref.read(currentShiftIdProvider);
+    shiftId ??= (await ref.read(shiftServiceProvider).currentOpen(workspaceId))
+        ?.localId;
+    if (shiftId == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('لا توجد مساحة عمل محددة. لا يمكن حفظ الطلب محليًا.'),
+        const SnackBar(content: Text('افتح وردية أولاً من الإعدادات.')),
+      );
+      return;
+    }
+    ref.read(currentShiftIdProvider.notifier).state = shiftId;
+
+    final paid = await showPaymentSheet(context: context, total: cart.total);
+    if (paid == null || paid.payments.isEmpty) return;
+
+    _checkoutInFlight = true;
+    _checkoutClientRef ??= const Uuid().v4();
+    final clientRef = _checkoutClientRef!;
+
+    try {
+      final deviceId = await ref
+          .read(deviceIdentityProvider)
+          .getOrCreateDeviceId();
+      var storeId = ref.read(currentStoreIdProvider);
+      if (storeId == null) {
+        final store = await ref.read(localAuthServiceProvider).anyStore();
+        storeId = store?.localId ?? 'local-store';
+        if (store != null) {
+          ref.read(currentStoreIdProvider.notifier).state = store.localId;
+        }
+      }
+      String? sessionId = cart.tableLocalId == null
+          ? null
+          : await ref
+                .read(tableSessionServiceProvider)
+                .open(
+                  workspaceId: workspaceId,
+                  tableLocalId: cart.tableLocalId!,
+                  openedByUserId: ref.read(currentLocalUserIdProvider),
+                );
+      final store = await ref.read(localAuthServiceProvider).anyStore();
+      final result = await ref
+          .read(checkoutServiceProvider)
+          .execute(
+            CheckoutCommand(
+              workspaceId: workspaceId,
+              deviceId: deviceId,
+              storeId: storeId,
+              clientReference: clientRef,
+              orderType: cart.channel.name,
+              lines: [for (final line in cart.lines) line.toPriced()],
+              payments: paid.payments,
+              tableLocalId: cart.tableLocalId,
+              tableServerId: cart.tableId,
+              sessionLocalId: sessionId,
+              customerLocalId: cart.customerLocalId,
+              notes: cart.notes,
+              orderDiscountAmount: cart.discountAmount,
+              orderDiscountPercent: cart.discountPercent,
+              taxRate: cart.taxRate,
+              createdByUserId: ref.read(currentLocalUserIdProvider),
+              shiftLocalId: shiftId,
+              allowNegativeStock: store?.allowNegativeStock ?? false,
+              connected: !standalone && ref.read(posConnectedModeProvider),
+              invoicePrefix: store?.invoicePrefix ?? 'INV-',
+            ),
+          );
+
+      ref.read(cartControllerProvider.notifier).clear();
+      _checkoutClientRef = null;
+      _refreshPending();
+      if (!mounted) return;
+
+      if (!standalone) {
+        unawaited(
+          ref
+              .read(posSyncCoordinatorProvider)
+              .flushPendingOrders(workspaceId: workspaceId, deviceId: deviceId)
+              .then((_) {
+                if (mounted) _refreshPending();
+              }),
+        );
+      }
+
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => _SuccessOrderDialog(
+          orderNumber: result.invoiceNumber,
+          onPrint: () async {
+            Navigator.pop(context);
+            try {
+              final invoice = await ref
+                  .read(localFinanceRepositoryProvider)
+                  .getInvoice(
+                    workspaceId: workspaceId,
+                    localId: result.invoiceLocalId,
+                  );
+              if (invoice == null) {
+                throw const PrinterFailure('الفاتورة غير موجودة للطباعة.');
+              }
+              final printer = await ref.read(
+                printerServiceFutureProvider.future,
+              );
+              final printResult = await printer.printInvoice(invoice);
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    printResult.success
+                        ? 'تمت الطباعة. الفاتورة ${result.invoiceNumber}'
+                        : 'اكتمل البيع. ${printResult.message}',
+                  ),
+                ),
+              );
+            } catch (e) {
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('اكتمل البيع. تعذر الطباعة: $e')),
+              );
+            }
+          },
+          onContinue: () => Navigator.pop(context),
         ),
       );
-      return;
-    }
-
-    // Architecture: UI → Repository → SQLite first, then Sync Engine → Laravel.
-    Map<String, dynamic> localOrder;
-    try {
-      if (wasTable) {
-        if (tableId == null) return;
-        localOrder = await _enqueueLocalTableOrder(
-          tableId: tableId,
-          workspaceId: workspaceId,
-          clientRef: clientRef,
-          notes: cart.notes,
-          items: lineItems,
-        );
-      } else {
-        localOrder = await _enqueueLocalTakeawayOrder(
-          workspaceId: workspaceId,
-          clientRef: clientRef,
-          notes: cart.notes,
-          items: lineItems,
-        );
-      }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تعذر حفظ الطلب محليًا: $e')),
-      );
-      return;
+      final message = e is PosException ? e.messageAr : e.toString();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      _checkoutInFlight = false;
     }
-
-    ref.read(cartControllerProvider.notifier).clear();
-    _refreshPending();
-    if (!mounted) return;
-
-    // Never block the success UI on sync — offline timeouts made checkout feel stuck.
-    final deviceId =
-        await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
-    // ignore: unawaited_futures
-    ref
-        .read(posSyncCoordinatorProvider)
-        .flushPendingOrders(
-          workspaceId: workspaceId,
-          deviceId: deviceId,
-        )
-        .then((_) {
-      if (mounted) _refreshPending();
-    });
-
-    if (wasTable) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم حفظ الطلب على الطاولة.')),
-      );
-      if (tableId != null) {
-        openTableWorkspace(ref, tableId);
-        requestPosShellTab(ref, PosShellTab.tables);
-      }
-      return;
-    }
-
-    // Takeaway: show success immediately; invoice/print use local draft.
-    final orderLabel =
-        '${localOrder['order_number'] ?? localOrder['local_id'] ?? clientRef}';
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => _SuccessOrderDialog(
-        orderNumber: orderLabel,
-        onPrint: () async {
-          Navigator.pop(context);
-          try {
-            final invoice =
-                await ref.read(ordersRepositoryProvider).enqueueInvoiceForOrder(
-                      workspaceId: workspaceId,
-                      deviceId: deviceId,
-                      orderLocalId: clientRef,
-                    );
-            // Sync in background — print local draft right away.
-            // ignore: unawaited_futures
-            ref.read(posSyncCoordinatorProvider).flushPendingOrders(
-                  workspaceId: workspaceId,
-                  deviceId: deviceId,
-                );
-            if (!context.mounted) return;
-            final printer =
-                await ref.read(printerServiceFutureProvider.future);
-            final result = await printer.printInvoice(invoice);
-            if (!context.mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  result.success
-                      ? 'تم إنشاء الفاتورة وطباعتها.'
-                      : 'تم إنشاء الفاتورة. ${result.message}',
-                ),
-              ),
-            );
-          } catch (e) {
-            if (!context.mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(e.toString())),
-            );
-          }
-        },
-        onContinue: () {
-          Navigator.pop(context);
-          // ignore: unawaited_futures
-          () async {
-            try {
-              await ref.read(ordersRepositoryProvider).enqueueInvoiceForOrder(
-                    workspaceId: workspaceId,
-                    deviceId: deviceId,
-                    orderLocalId: clientRef,
-                  );
-              await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
-                    workspaceId: workspaceId,
-                    deviceId: deviceId,
-                  );
-              if (mounted) _refreshPending();
-            } catch (_) {}
-          }();
-        },
-      ),
-    );
   }
 }
 
@@ -763,8 +773,9 @@ class _TopHeader extends StatelessWidget {
                           ),
                           decoration: BoxDecoration(
                             color: HasimColors.cta,
-                            borderRadius:
-                                BorderRadius.circular(HasimRadius.pill),
+                            borderRadius: BorderRadius.circular(
+                              HasimRadius.pill,
+                            ),
                           ),
                           child: Text(
                             '$cartCount',
@@ -895,8 +906,8 @@ class _CashierHome extends ConsumerWidget {
   final bool isDesktop;
   final bool isTablet;
   final TextEditingController search;
-  final int selectedCategoryId;
-  final ValueChanged<int> onCategory;
+  final String? selectedCategoryId;
+  final ValueChanged<String?> onCategory;
   final VoidCallback onSearchChanged;
   final Future<void> Function() onCheckout;
   final VoidCallback onOpenMobileCart;
@@ -934,20 +945,24 @@ class _CashierHome extends ConsumerWidget {
                         HsCategoryTile(
                           label: 'الكل',
                           count: (items.valueOrNull ?? []).length,
-                          selected: selectedCategoryId == 0,
-                          onTap: () => onCategory(0),
+                          selected: selectedCategoryId == null,
+                          onTap: () => onCategory(null),
                         ),
                         for (final cat in list)
                           HsCategoryTile(
                             label: (cat['name'] as String?) ?? '',
                             count: (items.valueOrNull ?? [])
-                                .where((i) =>
-                                    i['pos_item_category_id'] == cat['id'])
+                                .where(
+                                  (i) =>
+                                      '${i['category_local_id'] ?? i['pos_item_category_id']}' ==
+                                      '${cat['local_id'] ?? cat['id']}',
+                                )
                                 .length,
-                            selected: selectedCategoryId ==
-                                (cat['id'] as num?)?.toInt(),
+                            selected:
+                                selectedCategoryId ==
+                                '${cat['local_id'] ?? cat['id']}',
                             onTap: () =>
-                                onCategory((cat['id'] as num).toInt()),
+                                onCategory('${cat['local_id'] ?? cat['id']}'),
                           ),
                       ],
                     ),
@@ -992,12 +1007,16 @@ class _CashierHome extends ConsumerWidget {
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: [
-                  _chip('الكل', selectedCategoryId == 0, () => onCategory(0)),
+                  _chip(
+                    'الكل',
+                    selectedCategoryId == null,
+                    () => onCategory(null),
+                  ),
                   for (final cat in list)
                     _chip(
                       (cat['name'] as String?) ?? '',
-                      selectedCategoryId == (cat['id'] as num?)?.toInt(),
-                      () => onCategory((cat['id'] as num).toInt()),
+                      selectedCategoryId == '${cat['local_id'] ?? cat['id']}',
+                      () => onCategory('${cat['local_id'] ?? cat['id']}'),
                     ),
                 ],
               ),
@@ -1020,12 +1039,16 @@ class _CashierHome extends ConsumerWidget {
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   children: [
-                    _chip('الكل', selectedCategoryId == 0, () => onCategory(0)),
+                    _chip(
+                      'الكل',
+                      selectedCategoryId == null,
+                      () => onCategory(null),
+                    ),
                     for (final cat in offline)
                       _chip(
                         (cat['name'] as String?) ?? '',
-                        selectedCategoryId == (cat['id'] as num?)?.toInt(),
-                        () => onCategory((cat['id'] as num).toInt()),
+                        selectedCategoryId == '${cat['local_id'] ?? cat['id']}',
+                        () => onCategory('${cat['local_id'] ?? cat['id']}'),
                       ),
                   ],
                 ),
@@ -1093,8 +1116,8 @@ class _ProductsPanel extends ConsumerWidget {
   });
 
   final TextEditingController search;
-  final int selectedCategoryId;
-  final ValueChanged<int> onCategory;
+  final String? selectedCategoryId;
+  final ValueChanged<String?> onCategory;
   final VoidCallback onSearchChanged;
   final bool showMobileCategories;
 
@@ -1105,10 +1128,10 @@ class _ProductsPanel extends ConsumerWidget {
     final crossAxis = width >= 1500
         ? 5
         : width >= 1200
-            ? 4
-            : width >= 900
-                ? 3
-                : 2;
+        ? 4
+        : width >= 900
+        ? 3
+        : 2;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1126,8 +1149,30 @@ class _ProductsPanel extends ConsumerWidget {
               child: TextField(
                 controller: search,
                 onChanged: (_) => onSearchChanged(),
-                onSubmitted: (_) {
-                  // barcode enter parity with web
+                onSubmitted: (raw) async {
+                  final workspaceId = ref.read(workspaceIdProvider);
+                  if (workspaceId == null || raw.trim().isEmpty) return;
+                  final hit = await ref
+                      .read(barcodeInputProvider)
+                      .lookup(workspaceId: workspaceId, raw: raw.trim());
+                  if (hit == null) {
+                    onSearchChanged();
+                    return;
+                  }
+                  ref
+                      .read(cartControllerProvider.notifier)
+                      .addItem(
+                        productLocalId: '${hit['local_id']}',
+                        menuItemId: hit['id'] is int ? hit['id'] as int : null,
+                        name: '${hit['name']}',
+                        unitPrice: (hit['price'] as num?)?.toDouble() ?? 0,
+                        taxRate: (hit['tax_rate'] as num?)?.toDouble() ?? 0,
+                        cost: (hit['cost'] as num?)?.toDouble() ?? 0,
+                        sku: hit['sku'] as String?,
+                        barcode: hit['barcode'] as String?,
+                      );
+                  search.clear();
+                  onSearchChanged();
                 },
                 decoration: const InputDecoration(
                   hintText: 'ابحث بالاسم أو الباركود أو SKU...',
@@ -1144,14 +1189,14 @@ class _ProductsPanel extends ConsumerWidget {
             data: (list) {
               final q = search.text.trim().toLowerCase();
               final filtered = list.where((item) {
-                if (selectedCategoryId != 0 &&
-                    item['pos_item_category_id'] != selectedCategoryId) {
+                if (selectedCategoryId != null &&
+                    '${item['category_local_id'] ?? item['pos_item_category_id']}' !=
+                        selectedCategoryId) {
                   return false;
                 }
                 if (q.isEmpty) return true;
-                final hay =
-                    '${item['name']}|${item['sku']}|${item['barcode']}'
-                        .toLowerCase();
+                final hay = '${item['name']}|${item['sku']}|${item['barcode']}'
+                    .toLowerCase();
                 return hay.contains(q);
               }).toList();
 
@@ -1166,7 +1211,7 @@ class _ProductsPanel extends ConsumerWidget {
                   title: 'لا توجد منتجات في هذا التصنيف.',
                   actionLabel: 'عرض الكل',
                   onAction: () {
-                    onCategory(0);
+                    onCategory(null);
                     search.clear();
                     onSearchChanged();
                   },
@@ -1192,11 +1237,7 @@ class _ProductsPanel extends ConsumerWidget {
     );
   }
 
-  Widget _grid(
-    WidgetRef ref,
-    List<Map<String, dynamic>> items,
-    int crossAxis,
-  ) {
+  Widget _grid(WidgetRef ref, List<Map<String, dynamic>> items, int crossAxis) {
     return GridView.builder(
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: crossAxis,
@@ -1210,8 +1251,8 @@ class _ProductsPanel extends ConsumerWidget {
         final id = (item['id'] as num?)?.toInt() ?? 0;
         final name = (item['name'] as String?) ?? '';
         final price = (item['price'] as num?)?.toDouble() ?? 0;
-        final available = item['is_active'] != false &&
-            item['availability'] != 'unavailable';
+        final available =
+            item['is_active'] != false && item['availability'] != 'unavailable';
         return ProductCard(
           name: name,
           priceLabel: price.toStringAsFixed(2),
@@ -1220,10 +1261,20 @@ class _ProductsPanel extends ConsumerWidget {
           sku: item['sku'] as String?,
           available: available,
           onAdd: () {
-            ref.read(cartControllerProvider.notifier).addItem(
-                  menuItemId: id,
+            final localId =
+                (item['local_id'] as String?) ??
+                (item['id']?.toString() ?? name);
+            ref
+                .read(cartControllerProvider.notifier)
+                .addItem(
+                  productLocalId: localId,
+                  menuItemId: id == 0 ? null : id,
                   name: name,
                   unitPrice: price,
+                  taxRate: (item['tax_rate'] as num?)?.toDouble() ?? 0,
+                  cost: (item['cost'] as num?)?.toDouble() ?? 0,
+                  sku: item['sku'] as String?,
+                  barcode: item['barcode'] as String?,
                 );
           },
         );
@@ -1281,15 +1332,17 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
     if (workspaceId == null || workspaceId <= 0) return;
     try {
       // Local SQLite first — no network wait on cart open.
-      final local =
-          await ref.read(tablesRepositoryProvider).listTables(workspaceId);
+      final local = await ref
+          .read(tablesRepositoryProvider)
+          .listTables(workspaceId);
       if (!mounted) return;
       if (local.isNotEmpty) {
         setState(() => _tables = local);
       }
       // Best-effort remote refresh in background.
-      final board =
-          await ref.read(tablesRepositoryProvider).loadBoard(workspaceId);
+      final board = await ref
+          .read(tablesRepositoryProvider)
+          .loadBoard(workspaceId);
       if (!mounted) return;
       if (board.isNotEmpty) {
         setState(() => _tables = board);
@@ -1366,28 +1419,28 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
                     ref.watch(cashierPermissionsProvider),
                   ),
                   decoration: InputDecoration(
-                    labelText: CashierPermissions.canDiscount(
-                      ref.watch(cashierPermissionsProvider),
-                    )
+                    labelText:
+                        CashierPermissions.canDiscount(
+                          ref.watch(cashierPermissionsProvider),
+                        )
                         ? 'الخصم (مبلغ)'
                         : 'الخصم (غير مسموح)',
                     isDense: true,
                   ),
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  onChanged: CashierPermissions.canDiscount(
-                    ref.watch(cashierPermissionsProvider),
-                  )
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  onChanged:
+                      CashierPermissions.canDiscount(
+                        ref.watch(cashierPermissionsProvider),
+                      )
                       ? (v) => notifier.setDiscount(double.tryParse(v) ?? 0)
                       : null,
                 ),
                 const SizedBox(height: 10),
                 const Text(
                   'ملخص الطلب',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 6),
                 if (cart.lines.isEmpty)
@@ -1396,10 +1449,7 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
                     child: Text(
                       'السلة فارغة.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: HasimColors.muted,
-                      ),
+                      style: TextStyle(fontSize: 12, color: HasimColors.muted),
                     ),
                   )
                 else
@@ -1410,8 +1460,7 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius:
-                              BorderRadius.circular(HasimRadius.sm),
+                          borderRadius: BorderRadius.circular(HasimRadius.sm),
                           border: Border.all(color: HasimColors.border),
                         ),
                         child: Column(
@@ -1429,8 +1478,9 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
                                   ),
                                 ),
                                 Text(
-                                  cart.lines[index].unitPrice
-                                      .toStringAsFixed(2),
+                                  cart.lines[index].unitPrice.toStringAsFixed(
+                                    2,
+                                  ),
                                   style: const TextStyle(
                                     fontSize: 10,
                                     color: HasimColors.muted,
@@ -1438,7 +1488,7 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
                                 ),
                                 TextButton(
                                   onPressed: () => notifier.removeItem(
-                                    cart.lines[index].menuItemId,
+                                    cart.lines[index].productLocalId,
                                   ),
                                   style: TextButton.styleFrom(
                                     padding: EdgeInsets.zero,
@@ -1462,7 +1512,7 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
                                 _qtyBtn(
                                   '-',
                                   () => notifier.setQuantity(
-                                    cart.lines[index].menuItemId,
+                                    cart.lines[index].productLocalId,
                                     cart.lines[index].quantity - 1,
                                   ),
                                 ),
@@ -1475,14 +1525,15 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
                                 _qtyBtn(
                                   '+',
                                   () => notifier.setQuantity(
-                                    cart.lines[index].menuItemId,
+                                    cart.lines[index].productLocalId,
                                     cart.lines[index].quantity + 1,
                                   ),
                                 ),
                                 const Spacer(),
                                 Text(
-                                  cart.lines[index].lineTotal
-                                      .toStringAsFixed(2),
+                                  cart.lines[index].lineTotal.toStringAsFixed(
+                                    2,
+                                  ),
                                   style: const TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,
@@ -1505,8 +1556,7 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
           const SizedBox(height: 10),
           HsPrimaryButton(
             label: 'إنشاء الطلب',
-            onPressed:
-                cart.lines.isEmpty ? null : () => widget.onCheckout(),
+            onPressed: cart.lines.isEmpty ? null : () => widget.onCheckout(),
           ),
           const SizedBox(height: 6),
           HsOutlineButton(
@@ -1621,8 +1671,7 @@ class _TablePickerField extends StatelessWidget {
                   ListTile(
                     title: Text('${t['name']}'),
                     selected: (t['id'] as num?)?.toInt() == selectedId,
-                    onTap: () =>
-                        Navigator.pop(ctx, (t['id'] as num).toInt()),
+                    onTap: () => Navigator.pop(ctx, (t['id'] as num).toInt()),
                   ),
             ],
           ),
@@ -1746,10 +1795,7 @@ class _SuccessOrderDialog extends StatelessWidget {
             const SizedBox(height: 18),
             HsPrimaryButton(label: 'طباعة الفاتورة', onPressed: onPrint),
             const SizedBox(height: 8),
-            HsOutlineButton(
-              label: 'بدون فاتورة',
-              onPressed: onContinue,
-            ),
+            HsOutlineButton(label: 'بدون فاتورة', onPressed: onContinue),
           ],
         ),
       ),

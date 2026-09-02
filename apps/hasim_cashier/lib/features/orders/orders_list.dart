@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
+import '../../core/auth/auth_controller.dart';
 import '../../core/local_db/local_db_providers.dart';
+import '../../core/pos/application/pos_providers.dart';
+import '../../core/pos/application/return_service.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
 import '../../core/pos/pos_labels.dart';
@@ -65,12 +68,14 @@ class _OrdersListState extends ConsumerState<OrdersList> {
       final local = await ref
           .read(ordersRepositoryProvider)
           .listRunning(workspaceId: workspaceId);
-      if (local.isNotEmpty && mounted) {
+      if (mounted) {
         setState(() {
           _orders = local;
           _loading = false;
         });
       }
+      final session = ref.read(authControllerProvider).valueOrNull;
+      if (session?.isLocalMode == true) return;
       // Best-effort online enrichment for kitchen status / invoices — never
       // replaces empty local with invented data.
       try {
@@ -117,15 +122,15 @@ class _OrdersListState extends ConsumerState<OrdersList> {
     final id = (order['id'] as num?)?.toInt();
     if (id == null) return;
     try {
-      await ref.read(cashierApiProvider).post(
-        '/orders/$id/status',
-        data: {'pos_status': status},
-      );
+      await ref
+          .read(cashierApiProvider)
+          .post('/orders/$id/status', data: {'pos_status': status});
       await _load();
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -137,28 +142,29 @@ class _OrdersListState extends ConsumerState<OrdersList> {
     if (resolved == null) {
       final serverId = (order['id'] as num?)?.toInt();
       if (serverId == null) return;
-      resolved = (await ref.read(ordersRepositoryProvider).findByServerId(
-                workspaceId: workspaceId,
-                serverId: serverId,
-              ))
-          ?.localId;
+      resolved =
+          (await ref
+                  .read(ordersRepositoryProvider)
+                  .findByServerId(workspaceId: workspaceId, serverId: serverId))
+              ?.localId;
     }
     if (resolved == null) return;
     try {
-      final deviceId =
-          await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
-      final invoice =
-          await ref.read(ordersRepositoryProvider).enqueueInvoiceForOrder(
-                workspaceId: workspaceId,
-                deviceId: deviceId,
-                orderLocalId: resolved,
-              );
-      // Sync in background — confirm invoice creation immediately.
-      // ignore: unawaited_futures
-      ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+      final deviceId = await ref
+          .read(deviceIdentityProvider)
+          .getOrCreateDeviceId();
+      final invoice = await ref
+          .read(ordersRepositoryProvider)
+          .enqueueInvoiceForOrder(
             workspaceId: workspaceId,
             deviceId: deviceId,
+            orderLocalId: resolved,
           );
+      // Sync in background — confirm invoice creation immediately.
+      // ignore: unawaited_futures
+      ref
+          .read(posSyncCoordinatorProvider)
+          .flushPendingOrders(workspaceId: workspaceId, deviceId: deviceId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -170,8 +176,9 @@ class _OrdersListState extends ConsumerState<OrdersList> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -211,20 +218,56 @@ class _OrdersListState extends ConsumerState<OrdersList> {
     );
     if (ok != true) return;
     try {
-      await ref.read(cashierApiProvider).post(
-        '/orders/$id/returns',
-        data: {
-          'reason': 'مرتجع من تطبيق الكاشير',
-          'mark_refunded': true,
-          'items': [
-            for (final item in items)
-              {
-                'order_item_id': item['id'],
-                'qty': item['quantity'],
-              },
-          ],
-        },
-      );
+      final session = ref.read(authControllerProvider).valueOrNull;
+      final workspaceId = ref.read(workspaceIdProvider);
+      final localId = order['local_id'] as String?;
+      if ((session?.isLocalMode == true || localId != null) &&
+          workspaceId != null &&
+          localId != null) {
+        final resolved = await ref
+            .read(ordersRepositoryProvider)
+            .getOrder(workspaceId: workspaceId, localId: localId);
+        final rawItems = resolved?['items'] is List
+            ? (resolved!['items'] as List).whereType<Map>().toList()
+            : items;
+        await ref
+            .read(returnServiceProvider)
+            .execute(
+              workspaceId: workspaceId,
+              orderLocalId: localId,
+              lines: [
+                for (final item in rawItems)
+                  if (item['local_id'] != null || item['id'] != null)
+                    ReturnLineInput(
+                      orderItemLocalId: '${item['local_id'] ?? item['id']}',
+                      quantity: (item['quantity'] as num?)?.toInt() ?? 1,
+                    ),
+              ],
+              allowNegativeStock: true,
+              reason: 'مرتجع من تطبيق الكاشير',
+              createdByUserId: ref.read(currentLocalUserIdProvider),
+              shiftLocalId: ref.read(currentShiftIdProvider),
+            );
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم تسجيل المرتجع محلياً.')),
+        );
+        await _load();
+        return;
+      }
+      await ref
+          .read(cashierApiProvider)
+          .post(
+            '/orders/$id/returns',
+            data: {
+              'reason': 'مرتجع من تطبيق الكاشير',
+              'mark_refunded': true,
+              'items': [
+                for (final item in items)
+                  {'order_item_id': item['id'], 'qty': item['quantity']},
+              ],
+            },
+          );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم تسجيل المرتجع والاسترداد.')),
@@ -232,8 +275,9 @@ class _OrdersListState extends ConsumerState<OrdersList> {
       await _load();
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -417,7 +461,7 @@ class _OrdersListState extends ConsumerState<OrdersList> {
                               ),
                             ],
                             const SizedBox(height: 10),
-            Row(
+                            Row(
                               children: [
                                 Expanded(
                                   child: Container(
@@ -478,7 +522,10 @@ class _OrdersListState extends ConsumerState<OrdersList> {
                                 if (order['pos_cashier_invoice_id'] == null)
                                   OutlinedButton.icon(
                                     onPressed: () => _createInvoice(order),
-                                    icon: const Icon(Icons.receipt_long, size: 16),
+                                    icon: const Icon(
+                                      Icons.receipt_long,
+                                      size: 16,
+                                    ),
                                     label: const Text('فاتورة'),
                                   ),
                                 if (CashierPermissions.canRefund(
