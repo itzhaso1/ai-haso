@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../api/cashier_api.dart';
+import '../local_db/local_db_providers.dart';
+import '../local_db/local_demo_seed_service.dart';
 import '../offline/offline_store.dart';
 
 const _tokenKey = 'cashier_token';
@@ -16,6 +18,7 @@ class AuthSession {
     this.permissions = const {},
     this.posEnabled = false,
     this.entitlements,
+    this.isLocalMode = false,
   });
 
   final String token;
@@ -25,6 +28,7 @@ class AuthSession {
   final Map<String, dynamic> permissions;
   final bool posEnabled;
   final Map<String, dynamic>? entitlements;
+  final bool isLocalMode;
 
   String get userName => (user['name'] as String?) ?? '';
 }
@@ -47,6 +51,7 @@ class AuthRepository {
           : {'id': int.tryParse(workspaceRaw)},
       workspaces: const [],
       posEnabled: true,
+      isLocalMode: token == 'local-offline',
     );
   }
 
@@ -185,6 +190,33 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
       final cached = _sessionFromCache(restored.token, restored.workspace);
       // Leave splash immediately — never block startup on /auth/me.
       state = AsyncValue.data(cached ?? restored);
+      if (restored.token == 'local-offline' ||
+          (cached?.isLocalMode ?? restored.isLocalMode)) {
+        // Local mode — never call Laravel /auth/me (would 401 and wipe session).
+        if (cached != null && !cached.isLocalMode) {
+          state = AsyncValue.data(
+            AuthSession(
+              token: cached.token,
+              user: cached.user,
+              workspace: cached.workspace,
+              workspaces: cached.workspaces,
+              permissions: cached.permissions.isNotEmpty
+                  ? cached.permissions
+                  : const {
+                      'pos.use': true,
+                      'orders.create': true,
+                      'orders.manage': true,
+                      'tables.manage': true,
+                      'reports.view': true,
+                    },
+              posEnabled: true,
+              entitlements: cached.entitlements,
+              isLocalMode: true,
+            ),
+          );
+        }
+        return;
+      }
       try {
         final me = await _ref.read(cashierApiProvider).get('/auth/me');
         final session = _sessionFromMe(restored.token, restored.workspace, me);
@@ -275,6 +307,7 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
       entitlements: cached['entitlements'] is Map
           ? Map<String, dynamic>.from(cached['entitlements'] as Map)
           : null,
+      isLocalMode: cached['is_local_mode'] == true || token == 'local-offline',
     );
   }
 
@@ -285,6 +318,7 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
         'permissions': session.permissions,
         'pos_enabled': session.posEnabled,
         'entitlements': session.entitlements,
+        'is_local_mode': session.isLocalMode,
       };
 
   Future<void> login(String emailOrPhone, String password) async {
@@ -320,6 +354,61 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
       }
       Error.throwWithStackTrace(e, st);
     }
+  }
+
+  /// Enter local POS without a Laravel account (demo / offline store mode).
+  Future<void> enterLocalMode() async {
+    const token = 'local-offline';
+    final cached = OfflineStore.instance.readSession();
+    final cachedWs = cached?['workspace'];
+    var workspaceId = LocalDemoSeedService.demoWorkspaceId;
+    if (cachedWs is Map && cachedWs['id'] != null) {
+      workspaceId = int.tryParse('${cachedWs['id']}') ?? workspaceId;
+    }
+    final deviceId =
+        await _ref.read(deviceIdentityProvider).getOrCreateDeviceId();
+    await LocalDemoSeedService(_ref.read(appDatabaseProvider)).ensureDemoWorkspace(
+      workspaceId: workspaceId,
+      deviceId: deviceId,
+    );
+
+    final permissions = <String, dynamic>{
+      'pos.use': true,
+      'pos.manage': true,
+      'orders.create': true,
+      'orders.manage': true,
+      'orders.discount': true,
+      'orders.refund': true,
+      'tables.manage': true,
+      'menu.manage': true,
+      'reports.view': true,
+      'workspace.manage': true,
+    };
+    final session = AuthSession(
+      token: token,
+      user: const {'name': 'كاشير محلي', 'id': 0},
+      workspace: {
+        'id': workspaceId,
+        'name': 'متجر محلي',
+        'pos_enabled': true,
+      },
+      workspaces: [
+        {
+          'id': workspaceId,
+          'name': 'متجر محلي',
+          'pos_enabled': true,
+        },
+      ],
+      permissions: permissions,
+      posEnabled: true,
+      isLocalMode: true,
+    );
+    await _ref.read(authRepositoryProvider).persistWorkspace(workspaceId);
+    await _ref.read(secureStorageProvider).write(
+          key: 'cashier_token',
+          value: token,
+        );
+    await _applySession(session);
   }
 
   Future<String> forgotPassword(String email) {
@@ -400,6 +489,7 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
               permissions.isNotEmpty ? permissions : current.permissions,
           posEnabled: posEnabled,
           entitlements: entitlements ?? current.entitlements,
+          isLocalMode: current.isLocalMode,
         ),
       );
     }

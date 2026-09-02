@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
+import '../../core/local_db/local_db_providers.dart';
 import '../../core/network/cashier_link.dart';
 import '../../core/offline/offline_store.dart';
 import '../../core/permissions/cashier_permissions.dart';
@@ -46,6 +47,27 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
       _error = null;
       _forbidden = false;
     });
+
+    final workspaceId = ref.read(workspaceIdProvider);
+    // Local SQLite report first — never white page offline.
+    if (workspaceId != null && workspaceId > 0) {
+      try {
+        final local = await ref
+            .read(localFinanceRepositoryProvider)
+            .buildDailyReport(workspaceId: workspaceId, date: _date);
+        if (!mounted) return;
+        setState(() {
+          _data = local;
+          _loading = false;
+          _stale = true;
+          _error = null;
+          _forbidden = false;
+        });
+      } catch (_) {
+        // Continue to remote / cache.
+      }
+    }
+
     try {
       final api = ref.read(cashierApiProvider);
       final data = await api.get('/reports/daily', query: {'date': _q});
@@ -79,7 +101,7 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
           _loading = false;
           _forbidden = true;
           _error = e.message;
-          _data = null;
+          // Keep any local report already shown.
         });
         return;
       }
@@ -87,10 +109,15 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
       setState(() {
         _loading = false;
         _forbidden = false;
-        _error = cached == null ? e.message : null;
-        if (cached != null) {
+        if (_data == null && cached != null) {
           _data = cached;
           _stale = true;
+          _error = null;
+        } else if (_data == null) {
+          _error = e.message;
+        } else {
+          _stale = true;
+          _error = null;
         }
       });
     } catch (e) {
@@ -99,10 +126,15 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
       setState(() {
         _loading = false;
         _forbidden = false;
-        _error = cached == null ? e.toString() : null;
-        if (cached != null) {
+        if (_data == null && cached != null) {
           _data = cached;
           _stale = true;
+          _error = null;
+        } else if (_data == null) {
+          _error = e.toString();
+        } else {
+          _stale = true;
+          _error = null;
         }
       });
     }

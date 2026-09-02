@@ -52,6 +52,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  Future<void> _enterLocal() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await ref.read(authControllerProvider.notifier).enterLocalMode();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'تعذر فتح الوضع المحلي: $e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   Future<void> _google() async {
     setState(() {
       _googleBusy = true;
@@ -261,6 +276,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     ),
                                   )
                                 : const Text('تسجيل الدخول'),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          height: 48,
+                          child: OutlinedButton.icon(
+                            onPressed: busy ? null : _enterLocal,
+                            icon: const Icon(Icons.storefront_outlined),
+                            label: const Text('دخول محلي بدون حساب'),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'للعمل أوفلاين مباشرة بدون تسجيل Laravel — مع بيانات تجريبية.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
                           ),
                         ),
                         const SizedBox(height: 12),

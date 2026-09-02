@@ -7,6 +7,7 @@ import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
+import '../../core/util/json_numbers.dart';
 import '../../core/widgets/hasim_widgets.dart';
 import '../cart/cart_controller.dart';
 
@@ -44,20 +45,21 @@ class _TableOrderEditorDialogState
     _lines = items
         .map(
           (e) => _EditLine(
-            id: (e['id'] as num?)?.toInt(),
-            menuItemId: (e['pos_menu_item_id'] as num?)?.toInt(),
+            // Local unsynced items use String local_id as `id` — never cast to num.
+            id: asInt(e['id']),
+            menuItemId: asInt(e['pos_menu_item_id']),
             name:
-                '${e['product_name'] ?? 'صنف'}${e['variant_name'] != null ? ' - ${e['variant_name']}' : ''}',
-            quantity: (e['quantity'] as num?)?.toInt() ?? 1,
-            unitPrice: (e['unit_price'] as num?)?.toDouble() ?? 0,
-            discount: (e['discount_amount'] as num?)?.toDouble() ?? 0,
+                '${e['product_name'] ?? e['name'] ?? 'صنف'}${e['variant_name'] != null ? ' - ${e['variant_name']}' : ''}',
+            quantity: asIntOr(e['quantity'], 1).clamp(1, 9999),
+            unitPrice: asDoubleOr(e['unit_price']),
+            discount: asDoubleOr(e['discount_amount']),
             remove: false,
           ),
         )
         .toList();
     _notes = TextEditingController(text: '${widget.order['notes'] ?? ''}');
     _discount = TextEditingController(
-      text: ((widget.order['discount_amount'] as num?) ?? 0).toStringAsFixed(2),
+      text: asDoubleOr(widget.order['discount_amount']).toStringAsFixed(2),
     );
     _loadCatalog();
   }
@@ -142,7 +144,7 @@ class _TableOrderEditorDialogState
                         enabled: available,
                         title: Text('${item['name']}'),
                         subtitle: Text(
-                          ((item['price'] as num?) ?? 0).toStringAsFixed(2),
+                          ((asDoubleOr(item['price']))).toStringAsFixed(2),
                         ),
                         onTap: available
                             ? () => Navigator.pop(ctx, item)
@@ -162,10 +164,10 @@ class _TableOrderEditorDialogState
       _lines.add(
         _EditLine(
           id: null,
-          menuItemId: (selected['id'] as num).toInt(),
+          menuItemId: asInt(selected['id']),
           name: '${selected['name']}',
           quantity: 1,
-          unitPrice: (selected['price'] as num?)?.toDouble() ?? 0,
+          unitPrice: asDoubleOr(selected['price']),
           discount: 0,
           remove: false,
         ),

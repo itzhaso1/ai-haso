@@ -7,6 +7,7 @@ import '../local_db/app_database.dart';
 import '../local_db/local_ids.dart';
 import '../offline/offline_store.dart';
 import '../offline/pending_order.dart';
+import '../util/json_numbers.dart';
 import 'sync_queue_repository.dart';
 
 /// Local-first orders: UI → repository → SQLite transaction → sync_queue.
@@ -735,20 +736,19 @@ class OrdersRepository {
   ) {
     final out = <Map<String, dynamic>>[];
     for (final raw in items) {
-      final qty = (raw['quantity'] as num?)?.toInt() ?? 0;
+      final qty = asIntOr(raw['quantity']);
       if (qty <= 0) continue;
-      final price = (raw['unit_price'] as num?)?.toDouble() ?? 0;
-      final total =
-          (raw['total_amount'] as num?)?.toDouble() ?? qty * price;
+      final price = asDoubleOr(raw['unit_price']);
+      final total = asDouble(raw['total_amount']) ?? qty * price;
       out.add({
         'local_id': raw['local_id'] ?? _newItemId(),
-        'pos_menu_item_id': raw['pos_menu_item_id'],
+        'pos_menu_item_id': asInt(raw['pos_menu_item_id']),
         'name': raw['name'] ?? raw['product_name'] ?? 'صنف',
         'product_name': raw['product_name'] ?? raw['name'] ?? 'صنف',
         'variant_name': raw['variant_name'],
         'quantity': qty,
         'unit_price': price,
-        'discount_amount': (raw['discount_amount'] as num?)?.toDouble() ?? 0,
+        'discount_amount': asDoubleOr(raw['discount_amount']),
         'total_amount': total,
       });
     }
@@ -758,7 +758,7 @@ class OrdersRepository {
   ({double subtotal}) _totals(List<Map<String, dynamic>> items) {
     var subtotal = 0.0;
     for (final item in items) {
-      subtotal += (item['total_amount'] as num?)?.toDouble() ?? 0;
+      subtotal += asDoubleOr(item['total_amount']);
     }
     return (subtotal: subtotal);
   }

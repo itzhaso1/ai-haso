@@ -52,9 +52,9 @@ class LinkPolicy {
   static String bannerMessage(CashierLink link, {int pendingCount = 0}) {
     return switch (link) {
       CashierLink.offline =>
-        'غير متصل بالإنترنت — العمليات المالية متاحة عند عودة الاتصال فقط.',
+        'وضع أوفلاين — الكاشير يعمل محليًا والمزامنة عند عودة الإنترنت.',
       CashierLink.serverUnavailable =>
-        'غير متصل بالخادم — يمكنك العرض من آخر نسخة محفوظة وإعادة المحاولة.',
+        'الخادم غير متاح — العرض والحفظ المحلي مستمران، أعد المحاولة للمزامنة.',
       CashierLink.online => pendingCount > 0
           ? '$pendingCount عمليات بانتظار المزامنة'
           : 'تم الاتصال بالخادم',

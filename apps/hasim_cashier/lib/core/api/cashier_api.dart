@@ -59,7 +59,10 @@ final dioProvider = Provider<Dio>((ref) {
                 ? 0
                 : null);
         if (status == 401) {
-          ref.read(authTokenProvider.notifier).state = null;
+          final token = ref.read(authTokenProvider);
+          if (token != 'local-offline') {
+            ref.read(authTokenProvider.notifier).state = null;
+          }
         }
         ref.read(cashierLinkProvider.notifier).onApiFailure(statusCode: status);
         handler.next(error);

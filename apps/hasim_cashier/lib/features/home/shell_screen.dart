@@ -167,13 +167,31 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     _bootstrapInFlight = true;
     // Seed permissions from auth session immediately so reports/nav aren't
     // hidden while bootstrap is in-flight (root cause of missing reports).
-    final sessionPerms =
-        ref.read(authControllerProvider).valueOrNull?.permissions;
+    final session = ref.read(authControllerProvider).valueOrNull;
+    final sessionPerms = session?.permissions;
     if (sessionPerms != null &&
         sessionPerms.isNotEmpty &&
         ref.read(cashierPermissionsProvider).isEmpty) {
       ref.read(cashierPermissionsProvider.notifier).state =
           Map<String, dynamic>.from(sessionPerms);
+    }
+    if (session?.isLocalMode == true || session?.token == 'local-offline') {
+      _applyBootstrapPayload({
+        'pos_enabled': true,
+        'permissions': sessionPerms ?? const {},
+        'workspace': session?.workspace,
+        'user': session?.user,
+        'settings': {'tax_rate': 0},
+      }, fromCache: true);
+      final workspaceId = ref.read(workspaceIdProvider);
+      if (workspaceId != null) {
+        ref.invalidate(localPosReadyProvider(workspaceId));
+        ref.invalidate(catalogItemsProvider);
+        ref.invalidate(categoriesProvider);
+      }
+      setState(() => _bootstrapError = null);
+      _bootstrapInFlight = false;
+      return;
     }
     final cached = OfflineStore.instance.readBootstrap();
     try {

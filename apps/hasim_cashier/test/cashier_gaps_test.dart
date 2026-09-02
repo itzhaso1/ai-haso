@@ -438,11 +438,11 @@ void main() {
   test('offline indicator and retry policy', () {
     expect(
       LinkPolicy.bannerMessage(CashierLink.serverUnavailable),
-      contains('غير متصل بالخادم'),
+      contains('الخادم غير متاح'),
     );
     expect(
       LinkPolicy.bannerMessage(CashierLink.offline),
-      contains('غير متصل'),
+      contains('أوفلاين'),
     );
     var retries = 0;
     var inFlight = false;

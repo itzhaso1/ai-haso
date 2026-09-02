@@ -557,15 +557,15 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
         );
         return;
       }
-      await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
-            workspaceId: workspaceId,
-            deviceId: deviceId,
-          );
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم حفظ تعديلات الطلب.')),
       );
       await _load();
+      // ignore: unawaited_futures
+      ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+            workspaceId: workspaceId,
+            deviceId: deviceId,
+          );
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(
@@ -676,15 +676,15 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       );
       return;
     }
-    await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
-          workspaceId: workspaceId,
-          deviceId: deviceId,
-        );
-    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('تم حذف الطلب.')),
     );
     await _load();
+    // ignore: unawaited_futures
+    ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+          workspaceId: workspaceId,
+          deviceId: deviceId,
+        );
   }
 
   Future<void> _editNote() async {

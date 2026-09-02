@@ -8,6 +8,7 @@ import '../local_db/initial_sync_service.dart';
 import '../local_db/workspace_scope.dart';
 import '../repositories/catalog_repository.dart';
 import '../repositories/customers_repository.dart';
+import '../repositories/local_finance_repository.dart';
 import '../repositories/orders_repository.dart';
 import '../repositories/sync_conflict_repository.dart';
 import '../repositories/sync_queue_repository.dart';
@@ -64,6 +65,10 @@ final ordersRepositoryProvider = Provider<OrdersRepository>((ref) {
     ref.watch(appDatabaseProvider),
     ref.watch(syncQueueRepositoryProvider),
   );
+});
+
+final localFinanceRepositoryProvider = Provider<LocalFinanceRepository>((ref) {
+  return LocalFinanceRepository(ref.watch(appDatabaseProvider));
 });
 
 final syncPullApplierProvider = Provider<SyncPullApplier>((ref) {
