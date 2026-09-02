@@ -484,7 +484,6 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           clientRef: clientRef,
           notes: cart.notes,
           items: lineItems,
-          customerServerId: cart.customerId,
         );
       }
     } catch (e) {
@@ -497,30 +496,26 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
 
     ref.read(cartControllerProvider.notifier).clear();
     _refreshPending();
-
-    final deviceId =
-        await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
-    try {
-      await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
-            workspaceId: workspaceId,
-            deviceId: deviceId,
-          );
-      final refreshed = await ref.read(ordersRepositoryProvider).getOrder(
-            workspaceId: workspaceId,
-            localId: clientRef,
-          );
-      if (refreshed != null) localOrder = refreshed;
-    } catch (_) {
-      // Pending queue retained; cursor untouched.
-    }
-    _refreshPending();
     if (!mounted) return;
 
+    // Never block the success UI on sync — offline timeouts made checkout feel stuck.
+    final deviceId =
+        await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
+    // ignore: unawaited_futures
+    ref
+        .read(posSyncCoordinatorProvider)
+        .flushPendingOrders(
+          workspaceId: workspaceId,
+          deviceId: deviceId,
+        )
+        .then((_) {
+      if (mounted) _refreshPending();
+    });
+
     if (wasTable) {
-      final label = localOrder['is_local_pending'] == true
-          ? 'تم حفظ الطلب — بانتظار المزامنة'
-          : 'تم حفظ الطلب #${localOrder['order_number'] ?? localOrder['id']} على الطاولة.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(label)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم حفظ الطلب على الطاولة.')),
+      );
       if (tableId != null) {
         openTableWorkspace(ref, tableId);
         requestPosShellTab(ref, PosShellTab.tables);
@@ -528,9 +523,9 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       return;
     }
 
-    // Takeaway: local invoice draft + optional print; sync when online.
+    // Takeaway: show success immediately; invoice/print use local draft.
     final orderLabel =
-        '${localOrder['order_number'] ?? localOrder['id'] ?? clientRef}';
+        '${localOrder['order_number'] ?? localOrder['local_id'] ?? clientRef}';
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -545,7 +540,9 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
                       deviceId: deviceId,
                       orderLocalId: clientRef,
                     );
-            await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+            // Sync in background — print local draft right away.
+            // ignore: unawaited_futures
+            ref.read(posSyncCoordinatorProvider).flushPendingOrders(
                   workspaceId: workspaceId,
                   deviceId: deviceId,
                 );
@@ -570,19 +567,23 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
             );
           }
         },
-        onContinue: () async {
+        onContinue: () {
           Navigator.pop(context);
-          try {
-            await ref.read(ordersRepositoryProvider).enqueueInvoiceForOrder(
-                  workspaceId: workspaceId,
-                  deviceId: deviceId,
-                  orderLocalId: clientRef,
-                );
-            await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
-                  workspaceId: workspaceId,
-                  deviceId: deviceId,
-                );
-          } catch (_) {}
+          // ignore: unawaited_futures
+          () async {
+            try {
+              await ref.read(ordersRepositoryProvider).enqueueInvoiceForOrder(
+                    workspaceId: workspaceId,
+                    deviceId: deviceId,
+                    orderLocalId: clientRef,
+                  );
+              await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+                    workspaceId: workspaceId,
+                    deviceId: deviceId,
+                  );
+              if (mounted) _refreshPending();
+            } catch (_) {}
+          }();
         },
       ),
     );
@@ -1166,7 +1167,6 @@ class _CartPanel extends ConsumerStatefulWidget {
 
 class _CartPanelState extends ConsumerState<_CartPanel> {
   List<Map<String, dynamic>> _tables = const [];
-  List<Map<String, dynamic>> _customers = const [];
   final _notesController = TextEditingController();
   var _metaLoaded = false;
 
@@ -1179,28 +1179,25 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
   Future<void> _ensureMeta() async {
     if (_metaLoaded) return;
     _metaLoaded = true;
+    final workspaceId = ref.read(workspaceIdProvider);
+    if (workspaceId == null || workspaceId <= 0) return;
     try {
-      final tablesData = await ref.read(cashierApiProvider).get('/tables');
-      final customersData =
-          await ref.read(cashierApiProvider).get('/customers');
+      // Local SQLite first — no network wait on cart open.
+      final local =
+          await ref.read(tablesRepositoryProvider).listTables(workspaceId);
       if (!mounted) return;
-      setState(() {
-        _tables = (tablesData['tables'] is List)
-            ? (tablesData['tables'] as List)
-                .whereType<Map>()
-                .map((e) => Map<String, dynamic>.from(e))
-                .toList()
-            : const [];
-        final raw = customersData['customers'] ?? customersData['value'];
-        _customers = (raw is List)
-            ? raw
-                .whereType<Map>()
-                .map((e) => Map<String, dynamic>.from(e))
-                .toList()
-            : const [];
-      });
+      if (local.isNotEmpty) {
+        setState(() => _tables = local);
+      }
+      // Best-effort remote refresh in background.
+      final board =
+          await ref.read(tablesRepositoryProvider).loadBoard(workspaceId);
+      if (!mounted) return;
+      if (board.isNotEmpty) {
+        setState(() => _tables = board);
+      }
     } catch (_) {
-      // Offline / permission — cart still works for takeaway.
+      // Offline — takeaway still works without tables list.
     }
   }
 
@@ -1265,31 +1262,6 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
               onChanged: (v) => notifier.setTable(v),
             ),
           ],
-          const SizedBox(height: 8),
-          DropdownButtonFormField<int?>(
-            value: _customers.any(
-                      (c) => (c['id'] as num).toInt() == cart.customerId,
-                    )
-                ? cart.customerId
-                : null,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'العميل (اختياري)',
-              isDense: true,
-            ),
-            items: [
-              const DropdownMenuItem<int?>(
-                value: null,
-                child: Text('بدون عميل'),
-              ),
-              for (final c in _customers)
-                DropdownMenuItem(
-                  value: (c['id'] as num).toInt(),
-                  child: Text('${c['name'] ?? c['phone'] ?? c['id']}'),
-                ),
-            ],
-            onChanged: notifier.setCustomer,
-          ),
           const SizedBox(height: 8),
           TextField(
             controller: _notesController,

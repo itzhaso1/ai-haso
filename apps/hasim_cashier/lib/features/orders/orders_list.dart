@@ -153,7 +153,9 @@ class _OrdersListState extends ConsumerState<OrdersList> {
                 deviceId: deviceId,
                 orderLocalId: resolved,
               );
-      await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+      // Sync in background — confirm invoice creation immediately.
+      // ignore: unawaited_futures
+      ref.read(posSyncCoordinatorProvider).flushPendingOrders(
             workspaceId: workspaceId,
             deviceId: deviceId,
           );

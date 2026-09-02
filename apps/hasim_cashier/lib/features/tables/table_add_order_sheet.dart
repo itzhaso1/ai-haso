@@ -4,7 +4,6 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/local_db/local_db_providers.dart';
-import '../../core/network/cashier_link.dart';
 import '../../core/sync/pos_sync_coordinator.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
@@ -228,12 +227,11 @@ class _TableAddOrderSheetState extends ConsumerState<TableAddOrderSheet> {
     try {
       // Local-first: SQLite transaction + sync_queue (works fully offline).
       await _saveLocal(clientRef);
-      final online = ref.read(cashierLinkProvider).allowMutations;
-      if (online) {
-        await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
-              workspaceId: workspaceId,
-            );
-      }
+      // Never block the sheet close on network sync.
+      // ignore: unawaited_futures
+      ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+            workspaceId: workspaceId,
+          );
       if (!mounted) return;
       Navigator.pop(context, {
         'local_pending': true,

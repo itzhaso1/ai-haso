@@ -421,13 +421,13 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم فتح جلسة الطاولة.')),
       );
-      // Best-effort sync — offline keeps queue.
-      await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+      await _load();
+      // Sync in background — never block UI on network.
+      // ignore: unawaited_futures
+      ref.read(posSyncCoordinatorProvider).flushPendingOrders(
             workspaceId: workspaceId,
             deviceId: deviceId,
           );
-      if (!mounted) return;
-      await _load();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -997,12 +997,12 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       final invoice = closed['invoice'] is Map
           ? Map<String, dynamic>.from(closed['invoice'] as Map)
           : null;
-      // Best-effort sync — offline keeps payment/invoice/close in queue.
-      await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+      // Sync in background — show invoice dialog immediately.
+      // ignore: unawaited_futures
+      ref.read(posSyncCoordinatorProvider).flushPendingOrders(
             workspaceId: workspaceId,
             deviceId: deviceId,
           );
-      if (!mounted) return;
       if (invoice != null) {
         await _afterCloseInvoiceDialog(invoice);
       } else {
