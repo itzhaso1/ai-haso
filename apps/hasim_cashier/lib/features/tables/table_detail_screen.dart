@@ -1802,17 +1802,21 @@ class _CloseTableFlowState extends State<CloseTableFlow> {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    // Dialog gets loose height from Align — Expanded/Flexible need a TIGHT box.
+    final dialogHeight = (size.height * 0.72).clamp(420.0, 640.0);
+    final dialogWidth = size.width >= 460 ? 420.0 : size.width - 32;
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(HasimRadius.lg),
       ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420, maxHeight: 640),
+      child: SizedBox(
+        width: dialogWidth,
+        height: dialogHeight,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
@@ -1829,7 +1833,7 @@ class _CloseTableFlowState extends State<CloseTableFlow> {
                 style: const TextStyle(color: HasimColors.muted),
               ),
               const SizedBox(height: 12),
-              Flexible(
+              Expanded(
                 child: SingleChildScrollView(
                   child: _step == 0
                       ? Column(

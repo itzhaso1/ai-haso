@@ -1201,6 +1201,19 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
     super.dispose();
   }
 
+  void _syncNotesFromCart(String? notes) {
+    final next = notes ?? '';
+    if (_notesController.text == next) return;
+    // Writing TextEditingController during build marks the element dirty mid-frame
+    // and can cascade into semantics.parentDataDirty assertion storms.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_notesController.text != next) {
+        _notesController.text = next;
+      }
+    });
+  }
+
   Future<void> _ensureMeta() async {
     if (_metaLoaded) return;
     _metaLoaded = true;
@@ -1233,7 +1246,7 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
     if (cart.notes != null &&
         cart.notes!.isNotEmpty &&
         _notesController.text != cart.notes) {
-      _notesController.text = cart.notes!;
+      _syncNotesFromCart(cart.notes);
     }
 
     return HsCard(

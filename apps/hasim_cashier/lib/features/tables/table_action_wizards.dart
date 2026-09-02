@@ -30,13 +30,17 @@ class _TableTransferWizardState extends State<TableTransferWizard> {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final dialogHeight = (size.height * 0.7).clamp(400.0, 560.0);
+    final dialogWidth = size.width >= 460 ? 420.0 : size.width - 40;
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(HasimRadius.lg),
       ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420, maxHeight: 560),
+      child: SizedBox(
+        width: dialogWidth,
+        height: dialogHeight,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -232,13 +236,17 @@ class _SplitBillWizardState extends State<SplitBillWizard> {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final dialogHeight = (size.height * 0.75).clamp(420.0, 620.0);
+    final dialogWidth = size.width >= 480 ? 440.0 : size.width - 32;
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(HasimRadius.lg),
       ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 440, maxHeight: 620),
+      child: SizedBox(
+        width: dialogWidth,
+        height: dialogHeight,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
