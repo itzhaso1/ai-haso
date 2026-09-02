@@ -402,8 +402,10 @@ void main() {
       ),
     );
     final backup = BackupService(db);
+    final dir = await Directory.systemTemp.createTemp('pos-bak');
     final file = await backup.exportBackup(
       workspaceId: PosMode.standaloneWorkspaceId,
+      directory: dir,
     );
     final payload = jsonDecode(await file.readAsString()) as Map;
     expect(payload['format_version'], 1);

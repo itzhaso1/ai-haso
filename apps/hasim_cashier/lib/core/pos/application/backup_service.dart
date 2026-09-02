@@ -39,9 +39,12 @@ class BackupService {
     await restore(Map<String, dynamic>.from(raw), confirmed: confirmed);
   }
 
-  Future<File> exportBackup({required int workspaceId}) async {
+  Future<File> exportBackup({
+    required int workspaceId,
+    Directory? directory,
+  }) async {
     final payload = await _dump(workspaceId);
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = directory ?? await getApplicationDocumentsDirectory();
     final file = File(
       p.join(
         dir.path,
