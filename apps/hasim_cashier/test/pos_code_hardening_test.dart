@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hasim_cashier/core/local_db/app_database.dart';
+import 'package:hasim_cashier/core/local_db/workspace_scope.dart';
 import 'package:hasim_cashier/core/pos/application/catalog_admin_service.dart';
 import 'package:hasim_cashier/core/pos/application/checkout_service.dart';
 import 'package:hasim_cashier/core/pos/application/document_numbers.dart';
@@ -440,6 +441,8 @@ void main() {
         shiftLocalId: s.shiftId,
       ),
     );
+    expect(result.invoiceNumber, isNotEmpty);
+    expect(result.total, 10);
     final printResult = await UnconfiguredPrinterGateway().send(
       Uint8List(0),
       const PrinterProfile(

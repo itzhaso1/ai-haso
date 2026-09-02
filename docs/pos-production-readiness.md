@@ -1,8 +1,8 @@
 # Hasim Cashier — Production Readiness Audit
 
-تاريخ: 2026-09-02 (تحديث M1–M3)  
-النطاق: `apps/hasim_cashier/lib` + `apps/hasim_cashier/test` بعد Schema **v7** / INTEGER cents / PBKDF2 / backup مشفّر.  
-القاعدة: لا Features جديدة، لا Licensing، لا إعادة كتابة SyncEngine.
+تاريخ: 2026-09-02 (تحديث Code-Based Production Hardening)  
+النطاق: `apps/hasim_cashier` POS Core بعد Schema **v8** / INTEGER cents / PBKDF2 / backup مشفّر.  
+القاعدة: لا Features جديدة، لا Licensing، لا إعادة كتابة SyncEngine، **لا ادعاء باختبار جهاز Android**.
 
 ```
 Standalone POS = SQLite/Drift + Local Business Logic
@@ -17,14 +17,97 @@ Standalone POS = SQLite/Drift + Local Business Logic
 
 ## الحكم النهائي
 
-**M1–M3 في CI: PASS. البيع التجاري بدون تحفظ: لا.**
+**CI / code: أقوى مما كان. البيع التجاري بدون جهاز حقيقي: لا.**
 
-مسار Standalone اليومي معزول عن الشبكة، المال INTEGER cents، FK حقيقية، PIN بـ PBKDF2، Backup مشفّر، وstress 10k/100k نجح في الذاكرة.  
-ما يمنع إعلان «منتج جاهز للبيع» بدون شروط: لم يُنفَّذ الـ26-step smoke على جهاز Flutter حقيقي في هذه المهمة؛ KDF هو PBKDF2@100k وليس Argon2id؛ أوامر التسعير ما زالت تدخل كـ `double` ثم تُحوَّل؛ قائمة فواتير التقرير اليومي تُظهر آخر 100 فقط (المجاميع كاملة)؛ Backup لكلمة مرور يختارها المستخدم وليس مفتاح جهاز.
+لا يوجد blocker برمجي حقيقي يمنع مواصلة التطوير.  
+لا يوجد Android device في هذه البيئة؛ اختبار الدخان التشغيلي ما زال **BLOCKED**.  
+**NOT READY FOR LICENSING.**
+
+`flutter analyze`: 0 errors (28 info سابقة، لا warnings بعد إصلاح المتغير غير المستخدم).  
+`flutter test`: **173 passed, 0 failed**.
+
+Stress (SQLite in-memory): catalog 1ms، search 0ms، barcode 1ms، checkout 15ms، invoice list 0ms، reports 64ms، stock 29ms، backup 9287ms، restore 7838ms.
 
 ---
 
-## بوابة M1–M3 (2026-09-02)
+## VERIFIED AUTOMATICALLY
+
+أُثبتت بالاختبارات الآلية (ليس على جهاز):
+
+| بند | دليل |
+|---|---|
+| Checkout atomicity + failure injection | `checkout faults after each write roll back the sale` |
+| Duplicate / double checkout | `double tap pay is idempotent` |
+| Duplicate return (sequential + parallel) | `pos_code_hardening_test.dart` idempotent + `Future.wait` |
+| Return without shift / closed shift | لا إعادة مخزون ولا صف مرتجع |
+| Stock consistency sale→return→sale | دفتر حركات + `after = before ± qty` |
+| Invoice immutability | المرتجع لا يغيّر `total_amount` / `payloadJson` |
+| Sequences | `INSERT … ON CONFLICT`؛ اختبار `never use max(id)+1` |
+| Money INTEGER cents | 0.1+0.2، ضريبة بعد خصم، remainder للمرتجع الجزئي = 3003 |
+| FK / orphans | `pos_hardening_test.dart` M1 + ترحيل v5/v6→v7 ينظّف orphans |
+| Migrations | v5/v6 REAL → INTEGER cents + remap `1→900001` |
+| Backup encryption / integrity / restore | format 3 AES-256-GCM؛ checksum؛ كلمة مرور خاطئة لا تمسح |
+| PIN / KDF | PBKDF2-HMAC-SHA256 100k؛ لا plaintext |
+| Draft crash recovery | مسودة تبقى بعد إعادة فتح الملف؛ `clear` لا يعيد الأسطر |
+| Shift rules | بيع بدون وردية مرفوض؛ وردية مفتوحة واحدة |
+| Permissions | كاشير لا يستطيع مرتجع / خصم / كتالوج / backup |
+| Standalone network isolation | `NetworkGuard.attempts == 0`؛ Hive migration no-op |
+| Large catalog / invoices / items | 2k منتجات، 10k فواتير، 100k بنود |
+| Report correctness | `net_sales`، COGS بعد المرتجع، top items صافية |
+| Printer failure | فشل الطباعة بعد COMMIT لا يغيّر الفاتورة |
+| App restart recovery (SQLite file) | مسودة على ملف ثم إعادة فتح — ليس عملية Android |
+
+---
+
+## FIXED (هذا الفرع)
+
+1. **مرتجع مكرر** — `clientReference` + `return_idemp:*` في نفس المعاملة؛ UI: in-flight + UUID.
+2. **مرتجع بدون وردية مفتوحة** — يُرفض قبل أي حركة مخزون/نقد. وردية مغلقة كذلك.
+3. **مخزون الكتالوج** — الافتتاح والتسوية عبر `StockEngine` داخل معاملة (دفتر حركات).
+4. **دفعتان نقديتان** — `client_reference = ref:method:index` + unique index على المدفوعات (v8).
+5. **Checkout بدون متجر** — `StoreNotFound`؛ لا fallback إلى `local-store`.
+6. **serverId كهوية محلية** — السلة/الباركود/تعديل الصنف يرفضون `local_id` فارغ/`null`.
+7. **مسودة القنوات** — التبديل يحمّل مسودة القناة الهدف بدل الكتابة فوقها.
+8. **persist fire-and-forget** — طابور كتابات متسلسل؛ `clear()` على نفس الطابور حتى لا تعود الأسطر.
+9. **مرتجع جزئي** — آخر كمية تأخذ المتبقي بالسنت حتى لا يضيع فلس.
+10. **تقارير** — COGS يخصم تكلفة المرتجع؛ top items كمية/إيراد صافيان.
+11. **StockEngine** — تسوية إلى كمية 0 مسموحة.
+
+لم يُمس: SyncEngineV2، Laravel sync، Licensing.
+
+---
+
+## REMAINING DEVICE-ONLY VALIDATION
+
+**لم يُنفَّذ أي اختبار على جهاز Android حقيقي في هذه المهمة.** القائمة التالية تبقى BLOCKED حتى يتوفر جهاز:
+
+- تثبيت APK / أول تشغيل / أداء بارد على عتاد ضعيف
+- لوحة PIN، لوحة لمس، سكانر كاميرا، طابعة Bluetooth/USB
+- قتل التطبيق من Android recents أثناء checkout/return ثم التحقق بصرياً
+- نسخ احتياطي إلى تخزين الجهاز واستعادة بعد إعادة التثبيت
+- Permissive SELinux / صلاحيات تخزين / لوحة مفاتيح أجهزة
+- checklist التشغيلي 37+ خطوة في `docs/pos-production-smoke-test.md`
+
+النتيجة السابقة للجهاز: `docs/pos-production-smoke-test-result.md` — 48 BLOCKED، 0 PASS.
+
+---
+
+## RISKS
+
+1. PIN = PBKDF2@100k وليس Argon2id؛ الحد الأدنى 4 أرقام.
+2. Backup format 3 مشفّر بكلمة مرور المستخدم (ليست keychain). format 2 القديم plaintext إن وُجد.
+3. أوامر التسعير/الدفع تدخل `double` ثم `toCents`.
+4. قائمة فواتير التقرير اليومي محدودة بـ100 صف (المجاميع كاملة).
+5. `_safeIndex` يبتلع فشل إنشاء unique index إن وُجدت تكرارات قديمة — أفضل جهد عند الترقية.
+6. Hive لا يُحذف؛ Standalone لا يقرأه في المسار اليومي.
+7. Stress 10k/100k in-memory فقط — ليس جهاز تجاري.
+8. مسارات الطاولات/QR المتصلة ما زالت API-first (خارج Standalone Core).
+9. Connect إلى Laravel غير منفّذ. SyncEngineV2 لم يُمس (مقصود).
+10. لا كاميرا باركود، لا BT/USB printer plugin، لا Licensing.
+
+---
+
+## بوابة M1–M3 (2026-09-02، تاريخية)
 
 | بند | الحكم | دليل |
 |---|---|---|
