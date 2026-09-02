@@ -145,7 +145,8 @@ class BackupService {
     Map<String, dynamic>? permissions,
   }) async {
     PosPermissions.require(permissions, PosPermissions.backup);
-    if (password == null || password.trim().length < 6) {
+    final secret = password?.trim() ?? '';
+    if (secret.length < 6) {
       throw const DatabaseFailure(
         'كلمة مرور النسخة الاحتياطية يجب أن تكون 6 أحرف على الأقل.',
       );
@@ -155,7 +156,7 @@ class BackupService {
     final plaintext = jsonEncode(inner);
     final sealed = await _crypto.encrypt(
       plaintext: plaintext,
-      password: password,
+      password: secret,
     );
     final envelope = {
       'format_version': backupFormatVersion,
@@ -259,7 +260,8 @@ class BackupService {
 
     Map<String, dynamic> inner;
     if (version == backupFormatVersion) {
-      if (password == null || password.isEmpty) {
+      final secret = password?.trim() ?? '';
+      if (secret.isEmpty) {
         throw const DatabaseFailure('كلمة مرور النسخة الاحتياطية مطلوبة.');
       }
       final salt = payload['salt_b64'];
@@ -270,7 +272,7 @@ class BackupService {
       }
       try {
         final plaintext = await _crypto.decrypt(
-          password: password,
+          password: secret,
           saltB64: salt,
           nonceB64: nonce,
           ciphertextB64: cipher,

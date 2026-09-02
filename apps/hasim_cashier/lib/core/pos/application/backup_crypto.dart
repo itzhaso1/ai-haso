@@ -7,6 +7,9 @@ import 'package:cryptography/cryptography.dart';
 import 'pin_hasher.dart';
 
 /// AES-256-GCM envelope for on-disk POS backups.
+///
+/// The wrapping secret is a **user-chosen** password (min 6 after trim), not a
+/// hardware/keychain key, so a replacement device can restore the file.
 class BackupCrypto {
   const BackupCrypto();
 

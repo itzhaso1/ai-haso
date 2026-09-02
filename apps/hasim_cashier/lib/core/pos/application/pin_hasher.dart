@@ -8,6 +8,10 @@ import 'package:crypto/crypto.dart';
 ///
 /// Stored hash format: `pbkdf2-sha256$<iterations>$<b64-dk>`
 /// Legacy SHA-256 hex (64 chars) is still verified, then upgraded on login.
+///
+/// Argon2id is not used: the PIN is a UI lock, not data-at-rest encryption.
+/// A stolen SQLite file already exposes commercial rows; changing KDF would
+/// not encrypt them. Format stays stable for freeze (see production readiness).
 class PinHasher {
   const PinHasher._();
 

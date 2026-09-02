@@ -1,8 +1,10 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hasim_cashier/core/local_db/app_database.dart';
 import 'package:hasim_cashier/core/local_db/workspace_scope.dart';
+import 'package:hasim_cashier/core/pos/application/backup_service.dart';
 import 'package:hasim_cashier/core/pos/application/catalog_admin_service.dart';
 import 'package:hasim_cashier/core/pos/application/checkout_service.dart';
 import 'package:hasim_cashier/core/pos/application/document_numbers.dart';
@@ -591,5 +593,105 @@ void main() {
           ..where((t) => t.localId.equals(s.productId)))
         .getSingle();
     expect(product.stock, 10);
+  });
+
+  test('tax percent uses integer cents of the rate', () {
+    expect(Money.percentOf(1000, 15), 150);
+    expect(Money.percentOf(333, 15), 50);
+    expect(Money.toCents(0.1) + Money.toCents(0.2), Money.toCents(0.3));
+    const pricing = PricingService();
+    final quote = pricing.quote(
+      lines: const [
+        PricedLine(
+          productLocalId: 'p',
+          name: 'A',
+          quantity: 3,
+          unitPrice: 1.11,
+        ),
+      ],
+      fallbackTaxRate: 15,
+    );
+    expect(quote.subtotalCents, 333);
+    expect(quote.taxCents, 50);
+    expect(quote.totalCents, 383);
+  });
+
+  test('backup password is trimmed on export and restore', () async {
+    final s = await seed();
+    await checkout.execute(
+      CheckoutCommand(
+        workspaceId: PosMode.standaloneWorkspaceId,
+        deviceId: 'dev-1',
+        storeId: s.storeId,
+        permissions: adminPerms,
+        clientReference: 'sale-bak-trim',
+        orderType: 'takeaway',
+        lines: [
+          PricedLine(
+            productLocalId: s.productId,
+            name: 'شاي',
+            quantity: 1,
+            unitPrice: 10,
+          ),
+        ],
+        payments: const [
+          PaymentTender(method: 'cash', amount: 10, tendered: 10),
+        ],
+        shiftLocalId: s.shiftId,
+      ),
+    );
+    final dir = await Directory.systemTemp.createTemp('pos-trim');
+    final backup = BackupService(db);
+    final file = await backup.exportBackup(
+      workspaceId: PosMode.standaloneWorkspaceId,
+      directory: dir,
+      password: '  secret12  ',
+      permissions: adminPerms,
+    );
+    await backup.restoreFile(
+      file,
+      confirmed: true,
+      password: 'secret12',
+      permissions: adminPerms,
+    );
+    expect(await db.select(db.localInvoices).get(), hasLength(1));
+    await expectLater(
+      backup.exportBackup(
+        workspaceId: PosMode.standaloneWorkspaceId,
+        directory: dir,
+        password: '  12  ',
+        permissions: adminPerms,
+      ),
+      throwsA(isA<DatabaseFailure>()),
+    );
+    await dir.delete(recursive: true);
+  });
+
+  test('standalone checkout does not enqueue a sync-queue row', () async {
+    final s = await seed();
+    await checkout.execute(
+      CheckoutCommand(
+        workspaceId: PosMode.standaloneWorkspaceId,
+        deviceId: 'dev-1',
+        storeId: s.storeId,
+        permissions: adminPerms,
+        clientReference: 'sale-no-sync',
+        orderType: 'takeaway',
+        lines: [
+          PricedLine(
+            productLocalId: s.productId,
+            name: 'شاي',
+            quantity: 1,
+            unitPrice: 10,
+          ),
+        ],
+        payments: const [
+          PaymentTender(method: 'cash', amount: 10, tendered: 10),
+        ],
+        shiftLocalId: s.shiftId,
+      ),
+    );
+    expect(await db.select(db.syncQueueItems).get(), isEmpty);
+    expect(await db.select(db.localInvoices).get(), hasLength(1));
   });
 }

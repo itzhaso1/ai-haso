@@ -15,8 +15,16 @@ class Money {
 
   static int add(int a, int b) => a + b;
 
-  static int percentOf(int cents, num percent) =>
-      toCents(fromCents(cents) * (percent / 100));
+  /// [percent] is 0–100 (for example 15.5). Uses integer cents of the rate
+  /// (two decimal places) so tax is not accumulated in IEEE doubles.
+  static int percentOf(int cents, num percent) {
+    final rateE4 = toCents(percent);
+    final prod = cents * rateE4;
+    if (prod >= 0) {
+      return (prod + 5000) ~/ 10000;
+    }
+    return (prod - 5000) ~/ 10000;
+  }
 }
 
 class PricedLine {

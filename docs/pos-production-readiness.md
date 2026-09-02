@@ -1,36 +1,110 @@
 # Hasim Cashier — Production Readiness Audit
 
-تاريخ: 2026-09-02 (تحديث Code-Based Production Hardening)  
-النطاق: `apps/hasim_cashier` POS Core بعد Schema **v8** / INTEGER cents / PBKDF2 / backup مشفّر.  
-القاعدة: لا Features جديدة، لا Licensing، لا إعادة كتابة SyncEngine، **لا ادعاء باختبار جهاز Android**.
+تاريخ: 2026-09-02 — **Final Code Freeze Audit**  
+النطاق: `apps/hasim_cashier` POS Core. لا Features، لا Licensing، لا إعادة كتابة SyncEngine، **لا ادعاء باختبار Android**.
+
+العمارة المعتمدة:
 
 ```
-Standalone POS = SQLite/Drift + Local Business Logic
-              + Local Auth + Local Reports + Local Inventory
-              + Local Payments + Local Invoices + Local Returns
-              + Local Shifts + Local Printing + Local Backup
+One Cashier App → POS Core → Local SQLite/Drift → Optional Cloud/Sync → Laravel
 ```
 
-لا اعتماد في Core POS على Laravel / API / Internet / InitialSync / SyncEngine / Dio.
+Standalone: لا Laravel، لا Sync، لا Initial Sync، لا Internet.  
+Cloud: نفس POS Core؛ الـoutbox اختياري (`connected=true`)؛ البيع يكتمل Offline ثم يُزامَن عند رجوع الشبكة.
 
 ---
 
-## الحكم النهائي
+## 1. BLOCKERS
 
-**CI / code: أقوى مما كان. البيع التجاري بدون جهاز حقيقي: لا.**
+**0**
 
-لا يوجد blocker برمجي حقيقي يمنع مواصلة التطوير.  
-لا يوجد Android device في هذه البيئة؛ اختبار الدخان التشغيلي ما زال **BLOCKED**.  
-**NOT READY FOR LICENSING.**
-
-`flutter analyze`: 0 errors (28 info سابقة، لا warnings بعد إصلاح المتغير غير المستخدم).  
-`flutter test`: **173 passed, 0 failed**.
-
-Stress (SQLite in-memory): catalog 1ms، search 0ms، barcode 1ms، checkout 15ms، invoice list 0ms، reports 64ms، stock 29ms، backup 9287ms، restore 7838ms.
+لا يوجد blocker برمجي يمنع إكمال Code-Based Hardening والانتقال لاختبار Android الحقيقي.
 
 ---
 
-## VERIFIED AUTOMATICALLY
+## 2. FIXED (تجميد نهائي)
+
+1. **حساب الضريبة/النسبة داخل المحرك** — `Money.percentOf` أصبح قسمة صحيحة على السنتات (بدون `double` وسيط). اختبار: `tax percent uses integer cents of the rate`.
+2. **كلمة مرور النسخة** — تُقلَّم عند التصدير والاستعادة حتى لا تفشل الاستعادة بسبب مسافات الحقل. اختبار: `backup password is trimmed on export and restore`.
+3. **Standalone لا يكتب sync_queue** — مثبت: `standalone checkout does not enqueue a sync-queue row`.
+
+قرارات لم تُنفَّذ كـ «إصلاح» لأنها ليست أعطال:
+
+* **PBKDF2 بدل Argon2id** — مقبول. انظر ACCEPTED RISKS.
+* **Backup password من المستخدم** — مقبول ومطلوب لاستعادة جهاز بديل. انظر ACCEPTED RISKS.
+* **double عند حدود UI/الأوامر** — مقبول بعد تحويل فوري بـ `toCents`. REAL في SQLite للنسب فقط (`tax_rate`, `discount_percent`) وليس للمال.
+
+SyncEngineV2 لم يُمس (لا bug يمنع العمارة).
+
+---
+
+## 3. VERIFIED
+
+`flutter analyze`: 0 errors / 0 warnings (28 info سابقة، خارج POS Core).  
+`flutter test`: **176 passed, 0 failed**.
+
+| بند | دليل |
+|---|---|
+| Checkout ذري + حقن فشل | `checkout faults after each write roll back the sale` |
+| Double checkout | `double tap pay is idempotent` |
+| Duplicate return | idempotent + `Future.wait` |
+| وردية إلزامية للبيع/المرتجع | `ShiftNotOpen` بلا طفرة |
+| مخزون + دفتر | sale→return→sale؛ كتالوج عبر StockEngine |
+| الفاتورة لا تُغيَّر | المرتجع لا يمس `total_amount` |
+| تسلسل | لا `max(id)+1` |
+| مال INTEGER cents | 0.1+0.2؛ remainder مرتجع؛ percentOf صحيح |
+| FK / ترحيل | v5/v6→v7 cents+FK |
+| Backup AES-256-GCM | كلمة مرور خاطئة لا تمسح؛ trim |
+| PIN PBKDF2 + salt + ترقية SHA-256 | لا plaintext |
+| مسودة | بقاء الملف؛ clear لا يعيد الأسطر |
+| صلاحيات / عزل شبكة | كاشير ممنوع؛ `NetworkGuard==0`؛ لا Dio في Core |
+| Standalone بدون outbox | `connected` افتراضي false |
+| Stress | 10k فواتير / 100k بنود in-memory |
+| طابعة | الفشل بعد COMMIT لا يغيّر الفاتورة |
+
+---
+
+## 4. ACCEPTED RISKS
+
+### PBKDF2-HMAC-SHA256 @ 100k بدل Argon2id — **مقبول للإنتاج (قرار تصميم)**
+
+ليست مشكلة يجب إصلاحها الآن.
+
+الـPIN قفل واجهة، لا تشفير للقاعدة. ملف SQLite المسروق يكشف الفواتير والمخزون أصلاً؛ Argon2id لا يغيّر هذا التهديد. التحويل يغيّر صيغة الهاش وصيغة النسخ الاحتياطي ويتطلب قياس أداء على جهاز ضعيف — ذلك إعادة بناء وليست إصلاح صحة. الموجود: ملح لكل مستخدم، مقارنة ثابتة الزمن، عدد الدورات داخل الصيغة، ترقية SHA-256 القديم عند الدخول.
+
+### كلمة مرور النسخة من المستخدم — **مقبولة ومطلوبة (قرار تصميم)**
+
+ليست مشكلة يجب إصلاحها الآن (عدا التقليم أعلاه).
+
+ربط المفتاح بـkeychain/العتاد يمنع الاستعادة على جهاز بديل، وهو سبب وجود النسخة. الحد الأدنى 6 بعد التقليم، AES-256-GCM، checksum قبل الكتابة، كلمة مرور خاطئة لا تمسح البيانات. لا تُخزَّن كلمة المرور في SQLite.
+
+### double عند حدود الأوامر/الـUI — **مقبول بعد التحويل الفوري**
+
+المال في SQLite وفي محرك التسعير INTEGER cents. `PricedLine.unitPrice` و`PaymentTender.amount` و`CheckoutResult.total` حدود عرض/إدخال تُحوَّل بـ `Money.toCents` قبل الجمع. النسب (`tax_rate`) تبقى REAL لأنها ليست مالاً. ما أُصلح في التجمد: `percentOf` لم يعد يمر عبر `fromCents * percent`.
+
+مخاطر مقبولة أخرى (ليست ضمن الثلاث): قائمة فواتير التقرير آخر 100 (المجاميع كاملة)؛ `_safeIndex` قد يتخطى unique قديماً إن وُجدت تكرارات؛ Hive غير محذوف لكن Standalone لا يقرأه؛ format 2 plaintext إن وُجد على قرص قديم.
+
+---
+
+## 5. DEVICE-ONLY TESTS
+
+**لم يُنفَّذ أي اختبار على جهاز Android.** يبقى BLOCKED:
+
+- تثبيت APK / أول تشغيل / أداء PIN (PBKDF2@100k) على عتاد ضعيف
+- لمس، سكانر كاميرا، طابعة Bluetooth/USB
+- قتل التطبيق من Recents أثناء checkout/return
+- نسخة إلى تخزين الجهاز واستعادة بعد إعادة التثبيت
+- checklist `docs/pos-production-smoke-test.md`
+
+النتيجة السابقة: `docs/pos-production-smoke-test-result.md` — 48 BLOCKED، 0 PASS.
+
+**NOT READY FOR LICENSING** حتى يمر الدخان على جهاز حقيقي.
+
+إذا BLOCKERS = 0: **Code-Based Hardening مكتمل.** الخطوة التالية اختبار Android فقط.
+
+---
+
+## الحكم التاريخي (M1–M3 / hardening سابق)
 
 أُثبتت بالاختبارات الآلية (ليس على جهاز):
 
