@@ -168,10 +168,13 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       final orderItems = order['items'];
       if (orderItems is! List) continue;
       for (final item in orderItems.whereType<Map>()) {
+        final rawId = item['id'] ?? item['local_id'];
         items.add({
-          'order_item_id': item['id'],
+          'order_item_id': rawId is num ? rawId.toInt() : (rawId?.hashCode ?? 0),
+          'item_local_id': '${item['local_id'] ?? item['id'] ?? ''}',
+          'pos_menu_item_id': item['pos_menu_item_id'] ?? item['product_id'],
           'name':
-              '${item['product_name']}${item['variant_name'] != null ? ' - ${item['variant_name']}' : ''}',
+              '${item['product_name'] ?? item['name']}${item['variant_name'] != null ? ' - ${item['variant_name']}' : ''}',
           'quantity': (item['quantity'] as num?)?.toInt() ?? 1,
           'unit_price': (item['unit_price'] as num?)?.toDouble() ?? 0,
           'total': (item['total_amount'] as num?)?.toDouble() ?? 0,
@@ -190,7 +193,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
   }
 
   Future<bool> _ensureOnline() async {
-    // Advanced table ops (transfer/merge/split/discount/QR) still need Laravel.
+    // Daily POS is fully offline-first. Only rare admin ops still gate online.
     if (ConflictStrategy.forDomain('table_action') !=
         ConflictPolicy.requireOnline) {
       return true;
@@ -208,6 +211,17 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       return false;
     }
     return true;
+  }
+
+  Future<String> _deviceId() =>
+      ref.read(deviceIdentityProvider).getOrCreateDeviceId();
+
+  void _syncInBackground(int workspaceId, String deviceId) {
+    // ignore: unawaited_futures
+    ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+          workspaceId: workspaceId,
+          deviceId: deviceId,
+        );
   }
 
   Future<void> _load() async {
@@ -327,7 +341,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
   }
 
   Future<void> _showQr() async {
-    if (!await _ensureOnline()) return;
+    // Show cached QR fully offline; regenerate is best-effort when online.
     final url = _detail?['menu_url'] as String?;
     final token = _detail?['qr_token'] as String?;
     if (!mounted) return;
@@ -340,7 +354,8 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              url ?? 'لا يوجد رابط QR لهذه الطاولة.',
+              url ??
+                  'لا يوجد رابط QR محفوظ محليًا لهذه الطاولة. سيظهر بعد المزامنة الأولى.',
               style: const TextStyle(fontSize: 12),
             ),
             if (token != null) ...[
@@ -690,7 +705,8 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
 
   Future<void> _editNote() async {
     if (!_hasSession) return;
-    if (!await _ensureOnline()) return;
+    final workspaceId = _workspaceId;
+    if (workspaceId == null || workspaceId <= 0) return;
     final controller = TextEditingController(text: '${_detail?['notes'] ?? ''}');
     final ok = await showDialog<bool>(
       context: context,
@@ -711,20 +727,30 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
     );
     if (ok != true) return;
     try {
-      await ref.read(cashierApiProvider).post(
-        '/tables/${widget.tableId}/sessions/$_sessionId/note',
-        data: {'notes': controller.text.trim()},
+      final deviceId = await _deviceId();
+      await ref.read(tablesRepositoryProvider).setNoteLocal(
+            workspaceId: workspaceId,
+            deviceId: deviceId,
+            tableServerId: widget.tableId,
+            notes: controller.text,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم حفظ الملاحظة محليًا.')),
       );
       await _load();
-    } on ApiException catch (e) {
+      _syncInBackground(workspaceId, deviceId);
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+          .showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
   Future<void> _applyDiscount() async {
     if (!_hasSession) return;
+    final workspaceId = _workspaceId;
+    if (workspaceId == null || workspaceId <= 0) return;
     final perms = ref.read(cashierPermissionsProvider);
     if (!CashierPermissions.canDiscount(perms) && perms.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -732,8 +758,9 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       );
       return;
     }
-    if (!await _ensureOnline()) return;
-    final controller = TextEditingController();
+    final controller = TextEditingController(
+      text: '${_detail?['discount_amount'] ?? ''}',
+    );
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -759,21 +786,30 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
     final amount = double.tryParse(controller.text.trim()) ?? -1;
     if (amount < 0) return;
     try {
-      await ref.read(cashierApiProvider).post(
-        '/tables/${widget.tableId}/sessions/$_sessionId/discount',
-        data: {'discount_amount': amount},
+      final deviceId = await _deviceId();
+      await ref.read(tablesRepositoryProvider).applyDiscountLocal(
+            workspaceId: workspaceId,
+            deviceId: deviceId,
+            tableServerId: widget.tableId,
+            discountAmount: amount,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم تطبيق الخصم محليًا.')),
       );
       await _load();
-    } on ApiException catch (e) {
+      _syncInBackground(workspaceId, deviceId);
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+          .showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
   Future<void> _transferOrMerge({required bool merge}) async {
     if (!_hasSession || !_canManageTables) return;
-    if (!await _ensureOnline()) return;
+    final workspaceId = _workspaceId;
+    if (workspaceId == null || workspaceId <= 0) return;
     final others = _allTables
         .where((t) => t['id'] != widget.tableId)
         .map((t) => Map<String, dynamic>.from(t))
@@ -788,32 +824,49 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       ),
     );
     if (targetId == null) return;
-    final path = merge ? 'merge' : 'transfer';
     try {
-      await ref.read(cashierApiProvider).post(
-        '/tables/${widget.tableId}/sessions/$_sessionId/$path',
-        data: {'target_table_id': targetId},
-      );
+      final deviceId = await _deviceId();
+      final repo = ref.read(tablesRepositoryProvider);
+      if (merge) {
+        await repo.mergeSessionLocal(
+          workspaceId: workspaceId,
+          deviceId: deviceId,
+          fromTableServerId: widget.tableId,
+          toTableServerId: targetId,
+        );
+      } else {
+        await repo.transferSessionLocal(
+          workspaceId: workspaceId,
+          deviceId: deviceId,
+          fromTableServerId: widget.tableId,
+          toTableServerId: targetId,
+        );
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(merge ? 'تم الدمج.' : 'تم النقل.')),
+        SnackBar(
+          content: Text(
+            merge ? 'تم الدمج محليًا.' : 'تم النقل محليًا.',
+          ),
+        ),
       );
+      _syncInBackground(workspaceId, deviceId);
       if (merge) {
         closeTableWorkspace(ref);
       } else {
         openTableWorkspace(ref, targetId);
-        await _load();
       }
-    } on ApiException catch (e) {
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+          .showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
   Future<void> _splitBill() async {
     if (!_hasSession || !_canManageTables) return;
-    if (!await _ensureOnline()) return;
+    final workspaceId = _workspaceId;
+    if (workspaceId == null || workspaceId <= 0) return;
     final items = _splitItems;
     if (items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -832,17 +885,27 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       selectedById[(row['order_item_id'] as num).toInt()] =
           (row['quantity'] as num).toInt();
     }
-    final groupA = <Map<String, dynamic>>[];
-    final groupB = <Map<String, dynamic>>[];
+    final moveItems = <Map<String, dynamic>>[];
+    var groupAQty = 0;
+    var groupBQty = 0;
     for (final item in items) {
       final id = (item['order_item_id'] as num).toInt();
       final maxQty = (item['quantity'] as num).toInt();
       final qtyA = selectedById[id] ?? 0;
       final qtyB = maxQty - qtyA;
-      if (qtyA > 0) groupA.add({'order_item_id': id, 'quantity': qtyA});
-      if (qtyB > 0) groupB.add({'order_item_id': id, 'quantity': qtyB});
+      groupAQty += qtyA;
+      groupBQty += qtyB;
+      if (qtyA > 0) {
+        moveItems.add({
+          'item_local_id': item['item_local_id'] ?? item['local_id'],
+          'order_item_id': id,
+          'pos_menu_item_id': item['pos_menu_item_id'],
+          'quantity': qtyA,
+          'unit_price': item['unit_price'],
+        });
+      }
     }
-    if (groupA.isEmpty || groupB.isEmpty) {
+    if (groupAQty <= 0 || groupBQty <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('يجب فصل جزء مع الإبقاء على جزء (حسابان على الأقل).'),
@@ -851,20 +914,23 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       return;
     }
     try {
-      await ref.read(cashierApiProvider).post(
-        '/tables/${widget.tableId}/sessions/$_sessionId/split',
-        data: {
-          'groups': [
-            {'items': groupA},
-            {'items': groupB},
-          ],
-        },
+      final deviceId = await _deviceId();
+      await ref.read(tablesRepositoryProvider).splitSessionLocal(
+            workspaceId: workspaceId,
+            deviceId: deviceId,
+            tableServerId: widget.tableId,
+            moveItems: moveItems,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم تقسيم الحساب محليًا.')),
       );
       await _load();
-    } on ApiException catch (e) {
+      _syncInBackground(workspaceId, deviceId);
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+          .showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -1077,7 +1143,8 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
 
   Future<void> _cancelSession() async {
     if (!_hasSession || !_canManageTables) return;
-    if (!await _ensureOnline()) return;
+    final workspaceId = _workspaceId;
+    if (workspaceId == null || workspaceId <= 0) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1098,14 +1165,22 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
     );
     if (ok != true) return;
     try {
-      await ref
-          .read(cashierApiProvider)
-          .post('/tables/${widget.tableId}/sessions/$_sessionId/cancel');
+      final deviceId = await _deviceId();
+      await ref.read(tablesRepositoryProvider).cancelSessionLocal(
+            workspaceId: workspaceId,
+            deviceId: deviceId,
+            tableServerId: widget.tableId,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم إلغاء الطاولة محليًا.')),
+      );
+      _syncInBackground(workspaceId, deviceId);
       closeTableWorkspace(ref);
-    } on ApiException catch (e) {
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+          .showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 

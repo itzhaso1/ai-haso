@@ -238,7 +238,91 @@ void main() {
     expect(await queue.pendingForWorkspace(1), isEmpty);
   });
 
-  test('conflict policy allows offline POS session/payment/invoice', () {
+  test('cancel note discount transfer work fully offline', () async {
+    await seedTable(tableId: 10);
+    await seedTable(tableId: 11);
+    await tables.openSessionLocal(
+      workspaceId: 1,
+      deviceId: 'dev-1',
+      tableServerId: 10,
+    );
+    await orders.createTableOrder(
+      workspaceId: 1,
+      deviceId: 'dev-1',
+      tableId: 10,
+      clientReference: 'ord-x',
+      items: [
+        {
+          'pos_menu_item_id': 1,
+          'name': 'شاي',
+          'quantity': 1,
+          'unit_price': 5,
+          'total_amount': 5,
+        },
+      ],
+    );
+
+    await tables.setNoteLocal(
+      workspaceId: 1,
+      deviceId: 'dev-1',
+      tableServerId: 10,
+      notes: 'زاوية',
+    );
+    await tables.applyDiscountLocal(
+      workspaceId: 1,
+      deviceId: 'dev-1',
+      tableServerId: 10,
+      discountAmount: 1,
+    );
+    final noted = await tables.getTable(1, 10);
+    expect(noted?['notes'], 'زاوية');
+    expect((noted?['discount_amount'] as num?)?.toDouble(), 1);
+
+    await tables.transferSessionLocal(
+      workspaceId: 1,
+      deviceId: 'dev-1',
+      fromTableServerId: 10,
+      toTableServerId: 11,
+    );
+    final from = await tables.getTable(1, 10);
+    final to = await tables.getTable(1, 11);
+    expect(from?['status'], 'available');
+    expect(to?['status'], 'occupied');
+
+    await tables.cancelSessionLocal(
+      workspaceId: 1,
+      deviceId: 'dev-1',
+      tableServerId: 11,
+    );
+    final cancelled = await tables.getTable(1, 11);
+    expect(cancelled?['status'], 'available');
+
+    final pending = await queue.pendingForWorkspace(1);
+    expect(
+      pending.any((r) => r.entityType == 'table_session' && r.operation == 'note'),
+      isTrue,
+    );
+    expect(
+      pending.any(
+        (r) => r.entityType == 'table_session' && r.operation == 'discount',
+      ),
+      isTrue,
+    );
+    expect(
+      pending.any(
+        (r) => r.entityType == 'table_session' && r.operation == 'transfer',
+      ),
+      isTrue,
+    );
+    expect(
+      pending.any(
+        (r) => r.entityType == 'table_session' && r.operation == 'cancel',
+      ),
+      isTrue,
+    );
+  });
+
+  test('conflict policy allows full offline POS including table actions', () {
     expect(
       ConflictStrategy.forDomain('open_session'),
       ConflictPolicy.detectAndRecord,
@@ -257,7 +341,19 @@ void main() {
     );
     expect(
       ConflictStrategy.forDomain('transfer'),
-      ConflictPolicy.requireOnline,
+      ConflictPolicy.detectAndRecord,
+    );
+    expect(
+      ConflictStrategy.forDomain('merge'),
+      ConflictPolicy.detectAndRecord,
+    );
+    expect(
+      ConflictStrategy.forDomain('split'),
+      ConflictPolicy.detectAndRecord,
+    );
+    expect(
+      ConflictStrategy.forDomain('discount'),
+      ConflictPolicy.detectAndRecord,
     );
   });
 }

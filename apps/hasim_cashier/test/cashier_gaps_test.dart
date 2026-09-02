@@ -327,14 +327,30 @@ void main() {
     expect(usedKey, 'idem-1');
   });
 
-  test('conflict strategy keeps pending orders; session/payment/invoice offline', () {
+  test('conflict strategy keeps pending orders; all daily table ops offline', () {
     expect(
       ConflictStrategy.forDomain('pending_order'),
       ConflictPolicy.detectAndRecord,
     );
     expect(
       ConflictStrategy.forDomain('table_action'),
-      ConflictPolicy.requireOnline,
+      ConflictPolicy.detectAndRecord,
+    );
+    expect(
+      ConflictStrategy.forDomain('transfer'),
+      ConflictPolicy.detectAndRecord,
+    );
+    expect(
+      ConflictStrategy.forDomain('merge'),
+      ConflictPolicy.detectAndRecord,
+    );
+    expect(
+      ConflictStrategy.forDomain('split'),
+      ConflictPolicy.detectAndRecord,
+    );
+    expect(
+      ConflictStrategy.forDomain('discount'),
+      ConflictPolicy.detectAndRecord,
     );
     expect(
       ConflictStrategy.forDomain('close_table'),
@@ -355,6 +371,10 @@ void main() {
     expect(
       ConflictStrategy.forDomain('inventory'),
       ConflictPolicy.serverWins,
+    );
+    expect(
+      ConflictStrategy.forDomain('refund'),
+      ConflictPolicy.requireOnline,
     );
   });
 
@@ -457,10 +477,10 @@ void main() {
     expect(retries, 2);
   });
 
-  test('table payment and invoice are offline-first with advanced ops online', () {
+  test('table payment and all daily table ops are offline-first', () {
     expect(
       ConflictStrategy.forDomain('table_action'),
-      ConflictPolicy.requireOnline,
+      ConflictPolicy.detectAndRecord,
     );
     expect(ConflictStrategy.forDomain('payment'), ConflictPolicy.detectAndRecord);
     expect(
@@ -469,6 +489,10 @@ void main() {
     );
     expect(
       ConflictStrategy.forDomain('invoice'),
+      ConflictPolicy.detectAndRecord,
+    );
+    expect(
+      ConflictStrategy.forDomain('cancel_session'),
       ConflictPolicy.detectAndRecord,
     );
     expect(

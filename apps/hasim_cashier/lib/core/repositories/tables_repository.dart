@@ -413,6 +413,518 @@ class TablesRepository {
     };
   }
 
+  /// Cancel session + unpaid orders locally (no network required).
+  Future<void> cancelSessionLocal({
+    required int workspaceId,
+    required String deviceId,
+    required int tableServerId,
+  }) async {
+    final localId = tableLocalId(workspaceId, tableServerId);
+    final table = await _requireTable(workspaceId, localId);
+    final payload = _safeMap(table.payloadJson);
+    final sessionClientId = '${payload['session_client_id'] ?? _newId()}';
+    final clientRef = _newId();
+    final now = DateTime.now();
+
+    final activeOrders = await (_db.select(_db.localOrders)
+          ..where((t) =>
+              t.workspaceId.equals(workspaceId) &
+              t.tableServerId.equals(tableServerId) &
+              t.posStatus.isNotValue('cancelled') &
+              t.paymentStatus.isNotValue('paid')))
+        .get();
+
+    final nextPayload = {
+      ...payload,
+      'id': tableServerId,
+      'status': 'available',
+      'session_open': false,
+      'session_id': null,
+      'session_client_id': null,
+      'orders': const [],
+      'subtotal': 0,
+      'tax_amount': 0,
+      'discount_amount': 0,
+      'total': 0,
+      'notes': null,
+    };
+
+    await _db.transaction(() async {
+      for (final order in activeOrders) {
+        await (_db.update(_db.localOrders)
+              ..where((t) => t.localId.equals(order.localId)))
+            .write(
+          LocalOrdersCompanion(
+            posStatus: const Value('cancelled'),
+            updatedAt: Value(now),
+          ),
+        );
+      }
+      await (_db.update(_db.localTables)
+            ..where((t) =>
+                t.localId.equals(localId) &
+                t.workspaceId.equals(workspaceId)))
+          .write(
+        LocalTablesCompanion(
+          status: const Value('available'),
+          sessionServerId: const Value(null),
+          payloadJson: Value(jsonEncode(nextPayload)),
+          updatedAt: Value(now),
+        ),
+      );
+      await _queue.enqueue(
+        workspaceId: workspaceId,
+        deviceId: deviceId.trim(),
+        entityType: 'table_session',
+        entityId: localId,
+        operation: 'cancel',
+        payload: {
+          'table_server_id': tableServerId,
+          'table_local_id': localId,
+          'session_server_id': table.sessionServerId,
+          'session_client_id': sessionClientId,
+        },
+        clientReference: clientRef,
+      );
+    });
+  }
+
+  /// Update session note locally.
+  Future<void> setNoteLocal({
+    required int workspaceId,
+    required String deviceId,
+    required int tableServerId,
+    required String notes,
+  }) async {
+    final localId = tableLocalId(workspaceId, tableServerId);
+    final table = await _requireTable(workspaceId, localId);
+    final payload = _safeMap(table.payloadJson);
+    final trimmed = notes.trim();
+    final next = {...payload, 'notes': trimmed};
+    final clientRef = _newId();
+    await _db.transaction(() async {
+      await (_db.update(_db.localTables)
+            ..where((t) => t.localId.equals(localId)))
+          .write(
+        LocalTablesCompanion(
+          payloadJson: Value(jsonEncode(next)),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      await _queue.enqueue(
+        workspaceId: workspaceId,
+        deviceId: deviceId.trim(),
+        entityType: 'table_session',
+        entityId: localId,
+        operation: 'note',
+        payload: {
+          'table_server_id': tableServerId,
+          'table_local_id': localId,
+          'session_server_id': table.sessionServerId,
+          'session_client_id': payload['session_client_id'],
+          'notes': trimmed,
+        },
+        clientReference: clientRef,
+      );
+    });
+  }
+
+  /// Apply session discount locally and recompute displayed totals.
+  Future<void> applyDiscountLocal({
+    required int workspaceId,
+    required String deviceId,
+    required int tableServerId,
+    required double discountAmount,
+  }) async {
+    if (discountAmount < 0) throw ArgumentError('discountAmount');
+    final localId = tableLocalId(workspaceId, tableServerId);
+    final table = await _requireTable(workspaceId, localId);
+    final payload = _safeMap(table.payloadJson);
+    final subtotal = (payload['subtotal'] as num?)?.toDouble() ?? 0;
+    final tax = (payload['tax_amount'] as num?)?.toDouble() ?? 0;
+    final total = (subtotal - discountAmount + tax).clamp(0, double.infinity);
+    final next = {
+      ...payload,
+      'discount_amount': discountAmount,
+      'total': total,
+    };
+    final clientRef = _newId();
+    await _db.transaction(() async {
+      await (_db.update(_db.localTables)
+            ..where((t) => t.localId.equals(localId)))
+          .write(
+        LocalTablesCompanion(
+          payloadJson: Value(jsonEncode(next)),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      await _queue.enqueue(
+        workspaceId: workspaceId,
+        deviceId: deviceId.trim(),
+        entityType: 'table_session',
+        entityId: localId,
+        operation: 'discount',
+        payload: {
+          'table_server_id': tableServerId,
+          'table_local_id': localId,
+          'session_server_id': table.sessionServerId,
+          'session_client_id': payload['session_client_id'],
+          'discount_amount': discountAmount,
+        },
+        clientReference: clientRef,
+      );
+    });
+  }
+
+  /// Move open session + unpaid orders to another table (local-first).
+  Future<void> transferSessionLocal({
+    required int workspaceId,
+    required String deviceId,
+    required int fromTableServerId,
+    required int toTableServerId,
+  }) async {
+    if (fromTableServerId == toTableServerId) {
+      throw ArgumentError('target must differ');
+    }
+    final fromLocalId = tableLocalId(workspaceId, fromTableServerId);
+    final toLocalId = tableLocalId(workspaceId, toTableServerId);
+    final from = await _requireTable(workspaceId, fromLocalId);
+    final to = await _requireTable(workspaceId, toLocalId);
+    final fromPayload = _safeMap(from.payloadJson);
+    final toPayload = _safeMap(to.payloadJson);
+    final sessionClientId = '${fromPayload['session_client_id'] ?? _newId()}';
+    final clientRef = _newId();
+    final now = DateTime.now();
+
+    final orders = await (_db.select(_db.localOrders)
+          ..where((t) =>
+              t.workspaceId.equals(workspaceId) &
+              t.tableServerId.equals(fromTableServerId) &
+              t.posStatus.isNotValue('cancelled')))
+        .get();
+
+    final movedPayload = {
+      ...toPayload,
+      ...fromPayload,
+      'id': toTableServerId,
+      'name': to.name,
+      'status': 'occupied',
+      'session_open': true,
+      'session_client_id': sessionClientId,
+      'session_id': from.sessionServerId ?? fromPayload['session_id'],
+    };
+    final clearedFrom = {
+      ...fromPayload,
+      'id': fromTableServerId,
+      'status': 'available',
+      'session_open': false,
+      'session_id': null,
+      'session_client_id': null,
+      'orders': const [],
+      'subtotal': 0,
+      'tax_amount': 0,
+      'discount_amount': 0,
+      'total': 0,
+      'notes': null,
+    };
+
+    await _db.transaction(() async {
+      for (final order in orders) {
+        await (_db.update(_db.localOrders)
+              ..where((t) => t.localId.equals(order.localId)))
+            .write(
+          LocalOrdersCompanion(
+            tableServerId: Value(toTableServerId),
+            tableLocalId: Value(toLocalId),
+            updatedAt: Value(now),
+          ),
+        );
+      }
+      await (_db.update(_db.localTables)
+            ..where((t) => t.localId.equals(toLocalId)))
+          .write(
+        LocalTablesCompanion(
+          status: const Value('occupied'),
+          sessionServerId: Value(from.sessionServerId),
+          payloadJson: Value(jsonEncode(movedPayload)),
+          updatedAt: Value(now),
+        ),
+      );
+      await (_db.update(_db.localTables)
+            ..where((t) => t.localId.equals(fromLocalId)))
+          .write(
+        LocalTablesCompanion(
+          status: const Value('available'),
+          sessionServerId: const Value(null),
+          payloadJson: Value(jsonEncode(clearedFrom)),
+          updatedAt: Value(now),
+        ),
+      );
+      await _queue.enqueue(
+        workspaceId: workspaceId,
+        deviceId: deviceId.trim(),
+        entityType: 'table_session',
+        entityId: fromLocalId,
+        operation: 'transfer',
+        payload: {
+          'table_server_id': fromTableServerId,
+          'target_table_id': toTableServerId,
+          'session_server_id': from.sessionServerId,
+          'session_client_id': sessionClientId,
+        },
+        clientReference: clientRef,
+      );
+    });
+  }
+
+  /// Merge source session into target table (local-first).
+  Future<void> mergeSessionLocal({
+    required int workspaceId,
+    required String deviceId,
+    required int fromTableServerId,
+    required int toTableServerId,
+  }) async {
+    if (fromTableServerId == toTableServerId) {
+      throw ArgumentError('target must differ');
+    }
+    final fromLocalId = tableLocalId(workspaceId, fromTableServerId);
+    final toLocalId = tableLocalId(workspaceId, toTableServerId);
+    final from = await _requireTable(workspaceId, fromLocalId);
+    final to = await _requireTable(workspaceId, toLocalId);
+    final fromPayload = _safeMap(from.payloadJson);
+    final toPayload = _safeMap(to.payloadJson);
+    final clientRef = _newId();
+    final now = DateTime.now();
+
+    final orders = await (_db.select(_db.localOrders)
+          ..where((t) =>
+              t.workspaceId.equals(workspaceId) &
+              t.tableServerId.equals(fromTableServerId) &
+              t.posStatus.isNotValue('cancelled')))
+        .get();
+
+    final mergedPayload = {
+      ...toPayload,
+      'id': toTableServerId,
+      'status': 'occupied',
+      'session_open': true,
+      'subtotal': ((toPayload['subtotal'] as num?)?.toDouble() ?? 0) +
+          ((fromPayload['subtotal'] as num?)?.toDouble() ?? 0),
+      'tax_amount': ((toPayload['tax_amount'] as num?)?.toDouble() ?? 0) +
+          ((fromPayload['tax_amount'] as num?)?.toDouble() ?? 0),
+      'discount_amount':
+          ((toPayload['discount_amount'] as num?)?.toDouble() ?? 0) +
+              ((fromPayload['discount_amount'] as num?)?.toDouble() ?? 0),
+      'total': ((toPayload['total'] as num?)?.toDouble() ?? 0) +
+          ((fromPayload['total'] as num?)?.toDouble() ?? 0),
+    };
+    final clearedFrom = {
+      ...fromPayload,
+      'id': fromTableServerId,
+      'status': 'available',
+      'session_open': false,
+      'session_id': null,
+      'session_client_id': null,
+      'orders': const [],
+      'subtotal': 0,
+      'tax_amount': 0,
+      'discount_amount': 0,
+      'total': 0,
+      'notes': null,
+    };
+
+    await _db.transaction(() async {
+      for (final order in orders) {
+        await (_db.update(_db.localOrders)
+              ..where((t) => t.localId.equals(order.localId)))
+            .write(
+          LocalOrdersCompanion(
+            tableServerId: Value(toTableServerId),
+            tableLocalId: Value(toLocalId),
+            updatedAt: Value(now),
+          ),
+        );
+      }
+      await (_db.update(_db.localTables)
+            ..where((t) => t.localId.equals(toLocalId)))
+          .write(
+        LocalTablesCompanion(
+          status: const Value('occupied'),
+          payloadJson: Value(jsonEncode(mergedPayload)),
+          updatedAt: Value(now),
+        ),
+      );
+      await (_db.update(_db.localTables)
+            ..where((t) => t.localId.equals(fromLocalId)))
+          .write(
+        LocalTablesCompanion(
+          status: const Value('available'),
+          sessionServerId: const Value(null),
+          payloadJson: Value(jsonEncode(clearedFrom)),
+          updatedAt: Value(now),
+        ),
+      );
+      await _queue.enqueue(
+        workspaceId: workspaceId,
+        deviceId: deviceId.trim(),
+        entityType: 'table_session',
+        entityId: fromLocalId,
+        operation: 'merge',
+        payload: {
+          'table_server_id': fromTableServerId,
+          'target_table_id': toTableServerId,
+          'session_server_id': from.sessionServerId,
+          'session_client_id': fromPayload['session_client_id'],
+        },
+        clientReference: clientRef,
+      );
+    });
+  }
+
+  /// Split selected quantities into a new local order on the same table.
+  Future<void> splitSessionLocal({
+    required int workspaceId,
+    required String deviceId,
+    required int tableServerId,
+    required List<Map<String, dynamic>> moveItems,
+  }) async {
+    if (moveItems.isEmpty) throw ArgumentError('moveItems required');
+    final localId = tableLocalId(workspaceId, tableServerId);
+    final table = await _requireTable(workspaceId, localId);
+    final payload = _safeMap(table.payloadJson);
+    final clientRef = _newId();
+    final newOrderId = _newId();
+    final now = DateTime.now();
+
+    await _db.transaction(() async {
+      var newSubtotal = 0.0;
+      for (final move in moveItems) {
+        final itemLocalId = '${move['item_local_id'] ?? ''}';
+        final qty = (move['quantity'] as num?)?.toInt() ?? 0;
+        if (itemLocalId.isEmpty || qty <= 0) continue;
+        final item = await (_db.select(_db.localOrderItems)
+              ..where((t) =>
+                  t.localId.equals(itemLocalId) &
+                  t.workspaceId.equals(workspaceId)))
+            .getSingleOrNull();
+        if (item == null || item.isRemoved) continue;
+        final leave = item.quantity - qty;
+        if (leave < 0) continue;
+        final unit = item.unitPrice;
+        if (leave == 0) {
+          await (_db.update(_db.localOrderItems)
+                ..where((t) => t.localId.equals(itemLocalId)))
+              .write(
+            LocalOrderItemsCompanion(
+              isRemoved: const Value(true),
+              quantity: const Value(0),
+              totalAmount: const Value(0),
+              updatedAt: Value(now),
+            ),
+          );
+        } else {
+          await (_db.update(_db.localOrderItems)
+                ..where((t) => t.localId.equals(itemLocalId)))
+              .write(
+            LocalOrderItemsCompanion(
+              quantity: Value(leave),
+              totalAmount: Value(leave * unit),
+              updatedAt: Value(now),
+            ),
+          );
+        }
+        final movedLocalId = _newId();
+        final lineTotal = qty * unit;
+        newSubtotal += lineTotal;
+        await _db.into(_db.localOrderItems).insert(
+              LocalOrderItemsCompanion.insert(
+                localId: movedLocalId,
+                workspaceId: workspaceId,
+                orderLocalId: newOrderId,
+                productServerId: Value(item.productServerId),
+                productLocalId: Value(item.productLocalId),
+                name: item.name,
+                quantity: qty,
+                unitPrice: unit,
+                totalAmount: lineTotal,
+                updatedAt: now,
+              ),
+            );
+      }
+
+      await _db.into(_db.localOrders).insert(
+            LocalOrdersCompanion.insert(
+              localId: newOrderId,
+              workspaceId: workspaceId,
+              deviceId: deviceId.trim(),
+              clientReference: newOrderId,
+              orderType: 'table',
+              tableServerId: Value(tableServerId),
+              tableLocalId: Value(localId),
+              notes: const Value('تقسيم حساب (محلي)'),
+              subtotal: Value(newSubtotal),
+              taxAmount: const Value(0),
+              discountAmount: const Value(0),
+              totalAmount: Value(newSubtotal),
+              posStatus: const Value('new'),
+              paymentStatus: const Value('unpaid'),
+              syncStatus: const Value('pending'),
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+      await _queue.enqueue(
+        workspaceId: workspaceId,
+        deviceId: deviceId.trim(),
+        entityType: 'order',
+        entityId: newOrderId,
+        operation: 'create',
+        payload: {
+          'order_type': 'table',
+          'table_id': tableServerId,
+          'client_reference': newOrderId,
+          'notes': 'تقسيم حساب (محلي)',
+          'items': [
+            for (final move in moveItems)
+              if ((move['quantity'] as num?)?.toInt() != null)
+                {
+                  'pos_menu_item_id': move['pos_menu_item_id'],
+                  'quantity': move['quantity'],
+                  'unit_price': move['unit_price'],
+                },
+          ],
+        },
+        clientReference: newOrderId,
+      );
+      await _queue.enqueue(
+        workspaceId: workspaceId,
+        deviceId: deviceId.trim(),
+        entityType: 'table_session',
+        entityId: localId,
+        operation: 'split',
+        payload: {
+          'table_server_id': tableServerId,
+          'session_server_id': table.sessionServerId,
+          'session_client_id': payload['session_client_id'],
+          'new_order_local_id': newOrderId,
+          'move_items': moveItems,
+        },
+        clientReference: clientRef,
+      );
+    });
+  }
+
+  Future<LocalTable> _requireTable(int workspaceId, String localId) async {
+    final table = await (_db.select(_db.localTables)
+          ..where((t) =>
+              t.localId.equals(localId) & t.workspaceId.equals(workspaceId)))
+        .getSingleOrNull();
+    if (table == null) {
+      throw StateError('الطاولة غير متاحة محليًا.');
+    }
+    return table;
+  }
+
   /// Best-effort remote refresh. UI must not branch on connectivity —
   /// always returns the best local snapshot after attempting update.
   Future<List<Map<String, dynamic>>> loadBoard(int workspaceId) async {

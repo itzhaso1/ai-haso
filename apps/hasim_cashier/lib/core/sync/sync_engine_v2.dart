@@ -218,6 +218,12 @@ class SyncEngineV2 {
             continue;
           }
         }
+        if (row.entityType == 'table_session' &&
+            _isSessionAction(row.operation) &&
+            !await _sessionActionReady(row)) {
+          kept++;
+          continue;
+        }
         if (row.entityType == 'invoice' && row.operation == 'create') {
           final payload = _decode(row.payloadJson);
           final orderLocalId = '${payload['order_local_id'] ?? ''}';
@@ -240,6 +246,10 @@ class SyncEngineV2 {
           } else if (row.entityType == 'table_session' &&
               row.operation == 'close') {
             await _pushSessionClose(row);
+            synced++;
+          } else if (row.entityType == 'table_session' &&
+              _isSessionAction(row.operation)) {
+            await _pushSessionAction(row);
             synced++;
           } else if (row.entityType == 'invoice') {
             await _pushInvoice(row);
@@ -311,10 +321,126 @@ class SyncEngineV2 {
   int _pushPriority(SyncQueueItem row) {
     if (row.entityType == 'customer') return 0;
     if (row.entityType == 'table_session' && row.operation == 'open') return 1;
-    if (row.entityType == 'order') return 2;
-    if (row.entityType == 'invoice') return 3;
-    if (row.entityType == 'table_session' && row.operation == 'close') return 4;
+    if (row.entityType == 'table_session' && _isSessionAction(row.operation)) {
+      return 2;
+    }
+    if (row.entityType == 'order') return 3;
+    if (row.entityType == 'invoice') return 4;
+    if (row.entityType == 'table_session' && row.operation == 'close') return 5;
     return 9;
+  }
+
+  bool _isSessionAction(String operation) =>
+      operation == 'cancel' ||
+      operation == 'note' ||
+      operation == 'discount' ||
+      operation == 'transfer' ||
+      operation == 'merge' ||
+      operation == 'split';
+
+  Future<bool> _sessionActionReady(SyncQueueItem row) async {
+    final payload = _decode(row.payloadJson);
+    var sessionId = (payload['session_server_id'] as num?)?.toInt();
+    if (sessionId != null && sessionId > 0) return true;
+    final table = await (_db.select(_db.localTables)
+          ..where((t) =>
+              t.localId.equals(row.entityId) &
+              t.workspaceId.equals(row.workspaceId)))
+        .getSingleOrNull();
+    sessionId = table?.sessionServerId;
+    if (sessionId != null && sessionId > 0) return true;
+    // Transfer/merge may have moved session onto target table.
+    final targetId = (payload['target_table_id'] as num?)?.toInt();
+    if (targetId != null && targetId > 0) {
+      final target = await (_db.select(_db.localTables)
+            ..where((t) =>
+                t.workspaceId.equals(row.workspaceId) &
+                t.serverId.equals(targetId)))
+          .getSingleOrNull();
+      if (target?.sessionServerId != null && target!.sessionServerId! > 0) {
+        return true;
+      }
+    }
+    // Split is applied locally via new order create; remote split can wait.
+    if (row.operation == 'split') return true;
+    return false;
+  }
+
+  Future<void> _pushSessionAction(SyncQueueItem row) async {
+    final payload = _decode(row.payloadJson);
+    final tableId = (payload['table_server_id'] as num?)?.toInt();
+    if (tableId == null || tableId <= 0) {
+      throw StateError('table_session action requires table_server_id');
+    }
+    var sessionId = (payload['session_server_id'] as num?)?.toInt();
+    if (sessionId == null || sessionId <= 0) {
+      final table = await (_db.select(_db.localTables)
+            ..where((t) =>
+                t.localId.equals(row.entityId) &
+                t.workspaceId.equals(row.workspaceId)))
+          .getSingleOrNull();
+      sessionId = table?.sessionServerId;
+    }
+    final api = _api;
+    if (api == null) {
+      throw StateError('SyncEngineV2 requires API for session action');
+    }
+
+    // Local split already created a new order; remote split is best-effort.
+    if (row.operation == 'split') {
+      if (sessionId != null && sessionId > 0) {
+        try {
+          await api.post(
+            '/tables/$tableId/sessions/$sessionId/split',
+            data: payload['remote_groups'] ?? {'groups': const []},
+            idempotencyKey: row.clientReference,
+          );
+        } catch (_) {
+          // Keep local split; mark synced so we don't block the queue forever.
+        }
+      }
+      await _queue.markSynced(row.id);
+      return;
+    }
+
+    if (sessionId == null || sessionId <= 0) {
+      throw StateError('session_server_id missing for ${row.operation}');
+    }
+
+    switch (row.operation) {
+      case 'cancel':
+        await api.post(
+          '/tables/$tableId/sessions/$sessionId/cancel',
+          idempotencyKey: row.clientReference,
+        );
+      case 'note':
+        await api.post(
+          '/tables/$tableId/sessions/$sessionId/note',
+          data: {'notes': payload['notes'] ?? ''},
+          idempotencyKey: row.clientReference,
+        );
+      case 'discount':
+        await api.post(
+          '/tables/$tableId/sessions/$sessionId/discount',
+          data: {'discount_amount': payload['discount_amount'] ?? 0},
+          idempotencyKey: row.clientReference,
+        );
+      case 'transfer':
+        await api.post(
+          '/tables/$tableId/sessions/$sessionId/transfer',
+          data: {'target_table_id': payload['target_table_id']},
+          idempotencyKey: row.clientReference,
+        );
+      case 'merge':
+        await api.post(
+          '/tables/$tableId/sessions/$sessionId/merge',
+          data: {'target_table_id': payload['target_table_id']},
+          idempotencyKey: row.clientReference,
+        );
+      default:
+        throw StateError('unsupported session action ${row.operation}');
+    }
+    await _queue.markSynced(row.id);
   }
 
   Future<bool> _hasUnsyncedOrdersForTable(int workspaceId, int tableId) async {
