@@ -8,8 +8,11 @@ use App\Models\Appointment\AppointmentSetting;
 use App\Models\User;
 use App\Models\Website\Website;
 use App\Models\Website\WebsiteDomain;
+use App\Models\Website\WebsiteTemplate;
 use App\Models\Workspace;
 use App\Models\WorkspaceFeatureFlag;
+use App\Services\Website\TemplateService;
+use App\Services\Website\WebsiteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
@@ -23,7 +26,7 @@ class PublicWebsiteModuleTest extends TestCase
         [$owner, $workspace] = $this->createWorkspaceOwner('company');
         $this->enableWebsiteFeatures($workspace);
         config()->set('website.platform_domain', 'example.test');
-        app(\App\Services\Website\TemplateService::class)->ensureDefaultTemplates();
+        app(TemplateService::class)->ensureDefaultTemplates();
 
         $this->actingAs($owner)
             ->withSession(['current_workspace_id' => $workspace->id])
@@ -40,7 +43,7 @@ class PublicWebsiteModuleTest extends TestCase
         $this->actingAs($owner)
             ->withSession(['current_workspace_id' => $workspace->id])
             ->post(route('workspace.appointments.website.templates.select', $website), [
-                'template_id' => \App\Models\Website\WebsiteTemplate::query()->value('id'),
+                'template_id' => WebsiteTemplate::query()->value('id'),
             ])
             ->assertRedirect(route('workspace.appointments.website.customize', $website));
 
@@ -160,7 +163,7 @@ class PublicWebsiteModuleTest extends TestCase
             'metadata' => [],
         ]);
 
-        $startsAt = Carbon::now('Asia/Riyadh')->addDays(2)->setTime(10, 0)->toDateTimeString();
+        $startsAt = $this->nextOpenAppointmentSlot()->toDateTimeString();
         $response = $this->postJson(route('public.api.booking.store', $website->slug), [
             'service_id' => $service->id,
             'starts_at' => $startsAt,
@@ -220,10 +223,10 @@ class PublicWebsiteModuleTest extends TestCase
         [$owner, $workspace] = $this->createWorkspaceOwner('company');
         $this->enableWebsiteFeatures($workspace);
 
-        /** @var \App\Services\Website\WebsiteService $websiteService */
-        $websiteService = app(\App\Services\Website\WebsiteService::class);
-        /** @var \App\Services\Website\TemplateService $templateService */
-        $templateService = app(\App\Services\Website\TemplateService::class);
+        /** @var WebsiteService $websiteService */
+        $websiteService = app(WebsiteService::class);
+        /** @var TemplateService $templateService */
+        $templateService = app(TemplateService::class);
 
         $website = $websiteService->createWebsite($workspace, [
             'name' => 'Slug Booking Site',
@@ -289,7 +292,7 @@ class PublicWebsiteModuleTest extends TestCase
 
     private function enableWebsiteFeatures(Workspace $workspace): void
     {
-        foreach (['website_builder', 'custom_domains', 'public_booking'] as $feature) {
+        foreach (['website_builder', 'custom_domains', 'public_booking', 'appointments'] as $feature) {
             WorkspaceFeatureFlag::withoutGlobalScopes()->updateOrCreate(
                 ['workspace_id' => $workspace->id, 'feature_key' => $feature],
                 ['workspace_id' => $workspace->id, 'feature_key' => $feature, 'enabled' => true, 'source' => 'manual']

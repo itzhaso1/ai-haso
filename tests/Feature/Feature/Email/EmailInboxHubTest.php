@@ -6,6 +6,8 @@ use App\Models\EmailAccount;
 use App\Models\EmailAttachment;
 use App\Models\EmailContact;
 use App\Models\EmailMessage;
+use App\Models\Plan;
+use App\Models\Subscription;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Email\WorkspaceEmailSender;
@@ -298,7 +300,7 @@ class EmailInboxHubTest extends TestCase
                 'body' => 'Body',
             ])
             ->assertRedirect(route('workspace.emails.compose', ['account_id' => $account->id]))
-            ->assertSessionHas('error', 'فشل إرسال الرسالة: SMTP auth failed');
+            ->assertSessionHas('error', 'تعذر إرسال الرسالة حاليًا. يرجى المحاولة لاحقًا.');
 
         $this->assertDatabaseHas('email_messages', [
             'workspace_id' => $workspace->id,
@@ -469,7 +471,7 @@ class EmailInboxHubTest extends TestCase
             'joined_at' => now(),
         ]);
 
-        $plan = \App\Models\Plan::query()->create([
+        $plan = Plan::query()->create([
             'code' => $workspaceType.'_email_test_'.uniqid(),
             'name' => 'Email Test Plan',
             'tier' => 'pro',
@@ -482,7 +484,7 @@ class EmailInboxHubTest extends TestCase
             'limits' => ['email_sends' => 1000],
         ]);
 
-        \App\Models\Subscription::withoutGlobalScopes()->create([
+        Subscription::withoutGlobalScopes()->create([
             'workspace_id' => $workspace->id,
             'plan_id' => $plan->id,
             'status' => 'active',

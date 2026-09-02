@@ -5,30 +5,38 @@ namespace App\Http\Controllers;
 use App\Services\AI\WebsiteAssistantService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\RateLimiter;
 
 class AssistantController extends Controller
 {
     private const MAX_MESSAGES_PER_MINUTE = 8;
 
+    private const MAX_MESSAGES_PER_DAY = 40;
+
     public function chat(Request $request, WebsiteAssistantService $assistantService): JsonResponse
     {
         $validated = $request->validate([
-            'message' => ['required', 'string', 'max:1500'],
+            'message' => ['required', 'string', 'max:800'],
         ]);
 
-        $rateKey = $this->rateLimitKey($request);
-        if (RateLimiter::tooManyAttempts($rateKey, self::MAX_MESSAGES_PER_MINUTE)) {
-            $retryAfter = RateLimiter::availableIn($rateKey);
-
+        $minuteKey = $this->rateLimitKey($request, 'minute');
+        if (RateLimiter::tooManyAttempts($minuteKey, self::MAX_MESSAGES_PER_MINUTE)) {
             return response()->json([
                 'message' => 'تم تجاوز الحد الأقصى للرسائل. حاول مرة أخرى بعد قليل.',
-                'retry_after' => $retryAfter,
+                'retry_after' => RateLimiter::availableIn($minuteKey),
             ], 429);
         }
 
-        RateLimiter::hit($rateKey, 60);
+        $dayKey = $this->rateLimitKey($request, 'day');
+        if (RateLimiter::tooManyAttempts($dayKey, self::MAX_MESSAGES_PER_DAY)) {
+            return response()->json([
+                'message' => 'تم استهلاك حد المساعد اليومي. حاول غدًا.',
+                'retry_after' => RateLimiter::availableIn($dayKey),
+            ], 429);
+        }
+
+        RateLimiter::hit($minuteKey, 60);
+        RateLimiter::hit($dayKey, 86400);
 
         $result = $assistantService->replyWithMeta(
             prompt: $validated['message'],
@@ -46,11 +54,11 @@ class AssistantController extends Controller
         ]);
     }
 
-    private function rateLimitKey(Request $request): string
+    private function rateLimitKey(Request $request, string $window): string
     {
         $userId = $request->user()?->id;
         $ip = (string) $request->ip();
 
-        return 'assistant-chat:'.($userId ? 'user:'.$userId : 'ip:'.$ip);
+        return 'assistant-chat:'.$window.':'.($userId ? 'user:'.$userId : 'ip:'.$ip);
     }
 }

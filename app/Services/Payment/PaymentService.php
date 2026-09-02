@@ -30,7 +30,7 @@ class PaymentService
 
         $moneyBucket = $this->resolveMoneyBucket($paymentContext);
 
-        if (str_starts_with($paymentContext, 'merchant_')) {
+        if (str_starts_with($paymentContext, 'merchant_') && $this->requiresLiveMerchantOnboarding()) {
             $workspace = Workspace::query()->findOrFail($order->workspace_id);
             $this->merchantPaymentEligibilityService->assertCanAcceptCustomerPayments($workspace);
         }
@@ -72,6 +72,13 @@ class PaymentService
 
             return $payment;
         });
+    }
+
+    private function requiresLiveMerchantOnboarding(): bool
+    {
+        $provider = strtolower((string) config('payment.default_provider', 'local'));
+
+        return $provider !== 'local';
     }
 
     /**

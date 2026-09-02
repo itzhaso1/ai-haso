@@ -5,9 +5,9 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\Auth\AuthenticationService;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Validation\Rule;
 
 class PhoneOtpController extends Controller
 {
@@ -23,18 +23,20 @@ class PhoneOtpController extends Controller
     public function requestOtp(Request $request)
     {
         $validated = $request->validate([
-            'phone' => ['required', 'string', 'exists:users,phone'],
+            'phone' => ['required', 'string', 'max:32'],
         ]);
 
-        $otp = $this->authenticationService->requestOtp($validated['phone']);
-        $request->session()->put('otp_phone', $validated['phone']);
-
-        $user = User::query()->where('phone', $validated['phone'])->first();
-        $workspaces = $user?->workspaces()->wherePivot('status', 'active')->get() ?? collect();
+        $phone = $validated['phone'];
+        try {
+            $issued = $this->authenticationService->requestOtp($phone);
+        } catch (\RuntimeException) {
+            return back()->withErrors(['phone' => 'محاولات كثيرة. حاول لاحقًا.']);
+        }
+        $request->session()->put('otp_phone', $phone);
 
         return redirect()->route('otp.verify.form')
-            ->with('otp_hint', app()->isProduction() ? null : $otp)
-            ->with('workspaces', $workspaces);
+            ->with('otp_hint', app()->isProduction() ? null : $issued)
+            ->with('status', 'إذا كان الرقم مسجلاً لدينا فسيصلك رمز التحقق.');
     }
 
     public function verifyForm(Request $request)
@@ -59,14 +61,18 @@ class PhoneOtpController extends Controller
 
         $validated = $request->validate([
             'otp' => ['required', 'digits:6'],
-            'workspace_id' => ['required', Rule::exists('workspaces', 'id')],
+            'workspace_id' => ['required', 'integer'],
         ]);
 
-        $payload = $this->authenticationService->loginWithOtp(
-            $phone,
-            $validated['otp'],
-            (int) $validated['workspace_id']
-        );
+        try {
+            $payload = $this->authenticationService->loginWithOtp(
+                $phone,
+                $validated['otp'],
+                (int) $validated['workspace_id']
+            );
+        } catch (AuthenticationException|\Illuminate\Database\Eloquent\ModelNotFoundException) {
+            return back()->withErrors(['otp' => 'رمز التحقق غير صالح أو منتهي.']);
+        }
 
         Auth::login($payload['user']);
         $request->session()->put('current_workspace_id', $payload['workspace']->id);

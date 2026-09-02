@@ -23,7 +23,7 @@ class RequestOtpRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'phone' => ['required', 'string', 'max:32', 'exists:users,phone'],
+            'phone' => ['required', 'string', 'max:32'],
         ];
     }
 }

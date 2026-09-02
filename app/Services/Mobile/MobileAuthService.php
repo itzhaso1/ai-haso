@@ -5,11 +5,12 @@ namespace App\Services\Mobile;
 use App\Models\DevicePushToken;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\Audit\AuditLogService;
 use App\Services\Auth\AuthenticationService;
 use App\Services\Auth\SocialAuthService;
-use App\Services\Audit\AuditLogService;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\NewAccessToken;
@@ -26,7 +27,7 @@ class MobileAuthService
 
     /**
      * @param  array{device_name?:string,device_type?:string,user_agent?:string,ip_address?:string}  $device
-     * @return array{user:User,workspace:Workspace|null,workspaces:\Illuminate\Support\Collection,token:NewAccessToken}
+     * @return array{user:User,workspace:Workspace|null,workspaces:Collection,token:NewAccessToken}
      */
     public function loginWithPassword(string $emailOrPhone, string $password, ?int $workspaceId, array $device = []): array
     {
@@ -81,7 +82,7 @@ class MobileAuthService
      * Social login via provider access token, returning the same envelope as password login.
      *
      * @param  array{device_name?:string,device_type?:string,user_agent?:string,ip_address?:string}  $device
-     * @return array{user:User,workspace:Workspace|null,workspaces:\Illuminate\Support\Collection,token:NewAccessToken}
+     * @return array{user:User,workspace:Workspace|null,workspaces:Collection,token:NewAccessToken}
      */
     public function loginWithSocial(string $provider, string $accessToken, ?int $workspaceId, array $device = []): array
     {
@@ -209,7 +210,7 @@ class MobileAuthService
         $token = $user->createToken(
             name: $name,
             abilities: ['mobile', '*'],
-            expiresAt: now()->addDays(60),
+            expiresAt: now()->addDays((int) config('security.mobile_token_days', 60)),
         );
 
         $fill = ['workspace_id' => $workspaceId];

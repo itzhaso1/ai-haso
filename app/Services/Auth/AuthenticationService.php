@@ -3,6 +3,7 @@
 namespace App\Services\Auth;
 
 use App\Models\User;
+use App\Models\Workspace;
 use App\Services\Workspace\WorkspaceService;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -30,7 +31,7 @@ class AuthenticationService
 
     /**
      * @param  array{name:string,email:string,password:string,phone?:string,workspace_type:string,workspace_name?:string}  $payload
-     * @return array{user:User,workspace:\App\Models\Workspace}
+     * @return array{user:User,workspace:Workspace}
      */
     public function registerForSession(array $payload): array
     {
@@ -41,7 +42,7 @@ class AuthenticationService
 
     /**
      * @param  array{name:string,email:string,password:string,phone?:string,workspace_type:string,workspace_name?:string}  $payload
-     * @return array{0:User,1:\App\Models\Workspace}
+     * @return array{0:User,1:Workspace}
      */
     private function createUserAndWorkspace(array $payload): array
     {
@@ -90,8 +91,15 @@ class AuthenticationService
         return compact('user', 'workspace', 'token');
     }
 
-    public function requestOtp(string $phone): string
+    public function requestOtp(string $phone): ?string
     {
+        $user = User::query()->where('phone', $phone)->first();
+        if (! $user) {
+            usleep(random_int(40000, 120000));
+
+            return null;
+        }
+
         return $this->otpService->request($phone);
     }
 
@@ -103,7 +111,11 @@ class AuthenticationService
 
         $user = User::query()
             ->where('phone', $phone)
-            ->firstOrFail();
+            ->first();
+
+        if (! $user) {
+            throw new AuthenticationException('Invalid OTP.');
+        }
 
         $workspace = $user->workspaces()
             ->where('workspaces.id', $workspaceId)
@@ -122,12 +134,11 @@ class AuthenticationService
         $token = $user->createToken(
             name: 'api',
             abilities: $abilities,
-            expiresAt: now()->addDays(30)
+            expiresAt: now()->addDays((int) config('security.api_token_days', 30))
         );
 
         $token->accessToken->forceFill(['workspace_id' => $workspaceId])->save();
 
         return $token;
     }
-
 }

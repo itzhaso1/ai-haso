@@ -63,6 +63,8 @@ class AppointmentHolidaysTest extends TestCase
             'joined_at' => now(),
         ]);
 
+        $this->enableWorkspaceFeature($workspace, 'appointments');
+
         return [$user, $workspace];
     }
 }

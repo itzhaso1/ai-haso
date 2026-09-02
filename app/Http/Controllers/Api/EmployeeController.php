@@ -7,11 +7,12 @@ use App\Models\EmployeeInvitation;
 use App\Models\User;
 use App\Models\WorkspaceUser;
 use App\Notifications\EmployeeInvitationNotification;
+use App\Support\Authorization\WorkspaceAccess;
 use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use Spatie\Permission\Models\Role;
@@ -21,12 +22,14 @@ class EmployeeController extends Controller
 {
     public function __construct(
         private readonly WorkspaceContext $workspaceContext,
+        private readonly WorkspaceAccess $workspaceAccess,
     ) {}
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         $workspace = $this->workspaceContext->workspace();
         abort_unless($workspace, 422, 'Workspace not resolved.');
+        abort_unless($request->user() && $this->workspaceAccess->canManageMembers($request->user(), $workspace), 403);
 
         $employees = $workspace->memberships()
             ->with('user')
@@ -40,11 +43,15 @@ class EmployeeController extends Controller
     {
         $workspace = $this->workspaceContext->workspace();
         abort_unless($workspace, 422, 'Workspace not resolved.');
+        $actor = $request->user();
+        abort_unless($actor && $this->workspaceAccess->canManageMembers($actor, $workspace), 403);
 
         $validated = $request->validate([
             'email' => ['required', 'email', 'max:255'],
-            'role' => ['required', 'in:owner,admin,manager,agent'],
+            'role' => ['required', 'in:admin,manager,agent,accountant,receptionist,staff_doctor,staff'],
         ]);
+
+        abort_unless($this->workspaceAccess->canInviteRole($actor, $workspace, $validated['role']), 403);
 
         $invitation = EmployeeInvitation::query()->create([
             'email' => $validated['email'],
@@ -65,11 +72,24 @@ class EmployeeController extends Controller
     {
         $workspace = $this->workspaceContext->workspace();
         abort_unless($workspace && $membership->workspace_id === $workspace->id, 404);
+        $actor = $request->user();
+        abort_unless($actor, 403);
 
         $validated = $request->validate([
-            'membership_role' => ['nullable', 'in:owner,admin,manager,agent'],
+            'membership_role' => ['nullable', 'in:admin,manager,agent,accountant,receptionist,staff_doctor,staff'],
             'status' => ['nullable', 'in:active,invited,suspended'],
         ]);
+
+        $target = User::query()->findOrFail($membership->user_id);
+        abort_unless(
+            $this->workspaceAccess->canModifyMembership(
+                $actor,
+                $workspace,
+                $target,
+                $validated['membership_role'] ?? null
+            ),
+            403
+        );
 
         $membership->update($validated);
 
@@ -80,6 +100,12 @@ class EmployeeController extends Controller
     {
         $workspace = $this->workspaceContext->workspace();
         abort_unless($workspace && $membership->workspace_id === $workspace->id, 404);
+        $actor = request()->user();
+        abort_unless($actor, 403);
+
+        $target = User::query()->findOrFail($membership->user_id);
+        abort_unless($this->workspaceAccess->canModifyMembership($actor, $workspace, $target), 403);
+        abort_unless((int) $membership->user_id !== (int) $workspace->owner_user_id, 403);
 
         $membership->delete();
 

@@ -101,7 +101,7 @@ class WebsiteBuilderTest extends TestCase
         ]);
         $pastResponse->assertStatus(422);
 
-        $futureStart = Carbon::now('Asia/Riyadh')->addDays(2)->setTime(11, 0, 0);
+        $futureStart = $this->nextOpenAppointmentSlot('Asia/Riyadh', 11, 0);
         $createResponse = $this->postJson(route('public.api.booking.store', $website->slug), [
             'service_id' => $service->id,
             'starts_at' => $futureStart->toDateTimeString(),

@@ -2,22 +2,22 @@
 
 namespace App\Providers;
 
-use App\Models\Category;
-use App\Models\Conversation;
-use App\Models\Customer;
-use App\Models\DiningTable;
 use App\Models\Appointment\AppointmentBooking;
+use App\Models\Appointment\AppointmentHoliday;
+use App\Models\Appointment\AppointmentReminder;
 use App\Models\Appointment\AppointmentRequest;
 use App\Models\Appointment\AppointmentRequestSlot;
 use App\Models\Appointment\AppointmentResource;
-use App\Models\Appointment\AppointmentReminder;
 use App\Models\Appointment\AppointmentService as AppointmentServiceModel;
 use App\Models\Appointment\AppointmentSetting;
 use App\Models\Appointment\AppointmentStaff;
-use App\Models\Appointment\AppointmentHoliday;
+use App\Models\Category;
 use App\Models\Contract\Contract;
 use App\Models\Contract\ContractAttachment;
 use App\Models\Contract\ContractItem;
+use App\Models\Conversation;
+use App\Models\Customer;
+use App\Models\DiningTable;
 use App\Models\EmailAccount;
 use App\Models\EmailContact;
 use App\Models\EmailMessage;
@@ -25,10 +25,10 @@ use App\Models\EmployeeInvitation;
 use App\Models\Finance\FinanceBillingSchedule;
 use App\Models\Finance\FinanceCreditNote;
 use App\Models\Finance\FinanceCreditNoteItem;
-use App\Models\Finance\FinanceExpense;
 use App\Models\Finance\FinanceEmployee;
-use App\Models\Finance\FinanceEmployeeProfile;
 use App\Models\Finance\FinanceEmployeePayrollRecord;
+use App\Models\Finance\FinanceEmployeeProfile;
+use App\Models\Finance\FinanceExpense;
 use App\Models\Finance\FinanceFiscalYear;
 use App\Models\Finance\FinanceInvoice;
 use App\Models\Finance\FinanceInvoiceAttachment;
@@ -37,9 +37,9 @@ use App\Models\Finance\FinanceInvoicePayment;
 use App\Models\Finance\FinanceJournalEntry;
 use App\Models\Finance\FinancePayrollAdjustment;
 use App\Models\Finance\FinancePriceList;
-use App\Models\Finance\FinanceSetting;
 use App\Models\Finance\FinanceSalaryAdvance;
 use App\Models\Finance\FinanceSalaryAdvanceRepayment;
+use App\Models\Finance\FinanceSetting;
 use App\Models\Finance\FinanceSupplier;
 use App\Models\Finance\FinanceTaxRate;
 use App\Models\Finance\FinanceTreasuryAccount;
@@ -47,15 +47,14 @@ use App\Models\InventoryMovement;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
-use App\Models\PosMenuItem;
+use App\Models\PaymentGateway;
 use App\Models\PosCashierInvoice;
 use App\Models\PosCashierInvoiceItem;
 use App\Models\PosItemCategory;
-use App\Models\PaymentGateway;
+use App\Models\PosMenuItem;
 use App\Models\Product;
 use App\Models\Subscription;
 use App\Models\TableSession;
-use App\Models\WhatsAppAccount;
 use App\Models\Website\Website;
 use App\Models\Website\WebsiteAsset;
 use App\Models\Website\WebsiteDomain;
@@ -64,12 +63,13 @@ use App\Models\Website\WebsiteDomainOperation;
 use App\Models\Website\WebsitePage;
 use App\Models\Website\WebsiteSection;
 use App\Models\Website\WebsiteTemplate;
+use App\Models\WhatsAppAccount;
 use App\Models\Workspace;
-use App\Observers\FinanceInvoicePaymentObserver;
-use App\Observers\WebsiteResolverObserver;
-use App\Observers\PosSyncChangeObserver;
-use App\Observers\WorkspaceAuditObserver;
 use App\Notifications\Channels\CentralMailChannel;
+use App\Observers\FinanceInvoicePaymentObserver;
+use App\Observers\PosSyncChangeObserver;
+use App\Observers\WebsiteResolverObserver;
+use App\Observers\WorkspaceAuditObserver;
 use App\Policies\AppointmentBookingPolicy;
 use App\Policies\CategoryPolicy;
 use App\Policies\ConversationPolicy;
@@ -77,16 +77,18 @@ use App\Policies\CustomerPolicy;
 use App\Policies\DiningTablePolicy;
 use App\Policies\OrderPolicy;
 use App\Policies\PaymentPolicy;
-use App\Policies\ProductPolicy;
 use App\Policies\PosCashierInvoicePolicy;
 use App\Policies\PosItemCategoryPolicy;
 use App\Policies\PosMenuItemPolicy;
+use App\Policies\ProductPolicy;
 use App\Policies\SubscriptionPolicy;
 use App\Policies\WebsiteDomainPolicy;
 use App\Policies\WebsitePolicy;
 use App\Policies\WorkspacePolicy;
 use App\Services\Domain\Contracts\DomainRegistrarInterface;
 use App\Services\Domain\NamecheapRegistrar;
+use App\Services\Payment\Contracts\MerchantSettlementProviderInterface;
+use App\Services\Payment\Providers\HyperPayMerchantSettlementProvider;
 use App\Services\Subscription\Contracts\SubscriptionBillingProviderInterface;
 use App\Services\Subscription\LocalSubscriptionBillingProvider;
 use App\Support\Tenancy\WorkspaceContext;
@@ -108,8 +110,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(DomainRegistrarInterface::class, NamecheapRegistrar::class);
         $this->app->bind(SubscriptionBillingProviderInterface::class, LocalSubscriptionBillingProvider::class);
         $this->app->bind(
-            \App\Services\Payment\Contracts\MerchantSettlementProviderInterface::class,
-            \App\Services\Payment\Providers\HyperPayMerchantSettlementProvider::class
+            MerchantSettlementProviderInterface::class,
+            HyperPayMerchantSettlementProvider::class
         );
     }
 
@@ -121,6 +123,7 @@ class AppServiceProvider extends ServiceProvider
         Notification::extend('central_mail', fn ($app) => $app->make(CentralMailChannel::class));
 
         $this->configureMobileRateLimiting();
+        $this->configureAuthRateLimiting();
 
         Gate::policy(Workspace::class, WorkspacePolicy::class);
         Gate::policy(Category::class, CategoryPolicy::class);
@@ -248,6 +251,27 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('mobile-search', function (Request $request) {
             return Limit::perMinute(30)->by((string) ($request->user()?->id ?: $request->ip()));
+        });
+    }
+
+    private function configureAuthRateLimiting(): void
+    {
+        RateLimiter::for('otp-request', function (Request $request) {
+            $phone = strtolower(trim((string) $request->input('phone', '')));
+
+            return [
+                Limit::perMinute(5)->by($request->ip()),
+                Limit::perMinute(5)->by($phone !== '' ? 'otp-phone:'.$phone : $request->ip()),
+            ];
+        });
+
+        RateLimiter::for('otp-verify', function (Request $request) {
+            $phone = strtolower(trim((string) ($request->input('phone') ?: $request->session()->get('otp_phone', ''))));
+
+            return [
+                Limit::perMinute(10)->by($request->ip()),
+                Limit::perMinute(8)->by($phone !== '' ? 'otp-verify:'.$phone : $request->ip()),
+            ];
         });
     }
 }

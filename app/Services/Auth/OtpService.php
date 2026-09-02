@@ -12,6 +12,14 @@ class OtpService
 
     public function request(string $phone): string
     {
+        $throttleKey = $this->throttleKey($phone);
+        $hits = (int) Cache::get($throttleKey, 0);
+        if ($hits >= (int) config('security.otp.max_requests_per_minute', 5)) {
+            throw new \RuntimeException('Too many OTP requests. Try again later.');
+        }
+
+        Cache::put($throttleKey, $hits + 1, 60);
+
         $otp = (string) random_int(100000, 999999);
 
         Cache::put(
@@ -35,7 +43,7 @@ class OtpService
         }
 
         $attempts = (int) ($data['attempts'] ?? 0);
-        if ($attempts >= 5) {
+        if ($attempts >= (int) config('security.otp.max_verify_attempts', 5)) {
             Cache::forget($this->cacheKey($phone));
 
             return false;
@@ -56,5 +64,10 @@ class OtpService
     private function cacheKey(string $phone): string
     {
         return 'auth:otp:'.Str::lower($phone);
+    }
+
+    private function throttleKey(string $phone): string
+    {
+        return 'auth:otp:throttle:'.Str::lower($phone);
     }
 }

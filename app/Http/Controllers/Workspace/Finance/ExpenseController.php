@@ -100,4 +100,18 @@ class ExpenseController extends FinanceBaseController
 
         return redirect()->route('workspace.finance.expenses.index')->with('success', 'تم إنشاء المصروف وربطه محاسبيًا.');
     }
+
+    public function destroy(Request $request, FinanceExpense $expense): RedirectResponse
+    {
+        $this->authorizeFinance($request, 'expenses.edit');
+        abort_unless((int) $expense->workspace_id === (int) $this->currentWorkspace()->id, 404);
+
+        try {
+            $this->expenseService->delete($expense, (int) $request->user()?->id);
+        } catch (\RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return redirect()->route('workspace.finance.expenses.index')->with('success', 'تم إلغاء المصروف وعكس أثره المحاسبي.');
+    }
 }

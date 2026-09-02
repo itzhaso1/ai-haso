@@ -72,7 +72,7 @@ class SocialAuthService
                     ?? $this->workspaceService->createForUser($user, 'individual');
             }
 
-            $token = $user->createToken('api', ['*'], now()->addDays(30));
+            $token = $user->createToken('api', ['*'], now()->addDays((int) config('security.api_token_days', 30)));
             $token->accessToken->forceFill(['workspace_id' => $workspace->id])->save();
 
             return compact('user', 'workspace', 'token');

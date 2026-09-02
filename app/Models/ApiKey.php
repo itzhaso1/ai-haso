@@ -4,8 +4,8 @@ namespace App\Models;
 
 use App\Models\Concerns\BelongsToWorkspace;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'workspace_id',
@@ -20,6 +20,13 @@ use Illuminate\Database\Eloquent\Builder;
 class ApiKey extends WorkspaceScopedModel
 {
     use BelongsToWorkspace;
+
+    /**
+     * @var list<string>
+     */
+    protected $hidden = [
+        'key_hash',
+    ];
 
     protected function casts(): array
     {

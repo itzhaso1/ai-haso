@@ -14,9 +14,9 @@ class VerifyOtpRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'phone' => ['required', 'string', 'max:32', 'exists:users,phone'],
+            'phone' => ['required', 'string', 'max:32'],
             'otp' => ['required', 'digits:6'],
-            'workspace_id' => ['required', 'integer', 'exists:workspaces,id'],
+            'workspace_id' => ['required', 'integer'],
         ];
     }
 }

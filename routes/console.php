@@ -4,6 +4,7 @@ use App\Jobs\Stories\ExpireStoriesJob;
 use App\Jobs\SyncDomainStatusJob;
 use App\Models\Website\WebsiteDomain;
 use App\Services\Appointments\AppointmentReminderService;
+use App\Services\Domain\DomainService;
 use App\Services\Finance\BillingScheduleService;
 use App\Services\Finance\InvoiceReminderService;
 use App\Services\Finance\InvoiceService;
@@ -80,12 +81,12 @@ Artisan::command('finance:invoices:integrity-report', function () {
     $this->line(sprintf('- amount_due_sum: %.2f', $due));
 })->purpose('Output baseline invoice counters and totals for migration integrity checks');
 
-Schedule::command('appointments:reminders:prepare')->everyFiveMinutes();
-Schedule::command('appointments:reminders:dispatch')->everyMinute();
-Schedule::command('finance:invoices:refresh-payment-status')->hourly();
-Schedule::command('finance:invoices:send-reminders')->dailyAt('08:00');
-Schedule::command('finance:billing-schedules:generate')->dailyAt('01:15');
-Schedule::job(new ExpireStoriesJob)->hourly();
+Schedule::command('appointments:reminders:prepare')->everyFiveMinutes()->withoutOverlapping(10);
+Schedule::command('appointments:reminders:dispatch')->everyMinute()->withoutOverlapping(4);
+Schedule::command('finance:invoices:refresh-payment-status')->hourly()->withoutOverlapping(50);
+Schedule::command('finance:invoices:send-reminders')->dailyAt('08:00')->withoutOverlapping(120);
+Schedule::command('finance:billing-schedules:generate')->dailyAt('01:15')->withoutOverlapping(120);
+Schedule::job(new ExpireStoriesJob)->hourly()->withoutOverlapping(50);
 
 Artisan::command('domains:sync-status', function () {
     $count = 0;
@@ -101,22 +102,22 @@ Artisan::command('domains:sync-status', function () {
     $this->info("Queued {$count} domains for status sync.");
 })->purpose('Queue provider status sync for website domains');
 
-Artisan::command('domains:auto-renew', function (\App\Services\Domain\DomainService $domainService) {
+Artisan::command('domains:auto-renew', function (DomainService $domainService) {
     $count = $domainService->processDueAutoRenewals();
     $this->info("Queued {$count} auto-renewal jobs.");
 })->purpose('Queue auto renewals for domains nearing expiration');
 
-Artisan::command('domains:expiration-reminders', function (\App\Services\Domain\DomainService $domainService) {
+Artisan::command('domains:expiration-reminders', function (DomainService $domainService) {
     $count = $domainService->processExpirationReminders();
     $this->info("Sent {$count} domain expiration reminders.");
 })->purpose('Send domain expiration reminders without duplicates');
 
-Artisan::command('domains:ssl-maintain', function (\App\Services\Domain\DomainService $domainService) {
+Artisan::command('domains:ssl-maintain', function (DomainService $domainService) {
     $count = $domainService->processSslMaintenance();
     $this->info("Processed SSL maintenance for {$count} domains.");
 })->purpose('Provision/renew/sync SSL certificates for website domains');
 
-Schedule::command('domains:sync-status')->dailyAt('02:10');
-Schedule::command('domains:expiration-reminders')->dailyAt('08:15');
-Schedule::command('domains:auto-renew')->dailyAt('03:20');
-Schedule::command('domains:ssl-maintain')->dailyAt('04:05');
+Schedule::command('domains:sync-status')->dailyAt('02:10')->withoutOverlapping(120);
+Schedule::command('domains:expiration-reminders')->dailyAt('08:15')->withoutOverlapping(60);
+Schedule::command('domains:auto-renew')->dailyAt('03:20')->withoutOverlapping(120);
+Schedule::command('domains:ssl-maintain')->dailyAt('04:05')->withoutOverlapping(120);

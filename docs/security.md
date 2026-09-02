@@ -43,3 +43,16 @@
 - Never log Namecheap `ApiKey`, WhatsApp tokens, or `HYPERPAY_ACCESS_TOKEN`.
 - Webhook signature verification required in production (`WHATSAPP_APP_SECRET`, Stripe secrets).
 - Never enable `HYPERPAY_MERCHANT_SANDBOX_AUTO_APPROVE` in production.
+
+## Auth tokens
+
+- Sanctum global `expiration` is **null** so per-token `expires_at` is authoritative.
+- Core API / social tokens expire in 30 days (`config/security.php`).
+- Mobile and cashier device tokens expire in 60 days.
+- Do not set a global Sanctum expiration longer than the shortest client TTL.
+
+## OTP
+
+- Request and verify endpoints are rate-limited (IP + phone).
+- Responses are generic; they do not disclose whether a phone is registered.
+- OTP hashes are stored in cache for 5 minutes with a verify-attempt cap.

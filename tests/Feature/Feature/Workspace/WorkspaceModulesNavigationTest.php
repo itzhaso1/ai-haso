@@ -157,6 +157,8 @@ class WorkspaceModulesNavigationTest extends TestCase
             'joined_at' => now(),
         ]);
 
+        $this->enableWorkspaceFeature($workspace, 'finance');
+
         return [$user, $workspace];
     }
 }

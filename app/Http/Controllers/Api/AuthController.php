@@ -10,6 +10,7 @@ use App\Http\Requests\ApiAuth\VerifyOtpRequest;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Auth\AuthenticationService;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Laravel\Sanctum\NewAccessToken;
@@ -46,23 +47,35 @@ class AuthController extends Controller
 
     public function requestOtp(RequestOtpRequest $request): JsonResponse
     {
-        $otp = $this->authenticationService->requestOtp(
-            $request->string('phone')->toString()
-        );
+        try {
+            $otp = $this->authenticationService->requestOtp(
+                $request->string('phone')->toString()
+            );
+        } catch (\RuntimeException) {
+            return response()->json([
+                'message' => 'Too many verification requests. Try again later.',
+            ], 429);
+        }
 
         return response()->json([
-            'message' => 'OTP has been issued.',
+            'message' => 'If the phone number is registered, a verification code will be sent.',
             'data' => app()->isProduction() ? null : ['otp' => $otp],
         ]);
     }
 
     public function verifyOtp(VerifyOtpRequest $request): JsonResponse
     {
-        $payload = $this->authenticationService->loginWithOtp(
-            $request->string('phone')->toString(),
-            $request->string('otp')->toString(),
-            $request->integer('workspace_id'),
-        );
+        try {
+            $payload = $this->authenticationService->loginWithOtp(
+                $request->string('phone')->toString(),
+                $request->string('otp')->toString(),
+                $request->integer('workspace_id'),
+            );
+        } catch (AuthenticationException|\Illuminate\Database\Eloquent\ModelNotFoundException) {
+            return response()->json([
+                'message' => 'Invalid or expired verification code.',
+            ], 401);
+        }
 
         return response()->json([
             'message' => 'OTP verified.',

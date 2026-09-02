@@ -17,6 +17,7 @@ class InvoicePaymentService
         private readonly ChartOfAccountsService $chartOfAccountsService,
         private readonly InvoiceStateService $invoiceStateService,
         private readonly FinancialPeriodGuardService $financialPeriodGuardService,
+        private readonly TreasuryBalanceService $treasuryBalanceService,
     ) {}
 
     /**
@@ -165,9 +166,7 @@ class InvoicePaymentService
             $this->postPaymentEntry($lockedInvoice, $payment, $treasuryAccount?->id, $actorUserId);
 
             if ($treasuryAccount) {
-                $treasuryAccount->update([
-                    'current_balance' => round((float) $treasuryAccount->current_balance + $amount, 2),
-                ]);
+                $this->treasuryBalanceService->adjust($treasuryAccount, $amount);
             }
 
             return $payment;
@@ -223,9 +222,7 @@ class InvoicePaymentService
                     ->lockForUpdate()
                     ->first();
                 if ($treasury) {
-                    $treasury->update([
-                        'current_balance' => round((float) $treasury->current_balance - (float) $lockedPayment->amount, 2),
-                    ]);
+                    $this->treasuryBalanceService->adjust($treasury, -1 * (float) $lockedPayment->amount);
                 }
             }
 

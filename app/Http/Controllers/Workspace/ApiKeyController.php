@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Workspace\Concerns\InteractsWithWorkspace;
 use App\Models\ApiKey;
 use App\Services\ApiKey\ApiKeyService;
+use App\Support\Authorization\WorkspaceAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -16,10 +17,12 @@ class ApiKeyController extends Controller
 
     public function __construct(
         private readonly ApiKeyService $apiKeyService,
+        private readonly WorkspaceAccess $workspaceAccess,
     ) {}
 
     public function index(Request $request): View
     {
+        $this->authorizeApiKeys($request);
         $workspace = $this->currentWorkspace();
         $keys = $this->apiKeyService->list($workspace);
 
@@ -32,6 +35,7 @@ class ApiKeyController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        $this->authorizeApiKeys($request);
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:120'],
         ]);
@@ -51,6 +55,7 @@ class ApiKeyController extends Controller
 
     public function revoke(Request $request, ApiKey $apiKey): RedirectResponse
     {
+        $this->authorizeApiKeys($request);
         $this->ensureSameWorkspace($apiKey);
         $this->apiKeyService->revoke($apiKey);
 
@@ -61,6 +66,7 @@ class ApiKeyController extends Controller
 
     public function regenerate(Request $request, ApiKey $apiKey): RedirectResponse
     {
+        $this->authorizeApiKeys($request);
         $this->ensureSameWorkspace($apiKey);
 
         $result = $this->apiKeyService->regenerate($apiKey, $request->user());
@@ -70,6 +76,13 @@ class ApiKeyController extends Controller
             ->with('success', 'تم إعادة توليد المفتاح. انسخه الآن — لن يظهر مرة أخرى.')
             ->with('api_key_plain_text', $result['plain_text'])
             ->with('api_key_created_name', $result['api_key']->name);
+    }
+
+    private function authorizeApiKeys(Request $request): void
+    {
+        $user = $request->user();
+        abort_unless($user, 403);
+        abort_unless($this->workspaceAccess->canManageApiKeys($user, $this->currentWorkspace()), 403);
     }
 
     private function ensureSameWorkspace(ApiKey $apiKey): void

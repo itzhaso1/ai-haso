@@ -48,6 +48,11 @@ return [
     | considered expired. This will override any values set in the token's
     | "expires_at" attribute, but first-party sessions are not affected.
     |
+    | Keep this null so per-token TTLs win:
+    | - Core API tokens: 30 days (AuthenticationService / SocialAuthService)
+    | - Mobile / cashier device tokens: 60 days (MobileAuthService)
+    | A global number here would override shorter API tokens.
+    |
     */
 
     'expiration' => null,
