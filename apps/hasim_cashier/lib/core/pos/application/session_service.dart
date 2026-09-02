@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../local_db/app_database.dart';
+import '../domain/pricing_service.dart';
 import '../pos_errors.dart';
 
 /// Table dining sessions live in SQLite, not JSON on LocalTables.
@@ -92,7 +93,7 @@ class TableSessionService {
       _db.localSessions,
     )..where((t) => t.localId.equals(sessionId))).write(
       LocalSessionsCompanion(
-        discountAmount: Value(amount),
+        discountAmount: Value(Money.toCents(amount)),
         updatedAt: Value(DateTime.now()),
       ),
     );

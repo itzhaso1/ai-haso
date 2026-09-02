@@ -212,16 +212,14 @@ class CheckoutService {
               customerLocalId: Value(cmd.customerLocalId),
               createdByUserId: Value(cmd.createdByUserId),
               notes: Value(cmd.notes),
-              subtotal: Value(quote.subtotal),
-              taxAmount: Value(quote.taxAmount),
+              subtotal: Value(quote.subtotalCents),
+              taxAmount: Value(quote.taxCents),
               discountAmount: Value(
-                Money.fromCents(
-                  Money.toCents(quote.itemDiscountTotal) +
-                      Money.toCents(quote.orderDiscount),
-                ),
+                Money.toCents(quote.itemDiscountTotal) +
+                    Money.toCents(quote.orderDiscount),
               ),
               discountPercent: Value(cmd.orderDiscountPercent),
-              totalAmount: Value(quote.total),
+              totalAmount: Value(quote.totalCents),
               posStatus: const Value('new'),
               paymentStatus: const Value('paid'),
               fulfillmentStatus: const Value('unfulfilled'),
@@ -247,14 +245,14 @@ class CheckoutService {
                 skuSnapshot: Value(line.line.sku),
                 barcodeSnapshot: Value(line.line.barcode),
                 quantity: line.line.quantity,
-                unitPrice: line.line.unitPrice,
-                costSnapshot: Value(line.line.cost),
-                discountAmount: Value(line.discountAmount),
+                unitPrice: line.line.unitPriceCents,
+                costSnapshot: Value(Money.toCents(line.line.cost)),
+                discountAmount: Value(line.discountCents),
                 taxRate: Value(
                   line.line.taxRate > 0 ? line.line.taxRate : cmd.taxRate,
                 ),
-                taxAmount: Value(line.taxAmount),
-                totalAmount: line.total,
+                taxAmount: Value(line.taxCents),
+                totalAmount: line.totalCents,
                 createdAt: Value(now),
                 updatedAt: now,
               ),
@@ -309,15 +307,13 @@ class CheckoutService {
               localInvoiceNumber: Value(invoiceNumber),
               orderLocalId: Value(orderId),
               status: const Value('closed'),
-              subtotal: Value(quote.subtotal),
+              subtotal: Value(quote.subtotalCents),
               discountAmount: Value(
-                Money.fromCents(
-                  Money.toCents(quote.itemDiscountTotal) +
-                      Money.toCents(quote.orderDiscount),
-                ),
+                Money.toCents(quote.itemDiscountTotal) +
+                    Money.toCents(quote.orderDiscount),
               ),
-              taxAmount: Value(quote.taxAmount),
-              totalAmount: Value(quote.total),
+              taxAmount: Value(quote.taxCents),
+              totalAmount: Value(quote.totalCents),
               createdByUserId: Value(cmd.createdByUserId),
               syncStatus: Value(cmd.connected ? 'pending' : 'local'),
               payloadJson: Value(jsonEncode(invoicePayload)),
@@ -337,13 +333,13 @@ class CheckoutService {
                 orderLocalId: Value(orderId),
                 invoiceLocalId: Value(invoiceId),
                 method: p.method,
-                amount: p.amount,
-                tendered: Value(p.tendered),
+                amount: Money.toCents(p.amount),
+                tendered: Value(
+                  p.tendered == null ? null : Money.toCents(p.tendered!),
+                ),
                 changeDue: Value(
                   p.method == 'cash' && p.tendered != null
-                      ? Money.fromCents(
-                          Money.toCents(p.tendered!) - Money.toCents(p.amount),
-                        )
+                      ? Money.toCents(p.tendered!) - Money.toCents(p.amount)
                       : 0,
                 ),
                 shiftLocalId: Value(cmd.shiftLocalId),
@@ -362,7 +358,7 @@ class CheckoutService {
                   workspaceId: cmd.workspaceId,
                   shiftLocalId: cmd.shiftLocalId!,
                   type: 'sale',
-                  amount: p.amount,
+                  amount: Money.toCents(p.amount),
                   reason: const Value('بيع نقدي'),
                   referenceId: Value(invoiceId),
                   createdByUserId: Value(cmd.createdByUserId),
@@ -438,7 +434,7 @@ class CheckoutService {
           invoice?.invoiceNumber ??
           existing.orderNumber ??
           existing.localId,
-      total: existing.totalAmount,
+      total: Money.fromCents(existing.totalAmount),
       changeDue: 0,
     );
   }

@@ -140,16 +140,16 @@ void main() {
       final order = await (db.select(
         db.localOrders,
       )..where((t) => t.localId.equals('sale-1'))).getSingle();
-      expect(order.taxAmount, 4.5);
-      expect(order.subtotal, 30);
-      expect(order.totalAmount, 34.5);
+      expect(order.taxAmount, 450);
+      expect(order.subtotal, 3000);
+      expect(order.totalAmount, 3450);
       expect(order.paymentStatus, 'paid');
 
       final item = (await (db.select(
         db.localOrderItems,
       )..where((t) => t.orderLocalId.equals('sale-1'))).get()).single;
       expect(item.taxRate, 15);
-      expect(item.taxAmount, 4.5);
+      expect(item.taxAmount, 450);
       expect(item.name, 'برجر');
 
       final product = await (db.select(
@@ -313,6 +313,15 @@ void main() {
     final dir = await Directory.systemTemp.createTemp('pos-draft');
     final file = File('${dir.path}/draft.sqlite');
     var fileDb = AppDatabase(NativeDatabase(file));
+    final now = DateTime.now();
+    await fileDb.into(fileDb.localProducts).insert(
+      LocalProductsCompanion.insert(
+        localId: 'p1',
+        workspaceId: PosMode.standaloneWorkspaceId,
+        name: 'شاي',
+        updatedAt: now,
+      ),
+    );
     final store = DraftCartStore(fileDb);
     await store.save(
       workspaceId: PosMode.standaloneWorkspaceId,
@@ -339,6 +348,16 @@ void main() {
   });
 
   test('document numbers never use max(id)+1', () async {
+    final now = DateTime.now();
+    await db.into(db.localStores).insert(
+      LocalStoresCompanion.insert(
+        localId: 's1',
+        workspaceId: PosMode.standaloneWorkspaceId,
+        name: 'تسلسل',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
     expect(await numbers.nextInvoiceNumber(storeId: 's1'), 'INV-000001');
     expect(await numbers.nextInvoiceNumber(storeId: 's1'), 'INV-000002');
     expect(await numbers.nextOrderNumber(storeId: 's1'), 'ORD-000001');
@@ -420,15 +439,18 @@ void main() {
     final file = await backup.exportBackup(
       workspaceId: PosMode.standaloneWorkspaceId,
       directory: dir,
+      password: 'secret12',
       permissions: adminPerms,
     );
     final payload = jsonDecode(await file.readAsString()) as Map;
-    expect(payload['format_version'], 2);
+    expect(payload['format_version'], 3);
+    expect(payload['ciphertext_b64'], isNotEmpty);
     expect(payload['checksum_sha256'], isNotEmpty);
-    expect((payload['tables'] as Map)['local_invoices'], isNotEmpty);
+    expect(payload.containsKey('tables'), isFalse);
     await backup.restore(
       Map<String, dynamic>.from(payload),
       confirmed: true,
+      password: 'secret12',
       permissions: adminPerms,
     );
     expect(await db.select(db.localInvoices).get(), isNotEmpty);
@@ -540,6 +562,15 @@ void main() {
   test('standalone core path never increments NetworkGuard', () async {
     NetworkGuard.reset();
     final seed = await seedStore();
+    await auth.login(
+      workspaceId: PosMode.standaloneWorkspaceId,
+      username: 'admin',
+      pin: '1234',
+    );
+    await catalog.findByBarcode(
+      workspaceId: PosMode.standaloneWorkspaceId,
+      barcode: '123456',
+    );
     await checkout.execute(
       CheckoutCommand(
         workspaceId: PosMode.standaloneWorkspaceId,
@@ -562,6 +593,7 @@ void main() {
         shiftLocalId: seed.shiftId,
       ),
     );
+    expect(await db.select(db.localInvoices).get(), hasLength(1));
     final item = (await db.select(db.localOrderItems).get()).single;
     await returns.execute(
       workspaceId: PosMode.standaloneWorkspaceId,
@@ -574,7 +606,15 @@ void main() {
     await LocalReportsService(
       db,
     ).daily(workspaceId: PosMode.standaloneWorkspaceId, date: DateTime.now());
+    final dir = await Directory.systemTemp.createTemp('pos-iso');
+    await BackupService(db).exportBackup(
+      workspaceId: PosMode.standaloneWorkspaceId,
+      directory: dir,
+      password: 'secret12',
+      permissions: adminPerms,
+    );
     expect(NetworkGuard.attempts, 0);
+    await dir.delete(recursive: true);
   });
 
   test('sale without open shift is rejected', () async {
@@ -761,7 +801,7 @@ void main() {
       ),
     );
     final invoice = (await db.select(db.localInvoices).get()).single;
-    expect(invoice.totalAmount, 20);
+    expect(invoice.totalAmount, 2000);
     final item = (await db.select(db.localOrderItems).get()).single;
     await returns.execute(
       workspaceId: PosMode.standaloneWorkspaceId,
@@ -774,7 +814,7 @@ void main() {
     final after = await (db.select(
       db.localInvoices,
     )..where((t) => t.localId.equals(invoice.localId))).getSingle();
-    expect(after.totalAmount, 20);
+    expect(after.totalAmount, 2000);
     expect(after.payloadJson, invoice.payloadJson);
     expect(
       () => returns.execute(
@@ -940,6 +980,7 @@ void main() {
     );
     expect(created.user.pinHash, isNot('1234'));
     expect(created.user.pinHash.contains('1234'), isFalse);
+    expect(created.user.pinHash.startsWith('pbkdf2-sha256\$'), isTrue);
     expect(created.user.pinSalt, isNotEmpty);
   });
 

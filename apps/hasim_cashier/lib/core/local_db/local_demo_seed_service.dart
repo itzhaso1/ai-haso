@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../local_db/app_database.dart';
+import '../pos/domain/pricing_service.dart';
 import '../local_db/local_ids.dart';
 import '../local_db/workspace_scope.dart';
 
@@ -67,7 +68,7 @@ class LocalDemoSeedService {
               categoryServerId: Value(item.$2),
               categoryLocalId: Value(LocalIds.category(workspaceId, item.$2)),
               name: item.$3,
-              price: Value(item.$4),
+              price: Value(Money.toCents(item.$4)),
               isActive: const Value(true),
               isDeleted: const Value(false),
               updatedAt: now,

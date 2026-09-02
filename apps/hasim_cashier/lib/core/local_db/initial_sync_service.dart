@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../api/cashier_api.dart';
+import '../pos/domain/pricing_service.dart';
 import 'app_database.dart';
 import 'local_ids.dart';
 import 'workspace_scope.dart';
@@ -138,7 +139,7 @@ class InitialSyncService {
                 sku: Value(item['sku'] as String?),
                 barcode: Value(item['barcode'] as String?),
                 itemType: Value(item['item_type'] as String?),
-                price: Value((item['price'] as num?)?.toDouble() ?? 0),
+                price: Value(Money.toCents((item['price'] as num?) ?? 0)),
                 isActive: Value(item['is_active'] != false),
                 isDeleted: const Value(false),
                 payloadJson: Value(jsonEncode(item)),

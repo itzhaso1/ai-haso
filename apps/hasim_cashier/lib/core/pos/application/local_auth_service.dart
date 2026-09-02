@@ -1,7 +1,3 @@
-import 'dart:convert';
-import 'dart:math';
-
-import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
@@ -9,6 +5,7 @@ import '../../local_db/app_database.dart';
 import '../../local_db/workspace_scope.dart';
 import '../pos_errors.dart';
 import '../pos_mode.dart';
+import 'pin_hasher.dart';
 
 class LocalAuthService {
   LocalAuthService(this._db, {String Function()? newId})
@@ -86,7 +83,7 @@ class LocalAuthService {
       final now = DateTime.now();
       final storeId = _newId();
       final userId = _newId();
-      final salt = _salt();
+      final salt = PinHasher.newSalt();
       await _db
           .into(_db.localStores)
           .insert(
@@ -142,8 +139,29 @@ class LocalAuthService {
             .getSingleOrNull();
     if (user == null) throw const InvalidPin();
     if (!user.isActive) throw const UserInactive();
-    if (user.pinHash != hashPin(pin, user.pinSalt)) throw const InvalidPin();
+    if (!PinHasher.verify(pin, user.pinSalt, user.pinHash)) {
+      throw const InvalidPin();
+    }
+    if (PinHasher.isLegacySha256(user.pinHash)) {
+      await _upgradePinHash(user, pin);
+      return (await (_db.select(
+        _db.localUsers,
+      )..where((t) => t.localId.equals(user.localId))).getSingle());
+    }
     return user;
+  }
+
+  Future<void> _upgradePinHash(LocalUser user, String pin) async {
+    final salt = PinHasher.newSalt();
+    await (_db.update(
+      _db.localUsers,
+    )..where((t) => t.localId.equals(user.localId))).write(
+      LocalUsersCompanion(
+        pinSalt: Value(salt),
+        pinHash: Value(PinHasher.hash(pin, salt)),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   Future<List<LocalUser>> listUsers(int workspaceId) {
@@ -172,7 +190,7 @@ class LocalAuthService {
       throw const DatabaseFailure('اسم المستخدم موجود مسبقاً.');
     }
     final id = _newId();
-    final salt = _salt();
+    final salt = PinHasher.newSalt();
     final now = DateTime.now();
     await _db
         .into(_db.localUsers)
@@ -222,13 +240,5 @@ class LocalAuthService {
     );
   }
 
-  static String hashPin(String pin, String salt) {
-    return sha256.convert(utf8.encode('$salt:${pin.trim()}')).toString();
-  }
-
-  String _salt() {
-    final rand = Random.secure();
-    final bytes = List<int>.generate(16, (_) => rand.nextInt(256));
-    return base64Encode(bytes);
-  }
+  static String hashPin(String pin, String salt) => PinHasher.hash(pin, salt);
 }

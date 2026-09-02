@@ -26,4 +26,8 @@ class PosMode {
     String? token,
   }) =>
       isLocalMode || isStandaloneToken(token);
+
+  /// Standalone tokens never become a live session without a fresh PIN.
+  static bool admitRestoredSession(String? token) =>
+      token != null && token.isNotEmpty && !isStandaloneToken(token);
 }

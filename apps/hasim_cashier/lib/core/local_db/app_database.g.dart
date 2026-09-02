@@ -1207,6 +1207,9 @@ class $LocalProductsTable extends LocalProducts
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_categories (local_id) ON DELETE SET NULL',
+    ),
   );
   static const VerificationMeta _categoryServerIdMeta = const VerificationMeta(
     'categoryServerId',
@@ -1261,11 +1264,11 @@ class $LocalProductsTable extends LocalProducts
   );
   static const VerificationMeta _priceMeta = const VerificationMeta('price');
   @override
-  late final GeneratedColumn<double> price = GeneratedColumn<double>(
+  late final GeneratedColumn<int> price = GeneratedColumn<int>(
     'price',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
@@ -1322,11 +1325,11 @@ class $LocalProductsTable extends LocalProducts
   );
   static const VerificationMeta _costMeta = const VerificationMeta('cost');
   @override
-  late final GeneratedColumn<double> cost = GeneratedColumn<double>(
+  late final GeneratedColumn<int> cost = GeneratedColumn<int>(
     'cost',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
@@ -1632,7 +1635,7 @@ class $LocalProductsTable extends LocalProducts
         data['${effectivePrefix}item_type'],
       ),
       price: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}price'],
       )!,
       isActive: attachedDatabase.typeMapping.read(
@@ -1652,7 +1655,7 @@ class $LocalProductsTable extends LocalProducts
         data['${effectivePrefix}stock'],
       ),
       cost: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}cost'],
       )!,
       taxRate: attachedDatabase.typeMapping.read(
@@ -1698,12 +1701,12 @@ class LocalProduct extends DataClass implements Insertable<LocalProduct> {
   final String? sku;
   final String? barcode;
   final String? itemType;
-  final double price;
+  final int price;
   final bool isActive;
   final bool isDeleted;
   final String payloadJson;
   final int? stock;
-  final double cost;
+  final int cost;
   final double taxRate;
   final bool trackStock;
   final String? imagePath;
@@ -1757,14 +1760,14 @@ class LocalProduct extends DataClass implements Insertable<LocalProduct> {
     if (!nullToAbsent || itemType != null) {
       map['item_type'] = Variable<String>(itemType);
     }
-    map['price'] = Variable<double>(price);
+    map['price'] = Variable<int>(price);
     map['is_active'] = Variable<bool>(isActive);
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['payload_json'] = Variable<String>(payloadJson);
     if (!nullToAbsent || stock != null) {
       map['stock'] = Variable<int>(stock);
     }
-    map['cost'] = Variable<double>(cost);
+    map['cost'] = Variable<int>(cost);
     map['tax_rate'] = Variable<double>(taxRate);
     map['track_stock'] = Variable<bool>(trackStock);
     if (!nullToAbsent || imagePath != null) {
@@ -1839,12 +1842,12 @@ class LocalProduct extends DataClass implements Insertable<LocalProduct> {
       sku: serializer.fromJson<String?>(json['sku']),
       barcode: serializer.fromJson<String?>(json['barcode']),
       itemType: serializer.fromJson<String?>(json['itemType']),
-      price: serializer.fromJson<double>(json['price']),
+      price: serializer.fromJson<int>(json['price']),
       isActive: serializer.fromJson<bool>(json['isActive']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       payloadJson: serializer.fromJson<String>(json['payloadJson']),
       stock: serializer.fromJson<int?>(json['stock']),
-      cost: serializer.fromJson<double>(json['cost']),
+      cost: serializer.fromJson<int>(json['cost']),
       taxRate: serializer.fromJson<double>(json['taxRate']),
       trackStock: serializer.fromJson<bool>(json['trackStock']),
       imagePath: serializer.fromJson<String?>(json['imagePath']),
@@ -1866,12 +1869,12 @@ class LocalProduct extends DataClass implements Insertable<LocalProduct> {
       'sku': serializer.toJson<String?>(sku),
       'barcode': serializer.toJson<String?>(barcode),
       'itemType': serializer.toJson<String?>(itemType),
-      'price': serializer.toJson<double>(price),
+      'price': serializer.toJson<int>(price),
       'isActive': serializer.toJson<bool>(isActive),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'payloadJson': serializer.toJson<String>(payloadJson),
       'stock': serializer.toJson<int?>(stock),
-      'cost': serializer.toJson<double>(cost),
+      'cost': serializer.toJson<int>(cost),
       'taxRate': serializer.toJson<double>(taxRate),
       'trackStock': serializer.toJson<bool>(trackStock),
       'imagePath': serializer.toJson<String?>(imagePath),
@@ -1891,12 +1894,12 @@ class LocalProduct extends DataClass implements Insertable<LocalProduct> {
     Value<String?> sku = const Value.absent(),
     Value<String?> barcode = const Value.absent(),
     Value<String?> itemType = const Value.absent(),
-    double? price,
+    int? price,
     bool? isActive,
     bool? isDeleted,
     String? payloadJson,
     Value<int?> stock = const Value.absent(),
-    double? cost,
+    int? cost,
     double? taxRate,
     bool? trackStock,
     Value<String?> imagePath = const Value.absent(),
@@ -2059,12 +2062,12 @@ class LocalProductsCompanion extends UpdateCompanion<LocalProduct> {
   final Value<String?> sku;
   final Value<String?> barcode;
   final Value<String?> itemType;
-  final Value<double> price;
+  final Value<int> price;
   final Value<bool> isActive;
   final Value<bool> isDeleted;
   final Value<String> payloadJson;
   final Value<int?> stock;
-  final Value<double> cost;
+  final Value<int> cost;
   final Value<double> taxRate;
   final Value<bool> trackStock;
   final Value<String?> imagePath;
@@ -2133,12 +2136,12 @@ class LocalProductsCompanion extends UpdateCompanion<LocalProduct> {
     Expression<String>? sku,
     Expression<String>? barcode,
     Expression<String>? itemType,
-    Expression<double>? price,
+    Expression<int>? price,
     Expression<bool>? isActive,
     Expression<bool>? isDeleted,
     Expression<String>? payloadJson,
     Expression<int>? stock,
-    Expression<double>? cost,
+    Expression<int>? cost,
     Expression<double>? taxRate,
     Expression<bool>? trackStock,
     Expression<String>? imagePath,
@@ -2183,12 +2186,12 @@ class LocalProductsCompanion extends UpdateCompanion<LocalProduct> {
     Value<String?>? sku,
     Value<String?>? barcode,
     Value<String?>? itemType,
-    Value<double>? price,
+    Value<int>? price,
     Value<bool>? isActive,
     Value<bool>? isDeleted,
     Value<String>? payloadJson,
     Value<int?>? stock,
-    Value<double>? cost,
+    Value<int>? cost,
     Value<double>? taxRate,
     Value<bool>? trackStock,
     Value<String?>? imagePath,
@@ -2254,7 +2257,7 @@ class LocalProductsCompanion extends UpdateCompanion<LocalProduct> {
       map['item_type'] = Variable<String>(itemType.value);
     }
     if (price.present) {
-      map['price'] = Variable<double>(price.value);
+      map['price'] = Variable<int>(price.value);
     }
     if (isActive.present) {
       map['is_active'] = Variable<bool>(isActive.value);
@@ -2269,7 +2272,7 @@ class LocalProductsCompanion extends UpdateCompanion<LocalProduct> {
       map['stock'] = Variable<int>(stock.value);
     }
     if (cost.present) {
-      map['cost'] = Variable<double>(cost.value);
+      map['cost'] = Variable<int>(cost.value);
     }
     if (taxRate.present) {
       map['tax_rate'] = Variable<double>(taxRate.value);
@@ -3727,6 +3730,1362 @@ class LocalCustomersCompanion extends UpdateCompanion<LocalCustomer> {
   }
 }
 
+class $LocalUsersTable extends LocalUsers
+    with TableInfo<$LocalUsersTable, LocalUser> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LocalUsersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _localIdMeta = const VerificationMeta(
+    'localId',
+  );
+  @override
+  late final GeneratedColumn<String> localId = GeneratedColumn<String>(
+    'local_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
+    'workspaceId',
+  );
+  @override
+  late final GeneratedColumn<int> workspaceId = GeneratedColumn<int>(
+    'workspace_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _usernameMeta = const VerificationMeta(
+    'username',
+  );
+  @override
+  late final GeneratedColumn<String> username = GeneratedColumn<String>(
+    'username',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pinSaltMeta = const VerificationMeta(
+    'pinSalt',
+  );
+  @override
+  late final GeneratedColumn<String> pinSalt = GeneratedColumn<String>(
+    'pin_salt',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pinHashMeta = const VerificationMeta(
+    'pinHash',
+  );
+  @override
+  late final GeneratedColumn<String> pinHash = GeneratedColumn<String>(
+    'pin_hash',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _roleMeta = const VerificationMeta('role');
+  @override
+  late final GeneratedColumn<String> role = GeneratedColumn<String>(
+    'role',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('cashier'),
+  );
+  static const VerificationMeta _isActiveMeta = const VerificationMeta(
+    'isActive',
+  );
+  @override
+  late final GeneratedColumn<bool> isActive = GeneratedColumn<bool>(
+    'is_active',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_active" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    localId,
+    workspaceId,
+    name,
+    username,
+    pinSalt,
+    pinHash,
+    role,
+    isActive,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'local_users';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LocalUser> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('local_id')) {
+      context.handle(
+        _localIdMeta,
+        localId.isAcceptableOrUnknown(data['local_id']!, _localIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_localIdMeta);
+    }
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+        _workspaceIdMeta,
+        workspaceId.isAcceptableOrUnknown(
+          data['workspace_id']!,
+          _workspaceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_workspaceIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('username')) {
+      context.handle(
+        _usernameMeta,
+        username.isAcceptableOrUnknown(data['username']!, _usernameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_usernameMeta);
+    }
+    if (data.containsKey('pin_salt')) {
+      context.handle(
+        _pinSaltMeta,
+        pinSalt.isAcceptableOrUnknown(data['pin_salt']!, _pinSaltMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pinSaltMeta);
+    }
+    if (data.containsKey('pin_hash')) {
+      context.handle(
+        _pinHashMeta,
+        pinHash.isAcceptableOrUnknown(data['pin_hash']!, _pinHashMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_pinHashMeta);
+    }
+    if (data.containsKey('role')) {
+      context.handle(
+        _roleMeta,
+        role.isAcceptableOrUnknown(data['role']!, _roleMeta),
+      );
+    }
+    if (data.containsKey('is_active')) {
+      context.handle(
+        _isActiveMeta,
+        isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {localId};
+  @override
+  LocalUser map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LocalUser(
+      localId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_id'],
+      )!,
+      workspaceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}workspace_id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      username: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}username'],
+      )!,
+      pinSalt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pin_salt'],
+      )!,
+      pinHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pin_hash'],
+      )!,
+      role: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}role'],
+      )!,
+      isActive: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_active'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $LocalUsersTable createAlias(String alias) {
+    return $LocalUsersTable(attachedDatabase, alias);
+  }
+}
+
+class LocalUser extends DataClass implements Insertable<LocalUser> {
+  final String localId;
+  final int workspaceId;
+  final String name;
+  final String username;
+  final String pinSalt;
+  final String pinHash;
+  final String role;
+  final bool isActive;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const LocalUser({
+    required this.localId,
+    required this.workspaceId,
+    required this.name,
+    required this.username,
+    required this.pinSalt,
+    required this.pinHash,
+    required this.role,
+    required this.isActive,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['local_id'] = Variable<String>(localId);
+    map['workspace_id'] = Variable<int>(workspaceId);
+    map['name'] = Variable<String>(name);
+    map['username'] = Variable<String>(username);
+    map['pin_salt'] = Variable<String>(pinSalt);
+    map['pin_hash'] = Variable<String>(pinHash);
+    map['role'] = Variable<String>(role);
+    map['is_active'] = Variable<bool>(isActive);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  LocalUsersCompanion toCompanion(bool nullToAbsent) {
+    return LocalUsersCompanion(
+      localId: Value(localId),
+      workspaceId: Value(workspaceId),
+      name: Value(name),
+      username: Value(username),
+      pinSalt: Value(pinSalt),
+      pinHash: Value(pinHash),
+      role: Value(role),
+      isActive: Value(isActive),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory LocalUser.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LocalUser(
+      localId: serializer.fromJson<String>(json['localId']),
+      workspaceId: serializer.fromJson<int>(json['workspaceId']),
+      name: serializer.fromJson<String>(json['name']),
+      username: serializer.fromJson<String>(json['username']),
+      pinSalt: serializer.fromJson<String>(json['pinSalt']),
+      pinHash: serializer.fromJson<String>(json['pinHash']),
+      role: serializer.fromJson<String>(json['role']),
+      isActive: serializer.fromJson<bool>(json['isActive']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'localId': serializer.toJson<String>(localId),
+      'workspaceId': serializer.toJson<int>(workspaceId),
+      'name': serializer.toJson<String>(name),
+      'username': serializer.toJson<String>(username),
+      'pinSalt': serializer.toJson<String>(pinSalt),
+      'pinHash': serializer.toJson<String>(pinHash),
+      'role': serializer.toJson<String>(role),
+      'isActive': serializer.toJson<bool>(isActive),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  LocalUser copyWith({
+    String? localId,
+    int? workspaceId,
+    String? name,
+    String? username,
+    String? pinSalt,
+    String? pinHash,
+    String? role,
+    bool? isActive,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => LocalUser(
+    localId: localId ?? this.localId,
+    workspaceId: workspaceId ?? this.workspaceId,
+    name: name ?? this.name,
+    username: username ?? this.username,
+    pinSalt: pinSalt ?? this.pinSalt,
+    pinHash: pinHash ?? this.pinHash,
+    role: role ?? this.role,
+    isActive: isActive ?? this.isActive,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  LocalUser copyWithCompanion(LocalUsersCompanion data) {
+    return LocalUser(
+      localId: data.localId.present ? data.localId.value : this.localId,
+      workspaceId: data.workspaceId.present
+          ? data.workspaceId.value
+          : this.workspaceId,
+      name: data.name.present ? data.name.value : this.name,
+      username: data.username.present ? data.username.value : this.username,
+      pinSalt: data.pinSalt.present ? data.pinSalt.value : this.pinSalt,
+      pinHash: data.pinHash.present ? data.pinHash.value : this.pinHash,
+      role: data.role.present ? data.role.value : this.role,
+      isActive: data.isActive.present ? data.isActive.value : this.isActive,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalUser(')
+          ..write('localId: $localId, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('name: $name, ')
+          ..write('username: $username, ')
+          ..write('pinSalt: $pinSalt, ')
+          ..write('pinHash: $pinHash, ')
+          ..write('role: $role, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    localId,
+    workspaceId,
+    name,
+    username,
+    pinSalt,
+    pinHash,
+    role,
+    isActive,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LocalUser &&
+          other.localId == this.localId &&
+          other.workspaceId == this.workspaceId &&
+          other.name == this.name &&
+          other.username == this.username &&
+          other.pinSalt == this.pinSalt &&
+          other.pinHash == this.pinHash &&
+          other.role == this.role &&
+          other.isActive == this.isActive &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class LocalUsersCompanion extends UpdateCompanion<LocalUser> {
+  final Value<String> localId;
+  final Value<int> workspaceId;
+  final Value<String> name;
+  final Value<String> username;
+  final Value<String> pinSalt;
+  final Value<String> pinHash;
+  final Value<String> role;
+  final Value<bool> isActive;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const LocalUsersCompanion({
+    this.localId = const Value.absent(),
+    this.workspaceId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.username = const Value.absent(),
+    this.pinSalt = const Value.absent(),
+    this.pinHash = const Value.absent(),
+    this.role = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LocalUsersCompanion.insert({
+    required String localId,
+    required int workspaceId,
+    required String name,
+    required String username,
+    required String pinSalt,
+    required String pinHash,
+    this.role = const Value.absent(),
+    this.isActive = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : localId = Value(localId),
+       workspaceId = Value(workspaceId),
+       name = Value(name),
+       username = Value(username),
+       pinSalt = Value(pinSalt),
+       pinHash = Value(pinHash),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<LocalUser> custom({
+    Expression<String>? localId,
+    Expression<int>? workspaceId,
+    Expression<String>? name,
+    Expression<String>? username,
+    Expression<String>? pinSalt,
+    Expression<String>? pinHash,
+    Expression<String>? role,
+    Expression<bool>? isActive,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (localId != null) 'local_id': localId,
+      if (workspaceId != null) 'workspace_id': workspaceId,
+      if (name != null) 'name': name,
+      if (username != null) 'username': username,
+      if (pinSalt != null) 'pin_salt': pinSalt,
+      if (pinHash != null) 'pin_hash': pinHash,
+      if (role != null) 'role': role,
+      if (isActive != null) 'is_active': isActive,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LocalUsersCompanion copyWith({
+    Value<String>? localId,
+    Value<int>? workspaceId,
+    Value<String>? name,
+    Value<String>? username,
+    Value<String>? pinSalt,
+    Value<String>? pinHash,
+    Value<String>? role,
+    Value<bool>? isActive,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return LocalUsersCompanion(
+      localId: localId ?? this.localId,
+      workspaceId: workspaceId ?? this.workspaceId,
+      name: name ?? this.name,
+      username: username ?? this.username,
+      pinSalt: pinSalt ?? this.pinSalt,
+      pinHash: pinHash ?? this.pinHash,
+      role: role ?? this.role,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (localId.present) {
+      map['local_id'] = Variable<String>(localId.value);
+    }
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<int>(workspaceId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (username.present) {
+      map['username'] = Variable<String>(username.value);
+    }
+    if (pinSalt.present) {
+      map['pin_salt'] = Variable<String>(pinSalt.value);
+    }
+    if (pinHash.present) {
+      map['pin_hash'] = Variable<String>(pinHash.value);
+    }
+    if (role.present) {
+      map['role'] = Variable<String>(role.value);
+    }
+    if (isActive.present) {
+      map['is_active'] = Variable<bool>(isActive.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalUsersCompanion(')
+          ..write('localId: $localId, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('name: $name, ')
+          ..write('username: $username, ')
+          ..write('pinSalt: $pinSalt, ')
+          ..write('pinHash: $pinHash, ')
+          ..write('role: $role, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $LocalSessionsTable extends LocalSessions
+    with TableInfo<$LocalSessionsTable, LocalSession> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LocalSessionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _localIdMeta = const VerificationMeta(
+    'localId',
+  );
+  @override
+  late final GeneratedColumn<String> localId = GeneratedColumn<String>(
+    'local_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
+    'workspaceId',
+  );
+  @override
+  late final GeneratedColumn<int> workspaceId = GeneratedColumn<int>(
+    'workspace_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _tableLocalIdMeta = const VerificationMeta(
+    'tableLocalId',
+  );
+  @override
+  late final GeneratedColumn<String> tableLocalId = GeneratedColumn<String>(
+    'table_local_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_tables (local_id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('open'),
+  );
+  static const VerificationMeta _openedAtMeta = const VerificationMeta(
+    'openedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> openedAt = GeneratedColumn<DateTime>(
+    'opened_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _closedAtMeta = const VerificationMeta(
+    'closedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> closedAt = GeneratedColumn<DateTime>(
+    'closed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _openedByUserIdMeta = const VerificationMeta(
+    'openedByUserId',
+  );
+  @override
+  late final GeneratedColumn<String> openedByUserId = GeneratedColumn<String>(
+    'opened_by_user_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_users (local_id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _closedByUserIdMeta = const VerificationMeta(
+    'closedByUserId',
+  );
+  @override
+  late final GeneratedColumn<String> closedByUserId = GeneratedColumn<String>(
+    'closed_by_user_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_users (local_id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
+  @override
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _discountAmountMeta = const VerificationMeta(
+    'discountAmount',
+  );
+  @override
+  late final GeneratedColumn<int> discountAmount = GeneratedColumn<int>(
+    'discount_amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    localId,
+    workspaceId,
+    tableLocalId,
+    status,
+    openedAt,
+    closedAt,
+    openedByUserId,
+    closedByUserId,
+    notes,
+    discountAmount,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'local_sessions';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LocalSession> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('local_id')) {
+      context.handle(
+        _localIdMeta,
+        localId.isAcceptableOrUnknown(data['local_id']!, _localIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_localIdMeta);
+    }
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+        _workspaceIdMeta,
+        workspaceId.isAcceptableOrUnknown(
+          data['workspace_id']!,
+          _workspaceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_workspaceIdMeta);
+    }
+    if (data.containsKey('table_local_id')) {
+      context.handle(
+        _tableLocalIdMeta,
+        tableLocalId.isAcceptableOrUnknown(
+          data['table_local_id']!,
+          _tableLocalIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_tableLocalIdMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('opened_at')) {
+      context.handle(
+        _openedAtMeta,
+        openedAt.isAcceptableOrUnknown(data['opened_at']!, _openedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_openedAtMeta);
+    }
+    if (data.containsKey('closed_at')) {
+      context.handle(
+        _closedAtMeta,
+        closedAt.isAcceptableOrUnknown(data['closed_at']!, _closedAtMeta),
+      );
+    }
+    if (data.containsKey('opened_by_user_id')) {
+      context.handle(
+        _openedByUserIdMeta,
+        openedByUserId.isAcceptableOrUnknown(
+          data['opened_by_user_id']!,
+          _openedByUserIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('closed_by_user_id')) {
+      context.handle(
+        _closedByUserIdMeta,
+        closedByUserId.isAcceptableOrUnknown(
+          data['closed_by_user_id']!,
+          _closedByUserIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('notes')) {
+      context.handle(
+        _notesMeta,
+        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
+      );
+    }
+    if (data.containsKey('discount_amount')) {
+      context.handle(
+        _discountAmountMeta,
+        discountAmount.isAcceptableOrUnknown(
+          data['discount_amount']!,
+          _discountAmountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {localId};
+  @override
+  LocalSession map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LocalSession(
+      localId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_id'],
+      )!,
+      workspaceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}workspace_id'],
+      )!,
+      tableLocalId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}table_local_id'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      openedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}opened_at'],
+      )!,
+      closedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}closed_at'],
+      ),
+      openedByUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}opened_by_user_id'],
+      ),
+      closedByUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}closed_by_user_id'],
+      ),
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      ),
+      discountAmount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}discount_amount'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $LocalSessionsTable createAlias(String alias) {
+    return $LocalSessionsTable(attachedDatabase, alias);
+  }
+}
+
+class LocalSession extends DataClass implements Insertable<LocalSession> {
+  final String localId;
+  final int workspaceId;
+  final String tableLocalId;
+  final String status;
+  final DateTime openedAt;
+  final DateTime? closedAt;
+  final String? openedByUserId;
+  final String? closedByUserId;
+  final String? notes;
+  final int discountAmount;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const LocalSession({
+    required this.localId,
+    required this.workspaceId,
+    required this.tableLocalId,
+    required this.status,
+    required this.openedAt,
+    this.closedAt,
+    this.openedByUserId,
+    this.closedByUserId,
+    this.notes,
+    required this.discountAmount,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['local_id'] = Variable<String>(localId);
+    map['workspace_id'] = Variable<int>(workspaceId);
+    map['table_local_id'] = Variable<String>(tableLocalId);
+    map['status'] = Variable<String>(status);
+    map['opened_at'] = Variable<DateTime>(openedAt);
+    if (!nullToAbsent || closedAt != null) {
+      map['closed_at'] = Variable<DateTime>(closedAt);
+    }
+    if (!nullToAbsent || openedByUserId != null) {
+      map['opened_by_user_id'] = Variable<String>(openedByUserId);
+    }
+    if (!nullToAbsent || closedByUserId != null) {
+      map['closed_by_user_id'] = Variable<String>(closedByUserId);
+    }
+    if (!nullToAbsent || notes != null) {
+      map['notes'] = Variable<String>(notes);
+    }
+    map['discount_amount'] = Variable<int>(discountAmount);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  LocalSessionsCompanion toCompanion(bool nullToAbsent) {
+    return LocalSessionsCompanion(
+      localId: Value(localId),
+      workspaceId: Value(workspaceId),
+      tableLocalId: Value(tableLocalId),
+      status: Value(status),
+      openedAt: Value(openedAt),
+      closedAt: closedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closedAt),
+      openedByUserId: openedByUserId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(openedByUserId),
+      closedByUserId: closedByUserId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closedByUserId),
+      notes: notes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notes),
+      discountAmount: Value(discountAmount),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory LocalSession.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LocalSession(
+      localId: serializer.fromJson<String>(json['localId']),
+      workspaceId: serializer.fromJson<int>(json['workspaceId']),
+      tableLocalId: serializer.fromJson<String>(json['tableLocalId']),
+      status: serializer.fromJson<String>(json['status']),
+      openedAt: serializer.fromJson<DateTime>(json['openedAt']),
+      closedAt: serializer.fromJson<DateTime?>(json['closedAt']),
+      openedByUserId: serializer.fromJson<String?>(json['openedByUserId']),
+      closedByUserId: serializer.fromJson<String?>(json['closedByUserId']),
+      notes: serializer.fromJson<String?>(json['notes']),
+      discountAmount: serializer.fromJson<int>(json['discountAmount']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'localId': serializer.toJson<String>(localId),
+      'workspaceId': serializer.toJson<int>(workspaceId),
+      'tableLocalId': serializer.toJson<String>(tableLocalId),
+      'status': serializer.toJson<String>(status),
+      'openedAt': serializer.toJson<DateTime>(openedAt),
+      'closedAt': serializer.toJson<DateTime?>(closedAt),
+      'openedByUserId': serializer.toJson<String?>(openedByUserId),
+      'closedByUserId': serializer.toJson<String?>(closedByUserId),
+      'notes': serializer.toJson<String?>(notes),
+      'discountAmount': serializer.toJson<int>(discountAmount),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  LocalSession copyWith({
+    String? localId,
+    int? workspaceId,
+    String? tableLocalId,
+    String? status,
+    DateTime? openedAt,
+    Value<DateTime?> closedAt = const Value.absent(),
+    Value<String?> openedByUserId = const Value.absent(),
+    Value<String?> closedByUserId = const Value.absent(),
+    Value<String?> notes = const Value.absent(),
+    int? discountAmount,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => LocalSession(
+    localId: localId ?? this.localId,
+    workspaceId: workspaceId ?? this.workspaceId,
+    tableLocalId: tableLocalId ?? this.tableLocalId,
+    status: status ?? this.status,
+    openedAt: openedAt ?? this.openedAt,
+    closedAt: closedAt.present ? closedAt.value : this.closedAt,
+    openedByUserId: openedByUserId.present
+        ? openedByUserId.value
+        : this.openedByUserId,
+    closedByUserId: closedByUserId.present
+        ? closedByUserId.value
+        : this.closedByUserId,
+    notes: notes.present ? notes.value : this.notes,
+    discountAmount: discountAmount ?? this.discountAmount,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  LocalSession copyWithCompanion(LocalSessionsCompanion data) {
+    return LocalSession(
+      localId: data.localId.present ? data.localId.value : this.localId,
+      workspaceId: data.workspaceId.present
+          ? data.workspaceId.value
+          : this.workspaceId,
+      tableLocalId: data.tableLocalId.present
+          ? data.tableLocalId.value
+          : this.tableLocalId,
+      status: data.status.present ? data.status.value : this.status,
+      openedAt: data.openedAt.present ? data.openedAt.value : this.openedAt,
+      closedAt: data.closedAt.present ? data.closedAt.value : this.closedAt,
+      openedByUserId: data.openedByUserId.present
+          ? data.openedByUserId.value
+          : this.openedByUserId,
+      closedByUserId: data.closedByUserId.present
+          ? data.closedByUserId.value
+          : this.closedByUserId,
+      notes: data.notes.present ? data.notes.value : this.notes,
+      discountAmount: data.discountAmount.present
+          ? data.discountAmount.value
+          : this.discountAmount,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalSession(')
+          ..write('localId: $localId, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('tableLocalId: $tableLocalId, ')
+          ..write('status: $status, ')
+          ..write('openedAt: $openedAt, ')
+          ..write('closedAt: $closedAt, ')
+          ..write('openedByUserId: $openedByUserId, ')
+          ..write('closedByUserId: $closedByUserId, ')
+          ..write('notes: $notes, ')
+          ..write('discountAmount: $discountAmount, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    localId,
+    workspaceId,
+    tableLocalId,
+    status,
+    openedAt,
+    closedAt,
+    openedByUserId,
+    closedByUserId,
+    notes,
+    discountAmount,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LocalSession &&
+          other.localId == this.localId &&
+          other.workspaceId == this.workspaceId &&
+          other.tableLocalId == this.tableLocalId &&
+          other.status == this.status &&
+          other.openedAt == this.openedAt &&
+          other.closedAt == this.closedAt &&
+          other.openedByUserId == this.openedByUserId &&
+          other.closedByUserId == this.closedByUserId &&
+          other.notes == this.notes &&
+          other.discountAmount == this.discountAmount &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class LocalSessionsCompanion extends UpdateCompanion<LocalSession> {
+  final Value<String> localId;
+  final Value<int> workspaceId;
+  final Value<String> tableLocalId;
+  final Value<String> status;
+  final Value<DateTime> openedAt;
+  final Value<DateTime?> closedAt;
+  final Value<String?> openedByUserId;
+  final Value<String?> closedByUserId;
+  final Value<String?> notes;
+  final Value<int> discountAmount;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const LocalSessionsCompanion({
+    this.localId = const Value.absent(),
+    this.workspaceId = const Value.absent(),
+    this.tableLocalId = const Value.absent(),
+    this.status = const Value.absent(),
+    this.openedAt = const Value.absent(),
+    this.closedAt = const Value.absent(),
+    this.openedByUserId = const Value.absent(),
+    this.closedByUserId = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.discountAmount = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LocalSessionsCompanion.insert({
+    required String localId,
+    required int workspaceId,
+    required String tableLocalId,
+    this.status = const Value.absent(),
+    required DateTime openedAt,
+    this.closedAt = const Value.absent(),
+    this.openedByUserId = const Value.absent(),
+    this.closedByUserId = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.discountAmount = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : localId = Value(localId),
+       workspaceId = Value(workspaceId),
+       tableLocalId = Value(tableLocalId),
+       openedAt = Value(openedAt),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<LocalSession> custom({
+    Expression<String>? localId,
+    Expression<int>? workspaceId,
+    Expression<String>? tableLocalId,
+    Expression<String>? status,
+    Expression<DateTime>? openedAt,
+    Expression<DateTime>? closedAt,
+    Expression<String>? openedByUserId,
+    Expression<String>? closedByUserId,
+    Expression<String>? notes,
+    Expression<int>? discountAmount,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (localId != null) 'local_id': localId,
+      if (workspaceId != null) 'workspace_id': workspaceId,
+      if (tableLocalId != null) 'table_local_id': tableLocalId,
+      if (status != null) 'status': status,
+      if (openedAt != null) 'opened_at': openedAt,
+      if (closedAt != null) 'closed_at': closedAt,
+      if (openedByUserId != null) 'opened_by_user_id': openedByUserId,
+      if (closedByUserId != null) 'closed_by_user_id': closedByUserId,
+      if (notes != null) 'notes': notes,
+      if (discountAmount != null) 'discount_amount': discountAmount,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LocalSessionsCompanion copyWith({
+    Value<String>? localId,
+    Value<int>? workspaceId,
+    Value<String>? tableLocalId,
+    Value<String>? status,
+    Value<DateTime>? openedAt,
+    Value<DateTime?>? closedAt,
+    Value<String?>? openedByUserId,
+    Value<String?>? closedByUserId,
+    Value<String?>? notes,
+    Value<int>? discountAmount,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return LocalSessionsCompanion(
+      localId: localId ?? this.localId,
+      workspaceId: workspaceId ?? this.workspaceId,
+      tableLocalId: tableLocalId ?? this.tableLocalId,
+      status: status ?? this.status,
+      openedAt: openedAt ?? this.openedAt,
+      closedAt: closedAt ?? this.closedAt,
+      openedByUserId: openedByUserId ?? this.openedByUserId,
+      closedByUserId: closedByUserId ?? this.closedByUserId,
+      notes: notes ?? this.notes,
+      discountAmount: discountAmount ?? this.discountAmount,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (localId.present) {
+      map['local_id'] = Variable<String>(localId.value);
+    }
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<int>(workspaceId.value);
+    }
+    if (tableLocalId.present) {
+      map['table_local_id'] = Variable<String>(tableLocalId.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (openedAt.present) {
+      map['opened_at'] = Variable<DateTime>(openedAt.value);
+    }
+    if (closedAt.present) {
+      map['closed_at'] = Variable<DateTime>(closedAt.value);
+    }
+    if (openedByUserId.present) {
+      map['opened_by_user_id'] = Variable<String>(openedByUserId.value);
+    }
+    if (closedByUserId.present) {
+      map['closed_by_user_id'] = Variable<String>(closedByUserId.value);
+    }
+    if (notes.present) {
+      map['notes'] = Variable<String>(notes.value);
+    }
+    if (discountAmount.present) {
+      map['discount_amount'] = Variable<int>(discountAmount.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalSessionsCompanion(')
+          ..write('localId: $localId, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('tableLocalId: $tableLocalId, ')
+          ..write('status: $status, ')
+          ..write('openedAt: $openedAt, ')
+          ..write('closedAt: $closedAt, ')
+          ..write('openedByUserId: $openedByUserId, ')
+          ..write('closedByUserId: $closedByUserId, ')
+          ..write('notes: $notes, ')
+          ..write('discountAmount: $discountAmount, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $LocalOrdersTable extends LocalOrders
     with TableInfo<$LocalOrdersTable, LocalOrder> {
   @override
@@ -3831,6 +5190,9 @@ class $LocalOrdersTable extends LocalOrders
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_tables (local_id) ON DELETE SET NULL',
+    ),
   );
   static const VerificationMeta _sessionLocalIdMeta = const VerificationMeta(
     'sessionLocalId',
@@ -3842,6 +5204,9 @@ class $LocalOrdersTable extends LocalOrders
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_sessions (local_id) ON DELETE SET NULL',
+    ),
   );
   static const VerificationMeta _customerLocalIdMeta = const VerificationMeta(
     'customerLocalId',
@@ -3853,6 +5218,9 @@ class $LocalOrdersTable extends LocalOrders
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_customers (local_id) ON DELETE SET NULL',
+    ),
   );
   static const VerificationMeta _createdByUserIdMeta = const VerificationMeta(
     'createdByUserId',
@@ -3864,6 +5232,9 @@ class $LocalOrdersTable extends LocalOrders
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_users (local_id) ON DELETE SET NULL',
+    ),
   );
   static const VerificationMeta _notesMeta = const VerificationMeta('notes');
   @override
@@ -3878,11 +5249,11 @@ class $LocalOrdersTable extends LocalOrders
     'subtotal',
   );
   @override
-  late final GeneratedColumn<double> subtotal = GeneratedColumn<double>(
+  late final GeneratedColumn<int> subtotal = GeneratedColumn<int>(
     'subtotal',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
@@ -3890,11 +5261,11 @@ class $LocalOrdersTable extends LocalOrders
     'taxAmount',
   );
   @override
-  late final GeneratedColumn<double> taxAmount = GeneratedColumn<double>(
+  late final GeneratedColumn<int> taxAmount = GeneratedColumn<int>(
     'tax_amount',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
@@ -3902,11 +5273,11 @@ class $LocalOrdersTable extends LocalOrders
     'discountAmount',
   );
   @override
-  late final GeneratedColumn<double> discountAmount = GeneratedColumn<double>(
+  late final GeneratedColumn<int> discountAmount = GeneratedColumn<int>(
     'discount_amount',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
@@ -3926,11 +5297,11 @@ class $LocalOrdersTable extends LocalOrders
     'totalAmount',
   );
   @override
-  late final GeneratedColumn<double> totalAmount = GeneratedColumn<double>(
+  late final GeneratedColumn<int> totalAmount = GeneratedColumn<int>(
     'total_amount',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
@@ -4379,15 +5750,15 @@ class $LocalOrdersTable extends LocalOrders
         data['${effectivePrefix}notes'],
       ),
       subtotal: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}subtotal'],
       )!,
       taxAmount: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}tax_amount'],
       )!,
       discountAmount: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}discount_amount'],
       )!,
       discountPercent: attachedDatabase.typeMapping.read(
@@ -4395,7 +5766,7 @@ class $LocalOrdersTable extends LocalOrders
         data['${effectivePrefix}discount_percent'],
       )!,
       totalAmount: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}total_amount'],
       )!,
       posStatus: attachedDatabase.typeMapping.read(
@@ -4461,11 +5832,11 @@ class LocalOrder extends DataClass implements Insertable<LocalOrder> {
   final String? customerLocalId;
   final String? createdByUserId;
   final String? notes;
-  final double subtotal;
-  final double taxAmount;
-  final double discountAmount;
+  final int subtotal;
+  final int taxAmount;
+  final int discountAmount;
   final double discountPercent;
-  final double totalAmount;
+  final int totalAmount;
   final String posStatus;
   final String paymentStatus;
   final String fulfillmentStatus;
@@ -4538,11 +5909,11 @@ class LocalOrder extends DataClass implements Insertable<LocalOrder> {
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
     }
-    map['subtotal'] = Variable<double>(subtotal);
-    map['tax_amount'] = Variable<double>(taxAmount);
-    map['discount_amount'] = Variable<double>(discountAmount);
+    map['subtotal'] = Variable<int>(subtotal);
+    map['tax_amount'] = Variable<int>(taxAmount);
+    map['discount_amount'] = Variable<int>(discountAmount);
     map['discount_percent'] = Variable<double>(discountPercent);
-    map['total_amount'] = Variable<double>(totalAmount);
+    map['total_amount'] = Variable<int>(totalAmount);
     map['pos_status'] = Variable<String>(posStatus);
     map['payment_status'] = Variable<String>(paymentStatus);
     map['fulfillment_status'] = Variable<String>(fulfillmentStatus);
@@ -4636,11 +6007,11 @@ class LocalOrder extends DataClass implements Insertable<LocalOrder> {
       customerLocalId: serializer.fromJson<String?>(json['customerLocalId']),
       createdByUserId: serializer.fromJson<String?>(json['createdByUserId']),
       notes: serializer.fromJson<String?>(json['notes']),
-      subtotal: serializer.fromJson<double>(json['subtotal']),
-      taxAmount: serializer.fromJson<double>(json['taxAmount']),
-      discountAmount: serializer.fromJson<double>(json['discountAmount']),
+      subtotal: serializer.fromJson<int>(json['subtotal']),
+      taxAmount: serializer.fromJson<int>(json['taxAmount']),
+      discountAmount: serializer.fromJson<int>(json['discountAmount']),
       discountPercent: serializer.fromJson<double>(json['discountPercent']),
-      totalAmount: serializer.fromJson<double>(json['totalAmount']),
+      totalAmount: serializer.fromJson<int>(json['totalAmount']),
       posStatus: serializer.fromJson<String>(json['posStatus']),
       paymentStatus: serializer.fromJson<String>(json['paymentStatus']),
       fulfillmentStatus: serializer.fromJson<String>(json['fulfillmentStatus']),
@@ -4670,11 +6041,11 @@ class LocalOrder extends DataClass implements Insertable<LocalOrder> {
       'customerLocalId': serializer.toJson<String?>(customerLocalId),
       'createdByUserId': serializer.toJson<String?>(createdByUserId),
       'notes': serializer.toJson<String?>(notes),
-      'subtotal': serializer.toJson<double>(subtotal),
-      'taxAmount': serializer.toJson<double>(taxAmount),
-      'discountAmount': serializer.toJson<double>(discountAmount),
+      'subtotal': serializer.toJson<int>(subtotal),
+      'taxAmount': serializer.toJson<int>(taxAmount),
+      'discountAmount': serializer.toJson<int>(discountAmount),
       'discountPercent': serializer.toJson<double>(discountPercent),
-      'totalAmount': serializer.toJson<double>(totalAmount),
+      'totalAmount': serializer.toJson<int>(totalAmount),
       'posStatus': serializer.toJson<String>(posStatus),
       'paymentStatus': serializer.toJson<String>(paymentStatus),
       'fulfillmentStatus': serializer.toJson<String>(fulfillmentStatus),
@@ -4702,11 +6073,11 @@ class LocalOrder extends DataClass implements Insertable<LocalOrder> {
     Value<String?> customerLocalId = const Value.absent(),
     Value<String?> createdByUserId = const Value.absent(),
     Value<String?> notes = const Value.absent(),
-    double? subtotal,
-    double? taxAmount,
-    double? discountAmount,
+    int? subtotal,
+    int? taxAmount,
+    int? discountAmount,
     double? discountPercent,
-    double? totalAmount,
+    int? totalAmount,
     String? posStatus,
     String? paymentStatus,
     String? fulfillmentStatus,
@@ -4934,11 +6305,11 @@ class LocalOrdersCompanion extends UpdateCompanion<LocalOrder> {
   final Value<String?> customerLocalId;
   final Value<String?> createdByUserId;
   final Value<String?> notes;
-  final Value<double> subtotal;
-  final Value<double> taxAmount;
-  final Value<double> discountAmount;
+  final Value<int> subtotal;
+  final Value<int> taxAmount;
+  final Value<int> discountAmount;
   final Value<double> discountPercent;
-  final Value<double> totalAmount;
+  final Value<int> totalAmount;
   final Value<String> posStatus;
   final Value<String> paymentStatus;
   final Value<String> fulfillmentStatus;
@@ -5032,11 +6403,11 @@ class LocalOrdersCompanion extends UpdateCompanion<LocalOrder> {
     Expression<String>? customerLocalId,
     Expression<String>? createdByUserId,
     Expression<String>? notes,
-    Expression<double>? subtotal,
-    Expression<double>? taxAmount,
-    Expression<double>? discountAmount,
+    Expression<int>? subtotal,
+    Expression<int>? taxAmount,
+    Expression<int>? discountAmount,
     Expression<double>? discountPercent,
-    Expression<double>? totalAmount,
+    Expression<int>? totalAmount,
     Expression<String>? posStatus,
     Expression<String>? paymentStatus,
     Expression<String>? fulfillmentStatus,
@@ -5096,11 +6467,11 @@ class LocalOrdersCompanion extends UpdateCompanion<LocalOrder> {
     Value<String?>? customerLocalId,
     Value<String?>? createdByUserId,
     Value<String?>? notes,
-    Value<double>? subtotal,
-    Value<double>? taxAmount,
-    Value<double>? discountAmount,
+    Value<int>? subtotal,
+    Value<int>? taxAmount,
+    Value<int>? discountAmount,
     Value<double>? discountPercent,
-    Value<double>? totalAmount,
+    Value<int>? totalAmount,
     Value<String>? posStatus,
     Value<String>? paymentStatus,
     Value<String>? fulfillmentStatus,
@@ -5189,19 +6560,19 @@ class LocalOrdersCompanion extends UpdateCompanion<LocalOrder> {
       map['notes'] = Variable<String>(notes.value);
     }
     if (subtotal.present) {
-      map['subtotal'] = Variable<double>(subtotal.value);
+      map['subtotal'] = Variable<int>(subtotal.value);
     }
     if (taxAmount.present) {
-      map['tax_amount'] = Variable<double>(taxAmount.value);
+      map['tax_amount'] = Variable<int>(taxAmount.value);
     }
     if (discountAmount.present) {
-      map['discount_amount'] = Variable<double>(discountAmount.value);
+      map['discount_amount'] = Variable<int>(discountAmount.value);
     }
     if (discountPercent.present) {
       map['discount_percent'] = Variable<double>(discountPercent.value);
     }
     if (totalAmount.present) {
-      map['total_amount'] = Variable<double>(totalAmount.value);
+      map['total_amount'] = Variable<int>(totalAmount.value);
     }
     if (posStatus.present) {
       map['pos_status'] = Variable<String>(posStatus.value);
@@ -5314,6 +6685,9 @@ class $LocalOrderItemsTable extends LocalOrderItems
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_orders (local_id) ON DELETE CASCADE',
+    ),
   );
   static const VerificationMeta _serverIdMeta = const VerificationMeta(
     'serverId',
@@ -5347,6 +6721,9 @@ class $LocalOrderItemsTable extends LocalOrderItems
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_products (local_id) ON DELETE SET NULL',
+    ),
   );
   static const VerificationMeta _nameMeta = const VerificationMeta('name');
   @override
@@ -5394,22 +6771,22 @@ class $LocalOrderItemsTable extends LocalOrderItems
     'unitPrice',
   );
   @override
-  late final GeneratedColumn<double> unitPrice = GeneratedColumn<double>(
+  late final GeneratedColumn<int> unitPrice = GeneratedColumn<int>(
     'unit_price',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _costSnapshotMeta = const VerificationMeta(
     'costSnapshot',
   );
   @override
-  late final GeneratedColumn<double> costSnapshot = GeneratedColumn<double>(
+  late final GeneratedColumn<int> costSnapshot = GeneratedColumn<int>(
     'cost_snapshot',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
@@ -5417,11 +6794,11 @@ class $LocalOrderItemsTable extends LocalOrderItems
     'discountAmount',
   );
   @override
-  late final GeneratedColumn<double> discountAmount = GeneratedColumn<double>(
+  late final GeneratedColumn<int> discountAmount = GeneratedColumn<int>(
     'discount_amount',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
@@ -5441,11 +6818,11 @@ class $LocalOrderItemsTable extends LocalOrderItems
     'taxAmount',
   );
   @override
-  late final GeneratedColumn<double> taxAmount = GeneratedColumn<double>(
+  late final GeneratedColumn<int> taxAmount = GeneratedColumn<int>(
     'tax_amount',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
@@ -5453,11 +6830,11 @@ class $LocalOrderItemsTable extends LocalOrderItems
     'totalAmount',
   );
   @override
-  late final GeneratedColumn<double> totalAmount = GeneratedColumn<double>(
+  late final GeneratedColumn<int> totalAmount = GeneratedColumn<int>(
     'total_amount',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _notesMeta = const VerificationMeta('notes');
@@ -5754,15 +7131,15 @@ class $LocalOrderItemsTable extends LocalOrderItems
         data['${effectivePrefix}quantity'],
       )!,
       unitPrice: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}unit_price'],
       )!,
       costSnapshot: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}cost_snapshot'],
       )!,
       discountAmount: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}discount_amount'],
       )!,
       taxRate: attachedDatabase.typeMapping.read(
@@ -5770,11 +7147,11 @@ class $LocalOrderItemsTable extends LocalOrderItems
         data['${effectivePrefix}tax_rate'],
       )!,
       taxAmount: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}tax_amount'],
       )!,
       totalAmount: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}total_amount'],
       )!,
       notes: attachedDatabase.typeMapping.read(
@@ -5813,12 +7190,12 @@ class LocalOrderItem extends DataClass implements Insertable<LocalOrderItem> {
   final String? skuSnapshot;
   final String? barcodeSnapshot;
   final int quantity;
-  final double unitPrice;
-  final double costSnapshot;
-  final double discountAmount;
+  final int unitPrice;
+  final int costSnapshot;
+  final int discountAmount;
   final double taxRate;
-  final double taxAmount;
-  final double totalAmount;
+  final int taxAmount;
+  final int totalAmount;
   final String? notes;
   final bool isRemoved;
   final DateTime? createdAt;
@@ -5868,12 +7245,12 @@ class LocalOrderItem extends DataClass implements Insertable<LocalOrderItem> {
       map['barcode_snapshot'] = Variable<String>(barcodeSnapshot);
     }
     map['quantity'] = Variable<int>(quantity);
-    map['unit_price'] = Variable<double>(unitPrice);
-    map['cost_snapshot'] = Variable<double>(costSnapshot);
-    map['discount_amount'] = Variable<double>(discountAmount);
+    map['unit_price'] = Variable<int>(unitPrice);
+    map['cost_snapshot'] = Variable<int>(costSnapshot);
+    map['discount_amount'] = Variable<int>(discountAmount);
     map['tax_rate'] = Variable<double>(taxRate);
-    map['tax_amount'] = Variable<double>(taxAmount);
-    map['total_amount'] = Variable<double>(totalAmount);
+    map['tax_amount'] = Variable<int>(taxAmount);
+    map['total_amount'] = Variable<int>(totalAmount);
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
     }
@@ -5940,12 +7317,12 @@ class LocalOrderItem extends DataClass implements Insertable<LocalOrderItem> {
       skuSnapshot: serializer.fromJson<String?>(json['skuSnapshot']),
       barcodeSnapshot: serializer.fromJson<String?>(json['barcodeSnapshot']),
       quantity: serializer.fromJson<int>(json['quantity']),
-      unitPrice: serializer.fromJson<double>(json['unitPrice']),
-      costSnapshot: serializer.fromJson<double>(json['costSnapshot']),
-      discountAmount: serializer.fromJson<double>(json['discountAmount']),
+      unitPrice: serializer.fromJson<int>(json['unitPrice']),
+      costSnapshot: serializer.fromJson<int>(json['costSnapshot']),
+      discountAmount: serializer.fromJson<int>(json['discountAmount']),
       taxRate: serializer.fromJson<double>(json['taxRate']),
-      taxAmount: serializer.fromJson<double>(json['taxAmount']),
-      totalAmount: serializer.fromJson<double>(json['totalAmount']),
+      taxAmount: serializer.fromJson<int>(json['taxAmount']),
+      totalAmount: serializer.fromJson<int>(json['totalAmount']),
       notes: serializer.fromJson<String?>(json['notes']),
       isRemoved: serializer.fromJson<bool>(json['isRemoved']),
       createdAt: serializer.fromJson<DateTime?>(json['createdAt']),
@@ -5966,12 +7343,12 @@ class LocalOrderItem extends DataClass implements Insertable<LocalOrderItem> {
       'skuSnapshot': serializer.toJson<String?>(skuSnapshot),
       'barcodeSnapshot': serializer.toJson<String?>(barcodeSnapshot),
       'quantity': serializer.toJson<int>(quantity),
-      'unitPrice': serializer.toJson<double>(unitPrice),
-      'costSnapshot': serializer.toJson<double>(costSnapshot),
-      'discountAmount': serializer.toJson<double>(discountAmount),
+      'unitPrice': serializer.toJson<int>(unitPrice),
+      'costSnapshot': serializer.toJson<int>(costSnapshot),
+      'discountAmount': serializer.toJson<int>(discountAmount),
       'taxRate': serializer.toJson<double>(taxRate),
-      'taxAmount': serializer.toJson<double>(taxAmount),
-      'totalAmount': serializer.toJson<double>(totalAmount),
+      'taxAmount': serializer.toJson<int>(taxAmount),
+      'totalAmount': serializer.toJson<int>(totalAmount),
       'notes': serializer.toJson<String?>(notes),
       'isRemoved': serializer.toJson<bool>(isRemoved),
       'createdAt': serializer.toJson<DateTime?>(createdAt),
@@ -5990,12 +7367,12 @@ class LocalOrderItem extends DataClass implements Insertable<LocalOrderItem> {
     Value<String?> skuSnapshot = const Value.absent(),
     Value<String?> barcodeSnapshot = const Value.absent(),
     int? quantity,
-    double? unitPrice,
-    double? costSnapshot,
-    double? discountAmount,
+    int? unitPrice,
+    int? costSnapshot,
+    int? discountAmount,
     double? taxRate,
-    double? taxAmount,
-    double? totalAmount,
+    int? taxAmount,
+    int? totalAmount,
     Value<String?> notes = const Value.absent(),
     bool? isRemoved,
     Value<DateTime?> createdAt = const Value.absent(),
@@ -6158,12 +7535,12 @@ class LocalOrderItemsCompanion extends UpdateCompanion<LocalOrderItem> {
   final Value<String?> skuSnapshot;
   final Value<String?> barcodeSnapshot;
   final Value<int> quantity;
-  final Value<double> unitPrice;
-  final Value<double> costSnapshot;
-  final Value<double> discountAmount;
+  final Value<int> unitPrice;
+  final Value<int> costSnapshot;
+  final Value<int> discountAmount;
   final Value<double> taxRate;
-  final Value<double> taxAmount;
-  final Value<double> totalAmount;
+  final Value<int> taxAmount;
+  final Value<int> totalAmount;
   final Value<String?> notes;
   final Value<bool> isRemoved;
   final Value<DateTime?> createdAt;
@@ -6203,12 +7580,12 @@ class LocalOrderItemsCompanion extends UpdateCompanion<LocalOrderItem> {
     this.skuSnapshot = const Value.absent(),
     this.barcodeSnapshot = const Value.absent(),
     required int quantity,
-    required double unitPrice,
+    required int unitPrice,
     this.costSnapshot = const Value.absent(),
     this.discountAmount = const Value.absent(),
     this.taxRate = const Value.absent(),
     this.taxAmount = const Value.absent(),
-    required double totalAmount,
+    required int totalAmount,
     this.notes = const Value.absent(),
     this.isRemoved = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -6233,12 +7610,12 @@ class LocalOrderItemsCompanion extends UpdateCompanion<LocalOrderItem> {
     Expression<String>? skuSnapshot,
     Expression<String>? barcodeSnapshot,
     Expression<int>? quantity,
-    Expression<double>? unitPrice,
-    Expression<double>? costSnapshot,
-    Expression<double>? discountAmount,
+    Expression<int>? unitPrice,
+    Expression<int>? costSnapshot,
+    Expression<int>? discountAmount,
     Expression<double>? taxRate,
-    Expression<double>? taxAmount,
-    Expression<double>? totalAmount,
+    Expression<int>? taxAmount,
+    Expression<int>? totalAmount,
     Expression<String>? notes,
     Expression<bool>? isRemoved,
     Expression<DateTime>? createdAt,
@@ -6281,12 +7658,12 @@ class LocalOrderItemsCompanion extends UpdateCompanion<LocalOrderItem> {
     Value<String?>? skuSnapshot,
     Value<String?>? barcodeSnapshot,
     Value<int>? quantity,
-    Value<double>? unitPrice,
-    Value<double>? costSnapshot,
-    Value<double>? discountAmount,
+    Value<int>? unitPrice,
+    Value<int>? costSnapshot,
+    Value<int>? discountAmount,
     Value<double>? taxRate,
-    Value<double>? taxAmount,
-    Value<double>? totalAmount,
+    Value<int>? taxAmount,
+    Value<int>? totalAmount,
     Value<String?>? notes,
     Value<bool>? isRemoved,
     Value<DateTime?>? createdAt,
@@ -6352,22 +7729,22 @@ class LocalOrderItemsCompanion extends UpdateCompanion<LocalOrderItem> {
       map['quantity'] = Variable<int>(quantity.value);
     }
     if (unitPrice.present) {
-      map['unit_price'] = Variable<double>(unitPrice.value);
+      map['unit_price'] = Variable<int>(unitPrice.value);
     }
     if (costSnapshot.present) {
-      map['cost_snapshot'] = Variable<double>(costSnapshot.value);
+      map['cost_snapshot'] = Variable<int>(costSnapshot.value);
     }
     if (discountAmount.present) {
-      map['discount_amount'] = Variable<double>(discountAmount.value);
+      map['discount_amount'] = Variable<int>(discountAmount.value);
     }
     if (taxRate.present) {
       map['tax_rate'] = Variable<double>(taxRate.value);
     }
     if (taxAmount.present) {
-      map['tax_amount'] = Variable<double>(taxAmount.value);
+      map['tax_amount'] = Variable<int>(taxAmount.value);
     }
     if (totalAmount.present) {
-      map['total_amount'] = Variable<double>(totalAmount.value);
+      map['total_amount'] = Variable<int>(totalAmount.value);
     }
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
@@ -6465,6 +7842,9 @@ class $LocalStockMovementsTable extends LocalStockMovements
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_products (local_id) ON DELETE SET NULL',
+    ),
   );
   static const VerificationMeta _productServerIdMeta = const VerificationMeta(
     'productServerId',
@@ -7430,837 +8810,6 @@ class LocalStockMovementsCompanion extends UpdateCompanion<LocalStockMovement> {
   }
 }
 
-class $LocalPaymentsTable extends LocalPayments
-    with TableInfo<$LocalPaymentsTable, LocalPayment> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $LocalPaymentsTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _localIdMeta = const VerificationMeta(
-    'localId',
-  );
-  @override
-  late final GeneratedColumn<String> localId = GeneratedColumn<String>(
-    'local_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
-    'workspaceId',
-  );
-  @override
-  late final GeneratedColumn<int> workspaceId = GeneratedColumn<int>(
-    'workspace_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
-    'deviceId',
-  );
-  @override
-  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
-    'device_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _serverIdMeta = const VerificationMeta(
-    'serverId',
-  );
-  @override
-  late final GeneratedColumn<int> serverId = GeneratedColumn<int>(
-    'server_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _orderLocalIdMeta = const VerificationMeta(
-    'orderLocalId',
-  );
-  @override
-  late final GeneratedColumn<String> orderLocalId = GeneratedColumn<String>(
-    'order_local_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _invoiceLocalIdMeta = const VerificationMeta(
-    'invoiceLocalId',
-  );
-  @override
-  late final GeneratedColumn<String> invoiceLocalId = GeneratedColumn<String>(
-    'invoice_local_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _methodMeta = const VerificationMeta('method');
-  @override
-  late final GeneratedColumn<String> method = GeneratedColumn<String>(
-    'method',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _amountMeta = const VerificationMeta('amount');
-  @override
-  late final GeneratedColumn<double> amount = GeneratedColumn<double>(
-    'amount',
-    aliasedName,
-    false,
-    type: DriftSqlType.double,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _tenderedMeta = const VerificationMeta(
-    'tendered',
-  );
-  @override
-  late final GeneratedColumn<double> tendered = GeneratedColumn<double>(
-    'tendered',
-    aliasedName,
-    true,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _changeDueMeta = const VerificationMeta(
-    'changeDue',
-  );
-  @override
-  late final GeneratedColumn<double> changeDue = GeneratedColumn<double>(
-    'change_due',
-    aliasedName,
-    false,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _shiftLocalIdMeta = const VerificationMeta(
-    'shiftLocalId',
-  );
-  @override
-  late final GeneratedColumn<String> shiftLocalId = GeneratedColumn<String>(
-    'shift_local_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _syncStatusMeta = const VerificationMeta(
-    'syncStatus',
-  );
-  @override
-  late final GeneratedColumn<String> syncStatus = GeneratedColumn<String>(
-    'sync_status',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant('pending'),
-  );
-  static const VerificationMeta _clientReferenceMeta = const VerificationMeta(
-    'clientReference',
-  );
-  @override
-  late final GeneratedColumn<String> clientReference = GeneratedColumn<String>(
-    'client_reference',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _createdAtMeta = const VerificationMeta(
-    'createdAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: true,
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    localId,
-    workspaceId,
-    deviceId,
-    serverId,
-    orderLocalId,
-    invoiceLocalId,
-    method,
-    amount,
-    tendered,
-    changeDue,
-    shiftLocalId,
-    syncStatus,
-    clientReference,
-    createdAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'local_payments';
-  @override
-  VerificationContext validateIntegrity(
-    Insertable<LocalPayment> instance, {
-    bool isInserting = false,
-  }) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('local_id')) {
-      context.handle(
-        _localIdMeta,
-        localId.isAcceptableOrUnknown(data['local_id']!, _localIdMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_localIdMeta);
-    }
-    if (data.containsKey('workspace_id')) {
-      context.handle(
-        _workspaceIdMeta,
-        workspaceId.isAcceptableOrUnknown(
-          data['workspace_id']!,
-          _workspaceIdMeta,
-        ),
-      );
-    } else if (isInserting) {
-      context.missing(_workspaceIdMeta);
-    }
-    if (data.containsKey('device_id')) {
-      context.handle(
-        _deviceIdMeta,
-        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_deviceIdMeta);
-    }
-    if (data.containsKey('server_id')) {
-      context.handle(
-        _serverIdMeta,
-        serverId.isAcceptableOrUnknown(data['server_id']!, _serverIdMeta),
-      );
-    }
-    if (data.containsKey('order_local_id')) {
-      context.handle(
-        _orderLocalIdMeta,
-        orderLocalId.isAcceptableOrUnknown(
-          data['order_local_id']!,
-          _orderLocalIdMeta,
-        ),
-      );
-    }
-    if (data.containsKey('invoice_local_id')) {
-      context.handle(
-        _invoiceLocalIdMeta,
-        invoiceLocalId.isAcceptableOrUnknown(
-          data['invoice_local_id']!,
-          _invoiceLocalIdMeta,
-        ),
-      );
-    }
-    if (data.containsKey('method')) {
-      context.handle(
-        _methodMeta,
-        method.isAcceptableOrUnknown(data['method']!, _methodMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_methodMeta);
-    }
-    if (data.containsKey('amount')) {
-      context.handle(
-        _amountMeta,
-        amount.isAcceptableOrUnknown(data['amount']!, _amountMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_amountMeta);
-    }
-    if (data.containsKey('tendered')) {
-      context.handle(
-        _tenderedMeta,
-        tendered.isAcceptableOrUnknown(data['tendered']!, _tenderedMeta),
-      );
-    }
-    if (data.containsKey('change_due')) {
-      context.handle(
-        _changeDueMeta,
-        changeDue.isAcceptableOrUnknown(data['change_due']!, _changeDueMeta),
-      );
-    }
-    if (data.containsKey('shift_local_id')) {
-      context.handle(
-        _shiftLocalIdMeta,
-        shiftLocalId.isAcceptableOrUnknown(
-          data['shift_local_id']!,
-          _shiftLocalIdMeta,
-        ),
-      );
-    }
-    if (data.containsKey('sync_status')) {
-      context.handle(
-        _syncStatusMeta,
-        syncStatus.isAcceptableOrUnknown(data['sync_status']!, _syncStatusMeta),
-      );
-    }
-    if (data.containsKey('client_reference')) {
-      context.handle(
-        _clientReferenceMeta,
-        clientReference.isAcceptableOrUnknown(
-          data['client_reference']!,
-          _clientReferenceMeta,
-        ),
-      );
-    } else if (isInserting) {
-      context.missing(_clientReferenceMeta);
-    }
-    if (data.containsKey('created_at')) {
-      context.handle(
-        _createdAtMeta,
-        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_createdAtMeta);
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {localId};
-  @override
-  LocalPayment map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return LocalPayment(
-      localId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}local_id'],
-      )!,
-      workspaceId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}workspace_id'],
-      )!,
-      deviceId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}device_id'],
-      )!,
-      serverId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}server_id'],
-      ),
-      orderLocalId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}order_local_id'],
-      ),
-      invoiceLocalId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}invoice_local_id'],
-      ),
-      method: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}method'],
-      )!,
-      amount: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}amount'],
-      )!,
-      tendered: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}tendered'],
-      ),
-      changeDue: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}change_due'],
-      )!,
-      shiftLocalId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}shift_local_id'],
-      ),
-      syncStatus: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}sync_status'],
-      )!,
-      clientReference: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}client_reference'],
-      )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
-      )!,
-    );
-  }
-
-  @override
-  $LocalPaymentsTable createAlias(String alias) {
-    return $LocalPaymentsTable(attachedDatabase, alias);
-  }
-}
-
-class LocalPayment extends DataClass implements Insertable<LocalPayment> {
-  final String localId;
-  final int workspaceId;
-  final String deviceId;
-  final int? serverId;
-  final String? orderLocalId;
-  final String? invoiceLocalId;
-  final String method;
-  final double amount;
-  final double? tendered;
-  final double changeDue;
-  final String? shiftLocalId;
-  final String syncStatus;
-  final String clientReference;
-  final DateTime createdAt;
-  const LocalPayment({
-    required this.localId,
-    required this.workspaceId,
-    required this.deviceId,
-    this.serverId,
-    this.orderLocalId,
-    this.invoiceLocalId,
-    required this.method,
-    required this.amount,
-    this.tendered,
-    required this.changeDue,
-    this.shiftLocalId,
-    required this.syncStatus,
-    required this.clientReference,
-    required this.createdAt,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['local_id'] = Variable<String>(localId);
-    map['workspace_id'] = Variable<int>(workspaceId);
-    map['device_id'] = Variable<String>(deviceId);
-    if (!nullToAbsent || serverId != null) {
-      map['server_id'] = Variable<int>(serverId);
-    }
-    if (!nullToAbsent || orderLocalId != null) {
-      map['order_local_id'] = Variable<String>(orderLocalId);
-    }
-    if (!nullToAbsent || invoiceLocalId != null) {
-      map['invoice_local_id'] = Variable<String>(invoiceLocalId);
-    }
-    map['method'] = Variable<String>(method);
-    map['amount'] = Variable<double>(amount);
-    if (!nullToAbsent || tendered != null) {
-      map['tendered'] = Variable<double>(tendered);
-    }
-    map['change_due'] = Variable<double>(changeDue);
-    if (!nullToAbsent || shiftLocalId != null) {
-      map['shift_local_id'] = Variable<String>(shiftLocalId);
-    }
-    map['sync_status'] = Variable<String>(syncStatus);
-    map['client_reference'] = Variable<String>(clientReference);
-    map['created_at'] = Variable<DateTime>(createdAt);
-    return map;
-  }
-
-  LocalPaymentsCompanion toCompanion(bool nullToAbsent) {
-    return LocalPaymentsCompanion(
-      localId: Value(localId),
-      workspaceId: Value(workspaceId),
-      deviceId: Value(deviceId),
-      serverId: serverId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(serverId),
-      orderLocalId: orderLocalId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(orderLocalId),
-      invoiceLocalId: invoiceLocalId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(invoiceLocalId),
-      method: Value(method),
-      amount: Value(amount),
-      tendered: tendered == null && nullToAbsent
-          ? const Value.absent()
-          : Value(tendered),
-      changeDue: Value(changeDue),
-      shiftLocalId: shiftLocalId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(shiftLocalId),
-      syncStatus: Value(syncStatus),
-      clientReference: Value(clientReference),
-      createdAt: Value(createdAt),
-    );
-  }
-
-  factory LocalPayment.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return LocalPayment(
-      localId: serializer.fromJson<String>(json['localId']),
-      workspaceId: serializer.fromJson<int>(json['workspaceId']),
-      deviceId: serializer.fromJson<String>(json['deviceId']),
-      serverId: serializer.fromJson<int?>(json['serverId']),
-      orderLocalId: serializer.fromJson<String?>(json['orderLocalId']),
-      invoiceLocalId: serializer.fromJson<String?>(json['invoiceLocalId']),
-      method: serializer.fromJson<String>(json['method']),
-      amount: serializer.fromJson<double>(json['amount']),
-      tendered: serializer.fromJson<double?>(json['tendered']),
-      changeDue: serializer.fromJson<double>(json['changeDue']),
-      shiftLocalId: serializer.fromJson<String?>(json['shiftLocalId']),
-      syncStatus: serializer.fromJson<String>(json['syncStatus']),
-      clientReference: serializer.fromJson<String>(json['clientReference']),
-      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'localId': serializer.toJson<String>(localId),
-      'workspaceId': serializer.toJson<int>(workspaceId),
-      'deviceId': serializer.toJson<String>(deviceId),
-      'serverId': serializer.toJson<int?>(serverId),
-      'orderLocalId': serializer.toJson<String?>(orderLocalId),
-      'invoiceLocalId': serializer.toJson<String?>(invoiceLocalId),
-      'method': serializer.toJson<String>(method),
-      'amount': serializer.toJson<double>(amount),
-      'tendered': serializer.toJson<double?>(tendered),
-      'changeDue': serializer.toJson<double>(changeDue),
-      'shiftLocalId': serializer.toJson<String?>(shiftLocalId),
-      'syncStatus': serializer.toJson<String>(syncStatus),
-      'clientReference': serializer.toJson<String>(clientReference),
-      'createdAt': serializer.toJson<DateTime>(createdAt),
-    };
-  }
-
-  LocalPayment copyWith({
-    String? localId,
-    int? workspaceId,
-    String? deviceId,
-    Value<int?> serverId = const Value.absent(),
-    Value<String?> orderLocalId = const Value.absent(),
-    Value<String?> invoiceLocalId = const Value.absent(),
-    String? method,
-    double? amount,
-    Value<double?> tendered = const Value.absent(),
-    double? changeDue,
-    Value<String?> shiftLocalId = const Value.absent(),
-    String? syncStatus,
-    String? clientReference,
-    DateTime? createdAt,
-  }) => LocalPayment(
-    localId: localId ?? this.localId,
-    workspaceId: workspaceId ?? this.workspaceId,
-    deviceId: deviceId ?? this.deviceId,
-    serverId: serverId.present ? serverId.value : this.serverId,
-    orderLocalId: orderLocalId.present ? orderLocalId.value : this.orderLocalId,
-    invoiceLocalId: invoiceLocalId.present
-        ? invoiceLocalId.value
-        : this.invoiceLocalId,
-    method: method ?? this.method,
-    amount: amount ?? this.amount,
-    tendered: tendered.present ? tendered.value : this.tendered,
-    changeDue: changeDue ?? this.changeDue,
-    shiftLocalId: shiftLocalId.present ? shiftLocalId.value : this.shiftLocalId,
-    syncStatus: syncStatus ?? this.syncStatus,
-    clientReference: clientReference ?? this.clientReference,
-    createdAt: createdAt ?? this.createdAt,
-  );
-  LocalPayment copyWithCompanion(LocalPaymentsCompanion data) {
-    return LocalPayment(
-      localId: data.localId.present ? data.localId.value : this.localId,
-      workspaceId: data.workspaceId.present
-          ? data.workspaceId.value
-          : this.workspaceId,
-      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
-      serverId: data.serverId.present ? data.serverId.value : this.serverId,
-      orderLocalId: data.orderLocalId.present
-          ? data.orderLocalId.value
-          : this.orderLocalId,
-      invoiceLocalId: data.invoiceLocalId.present
-          ? data.invoiceLocalId.value
-          : this.invoiceLocalId,
-      method: data.method.present ? data.method.value : this.method,
-      amount: data.amount.present ? data.amount.value : this.amount,
-      tendered: data.tendered.present ? data.tendered.value : this.tendered,
-      changeDue: data.changeDue.present ? data.changeDue.value : this.changeDue,
-      shiftLocalId: data.shiftLocalId.present
-          ? data.shiftLocalId.value
-          : this.shiftLocalId,
-      syncStatus: data.syncStatus.present
-          ? data.syncStatus.value
-          : this.syncStatus,
-      clientReference: data.clientReference.present
-          ? data.clientReference.value
-          : this.clientReference,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('LocalPayment(')
-          ..write('localId: $localId, ')
-          ..write('workspaceId: $workspaceId, ')
-          ..write('deviceId: $deviceId, ')
-          ..write('serverId: $serverId, ')
-          ..write('orderLocalId: $orderLocalId, ')
-          ..write('invoiceLocalId: $invoiceLocalId, ')
-          ..write('method: $method, ')
-          ..write('amount: $amount, ')
-          ..write('tendered: $tendered, ')
-          ..write('changeDue: $changeDue, ')
-          ..write('shiftLocalId: $shiftLocalId, ')
-          ..write('syncStatus: $syncStatus, ')
-          ..write('clientReference: $clientReference, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    localId,
-    workspaceId,
-    deviceId,
-    serverId,
-    orderLocalId,
-    invoiceLocalId,
-    method,
-    amount,
-    tendered,
-    changeDue,
-    shiftLocalId,
-    syncStatus,
-    clientReference,
-    createdAt,
-  );
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is LocalPayment &&
-          other.localId == this.localId &&
-          other.workspaceId == this.workspaceId &&
-          other.deviceId == this.deviceId &&
-          other.serverId == this.serverId &&
-          other.orderLocalId == this.orderLocalId &&
-          other.invoiceLocalId == this.invoiceLocalId &&
-          other.method == this.method &&
-          other.amount == this.amount &&
-          other.tendered == this.tendered &&
-          other.changeDue == this.changeDue &&
-          other.shiftLocalId == this.shiftLocalId &&
-          other.syncStatus == this.syncStatus &&
-          other.clientReference == this.clientReference &&
-          other.createdAt == this.createdAt);
-}
-
-class LocalPaymentsCompanion extends UpdateCompanion<LocalPayment> {
-  final Value<String> localId;
-  final Value<int> workspaceId;
-  final Value<String> deviceId;
-  final Value<int?> serverId;
-  final Value<String?> orderLocalId;
-  final Value<String?> invoiceLocalId;
-  final Value<String> method;
-  final Value<double> amount;
-  final Value<double?> tendered;
-  final Value<double> changeDue;
-  final Value<String?> shiftLocalId;
-  final Value<String> syncStatus;
-  final Value<String> clientReference;
-  final Value<DateTime> createdAt;
-  final Value<int> rowid;
-  const LocalPaymentsCompanion({
-    this.localId = const Value.absent(),
-    this.workspaceId = const Value.absent(),
-    this.deviceId = const Value.absent(),
-    this.serverId = const Value.absent(),
-    this.orderLocalId = const Value.absent(),
-    this.invoiceLocalId = const Value.absent(),
-    this.method = const Value.absent(),
-    this.amount = const Value.absent(),
-    this.tendered = const Value.absent(),
-    this.changeDue = const Value.absent(),
-    this.shiftLocalId = const Value.absent(),
-    this.syncStatus = const Value.absent(),
-    this.clientReference = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.rowid = const Value.absent(),
-  });
-  LocalPaymentsCompanion.insert({
-    required String localId,
-    required int workspaceId,
-    required String deviceId,
-    this.serverId = const Value.absent(),
-    this.orderLocalId = const Value.absent(),
-    this.invoiceLocalId = const Value.absent(),
-    required String method,
-    required double amount,
-    this.tendered = const Value.absent(),
-    this.changeDue = const Value.absent(),
-    this.shiftLocalId = const Value.absent(),
-    this.syncStatus = const Value.absent(),
-    required String clientReference,
-    required DateTime createdAt,
-    this.rowid = const Value.absent(),
-  }) : localId = Value(localId),
-       workspaceId = Value(workspaceId),
-       deviceId = Value(deviceId),
-       method = Value(method),
-       amount = Value(amount),
-       clientReference = Value(clientReference),
-       createdAt = Value(createdAt);
-  static Insertable<LocalPayment> custom({
-    Expression<String>? localId,
-    Expression<int>? workspaceId,
-    Expression<String>? deviceId,
-    Expression<int>? serverId,
-    Expression<String>? orderLocalId,
-    Expression<String>? invoiceLocalId,
-    Expression<String>? method,
-    Expression<double>? amount,
-    Expression<double>? tendered,
-    Expression<double>? changeDue,
-    Expression<String>? shiftLocalId,
-    Expression<String>? syncStatus,
-    Expression<String>? clientReference,
-    Expression<DateTime>? createdAt,
-    Expression<int>? rowid,
-  }) {
-    return RawValuesInsertable({
-      if (localId != null) 'local_id': localId,
-      if (workspaceId != null) 'workspace_id': workspaceId,
-      if (deviceId != null) 'device_id': deviceId,
-      if (serverId != null) 'server_id': serverId,
-      if (orderLocalId != null) 'order_local_id': orderLocalId,
-      if (invoiceLocalId != null) 'invoice_local_id': invoiceLocalId,
-      if (method != null) 'method': method,
-      if (amount != null) 'amount': amount,
-      if (tendered != null) 'tendered': tendered,
-      if (changeDue != null) 'change_due': changeDue,
-      if (shiftLocalId != null) 'shift_local_id': shiftLocalId,
-      if (syncStatus != null) 'sync_status': syncStatus,
-      if (clientReference != null) 'client_reference': clientReference,
-      if (createdAt != null) 'created_at': createdAt,
-      if (rowid != null) 'rowid': rowid,
-    });
-  }
-
-  LocalPaymentsCompanion copyWith({
-    Value<String>? localId,
-    Value<int>? workspaceId,
-    Value<String>? deviceId,
-    Value<int?>? serverId,
-    Value<String?>? orderLocalId,
-    Value<String?>? invoiceLocalId,
-    Value<String>? method,
-    Value<double>? amount,
-    Value<double?>? tendered,
-    Value<double>? changeDue,
-    Value<String?>? shiftLocalId,
-    Value<String>? syncStatus,
-    Value<String>? clientReference,
-    Value<DateTime>? createdAt,
-    Value<int>? rowid,
-  }) {
-    return LocalPaymentsCompanion(
-      localId: localId ?? this.localId,
-      workspaceId: workspaceId ?? this.workspaceId,
-      deviceId: deviceId ?? this.deviceId,
-      serverId: serverId ?? this.serverId,
-      orderLocalId: orderLocalId ?? this.orderLocalId,
-      invoiceLocalId: invoiceLocalId ?? this.invoiceLocalId,
-      method: method ?? this.method,
-      amount: amount ?? this.amount,
-      tendered: tendered ?? this.tendered,
-      changeDue: changeDue ?? this.changeDue,
-      shiftLocalId: shiftLocalId ?? this.shiftLocalId,
-      syncStatus: syncStatus ?? this.syncStatus,
-      clientReference: clientReference ?? this.clientReference,
-      createdAt: createdAt ?? this.createdAt,
-      rowid: rowid ?? this.rowid,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (localId.present) {
-      map['local_id'] = Variable<String>(localId.value);
-    }
-    if (workspaceId.present) {
-      map['workspace_id'] = Variable<int>(workspaceId.value);
-    }
-    if (deviceId.present) {
-      map['device_id'] = Variable<String>(deviceId.value);
-    }
-    if (serverId.present) {
-      map['server_id'] = Variable<int>(serverId.value);
-    }
-    if (orderLocalId.present) {
-      map['order_local_id'] = Variable<String>(orderLocalId.value);
-    }
-    if (invoiceLocalId.present) {
-      map['invoice_local_id'] = Variable<String>(invoiceLocalId.value);
-    }
-    if (method.present) {
-      map['method'] = Variable<String>(method.value);
-    }
-    if (amount.present) {
-      map['amount'] = Variable<double>(amount.value);
-    }
-    if (tendered.present) {
-      map['tendered'] = Variable<double>(tendered.value);
-    }
-    if (changeDue.present) {
-      map['change_due'] = Variable<double>(changeDue.value);
-    }
-    if (shiftLocalId.present) {
-      map['shift_local_id'] = Variable<String>(shiftLocalId.value);
-    }
-    if (syncStatus.present) {
-      map['sync_status'] = Variable<String>(syncStatus.value);
-    }
-    if (clientReference.present) {
-      map['client_reference'] = Variable<String>(clientReference.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<DateTime>(createdAt.value);
-    }
-    if (rowid.present) {
-      map['rowid'] = Variable<int>(rowid.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('LocalPaymentsCompanion(')
-          ..write('localId: $localId, ')
-          ..write('workspaceId: $workspaceId, ')
-          ..write('deviceId: $deviceId, ')
-          ..write('serverId: $serverId, ')
-          ..write('orderLocalId: $orderLocalId, ')
-          ..write('invoiceLocalId: $invoiceLocalId, ')
-          ..write('method: $method, ')
-          ..write('amount: $amount, ')
-          ..write('tendered: $tendered, ')
-          ..write('changeDue: $changeDue, ')
-          ..write('shiftLocalId: $shiftLocalId, ')
-          ..write('syncStatus: $syncStatus, ')
-          ..write('clientReference: $clientReference, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('rowid: $rowid')
-          ..write(')'))
-        .toString();
-  }
-}
-
 class $LocalInvoicesTable extends LocalInvoices
     with TableInfo<$LocalInvoicesTable, LocalInvoice> {
   @override
@@ -8354,6 +8903,9 @@ class $LocalInvoicesTable extends LocalInvoices
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_orders (local_id) ON DELETE RESTRICT',
+    ),
   );
   static const VerificationMeta _statusMeta = const VerificationMeta('status');
   @override
@@ -8369,11 +8921,11 @@ class $LocalInvoicesTable extends LocalInvoices
     'subtotal',
   );
   @override
-  late final GeneratedColumn<double> subtotal = GeneratedColumn<double>(
+  late final GeneratedColumn<int> subtotal = GeneratedColumn<int>(
     'subtotal',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
@@ -8381,11 +8933,11 @@ class $LocalInvoicesTable extends LocalInvoices
     'discountAmount',
   );
   @override
-  late final GeneratedColumn<double> discountAmount = GeneratedColumn<double>(
+  late final GeneratedColumn<int> discountAmount = GeneratedColumn<int>(
     'discount_amount',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
@@ -8393,11 +8945,11 @@ class $LocalInvoicesTable extends LocalInvoices
     'taxAmount',
   );
   @override
-  late final GeneratedColumn<double> taxAmount = GeneratedColumn<double>(
+  late final GeneratedColumn<int> taxAmount = GeneratedColumn<int>(
     'tax_amount',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
@@ -8405,11 +8957,11 @@ class $LocalInvoicesTable extends LocalInvoices
     'totalAmount',
   );
   @override
-  late final GeneratedColumn<double> totalAmount = GeneratedColumn<double>(
+  late final GeneratedColumn<int> totalAmount = GeneratedColumn<int>(
     'total_amount',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
@@ -8423,6 +8975,9 @@ class $LocalInvoicesTable extends LocalInvoices
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_users (local_id) ON DELETE SET NULL',
+    ),
   );
   static const VerificationMeta _syncStatusMeta = const VerificationMeta(
     'syncStatus',
@@ -8674,19 +9229,19 @@ class $LocalInvoicesTable extends LocalInvoices
         data['${effectivePrefix}status'],
       )!,
       subtotal: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}subtotal'],
       )!,
       discountAmount: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}discount_amount'],
       )!,
       taxAmount: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}tax_amount'],
       )!,
       totalAmount: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}total_amount'],
       )!,
       createdByUserId: attachedDatabase.typeMapping.read(
@@ -8724,10 +9279,10 @@ class LocalInvoice extends DataClass implements Insertable<LocalInvoice> {
   final String? serverInvoiceNumber;
   final String? orderLocalId;
   final String status;
-  final double subtotal;
-  final double discountAmount;
-  final double taxAmount;
-  final double totalAmount;
+  final int subtotal;
+  final int discountAmount;
+  final int taxAmount;
+  final int totalAmount;
   final String? createdByUserId;
   final String syncStatus;
   final String payloadJson;
@@ -8773,10 +9328,10 @@ class LocalInvoice extends DataClass implements Insertable<LocalInvoice> {
       map['order_local_id'] = Variable<String>(orderLocalId);
     }
     map['status'] = Variable<String>(status);
-    map['subtotal'] = Variable<double>(subtotal);
-    map['discount_amount'] = Variable<double>(discountAmount);
-    map['tax_amount'] = Variable<double>(taxAmount);
-    map['total_amount'] = Variable<double>(totalAmount);
+    map['subtotal'] = Variable<int>(subtotal);
+    map['discount_amount'] = Variable<int>(discountAmount);
+    map['tax_amount'] = Variable<int>(taxAmount);
+    map['total_amount'] = Variable<int>(totalAmount);
     if (!nullToAbsent || createdByUserId != null) {
       map['created_by_user_id'] = Variable<String>(createdByUserId);
     }
@@ -8839,10 +9394,10 @@ class LocalInvoice extends DataClass implements Insertable<LocalInvoice> {
       ),
       orderLocalId: serializer.fromJson<String?>(json['orderLocalId']),
       status: serializer.fromJson<String>(json['status']),
-      subtotal: serializer.fromJson<double>(json['subtotal']),
-      discountAmount: serializer.fromJson<double>(json['discountAmount']),
-      taxAmount: serializer.fromJson<double>(json['taxAmount']),
-      totalAmount: serializer.fromJson<double>(json['totalAmount']),
+      subtotal: serializer.fromJson<int>(json['subtotal']),
+      discountAmount: serializer.fromJson<int>(json['discountAmount']),
+      taxAmount: serializer.fromJson<int>(json['taxAmount']),
+      totalAmount: serializer.fromJson<int>(json['totalAmount']),
       createdByUserId: serializer.fromJson<String?>(json['createdByUserId']),
       syncStatus: serializer.fromJson<String>(json['syncStatus']),
       payloadJson: serializer.fromJson<String>(json['payloadJson']),
@@ -8862,10 +9417,10 @@ class LocalInvoice extends DataClass implements Insertable<LocalInvoice> {
       'serverInvoiceNumber': serializer.toJson<String?>(serverInvoiceNumber),
       'orderLocalId': serializer.toJson<String?>(orderLocalId),
       'status': serializer.toJson<String>(status),
-      'subtotal': serializer.toJson<double>(subtotal),
-      'discountAmount': serializer.toJson<double>(discountAmount),
-      'taxAmount': serializer.toJson<double>(taxAmount),
-      'totalAmount': serializer.toJson<double>(totalAmount),
+      'subtotal': serializer.toJson<int>(subtotal),
+      'discountAmount': serializer.toJson<int>(discountAmount),
+      'taxAmount': serializer.toJson<int>(taxAmount),
+      'totalAmount': serializer.toJson<int>(totalAmount),
       'createdByUserId': serializer.toJson<String?>(createdByUserId),
       'syncStatus': serializer.toJson<String>(syncStatus),
       'payloadJson': serializer.toJson<String>(payloadJson),
@@ -8883,10 +9438,10 @@ class LocalInvoice extends DataClass implements Insertable<LocalInvoice> {
     Value<String?> serverInvoiceNumber = const Value.absent(),
     Value<String?> orderLocalId = const Value.absent(),
     String? status,
-    double? subtotal,
-    double? discountAmount,
-    double? taxAmount,
-    double? totalAmount,
+    int? subtotal,
+    int? discountAmount,
+    int? taxAmount,
+    int? totalAmount,
     Value<String?> createdByUserId = const Value.absent(),
     String? syncStatus,
     String? payloadJson,
@@ -9037,10 +9592,10 @@ class LocalInvoicesCompanion extends UpdateCompanion<LocalInvoice> {
   final Value<String?> serverInvoiceNumber;
   final Value<String?> orderLocalId;
   final Value<String> status;
-  final Value<double> subtotal;
-  final Value<double> discountAmount;
-  final Value<double> taxAmount;
-  final Value<double> totalAmount;
+  final Value<int> subtotal;
+  final Value<int> discountAmount;
+  final Value<int> taxAmount;
+  final Value<int> totalAmount;
   final Value<String?> createdByUserId;
   final Value<String> syncStatus;
   final Value<String> payloadJson;
@@ -9099,10 +9654,10 @@ class LocalInvoicesCompanion extends UpdateCompanion<LocalInvoice> {
     Expression<String>? serverInvoiceNumber,
     Expression<String>? orderLocalId,
     Expression<String>? status,
-    Expression<double>? subtotal,
-    Expression<double>? discountAmount,
-    Expression<double>? taxAmount,
-    Expression<double>? totalAmount,
+    Expression<int>? subtotal,
+    Expression<int>? discountAmount,
+    Expression<int>? taxAmount,
+    Expression<int>? totalAmount,
     Expression<String>? createdByUserId,
     Expression<String>? syncStatus,
     Expression<String>? payloadJson,
@@ -9143,10 +9698,10 @@ class LocalInvoicesCompanion extends UpdateCompanion<LocalInvoice> {
     Value<String?>? serverInvoiceNumber,
     Value<String?>? orderLocalId,
     Value<String>? status,
-    Value<double>? subtotal,
-    Value<double>? discountAmount,
-    Value<double>? taxAmount,
-    Value<double>? totalAmount,
+    Value<int>? subtotal,
+    Value<int>? discountAmount,
+    Value<int>? taxAmount,
+    Value<int>? totalAmount,
     Value<String?>? createdByUserId,
     Value<String>? syncStatus,
     Value<String>? payloadJson,
@@ -9208,16 +9763,16 @@ class LocalInvoicesCompanion extends UpdateCompanion<LocalInvoice> {
       map['status'] = Variable<String>(status.value);
     }
     if (subtotal.present) {
-      map['subtotal'] = Variable<double>(subtotal.value);
+      map['subtotal'] = Variable<int>(subtotal.value);
     }
     if (discountAmount.present) {
-      map['discount_amount'] = Variable<double>(discountAmount.value);
+      map['discount_amount'] = Variable<int>(discountAmount.value);
     }
     if (taxAmount.present) {
-      map['tax_amount'] = Variable<double>(taxAmount.value);
+      map['tax_amount'] = Variable<int>(taxAmount.value);
     }
     if (totalAmount.present) {
-      map['total_amount'] = Variable<double>(totalAmount.value);
+      map['total_amount'] = Variable<int>(totalAmount.value);
     }
     if (createdByUserId.present) {
       map['created_by_user_id'] = Variable<String>(createdByUserId.value);
@@ -9256,6 +9811,1532 @@ class LocalInvoicesCompanion extends UpdateCompanion<LocalInvoice> {
           ..write('createdByUserId: $createdByUserId, ')
           ..write('syncStatus: $syncStatus, ')
           ..write('payloadJson: $payloadJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $LocalShiftsTable extends LocalShifts
+    with TableInfo<$LocalShiftsTable, LocalShift> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LocalShiftsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _localIdMeta = const VerificationMeta(
+    'localId',
+  );
+  @override
+  late final GeneratedColumn<String> localId = GeneratedColumn<String>(
+    'local_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
+    'workspaceId',
+  );
+  @override
+  late final GeneratedColumn<int> workspaceId = GeneratedColumn<int>(
+    'workspace_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+    'user_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_users (local_id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _openedAtMeta = const VerificationMeta(
+    'openedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> openedAt = GeneratedColumn<DateTime>(
+    'opened_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _closedAtMeta = const VerificationMeta(
+    'closedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> closedAt = GeneratedColumn<DateTime>(
+    'closed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _openingCashMeta = const VerificationMeta(
+    'openingCash',
+  );
+  @override
+  late final GeneratedColumn<int> openingCash = GeneratedColumn<int>(
+    'opening_cash',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _closingCashMeta = const VerificationMeta(
+    'closingCash',
+  );
+  @override
+  late final GeneratedColumn<int> closingCash = GeneratedColumn<int>(
+    'closing_cash',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _expectedCashMeta = const VerificationMeta(
+    'expectedCash',
+  );
+  @override
+  late final GeneratedColumn<int> expectedCash = GeneratedColumn<int>(
+    'expected_cash',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _actualCashMeta = const VerificationMeta(
+    'actualCash',
+  );
+  @override
+  late final GeneratedColumn<int> actualCash = GeneratedColumn<int>(
+    'actual_cash',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _differenceMeta = const VerificationMeta(
+    'difference',
+  );
+  @override
+  late final GeneratedColumn<int> difference = GeneratedColumn<int>(
+    'difference',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('open'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    localId,
+    workspaceId,
+    userId,
+    openedAt,
+    closedAt,
+    openingCash,
+    closingCash,
+    expectedCash,
+    actualCash,
+    difference,
+    status,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'local_shifts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LocalShift> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('local_id')) {
+      context.handle(
+        _localIdMeta,
+        localId.isAcceptableOrUnknown(data['local_id']!, _localIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_localIdMeta);
+    }
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+        _workspaceIdMeta,
+        workspaceId.isAcceptableOrUnknown(
+          data['workspace_id']!,
+          _workspaceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_workspaceIdMeta);
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    }
+    if (data.containsKey('opened_at')) {
+      context.handle(
+        _openedAtMeta,
+        openedAt.isAcceptableOrUnknown(data['opened_at']!, _openedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_openedAtMeta);
+    }
+    if (data.containsKey('closed_at')) {
+      context.handle(
+        _closedAtMeta,
+        closedAt.isAcceptableOrUnknown(data['closed_at']!, _closedAtMeta),
+      );
+    }
+    if (data.containsKey('opening_cash')) {
+      context.handle(
+        _openingCashMeta,
+        openingCash.isAcceptableOrUnknown(
+          data['opening_cash']!,
+          _openingCashMeta,
+        ),
+      );
+    }
+    if (data.containsKey('closing_cash')) {
+      context.handle(
+        _closingCashMeta,
+        closingCash.isAcceptableOrUnknown(
+          data['closing_cash']!,
+          _closingCashMeta,
+        ),
+      );
+    }
+    if (data.containsKey('expected_cash')) {
+      context.handle(
+        _expectedCashMeta,
+        expectedCash.isAcceptableOrUnknown(
+          data['expected_cash']!,
+          _expectedCashMeta,
+        ),
+      );
+    }
+    if (data.containsKey('actual_cash')) {
+      context.handle(
+        _actualCashMeta,
+        actualCash.isAcceptableOrUnknown(data['actual_cash']!, _actualCashMeta),
+      );
+    }
+    if (data.containsKey('difference')) {
+      context.handle(
+        _differenceMeta,
+        difference.isAcceptableOrUnknown(data['difference']!, _differenceMeta),
+      );
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {localId};
+  @override
+  LocalShift map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LocalShift(
+      localId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_id'],
+      )!,
+      workspaceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}workspace_id'],
+      )!,
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_id'],
+      ),
+      openedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}opened_at'],
+      )!,
+      closedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}closed_at'],
+      ),
+      openingCash: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}opening_cash'],
+      )!,
+      closingCash: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}closing_cash'],
+      ),
+      expectedCash: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}expected_cash'],
+      ),
+      actualCash: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}actual_cash'],
+      ),
+      difference: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}difference'],
+      ),
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+    );
+  }
+
+  @override
+  $LocalShiftsTable createAlias(String alias) {
+    return $LocalShiftsTable(attachedDatabase, alias);
+  }
+}
+
+class LocalShift extends DataClass implements Insertable<LocalShift> {
+  final String localId;
+  final int workspaceId;
+  final String? userId;
+  final DateTime openedAt;
+  final DateTime? closedAt;
+  final int openingCash;
+  final int? closingCash;
+  final int? expectedCash;
+  final int? actualCash;
+  final int? difference;
+  final String status;
+  const LocalShift({
+    required this.localId,
+    required this.workspaceId,
+    this.userId,
+    required this.openedAt,
+    this.closedAt,
+    required this.openingCash,
+    this.closingCash,
+    this.expectedCash,
+    this.actualCash,
+    this.difference,
+    required this.status,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['local_id'] = Variable<String>(localId);
+    map['workspace_id'] = Variable<int>(workspaceId);
+    if (!nullToAbsent || userId != null) {
+      map['user_id'] = Variable<String>(userId);
+    }
+    map['opened_at'] = Variable<DateTime>(openedAt);
+    if (!nullToAbsent || closedAt != null) {
+      map['closed_at'] = Variable<DateTime>(closedAt);
+    }
+    map['opening_cash'] = Variable<int>(openingCash);
+    if (!nullToAbsent || closingCash != null) {
+      map['closing_cash'] = Variable<int>(closingCash);
+    }
+    if (!nullToAbsent || expectedCash != null) {
+      map['expected_cash'] = Variable<int>(expectedCash);
+    }
+    if (!nullToAbsent || actualCash != null) {
+      map['actual_cash'] = Variable<int>(actualCash);
+    }
+    if (!nullToAbsent || difference != null) {
+      map['difference'] = Variable<int>(difference);
+    }
+    map['status'] = Variable<String>(status);
+    return map;
+  }
+
+  LocalShiftsCompanion toCompanion(bool nullToAbsent) {
+    return LocalShiftsCompanion(
+      localId: Value(localId),
+      workspaceId: Value(workspaceId),
+      userId: userId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(userId),
+      openedAt: Value(openedAt),
+      closedAt: closedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closedAt),
+      openingCash: Value(openingCash),
+      closingCash: closingCash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closingCash),
+      expectedCash: expectedCash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(expectedCash),
+      actualCash: actualCash == null && nullToAbsent
+          ? const Value.absent()
+          : Value(actualCash),
+      difference: difference == null && nullToAbsent
+          ? const Value.absent()
+          : Value(difference),
+      status: Value(status),
+    );
+  }
+
+  factory LocalShift.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LocalShift(
+      localId: serializer.fromJson<String>(json['localId']),
+      workspaceId: serializer.fromJson<int>(json['workspaceId']),
+      userId: serializer.fromJson<String?>(json['userId']),
+      openedAt: serializer.fromJson<DateTime>(json['openedAt']),
+      closedAt: serializer.fromJson<DateTime?>(json['closedAt']),
+      openingCash: serializer.fromJson<int>(json['openingCash']),
+      closingCash: serializer.fromJson<int?>(json['closingCash']),
+      expectedCash: serializer.fromJson<int?>(json['expectedCash']),
+      actualCash: serializer.fromJson<int?>(json['actualCash']),
+      difference: serializer.fromJson<int?>(json['difference']),
+      status: serializer.fromJson<String>(json['status']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'localId': serializer.toJson<String>(localId),
+      'workspaceId': serializer.toJson<int>(workspaceId),
+      'userId': serializer.toJson<String?>(userId),
+      'openedAt': serializer.toJson<DateTime>(openedAt),
+      'closedAt': serializer.toJson<DateTime?>(closedAt),
+      'openingCash': serializer.toJson<int>(openingCash),
+      'closingCash': serializer.toJson<int?>(closingCash),
+      'expectedCash': serializer.toJson<int?>(expectedCash),
+      'actualCash': serializer.toJson<int?>(actualCash),
+      'difference': serializer.toJson<int?>(difference),
+      'status': serializer.toJson<String>(status),
+    };
+  }
+
+  LocalShift copyWith({
+    String? localId,
+    int? workspaceId,
+    Value<String?> userId = const Value.absent(),
+    DateTime? openedAt,
+    Value<DateTime?> closedAt = const Value.absent(),
+    int? openingCash,
+    Value<int?> closingCash = const Value.absent(),
+    Value<int?> expectedCash = const Value.absent(),
+    Value<int?> actualCash = const Value.absent(),
+    Value<int?> difference = const Value.absent(),
+    String? status,
+  }) => LocalShift(
+    localId: localId ?? this.localId,
+    workspaceId: workspaceId ?? this.workspaceId,
+    userId: userId.present ? userId.value : this.userId,
+    openedAt: openedAt ?? this.openedAt,
+    closedAt: closedAt.present ? closedAt.value : this.closedAt,
+    openingCash: openingCash ?? this.openingCash,
+    closingCash: closingCash.present ? closingCash.value : this.closingCash,
+    expectedCash: expectedCash.present ? expectedCash.value : this.expectedCash,
+    actualCash: actualCash.present ? actualCash.value : this.actualCash,
+    difference: difference.present ? difference.value : this.difference,
+    status: status ?? this.status,
+  );
+  LocalShift copyWithCompanion(LocalShiftsCompanion data) {
+    return LocalShift(
+      localId: data.localId.present ? data.localId.value : this.localId,
+      workspaceId: data.workspaceId.present
+          ? data.workspaceId.value
+          : this.workspaceId,
+      userId: data.userId.present ? data.userId.value : this.userId,
+      openedAt: data.openedAt.present ? data.openedAt.value : this.openedAt,
+      closedAt: data.closedAt.present ? data.closedAt.value : this.closedAt,
+      openingCash: data.openingCash.present
+          ? data.openingCash.value
+          : this.openingCash,
+      closingCash: data.closingCash.present
+          ? data.closingCash.value
+          : this.closingCash,
+      expectedCash: data.expectedCash.present
+          ? data.expectedCash.value
+          : this.expectedCash,
+      actualCash: data.actualCash.present
+          ? data.actualCash.value
+          : this.actualCash,
+      difference: data.difference.present
+          ? data.difference.value
+          : this.difference,
+      status: data.status.present ? data.status.value : this.status,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalShift(')
+          ..write('localId: $localId, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('userId: $userId, ')
+          ..write('openedAt: $openedAt, ')
+          ..write('closedAt: $closedAt, ')
+          ..write('openingCash: $openingCash, ')
+          ..write('closingCash: $closingCash, ')
+          ..write('expectedCash: $expectedCash, ')
+          ..write('actualCash: $actualCash, ')
+          ..write('difference: $difference, ')
+          ..write('status: $status')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    localId,
+    workspaceId,
+    userId,
+    openedAt,
+    closedAt,
+    openingCash,
+    closingCash,
+    expectedCash,
+    actualCash,
+    difference,
+    status,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LocalShift &&
+          other.localId == this.localId &&
+          other.workspaceId == this.workspaceId &&
+          other.userId == this.userId &&
+          other.openedAt == this.openedAt &&
+          other.closedAt == this.closedAt &&
+          other.openingCash == this.openingCash &&
+          other.closingCash == this.closingCash &&
+          other.expectedCash == this.expectedCash &&
+          other.actualCash == this.actualCash &&
+          other.difference == this.difference &&
+          other.status == this.status);
+}
+
+class LocalShiftsCompanion extends UpdateCompanion<LocalShift> {
+  final Value<String> localId;
+  final Value<int> workspaceId;
+  final Value<String?> userId;
+  final Value<DateTime> openedAt;
+  final Value<DateTime?> closedAt;
+  final Value<int> openingCash;
+  final Value<int?> closingCash;
+  final Value<int?> expectedCash;
+  final Value<int?> actualCash;
+  final Value<int?> difference;
+  final Value<String> status;
+  final Value<int> rowid;
+  const LocalShiftsCompanion({
+    this.localId = const Value.absent(),
+    this.workspaceId = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.openedAt = const Value.absent(),
+    this.closedAt = const Value.absent(),
+    this.openingCash = const Value.absent(),
+    this.closingCash = const Value.absent(),
+    this.expectedCash = const Value.absent(),
+    this.actualCash = const Value.absent(),
+    this.difference = const Value.absent(),
+    this.status = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LocalShiftsCompanion.insert({
+    required String localId,
+    required int workspaceId,
+    this.userId = const Value.absent(),
+    required DateTime openedAt,
+    this.closedAt = const Value.absent(),
+    this.openingCash = const Value.absent(),
+    this.closingCash = const Value.absent(),
+    this.expectedCash = const Value.absent(),
+    this.actualCash = const Value.absent(),
+    this.difference = const Value.absent(),
+    this.status = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : localId = Value(localId),
+       workspaceId = Value(workspaceId),
+       openedAt = Value(openedAt);
+  static Insertable<LocalShift> custom({
+    Expression<String>? localId,
+    Expression<int>? workspaceId,
+    Expression<String>? userId,
+    Expression<DateTime>? openedAt,
+    Expression<DateTime>? closedAt,
+    Expression<int>? openingCash,
+    Expression<int>? closingCash,
+    Expression<int>? expectedCash,
+    Expression<int>? actualCash,
+    Expression<int>? difference,
+    Expression<String>? status,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (localId != null) 'local_id': localId,
+      if (workspaceId != null) 'workspace_id': workspaceId,
+      if (userId != null) 'user_id': userId,
+      if (openedAt != null) 'opened_at': openedAt,
+      if (closedAt != null) 'closed_at': closedAt,
+      if (openingCash != null) 'opening_cash': openingCash,
+      if (closingCash != null) 'closing_cash': closingCash,
+      if (expectedCash != null) 'expected_cash': expectedCash,
+      if (actualCash != null) 'actual_cash': actualCash,
+      if (difference != null) 'difference': difference,
+      if (status != null) 'status': status,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LocalShiftsCompanion copyWith({
+    Value<String>? localId,
+    Value<int>? workspaceId,
+    Value<String?>? userId,
+    Value<DateTime>? openedAt,
+    Value<DateTime?>? closedAt,
+    Value<int>? openingCash,
+    Value<int?>? closingCash,
+    Value<int?>? expectedCash,
+    Value<int?>? actualCash,
+    Value<int?>? difference,
+    Value<String>? status,
+    Value<int>? rowid,
+  }) {
+    return LocalShiftsCompanion(
+      localId: localId ?? this.localId,
+      workspaceId: workspaceId ?? this.workspaceId,
+      userId: userId ?? this.userId,
+      openedAt: openedAt ?? this.openedAt,
+      closedAt: closedAt ?? this.closedAt,
+      openingCash: openingCash ?? this.openingCash,
+      closingCash: closingCash ?? this.closingCash,
+      expectedCash: expectedCash ?? this.expectedCash,
+      actualCash: actualCash ?? this.actualCash,
+      difference: difference ?? this.difference,
+      status: status ?? this.status,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (localId.present) {
+      map['local_id'] = Variable<String>(localId.value);
+    }
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<int>(workspaceId.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (openedAt.present) {
+      map['opened_at'] = Variable<DateTime>(openedAt.value);
+    }
+    if (closedAt.present) {
+      map['closed_at'] = Variable<DateTime>(closedAt.value);
+    }
+    if (openingCash.present) {
+      map['opening_cash'] = Variable<int>(openingCash.value);
+    }
+    if (closingCash.present) {
+      map['closing_cash'] = Variable<int>(closingCash.value);
+    }
+    if (expectedCash.present) {
+      map['expected_cash'] = Variable<int>(expectedCash.value);
+    }
+    if (actualCash.present) {
+      map['actual_cash'] = Variable<int>(actualCash.value);
+    }
+    if (difference.present) {
+      map['difference'] = Variable<int>(difference.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalShiftsCompanion(')
+          ..write('localId: $localId, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('userId: $userId, ')
+          ..write('openedAt: $openedAt, ')
+          ..write('closedAt: $closedAt, ')
+          ..write('openingCash: $openingCash, ')
+          ..write('closingCash: $closingCash, ')
+          ..write('expectedCash: $expectedCash, ')
+          ..write('actualCash: $actualCash, ')
+          ..write('difference: $difference, ')
+          ..write('status: $status, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $LocalPaymentsTable extends LocalPayments
+    with TableInfo<$LocalPaymentsTable, LocalPayment> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LocalPaymentsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _localIdMeta = const VerificationMeta(
+    'localId',
+  );
+  @override
+  late final GeneratedColumn<String> localId = GeneratedColumn<String>(
+    'local_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
+    'workspaceId',
+  );
+  @override
+  late final GeneratedColumn<int> workspaceId = GeneratedColumn<int>(
+    'workspace_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _serverIdMeta = const VerificationMeta(
+    'serverId',
+  );
+  @override
+  late final GeneratedColumn<int> serverId = GeneratedColumn<int>(
+    'server_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _orderLocalIdMeta = const VerificationMeta(
+    'orderLocalId',
+  );
+  @override
+  late final GeneratedColumn<String> orderLocalId = GeneratedColumn<String>(
+    'order_local_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_orders (local_id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _invoiceLocalIdMeta = const VerificationMeta(
+    'invoiceLocalId',
+  );
+  @override
+  late final GeneratedColumn<String> invoiceLocalId = GeneratedColumn<String>(
+    'invoice_local_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_invoices (local_id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _methodMeta = const VerificationMeta('method');
+  @override
+  late final GeneratedColumn<String> method = GeneratedColumn<String>(
+    'method',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _amountMeta = const VerificationMeta('amount');
+  @override
+  late final GeneratedColumn<int> amount = GeneratedColumn<int>(
+    'amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _tenderedMeta = const VerificationMeta(
+    'tendered',
+  );
+  @override
+  late final GeneratedColumn<int> tendered = GeneratedColumn<int>(
+    'tendered',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _changeDueMeta = const VerificationMeta(
+    'changeDue',
+  );
+  @override
+  late final GeneratedColumn<int> changeDue = GeneratedColumn<int>(
+    'change_due',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _shiftLocalIdMeta = const VerificationMeta(
+    'shiftLocalId',
+  );
+  @override
+  late final GeneratedColumn<String> shiftLocalId = GeneratedColumn<String>(
+    'shift_local_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_shifts (local_id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _syncStatusMeta = const VerificationMeta(
+    'syncStatus',
+  );
+  @override
+  late final GeneratedColumn<String> syncStatus = GeneratedColumn<String>(
+    'sync_status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('pending'),
+  );
+  static const VerificationMeta _clientReferenceMeta = const VerificationMeta(
+    'clientReference',
+  );
+  @override
+  late final GeneratedColumn<String> clientReference = GeneratedColumn<String>(
+    'client_reference',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    localId,
+    workspaceId,
+    deviceId,
+    serverId,
+    orderLocalId,
+    invoiceLocalId,
+    method,
+    amount,
+    tendered,
+    changeDue,
+    shiftLocalId,
+    syncStatus,
+    clientReference,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'local_payments';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LocalPayment> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('local_id')) {
+      context.handle(
+        _localIdMeta,
+        localId.isAcceptableOrUnknown(data['local_id']!, _localIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_localIdMeta);
+    }
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+        _workspaceIdMeta,
+        workspaceId.isAcceptableOrUnknown(
+          data['workspace_id']!,
+          _workspaceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_workspaceIdMeta);
+    }
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deviceIdMeta);
+    }
+    if (data.containsKey('server_id')) {
+      context.handle(
+        _serverIdMeta,
+        serverId.isAcceptableOrUnknown(data['server_id']!, _serverIdMeta),
+      );
+    }
+    if (data.containsKey('order_local_id')) {
+      context.handle(
+        _orderLocalIdMeta,
+        orderLocalId.isAcceptableOrUnknown(
+          data['order_local_id']!,
+          _orderLocalIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('invoice_local_id')) {
+      context.handle(
+        _invoiceLocalIdMeta,
+        invoiceLocalId.isAcceptableOrUnknown(
+          data['invoice_local_id']!,
+          _invoiceLocalIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('method')) {
+      context.handle(
+        _methodMeta,
+        method.isAcceptableOrUnknown(data['method']!, _methodMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_methodMeta);
+    }
+    if (data.containsKey('amount')) {
+      context.handle(
+        _amountMeta,
+        amount.isAcceptableOrUnknown(data['amount']!, _amountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_amountMeta);
+    }
+    if (data.containsKey('tendered')) {
+      context.handle(
+        _tenderedMeta,
+        tendered.isAcceptableOrUnknown(data['tendered']!, _tenderedMeta),
+      );
+    }
+    if (data.containsKey('change_due')) {
+      context.handle(
+        _changeDueMeta,
+        changeDue.isAcceptableOrUnknown(data['change_due']!, _changeDueMeta),
+      );
+    }
+    if (data.containsKey('shift_local_id')) {
+      context.handle(
+        _shiftLocalIdMeta,
+        shiftLocalId.isAcceptableOrUnknown(
+          data['shift_local_id']!,
+          _shiftLocalIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sync_status')) {
+      context.handle(
+        _syncStatusMeta,
+        syncStatus.isAcceptableOrUnknown(data['sync_status']!, _syncStatusMeta),
+      );
+    }
+    if (data.containsKey('client_reference')) {
+      context.handle(
+        _clientReferenceMeta,
+        clientReference.isAcceptableOrUnknown(
+          data['client_reference']!,
+          _clientReferenceMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_clientReferenceMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {localId};
+  @override
+  LocalPayment map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LocalPayment(
+      localId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_id'],
+      )!,
+      workspaceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}workspace_id'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      )!,
+      serverId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}server_id'],
+      ),
+      orderLocalId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}order_local_id'],
+      ),
+      invoiceLocalId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}invoice_local_id'],
+      ),
+      method: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}method'],
+      )!,
+      amount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}amount'],
+      )!,
+      tendered: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}tendered'],
+      ),
+      changeDue: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}change_due'],
+      )!,
+      shiftLocalId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}shift_local_id'],
+      ),
+      syncStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_status'],
+      )!,
+      clientReference: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}client_reference'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $LocalPaymentsTable createAlias(String alias) {
+    return $LocalPaymentsTable(attachedDatabase, alias);
+  }
+}
+
+class LocalPayment extends DataClass implements Insertable<LocalPayment> {
+  final String localId;
+  final int workspaceId;
+  final String deviceId;
+  final int? serverId;
+  final String? orderLocalId;
+  final String? invoiceLocalId;
+  final String method;
+  final int amount;
+  final int? tendered;
+  final int changeDue;
+  final String? shiftLocalId;
+  final String syncStatus;
+  final String clientReference;
+  final DateTime createdAt;
+  const LocalPayment({
+    required this.localId,
+    required this.workspaceId,
+    required this.deviceId,
+    this.serverId,
+    this.orderLocalId,
+    this.invoiceLocalId,
+    required this.method,
+    required this.amount,
+    this.tendered,
+    required this.changeDue,
+    this.shiftLocalId,
+    required this.syncStatus,
+    required this.clientReference,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['local_id'] = Variable<String>(localId);
+    map['workspace_id'] = Variable<int>(workspaceId);
+    map['device_id'] = Variable<String>(deviceId);
+    if (!nullToAbsent || serverId != null) {
+      map['server_id'] = Variable<int>(serverId);
+    }
+    if (!nullToAbsent || orderLocalId != null) {
+      map['order_local_id'] = Variable<String>(orderLocalId);
+    }
+    if (!nullToAbsent || invoiceLocalId != null) {
+      map['invoice_local_id'] = Variable<String>(invoiceLocalId);
+    }
+    map['method'] = Variable<String>(method);
+    map['amount'] = Variable<int>(amount);
+    if (!nullToAbsent || tendered != null) {
+      map['tendered'] = Variable<int>(tendered);
+    }
+    map['change_due'] = Variable<int>(changeDue);
+    if (!nullToAbsent || shiftLocalId != null) {
+      map['shift_local_id'] = Variable<String>(shiftLocalId);
+    }
+    map['sync_status'] = Variable<String>(syncStatus);
+    map['client_reference'] = Variable<String>(clientReference);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  LocalPaymentsCompanion toCompanion(bool nullToAbsent) {
+    return LocalPaymentsCompanion(
+      localId: Value(localId),
+      workspaceId: Value(workspaceId),
+      deviceId: Value(deviceId),
+      serverId: serverId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(serverId),
+      orderLocalId: orderLocalId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(orderLocalId),
+      invoiceLocalId: invoiceLocalId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(invoiceLocalId),
+      method: Value(method),
+      amount: Value(amount),
+      tendered: tendered == null && nullToAbsent
+          ? const Value.absent()
+          : Value(tendered),
+      changeDue: Value(changeDue),
+      shiftLocalId: shiftLocalId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(shiftLocalId),
+      syncStatus: Value(syncStatus),
+      clientReference: Value(clientReference),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory LocalPayment.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LocalPayment(
+      localId: serializer.fromJson<String>(json['localId']),
+      workspaceId: serializer.fromJson<int>(json['workspaceId']),
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+      serverId: serializer.fromJson<int?>(json['serverId']),
+      orderLocalId: serializer.fromJson<String?>(json['orderLocalId']),
+      invoiceLocalId: serializer.fromJson<String?>(json['invoiceLocalId']),
+      method: serializer.fromJson<String>(json['method']),
+      amount: serializer.fromJson<int>(json['amount']),
+      tendered: serializer.fromJson<int?>(json['tendered']),
+      changeDue: serializer.fromJson<int>(json['changeDue']),
+      shiftLocalId: serializer.fromJson<String?>(json['shiftLocalId']),
+      syncStatus: serializer.fromJson<String>(json['syncStatus']),
+      clientReference: serializer.fromJson<String>(json['clientReference']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'localId': serializer.toJson<String>(localId),
+      'workspaceId': serializer.toJson<int>(workspaceId),
+      'deviceId': serializer.toJson<String>(deviceId),
+      'serverId': serializer.toJson<int?>(serverId),
+      'orderLocalId': serializer.toJson<String?>(orderLocalId),
+      'invoiceLocalId': serializer.toJson<String?>(invoiceLocalId),
+      'method': serializer.toJson<String>(method),
+      'amount': serializer.toJson<int>(amount),
+      'tendered': serializer.toJson<int?>(tendered),
+      'changeDue': serializer.toJson<int>(changeDue),
+      'shiftLocalId': serializer.toJson<String?>(shiftLocalId),
+      'syncStatus': serializer.toJson<String>(syncStatus),
+      'clientReference': serializer.toJson<String>(clientReference),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  LocalPayment copyWith({
+    String? localId,
+    int? workspaceId,
+    String? deviceId,
+    Value<int?> serverId = const Value.absent(),
+    Value<String?> orderLocalId = const Value.absent(),
+    Value<String?> invoiceLocalId = const Value.absent(),
+    String? method,
+    int? amount,
+    Value<int?> tendered = const Value.absent(),
+    int? changeDue,
+    Value<String?> shiftLocalId = const Value.absent(),
+    String? syncStatus,
+    String? clientReference,
+    DateTime? createdAt,
+  }) => LocalPayment(
+    localId: localId ?? this.localId,
+    workspaceId: workspaceId ?? this.workspaceId,
+    deviceId: deviceId ?? this.deviceId,
+    serverId: serverId.present ? serverId.value : this.serverId,
+    orderLocalId: orderLocalId.present ? orderLocalId.value : this.orderLocalId,
+    invoiceLocalId: invoiceLocalId.present
+        ? invoiceLocalId.value
+        : this.invoiceLocalId,
+    method: method ?? this.method,
+    amount: amount ?? this.amount,
+    tendered: tendered.present ? tendered.value : this.tendered,
+    changeDue: changeDue ?? this.changeDue,
+    shiftLocalId: shiftLocalId.present ? shiftLocalId.value : this.shiftLocalId,
+    syncStatus: syncStatus ?? this.syncStatus,
+    clientReference: clientReference ?? this.clientReference,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  LocalPayment copyWithCompanion(LocalPaymentsCompanion data) {
+    return LocalPayment(
+      localId: data.localId.present ? data.localId.value : this.localId,
+      workspaceId: data.workspaceId.present
+          ? data.workspaceId.value
+          : this.workspaceId,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      serverId: data.serverId.present ? data.serverId.value : this.serverId,
+      orderLocalId: data.orderLocalId.present
+          ? data.orderLocalId.value
+          : this.orderLocalId,
+      invoiceLocalId: data.invoiceLocalId.present
+          ? data.invoiceLocalId.value
+          : this.invoiceLocalId,
+      method: data.method.present ? data.method.value : this.method,
+      amount: data.amount.present ? data.amount.value : this.amount,
+      tendered: data.tendered.present ? data.tendered.value : this.tendered,
+      changeDue: data.changeDue.present ? data.changeDue.value : this.changeDue,
+      shiftLocalId: data.shiftLocalId.present
+          ? data.shiftLocalId.value
+          : this.shiftLocalId,
+      syncStatus: data.syncStatus.present
+          ? data.syncStatus.value
+          : this.syncStatus,
+      clientReference: data.clientReference.present
+          ? data.clientReference.value
+          : this.clientReference,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalPayment(')
+          ..write('localId: $localId, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('serverId: $serverId, ')
+          ..write('orderLocalId: $orderLocalId, ')
+          ..write('invoiceLocalId: $invoiceLocalId, ')
+          ..write('method: $method, ')
+          ..write('amount: $amount, ')
+          ..write('tendered: $tendered, ')
+          ..write('changeDue: $changeDue, ')
+          ..write('shiftLocalId: $shiftLocalId, ')
+          ..write('syncStatus: $syncStatus, ')
+          ..write('clientReference: $clientReference, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    localId,
+    workspaceId,
+    deviceId,
+    serverId,
+    orderLocalId,
+    invoiceLocalId,
+    method,
+    amount,
+    tendered,
+    changeDue,
+    shiftLocalId,
+    syncStatus,
+    clientReference,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LocalPayment &&
+          other.localId == this.localId &&
+          other.workspaceId == this.workspaceId &&
+          other.deviceId == this.deviceId &&
+          other.serverId == this.serverId &&
+          other.orderLocalId == this.orderLocalId &&
+          other.invoiceLocalId == this.invoiceLocalId &&
+          other.method == this.method &&
+          other.amount == this.amount &&
+          other.tendered == this.tendered &&
+          other.changeDue == this.changeDue &&
+          other.shiftLocalId == this.shiftLocalId &&
+          other.syncStatus == this.syncStatus &&
+          other.clientReference == this.clientReference &&
+          other.createdAt == this.createdAt);
+}
+
+class LocalPaymentsCompanion extends UpdateCompanion<LocalPayment> {
+  final Value<String> localId;
+  final Value<int> workspaceId;
+  final Value<String> deviceId;
+  final Value<int?> serverId;
+  final Value<String?> orderLocalId;
+  final Value<String?> invoiceLocalId;
+  final Value<String> method;
+  final Value<int> amount;
+  final Value<int?> tendered;
+  final Value<int> changeDue;
+  final Value<String?> shiftLocalId;
+  final Value<String> syncStatus;
+  final Value<String> clientReference;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const LocalPaymentsCompanion({
+    this.localId = const Value.absent(),
+    this.workspaceId = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.serverId = const Value.absent(),
+    this.orderLocalId = const Value.absent(),
+    this.invoiceLocalId = const Value.absent(),
+    this.method = const Value.absent(),
+    this.amount = const Value.absent(),
+    this.tendered = const Value.absent(),
+    this.changeDue = const Value.absent(),
+    this.shiftLocalId = const Value.absent(),
+    this.syncStatus = const Value.absent(),
+    this.clientReference = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LocalPaymentsCompanion.insert({
+    required String localId,
+    required int workspaceId,
+    required String deviceId,
+    this.serverId = const Value.absent(),
+    this.orderLocalId = const Value.absent(),
+    this.invoiceLocalId = const Value.absent(),
+    required String method,
+    required int amount,
+    this.tendered = const Value.absent(),
+    this.changeDue = const Value.absent(),
+    this.shiftLocalId = const Value.absent(),
+    this.syncStatus = const Value.absent(),
+    required String clientReference,
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : localId = Value(localId),
+       workspaceId = Value(workspaceId),
+       deviceId = Value(deviceId),
+       method = Value(method),
+       amount = Value(amount),
+       clientReference = Value(clientReference),
+       createdAt = Value(createdAt);
+  static Insertable<LocalPayment> custom({
+    Expression<String>? localId,
+    Expression<int>? workspaceId,
+    Expression<String>? deviceId,
+    Expression<int>? serverId,
+    Expression<String>? orderLocalId,
+    Expression<String>? invoiceLocalId,
+    Expression<String>? method,
+    Expression<int>? amount,
+    Expression<int>? tendered,
+    Expression<int>? changeDue,
+    Expression<String>? shiftLocalId,
+    Expression<String>? syncStatus,
+    Expression<String>? clientReference,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (localId != null) 'local_id': localId,
+      if (workspaceId != null) 'workspace_id': workspaceId,
+      if (deviceId != null) 'device_id': deviceId,
+      if (serverId != null) 'server_id': serverId,
+      if (orderLocalId != null) 'order_local_id': orderLocalId,
+      if (invoiceLocalId != null) 'invoice_local_id': invoiceLocalId,
+      if (method != null) 'method': method,
+      if (amount != null) 'amount': amount,
+      if (tendered != null) 'tendered': tendered,
+      if (changeDue != null) 'change_due': changeDue,
+      if (shiftLocalId != null) 'shift_local_id': shiftLocalId,
+      if (syncStatus != null) 'sync_status': syncStatus,
+      if (clientReference != null) 'client_reference': clientReference,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LocalPaymentsCompanion copyWith({
+    Value<String>? localId,
+    Value<int>? workspaceId,
+    Value<String>? deviceId,
+    Value<int?>? serverId,
+    Value<String?>? orderLocalId,
+    Value<String?>? invoiceLocalId,
+    Value<String>? method,
+    Value<int>? amount,
+    Value<int?>? tendered,
+    Value<int>? changeDue,
+    Value<String?>? shiftLocalId,
+    Value<String>? syncStatus,
+    Value<String>? clientReference,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return LocalPaymentsCompanion(
+      localId: localId ?? this.localId,
+      workspaceId: workspaceId ?? this.workspaceId,
+      deviceId: deviceId ?? this.deviceId,
+      serverId: serverId ?? this.serverId,
+      orderLocalId: orderLocalId ?? this.orderLocalId,
+      invoiceLocalId: invoiceLocalId ?? this.invoiceLocalId,
+      method: method ?? this.method,
+      amount: amount ?? this.amount,
+      tendered: tendered ?? this.tendered,
+      changeDue: changeDue ?? this.changeDue,
+      shiftLocalId: shiftLocalId ?? this.shiftLocalId,
+      syncStatus: syncStatus ?? this.syncStatus,
+      clientReference: clientReference ?? this.clientReference,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (localId.present) {
+      map['local_id'] = Variable<String>(localId.value);
+    }
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<int>(workspaceId.value);
+    }
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (serverId.present) {
+      map['server_id'] = Variable<int>(serverId.value);
+    }
+    if (orderLocalId.present) {
+      map['order_local_id'] = Variable<String>(orderLocalId.value);
+    }
+    if (invoiceLocalId.present) {
+      map['invoice_local_id'] = Variable<String>(invoiceLocalId.value);
+    }
+    if (method.present) {
+      map['method'] = Variable<String>(method.value);
+    }
+    if (amount.present) {
+      map['amount'] = Variable<int>(amount.value);
+    }
+    if (tendered.present) {
+      map['tendered'] = Variable<int>(tendered.value);
+    }
+    if (changeDue.present) {
+      map['change_due'] = Variable<int>(changeDue.value);
+    }
+    if (shiftLocalId.present) {
+      map['shift_local_id'] = Variable<String>(shiftLocalId.value);
+    }
+    if (syncStatus.present) {
+      map['sync_status'] = Variable<String>(syncStatus.value);
+    }
+    if (clientReference.present) {
+      map['client_reference'] = Variable<String>(clientReference.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalPaymentsCompanion(')
+          ..write('localId: $localId, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('serverId: $serverId, ')
+          ..write('orderLocalId: $orderLocalId, ')
+          ..write('invoiceLocalId: $invoiceLocalId, ')
+          ..write('method: $method, ')
+          ..write('amount: $amount, ')
+          ..write('tendered: $tendered, ')
+          ..write('changeDue: $changeDue, ')
+          ..write('shiftLocalId: $shiftLocalId, ')
+          ..write('syncStatus: $syncStatus, ')
+          ..write('clientReference: $clientReference, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -12520,619 +14601,6 @@ class LocalStoresCompanion extends UpdateCompanion<LocalStore> {
   }
 }
 
-class $LocalUsersTable extends LocalUsers
-    with TableInfo<$LocalUsersTable, LocalUser> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $LocalUsersTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _localIdMeta = const VerificationMeta(
-    'localId',
-  );
-  @override
-  late final GeneratedColumn<String> localId = GeneratedColumn<String>(
-    'local_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
-    'workspaceId',
-  );
-  @override
-  late final GeneratedColumn<int> workspaceId = GeneratedColumn<int>(
-    'workspace_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _nameMeta = const VerificationMeta('name');
-  @override
-  late final GeneratedColumn<String> name = GeneratedColumn<String>(
-    'name',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _usernameMeta = const VerificationMeta(
-    'username',
-  );
-  @override
-  late final GeneratedColumn<String> username = GeneratedColumn<String>(
-    'username',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _pinSaltMeta = const VerificationMeta(
-    'pinSalt',
-  );
-  @override
-  late final GeneratedColumn<String> pinSalt = GeneratedColumn<String>(
-    'pin_salt',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _pinHashMeta = const VerificationMeta(
-    'pinHash',
-  );
-  @override
-  late final GeneratedColumn<String> pinHash = GeneratedColumn<String>(
-    'pin_hash',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _roleMeta = const VerificationMeta('role');
-  @override
-  late final GeneratedColumn<String> role = GeneratedColumn<String>(
-    'role',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant('cashier'),
-  );
-  static const VerificationMeta _isActiveMeta = const VerificationMeta(
-    'isActive',
-  );
-  @override
-  late final GeneratedColumn<bool> isActive = GeneratedColumn<bool>(
-    'is_active',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("is_active" IN (0, 1))',
-    ),
-    defaultValue: const Constant(true),
-  );
-  static const VerificationMeta _createdAtMeta = const VerificationMeta(
-    'createdAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
-    'updatedAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
-    'updated_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: true,
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    localId,
-    workspaceId,
-    name,
-    username,
-    pinSalt,
-    pinHash,
-    role,
-    isActive,
-    createdAt,
-    updatedAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'local_users';
-  @override
-  VerificationContext validateIntegrity(
-    Insertable<LocalUser> instance, {
-    bool isInserting = false,
-  }) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('local_id')) {
-      context.handle(
-        _localIdMeta,
-        localId.isAcceptableOrUnknown(data['local_id']!, _localIdMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_localIdMeta);
-    }
-    if (data.containsKey('workspace_id')) {
-      context.handle(
-        _workspaceIdMeta,
-        workspaceId.isAcceptableOrUnknown(
-          data['workspace_id']!,
-          _workspaceIdMeta,
-        ),
-      );
-    } else if (isInserting) {
-      context.missing(_workspaceIdMeta);
-    }
-    if (data.containsKey('name')) {
-      context.handle(
-        _nameMeta,
-        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_nameMeta);
-    }
-    if (data.containsKey('username')) {
-      context.handle(
-        _usernameMeta,
-        username.isAcceptableOrUnknown(data['username']!, _usernameMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_usernameMeta);
-    }
-    if (data.containsKey('pin_salt')) {
-      context.handle(
-        _pinSaltMeta,
-        pinSalt.isAcceptableOrUnknown(data['pin_salt']!, _pinSaltMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_pinSaltMeta);
-    }
-    if (data.containsKey('pin_hash')) {
-      context.handle(
-        _pinHashMeta,
-        pinHash.isAcceptableOrUnknown(data['pin_hash']!, _pinHashMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_pinHashMeta);
-    }
-    if (data.containsKey('role')) {
-      context.handle(
-        _roleMeta,
-        role.isAcceptableOrUnknown(data['role']!, _roleMeta),
-      );
-    }
-    if (data.containsKey('is_active')) {
-      context.handle(
-        _isActiveMeta,
-        isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta),
-      );
-    }
-    if (data.containsKey('created_at')) {
-      context.handle(
-        _createdAtMeta,
-        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_createdAtMeta);
-    }
-    if (data.containsKey('updated_at')) {
-      context.handle(
-        _updatedAtMeta,
-        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_updatedAtMeta);
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {localId};
-  @override
-  LocalUser map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return LocalUser(
-      localId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}local_id'],
-      )!,
-      workspaceId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}workspace_id'],
-      )!,
-      name: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}name'],
-      )!,
-      username: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}username'],
-      )!,
-      pinSalt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}pin_salt'],
-      )!,
-      pinHash: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}pin_hash'],
-      )!,
-      role: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}role'],
-      )!,
-      isActive: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}is_active'],
-      )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}updated_at'],
-      )!,
-    );
-  }
-
-  @override
-  $LocalUsersTable createAlias(String alias) {
-    return $LocalUsersTable(attachedDatabase, alias);
-  }
-}
-
-class LocalUser extends DataClass implements Insertable<LocalUser> {
-  final String localId;
-  final int workspaceId;
-  final String name;
-  final String username;
-  final String pinSalt;
-  final String pinHash;
-  final String role;
-  final bool isActive;
-  final DateTime createdAt;
-  final DateTime updatedAt;
-  const LocalUser({
-    required this.localId,
-    required this.workspaceId,
-    required this.name,
-    required this.username,
-    required this.pinSalt,
-    required this.pinHash,
-    required this.role,
-    required this.isActive,
-    required this.createdAt,
-    required this.updatedAt,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['local_id'] = Variable<String>(localId);
-    map['workspace_id'] = Variable<int>(workspaceId);
-    map['name'] = Variable<String>(name);
-    map['username'] = Variable<String>(username);
-    map['pin_salt'] = Variable<String>(pinSalt);
-    map['pin_hash'] = Variable<String>(pinHash);
-    map['role'] = Variable<String>(role);
-    map['is_active'] = Variable<bool>(isActive);
-    map['created_at'] = Variable<DateTime>(createdAt);
-    map['updated_at'] = Variable<DateTime>(updatedAt);
-    return map;
-  }
-
-  LocalUsersCompanion toCompanion(bool nullToAbsent) {
-    return LocalUsersCompanion(
-      localId: Value(localId),
-      workspaceId: Value(workspaceId),
-      name: Value(name),
-      username: Value(username),
-      pinSalt: Value(pinSalt),
-      pinHash: Value(pinHash),
-      role: Value(role),
-      isActive: Value(isActive),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
-    );
-  }
-
-  factory LocalUser.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return LocalUser(
-      localId: serializer.fromJson<String>(json['localId']),
-      workspaceId: serializer.fromJson<int>(json['workspaceId']),
-      name: serializer.fromJson<String>(json['name']),
-      username: serializer.fromJson<String>(json['username']),
-      pinSalt: serializer.fromJson<String>(json['pinSalt']),
-      pinHash: serializer.fromJson<String>(json['pinHash']),
-      role: serializer.fromJson<String>(json['role']),
-      isActive: serializer.fromJson<bool>(json['isActive']),
-      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
-      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'localId': serializer.toJson<String>(localId),
-      'workspaceId': serializer.toJson<int>(workspaceId),
-      'name': serializer.toJson<String>(name),
-      'username': serializer.toJson<String>(username),
-      'pinSalt': serializer.toJson<String>(pinSalt),
-      'pinHash': serializer.toJson<String>(pinHash),
-      'role': serializer.toJson<String>(role),
-      'isActive': serializer.toJson<bool>(isActive),
-      'createdAt': serializer.toJson<DateTime>(createdAt),
-      'updatedAt': serializer.toJson<DateTime>(updatedAt),
-    };
-  }
-
-  LocalUser copyWith({
-    String? localId,
-    int? workspaceId,
-    String? name,
-    String? username,
-    String? pinSalt,
-    String? pinHash,
-    String? role,
-    bool? isActive,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-  }) => LocalUser(
-    localId: localId ?? this.localId,
-    workspaceId: workspaceId ?? this.workspaceId,
-    name: name ?? this.name,
-    username: username ?? this.username,
-    pinSalt: pinSalt ?? this.pinSalt,
-    pinHash: pinHash ?? this.pinHash,
-    role: role ?? this.role,
-    isActive: isActive ?? this.isActive,
-    createdAt: createdAt ?? this.createdAt,
-    updatedAt: updatedAt ?? this.updatedAt,
-  );
-  LocalUser copyWithCompanion(LocalUsersCompanion data) {
-    return LocalUser(
-      localId: data.localId.present ? data.localId.value : this.localId,
-      workspaceId: data.workspaceId.present
-          ? data.workspaceId.value
-          : this.workspaceId,
-      name: data.name.present ? data.name.value : this.name,
-      username: data.username.present ? data.username.value : this.username,
-      pinSalt: data.pinSalt.present ? data.pinSalt.value : this.pinSalt,
-      pinHash: data.pinHash.present ? data.pinHash.value : this.pinHash,
-      role: data.role.present ? data.role.value : this.role,
-      isActive: data.isActive.present ? data.isActive.value : this.isActive,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('LocalUser(')
-          ..write('localId: $localId, ')
-          ..write('workspaceId: $workspaceId, ')
-          ..write('name: $name, ')
-          ..write('username: $username, ')
-          ..write('pinSalt: $pinSalt, ')
-          ..write('pinHash: $pinHash, ')
-          ..write('role: $role, ')
-          ..write('isActive: $isActive, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    localId,
-    workspaceId,
-    name,
-    username,
-    pinSalt,
-    pinHash,
-    role,
-    isActive,
-    createdAt,
-    updatedAt,
-  );
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is LocalUser &&
-          other.localId == this.localId &&
-          other.workspaceId == this.workspaceId &&
-          other.name == this.name &&
-          other.username == this.username &&
-          other.pinSalt == this.pinSalt &&
-          other.pinHash == this.pinHash &&
-          other.role == this.role &&
-          other.isActive == this.isActive &&
-          other.createdAt == this.createdAt &&
-          other.updatedAt == this.updatedAt);
-}
-
-class LocalUsersCompanion extends UpdateCompanion<LocalUser> {
-  final Value<String> localId;
-  final Value<int> workspaceId;
-  final Value<String> name;
-  final Value<String> username;
-  final Value<String> pinSalt;
-  final Value<String> pinHash;
-  final Value<String> role;
-  final Value<bool> isActive;
-  final Value<DateTime> createdAt;
-  final Value<DateTime> updatedAt;
-  final Value<int> rowid;
-  const LocalUsersCompanion({
-    this.localId = const Value.absent(),
-    this.workspaceId = const Value.absent(),
-    this.name = const Value.absent(),
-    this.username = const Value.absent(),
-    this.pinSalt = const Value.absent(),
-    this.pinHash = const Value.absent(),
-    this.role = const Value.absent(),
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-    this.rowid = const Value.absent(),
-  });
-  LocalUsersCompanion.insert({
-    required String localId,
-    required int workspaceId,
-    required String name,
-    required String username,
-    required String pinSalt,
-    required String pinHash,
-    this.role = const Value.absent(),
-    this.isActive = const Value.absent(),
-    required DateTime createdAt,
-    required DateTime updatedAt,
-    this.rowid = const Value.absent(),
-  }) : localId = Value(localId),
-       workspaceId = Value(workspaceId),
-       name = Value(name),
-       username = Value(username),
-       pinSalt = Value(pinSalt),
-       pinHash = Value(pinHash),
-       createdAt = Value(createdAt),
-       updatedAt = Value(updatedAt);
-  static Insertable<LocalUser> custom({
-    Expression<String>? localId,
-    Expression<int>? workspaceId,
-    Expression<String>? name,
-    Expression<String>? username,
-    Expression<String>? pinSalt,
-    Expression<String>? pinHash,
-    Expression<String>? role,
-    Expression<bool>? isActive,
-    Expression<DateTime>? createdAt,
-    Expression<DateTime>? updatedAt,
-    Expression<int>? rowid,
-  }) {
-    return RawValuesInsertable({
-      if (localId != null) 'local_id': localId,
-      if (workspaceId != null) 'workspace_id': workspaceId,
-      if (name != null) 'name': name,
-      if (username != null) 'username': username,
-      if (pinSalt != null) 'pin_salt': pinSalt,
-      if (pinHash != null) 'pin_hash': pinHash,
-      if (role != null) 'role': role,
-      if (isActive != null) 'is_active': isActive,
-      if (createdAt != null) 'created_at': createdAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-      if (rowid != null) 'rowid': rowid,
-    });
-  }
-
-  LocalUsersCompanion copyWith({
-    Value<String>? localId,
-    Value<int>? workspaceId,
-    Value<String>? name,
-    Value<String>? username,
-    Value<String>? pinSalt,
-    Value<String>? pinHash,
-    Value<String>? role,
-    Value<bool>? isActive,
-    Value<DateTime>? createdAt,
-    Value<DateTime>? updatedAt,
-    Value<int>? rowid,
-  }) {
-    return LocalUsersCompanion(
-      localId: localId ?? this.localId,
-      workspaceId: workspaceId ?? this.workspaceId,
-      name: name ?? this.name,
-      username: username ?? this.username,
-      pinSalt: pinSalt ?? this.pinSalt,
-      pinHash: pinHash ?? this.pinHash,
-      role: role ?? this.role,
-      isActive: isActive ?? this.isActive,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      rowid: rowid ?? this.rowid,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (localId.present) {
-      map['local_id'] = Variable<String>(localId.value);
-    }
-    if (workspaceId.present) {
-      map['workspace_id'] = Variable<int>(workspaceId.value);
-    }
-    if (name.present) {
-      map['name'] = Variable<String>(name.value);
-    }
-    if (username.present) {
-      map['username'] = Variable<String>(username.value);
-    }
-    if (pinSalt.present) {
-      map['pin_salt'] = Variable<String>(pinSalt.value);
-    }
-    if (pinHash.present) {
-      map['pin_hash'] = Variable<String>(pinHash.value);
-    }
-    if (role.present) {
-      map['role'] = Variable<String>(role.value);
-    }
-    if (isActive.present) {
-      map['is_active'] = Variable<bool>(isActive.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<DateTime>(createdAt.value);
-    }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<DateTime>(updatedAt.value);
-    }
-    if (rowid.present) {
-      map['rowid'] = Variable<int>(rowid.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('LocalUsersCompanion(')
-          ..write('localId: $localId, ')
-          ..write('workspaceId: $workspaceId, ')
-          ..write('name: $name, ')
-          ..write('username: $username, ')
-          ..write('pinSalt: $pinSalt, ')
-          ..write('pinHash: $pinHash, ')
-          ..write('role: $role, ')
-          ..write('isActive: $isActive, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt, ')
-          ..write('rowid: $rowid')
-          ..write(')'))
-        .toString();
-  }
-}
-
 class $LocalSequencesTable extends LocalSequences
     with TableInfo<$LocalSequencesTable, LocalSequence> {
   @override
@@ -13149,6 +14617,9 @@ class $LocalSequencesTable extends LocalSequences
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_stores (local_id) ON DELETE RESTRICT',
+    ),
   );
   static const VerificationMeta _kindMeta = const VerificationMeta('kind');
   @override
@@ -13446,740 +14917,6 @@ class LocalSequencesCompanion extends UpdateCompanion<LocalSequence> {
   }
 }
 
-class $LocalSessionsTable extends LocalSessions
-    with TableInfo<$LocalSessionsTable, LocalSession> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $LocalSessionsTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _localIdMeta = const VerificationMeta(
-    'localId',
-  );
-  @override
-  late final GeneratedColumn<String> localId = GeneratedColumn<String>(
-    'local_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
-    'workspaceId',
-  );
-  @override
-  late final GeneratedColumn<int> workspaceId = GeneratedColumn<int>(
-    'workspace_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _tableLocalIdMeta = const VerificationMeta(
-    'tableLocalId',
-  );
-  @override
-  late final GeneratedColumn<String> tableLocalId = GeneratedColumn<String>(
-    'table_local_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _statusMeta = const VerificationMeta('status');
-  @override
-  late final GeneratedColumn<String> status = GeneratedColumn<String>(
-    'status',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant('open'),
-  );
-  static const VerificationMeta _openedAtMeta = const VerificationMeta(
-    'openedAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> openedAt = GeneratedColumn<DateTime>(
-    'opened_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _closedAtMeta = const VerificationMeta(
-    'closedAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> closedAt = GeneratedColumn<DateTime>(
-    'closed_at',
-    aliasedName,
-    true,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _openedByUserIdMeta = const VerificationMeta(
-    'openedByUserId',
-  );
-  @override
-  late final GeneratedColumn<String> openedByUserId = GeneratedColumn<String>(
-    'opened_by_user_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _closedByUserIdMeta = const VerificationMeta(
-    'closedByUserId',
-  );
-  @override
-  late final GeneratedColumn<String> closedByUserId = GeneratedColumn<String>(
-    'closed_by_user_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
-  @override
-  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
-    'notes',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _discountAmountMeta = const VerificationMeta(
-    'discountAmount',
-  );
-  @override
-  late final GeneratedColumn<double> discountAmount = GeneratedColumn<double>(
-    'discount_amount',
-    aliasedName,
-    false,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _createdAtMeta = const VerificationMeta(
-    'createdAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
-    'updatedAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
-    'updated_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: true,
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    localId,
-    workspaceId,
-    tableLocalId,
-    status,
-    openedAt,
-    closedAt,
-    openedByUserId,
-    closedByUserId,
-    notes,
-    discountAmount,
-    createdAt,
-    updatedAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'local_sessions';
-  @override
-  VerificationContext validateIntegrity(
-    Insertable<LocalSession> instance, {
-    bool isInserting = false,
-  }) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('local_id')) {
-      context.handle(
-        _localIdMeta,
-        localId.isAcceptableOrUnknown(data['local_id']!, _localIdMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_localIdMeta);
-    }
-    if (data.containsKey('workspace_id')) {
-      context.handle(
-        _workspaceIdMeta,
-        workspaceId.isAcceptableOrUnknown(
-          data['workspace_id']!,
-          _workspaceIdMeta,
-        ),
-      );
-    } else if (isInserting) {
-      context.missing(_workspaceIdMeta);
-    }
-    if (data.containsKey('table_local_id')) {
-      context.handle(
-        _tableLocalIdMeta,
-        tableLocalId.isAcceptableOrUnknown(
-          data['table_local_id']!,
-          _tableLocalIdMeta,
-        ),
-      );
-    } else if (isInserting) {
-      context.missing(_tableLocalIdMeta);
-    }
-    if (data.containsKey('status')) {
-      context.handle(
-        _statusMeta,
-        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
-      );
-    }
-    if (data.containsKey('opened_at')) {
-      context.handle(
-        _openedAtMeta,
-        openedAt.isAcceptableOrUnknown(data['opened_at']!, _openedAtMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_openedAtMeta);
-    }
-    if (data.containsKey('closed_at')) {
-      context.handle(
-        _closedAtMeta,
-        closedAt.isAcceptableOrUnknown(data['closed_at']!, _closedAtMeta),
-      );
-    }
-    if (data.containsKey('opened_by_user_id')) {
-      context.handle(
-        _openedByUserIdMeta,
-        openedByUserId.isAcceptableOrUnknown(
-          data['opened_by_user_id']!,
-          _openedByUserIdMeta,
-        ),
-      );
-    }
-    if (data.containsKey('closed_by_user_id')) {
-      context.handle(
-        _closedByUserIdMeta,
-        closedByUserId.isAcceptableOrUnknown(
-          data['closed_by_user_id']!,
-          _closedByUserIdMeta,
-        ),
-      );
-    }
-    if (data.containsKey('notes')) {
-      context.handle(
-        _notesMeta,
-        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
-      );
-    }
-    if (data.containsKey('discount_amount')) {
-      context.handle(
-        _discountAmountMeta,
-        discountAmount.isAcceptableOrUnknown(
-          data['discount_amount']!,
-          _discountAmountMeta,
-        ),
-      );
-    }
-    if (data.containsKey('created_at')) {
-      context.handle(
-        _createdAtMeta,
-        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_createdAtMeta);
-    }
-    if (data.containsKey('updated_at')) {
-      context.handle(
-        _updatedAtMeta,
-        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_updatedAtMeta);
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {localId};
-  @override
-  LocalSession map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return LocalSession(
-      localId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}local_id'],
-      )!,
-      workspaceId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}workspace_id'],
-      )!,
-      tableLocalId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}table_local_id'],
-      )!,
-      status: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}status'],
-      )!,
-      openedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}opened_at'],
-      )!,
-      closedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}closed_at'],
-      ),
-      openedByUserId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}opened_by_user_id'],
-      ),
-      closedByUserId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}closed_by_user_id'],
-      ),
-      notes: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}notes'],
-      ),
-      discountAmount: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}discount_amount'],
-      )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}updated_at'],
-      )!,
-    );
-  }
-
-  @override
-  $LocalSessionsTable createAlias(String alias) {
-    return $LocalSessionsTable(attachedDatabase, alias);
-  }
-}
-
-class LocalSession extends DataClass implements Insertable<LocalSession> {
-  final String localId;
-  final int workspaceId;
-  final String tableLocalId;
-  final String status;
-  final DateTime openedAt;
-  final DateTime? closedAt;
-  final String? openedByUserId;
-  final String? closedByUserId;
-  final String? notes;
-  final double discountAmount;
-  final DateTime createdAt;
-  final DateTime updatedAt;
-  const LocalSession({
-    required this.localId,
-    required this.workspaceId,
-    required this.tableLocalId,
-    required this.status,
-    required this.openedAt,
-    this.closedAt,
-    this.openedByUserId,
-    this.closedByUserId,
-    this.notes,
-    required this.discountAmount,
-    required this.createdAt,
-    required this.updatedAt,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['local_id'] = Variable<String>(localId);
-    map['workspace_id'] = Variable<int>(workspaceId);
-    map['table_local_id'] = Variable<String>(tableLocalId);
-    map['status'] = Variable<String>(status);
-    map['opened_at'] = Variable<DateTime>(openedAt);
-    if (!nullToAbsent || closedAt != null) {
-      map['closed_at'] = Variable<DateTime>(closedAt);
-    }
-    if (!nullToAbsent || openedByUserId != null) {
-      map['opened_by_user_id'] = Variable<String>(openedByUserId);
-    }
-    if (!nullToAbsent || closedByUserId != null) {
-      map['closed_by_user_id'] = Variable<String>(closedByUserId);
-    }
-    if (!nullToAbsent || notes != null) {
-      map['notes'] = Variable<String>(notes);
-    }
-    map['discount_amount'] = Variable<double>(discountAmount);
-    map['created_at'] = Variable<DateTime>(createdAt);
-    map['updated_at'] = Variable<DateTime>(updatedAt);
-    return map;
-  }
-
-  LocalSessionsCompanion toCompanion(bool nullToAbsent) {
-    return LocalSessionsCompanion(
-      localId: Value(localId),
-      workspaceId: Value(workspaceId),
-      tableLocalId: Value(tableLocalId),
-      status: Value(status),
-      openedAt: Value(openedAt),
-      closedAt: closedAt == null && nullToAbsent
-          ? const Value.absent()
-          : Value(closedAt),
-      openedByUserId: openedByUserId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(openedByUserId),
-      closedByUserId: closedByUserId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(closedByUserId),
-      notes: notes == null && nullToAbsent
-          ? const Value.absent()
-          : Value(notes),
-      discountAmount: Value(discountAmount),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
-    );
-  }
-
-  factory LocalSession.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return LocalSession(
-      localId: serializer.fromJson<String>(json['localId']),
-      workspaceId: serializer.fromJson<int>(json['workspaceId']),
-      tableLocalId: serializer.fromJson<String>(json['tableLocalId']),
-      status: serializer.fromJson<String>(json['status']),
-      openedAt: serializer.fromJson<DateTime>(json['openedAt']),
-      closedAt: serializer.fromJson<DateTime?>(json['closedAt']),
-      openedByUserId: serializer.fromJson<String?>(json['openedByUserId']),
-      closedByUserId: serializer.fromJson<String?>(json['closedByUserId']),
-      notes: serializer.fromJson<String?>(json['notes']),
-      discountAmount: serializer.fromJson<double>(json['discountAmount']),
-      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
-      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'localId': serializer.toJson<String>(localId),
-      'workspaceId': serializer.toJson<int>(workspaceId),
-      'tableLocalId': serializer.toJson<String>(tableLocalId),
-      'status': serializer.toJson<String>(status),
-      'openedAt': serializer.toJson<DateTime>(openedAt),
-      'closedAt': serializer.toJson<DateTime?>(closedAt),
-      'openedByUserId': serializer.toJson<String?>(openedByUserId),
-      'closedByUserId': serializer.toJson<String?>(closedByUserId),
-      'notes': serializer.toJson<String?>(notes),
-      'discountAmount': serializer.toJson<double>(discountAmount),
-      'createdAt': serializer.toJson<DateTime>(createdAt),
-      'updatedAt': serializer.toJson<DateTime>(updatedAt),
-    };
-  }
-
-  LocalSession copyWith({
-    String? localId,
-    int? workspaceId,
-    String? tableLocalId,
-    String? status,
-    DateTime? openedAt,
-    Value<DateTime?> closedAt = const Value.absent(),
-    Value<String?> openedByUserId = const Value.absent(),
-    Value<String?> closedByUserId = const Value.absent(),
-    Value<String?> notes = const Value.absent(),
-    double? discountAmount,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-  }) => LocalSession(
-    localId: localId ?? this.localId,
-    workspaceId: workspaceId ?? this.workspaceId,
-    tableLocalId: tableLocalId ?? this.tableLocalId,
-    status: status ?? this.status,
-    openedAt: openedAt ?? this.openedAt,
-    closedAt: closedAt.present ? closedAt.value : this.closedAt,
-    openedByUserId: openedByUserId.present
-        ? openedByUserId.value
-        : this.openedByUserId,
-    closedByUserId: closedByUserId.present
-        ? closedByUserId.value
-        : this.closedByUserId,
-    notes: notes.present ? notes.value : this.notes,
-    discountAmount: discountAmount ?? this.discountAmount,
-    createdAt: createdAt ?? this.createdAt,
-    updatedAt: updatedAt ?? this.updatedAt,
-  );
-  LocalSession copyWithCompanion(LocalSessionsCompanion data) {
-    return LocalSession(
-      localId: data.localId.present ? data.localId.value : this.localId,
-      workspaceId: data.workspaceId.present
-          ? data.workspaceId.value
-          : this.workspaceId,
-      tableLocalId: data.tableLocalId.present
-          ? data.tableLocalId.value
-          : this.tableLocalId,
-      status: data.status.present ? data.status.value : this.status,
-      openedAt: data.openedAt.present ? data.openedAt.value : this.openedAt,
-      closedAt: data.closedAt.present ? data.closedAt.value : this.closedAt,
-      openedByUserId: data.openedByUserId.present
-          ? data.openedByUserId.value
-          : this.openedByUserId,
-      closedByUserId: data.closedByUserId.present
-          ? data.closedByUserId.value
-          : this.closedByUserId,
-      notes: data.notes.present ? data.notes.value : this.notes,
-      discountAmount: data.discountAmount.present
-          ? data.discountAmount.value
-          : this.discountAmount,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('LocalSession(')
-          ..write('localId: $localId, ')
-          ..write('workspaceId: $workspaceId, ')
-          ..write('tableLocalId: $tableLocalId, ')
-          ..write('status: $status, ')
-          ..write('openedAt: $openedAt, ')
-          ..write('closedAt: $closedAt, ')
-          ..write('openedByUserId: $openedByUserId, ')
-          ..write('closedByUserId: $closedByUserId, ')
-          ..write('notes: $notes, ')
-          ..write('discountAmount: $discountAmount, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    localId,
-    workspaceId,
-    tableLocalId,
-    status,
-    openedAt,
-    closedAt,
-    openedByUserId,
-    closedByUserId,
-    notes,
-    discountAmount,
-    createdAt,
-    updatedAt,
-  );
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is LocalSession &&
-          other.localId == this.localId &&
-          other.workspaceId == this.workspaceId &&
-          other.tableLocalId == this.tableLocalId &&
-          other.status == this.status &&
-          other.openedAt == this.openedAt &&
-          other.closedAt == this.closedAt &&
-          other.openedByUserId == this.openedByUserId &&
-          other.closedByUserId == this.closedByUserId &&
-          other.notes == this.notes &&
-          other.discountAmount == this.discountAmount &&
-          other.createdAt == this.createdAt &&
-          other.updatedAt == this.updatedAt);
-}
-
-class LocalSessionsCompanion extends UpdateCompanion<LocalSession> {
-  final Value<String> localId;
-  final Value<int> workspaceId;
-  final Value<String> tableLocalId;
-  final Value<String> status;
-  final Value<DateTime> openedAt;
-  final Value<DateTime?> closedAt;
-  final Value<String?> openedByUserId;
-  final Value<String?> closedByUserId;
-  final Value<String?> notes;
-  final Value<double> discountAmount;
-  final Value<DateTime> createdAt;
-  final Value<DateTime> updatedAt;
-  final Value<int> rowid;
-  const LocalSessionsCompanion({
-    this.localId = const Value.absent(),
-    this.workspaceId = const Value.absent(),
-    this.tableLocalId = const Value.absent(),
-    this.status = const Value.absent(),
-    this.openedAt = const Value.absent(),
-    this.closedAt = const Value.absent(),
-    this.openedByUserId = const Value.absent(),
-    this.closedByUserId = const Value.absent(),
-    this.notes = const Value.absent(),
-    this.discountAmount = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-    this.rowid = const Value.absent(),
-  });
-  LocalSessionsCompanion.insert({
-    required String localId,
-    required int workspaceId,
-    required String tableLocalId,
-    this.status = const Value.absent(),
-    required DateTime openedAt,
-    this.closedAt = const Value.absent(),
-    this.openedByUserId = const Value.absent(),
-    this.closedByUserId = const Value.absent(),
-    this.notes = const Value.absent(),
-    this.discountAmount = const Value.absent(),
-    required DateTime createdAt,
-    required DateTime updatedAt,
-    this.rowid = const Value.absent(),
-  }) : localId = Value(localId),
-       workspaceId = Value(workspaceId),
-       tableLocalId = Value(tableLocalId),
-       openedAt = Value(openedAt),
-       createdAt = Value(createdAt),
-       updatedAt = Value(updatedAt);
-  static Insertable<LocalSession> custom({
-    Expression<String>? localId,
-    Expression<int>? workspaceId,
-    Expression<String>? tableLocalId,
-    Expression<String>? status,
-    Expression<DateTime>? openedAt,
-    Expression<DateTime>? closedAt,
-    Expression<String>? openedByUserId,
-    Expression<String>? closedByUserId,
-    Expression<String>? notes,
-    Expression<double>? discountAmount,
-    Expression<DateTime>? createdAt,
-    Expression<DateTime>? updatedAt,
-    Expression<int>? rowid,
-  }) {
-    return RawValuesInsertable({
-      if (localId != null) 'local_id': localId,
-      if (workspaceId != null) 'workspace_id': workspaceId,
-      if (tableLocalId != null) 'table_local_id': tableLocalId,
-      if (status != null) 'status': status,
-      if (openedAt != null) 'opened_at': openedAt,
-      if (closedAt != null) 'closed_at': closedAt,
-      if (openedByUserId != null) 'opened_by_user_id': openedByUserId,
-      if (closedByUserId != null) 'closed_by_user_id': closedByUserId,
-      if (notes != null) 'notes': notes,
-      if (discountAmount != null) 'discount_amount': discountAmount,
-      if (createdAt != null) 'created_at': createdAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-      if (rowid != null) 'rowid': rowid,
-    });
-  }
-
-  LocalSessionsCompanion copyWith({
-    Value<String>? localId,
-    Value<int>? workspaceId,
-    Value<String>? tableLocalId,
-    Value<String>? status,
-    Value<DateTime>? openedAt,
-    Value<DateTime?>? closedAt,
-    Value<String?>? openedByUserId,
-    Value<String?>? closedByUserId,
-    Value<String?>? notes,
-    Value<double>? discountAmount,
-    Value<DateTime>? createdAt,
-    Value<DateTime>? updatedAt,
-    Value<int>? rowid,
-  }) {
-    return LocalSessionsCompanion(
-      localId: localId ?? this.localId,
-      workspaceId: workspaceId ?? this.workspaceId,
-      tableLocalId: tableLocalId ?? this.tableLocalId,
-      status: status ?? this.status,
-      openedAt: openedAt ?? this.openedAt,
-      closedAt: closedAt ?? this.closedAt,
-      openedByUserId: openedByUserId ?? this.openedByUserId,
-      closedByUserId: closedByUserId ?? this.closedByUserId,
-      notes: notes ?? this.notes,
-      discountAmount: discountAmount ?? this.discountAmount,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      rowid: rowid ?? this.rowid,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (localId.present) {
-      map['local_id'] = Variable<String>(localId.value);
-    }
-    if (workspaceId.present) {
-      map['workspace_id'] = Variable<int>(workspaceId.value);
-    }
-    if (tableLocalId.present) {
-      map['table_local_id'] = Variable<String>(tableLocalId.value);
-    }
-    if (status.present) {
-      map['status'] = Variable<String>(status.value);
-    }
-    if (openedAt.present) {
-      map['opened_at'] = Variable<DateTime>(openedAt.value);
-    }
-    if (closedAt.present) {
-      map['closed_at'] = Variable<DateTime>(closedAt.value);
-    }
-    if (openedByUserId.present) {
-      map['opened_by_user_id'] = Variable<String>(openedByUserId.value);
-    }
-    if (closedByUserId.present) {
-      map['closed_by_user_id'] = Variable<String>(closedByUserId.value);
-    }
-    if (notes.present) {
-      map['notes'] = Variable<String>(notes.value);
-    }
-    if (discountAmount.present) {
-      map['discount_amount'] = Variable<double>(discountAmount.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<DateTime>(createdAt.value);
-    }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<DateTime>(updatedAt.value);
-    }
-    if (rowid.present) {
-      map['rowid'] = Variable<int>(rowid.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('LocalSessionsCompanion(')
-          ..write('localId: $localId, ')
-          ..write('workspaceId: $workspaceId, ')
-          ..write('tableLocalId: $tableLocalId, ')
-          ..write('status: $status, ')
-          ..write('openedAt: $openedAt, ')
-          ..write('closedAt: $closedAt, ')
-          ..write('openedByUserId: $openedByUserId, ')
-          ..write('closedByUserId: $closedByUserId, ')
-          ..write('notes: $notes, ')
-          ..write('discountAmount: $discountAmount, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt, ')
-          ..write('rowid: $rowid')
-          ..write(')'))
-        .toString();
-  }
-}
-
 class $LocalDraftCartsTable extends LocalDraftCarts
     with TableInfo<$LocalDraftCartsTable, LocalDraftCart> {
   @override
@@ -14229,6 +14966,9 @@ class $LocalDraftCartsTable extends LocalDraftCarts
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_tables (local_id) ON DELETE SET NULL',
+    ),
   );
   static const VerificationMeta _tableServerIdMeta = const VerificationMeta(
     'tableServerId',
@@ -14251,6 +14991,9 @@ class $LocalDraftCartsTable extends LocalDraftCarts
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_customers (local_id) ON DELETE SET NULL',
+    ),
   );
   static const VerificationMeta _notesMeta = const VerificationMeta('notes');
   @override
@@ -14265,11 +15008,11 @@ class $LocalDraftCartsTable extends LocalDraftCarts
     'discountAmount',
   );
   @override
-  late final GeneratedColumn<double> discountAmount = GeneratedColumn<double>(
+  late final GeneratedColumn<int> discountAmount = GeneratedColumn<int>(
     'discount_amount',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
@@ -14464,7 +15207,7 @@ class $LocalDraftCartsTable extends LocalDraftCarts
         data['${effectivePrefix}notes'],
       ),
       discountAmount: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}discount_amount'],
       )!,
       discountPercent: attachedDatabase.typeMapping.read(
@@ -14496,7 +15239,7 @@ class LocalDraftCart extends DataClass implements Insertable<LocalDraftCart> {
   final int? tableServerId;
   final String? customerLocalId;
   final String? notes;
-  final double discountAmount;
+  final int discountAmount;
   final double discountPercent;
   final double taxRate;
   final DateTime updatedAt;
@@ -14531,7 +15274,7 @@ class LocalDraftCart extends DataClass implements Insertable<LocalDraftCart> {
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
     }
-    map['discount_amount'] = Variable<double>(discountAmount);
+    map['discount_amount'] = Variable<int>(discountAmount);
     map['discount_percent'] = Variable<double>(discountPercent);
     map['tax_rate'] = Variable<double>(taxRate);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -14575,7 +15318,7 @@ class LocalDraftCart extends DataClass implements Insertable<LocalDraftCart> {
       tableServerId: serializer.fromJson<int?>(json['tableServerId']),
       customerLocalId: serializer.fromJson<String?>(json['customerLocalId']),
       notes: serializer.fromJson<String?>(json['notes']),
-      discountAmount: serializer.fromJson<double>(json['discountAmount']),
+      discountAmount: serializer.fromJson<int>(json['discountAmount']),
       discountPercent: serializer.fromJson<double>(json['discountPercent']),
       taxRate: serializer.fromJson<double>(json['taxRate']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -14592,7 +15335,7 @@ class LocalDraftCart extends DataClass implements Insertable<LocalDraftCart> {
       'tableServerId': serializer.toJson<int?>(tableServerId),
       'customerLocalId': serializer.toJson<String?>(customerLocalId),
       'notes': serializer.toJson<String?>(notes),
-      'discountAmount': serializer.toJson<double>(discountAmount),
+      'discountAmount': serializer.toJson<int>(discountAmount),
       'discountPercent': serializer.toJson<double>(discountPercent),
       'taxRate': serializer.toJson<double>(taxRate),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -14607,7 +15350,7 @@ class LocalDraftCart extends DataClass implements Insertable<LocalDraftCart> {
     Value<int?> tableServerId = const Value.absent(),
     Value<String?> customerLocalId = const Value.absent(),
     Value<String?> notes = const Value.absent(),
-    double? discountAmount,
+    int? discountAmount,
     double? discountPercent,
     double? taxRate,
     DateTime? updatedAt,
@@ -14713,7 +15456,7 @@ class LocalDraftCartsCompanion extends UpdateCompanion<LocalDraftCart> {
   final Value<int?> tableServerId;
   final Value<String?> customerLocalId;
   final Value<String?> notes;
-  final Value<double> discountAmount;
+  final Value<int> discountAmount;
   final Value<double> discountPercent;
   final Value<double> taxRate;
   final Value<DateTime> updatedAt;
@@ -14757,7 +15500,7 @@ class LocalDraftCartsCompanion extends UpdateCompanion<LocalDraftCart> {
     Expression<int>? tableServerId,
     Expression<String>? customerLocalId,
     Expression<String>? notes,
-    Expression<double>? discountAmount,
+    Expression<int>? discountAmount,
     Expression<double>? discountPercent,
     Expression<double>? taxRate,
     Expression<DateTime>? updatedAt,
@@ -14787,7 +15530,7 @@ class LocalDraftCartsCompanion extends UpdateCompanion<LocalDraftCart> {
     Value<int?>? tableServerId,
     Value<String?>? customerLocalId,
     Value<String?>? notes,
-    Value<double>? discountAmount,
+    Value<int>? discountAmount,
     Value<double>? discountPercent,
     Value<double>? taxRate,
     Value<DateTime>? updatedAt,
@@ -14834,7 +15577,7 @@ class LocalDraftCartsCompanion extends UpdateCompanion<LocalDraftCart> {
       map['notes'] = Variable<String>(notes.value);
     }
     if (discountAmount.present) {
-      map['discount_amount'] = Variable<double>(discountAmount.value);
+      map['discount_amount'] = Variable<int>(discountAmount.value);
     }
     if (discountPercent.present) {
       map['discount_percent'] = Variable<double>(discountPercent.value);
@@ -14898,6 +15641,9 @@ class $LocalDraftCartLinesTable extends LocalDraftCartLines
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_draft_carts (local_id) ON DELETE CASCADE',
+    ),
   );
   static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
     'workspaceId',
@@ -14920,6 +15666,9 @@ class $LocalDraftCartLinesTable extends LocalDraftCartLines
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_products (local_id) ON DELETE RESTRICT',
+    ),
   );
   static const VerificationMeta _productServerIdMeta = const VerificationMeta(
     'productServerId',
@@ -14976,20 +15725,20 @@ class $LocalDraftCartLinesTable extends LocalDraftCartLines
     'unitPrice',
   );
   @override
-  late final GeneratedColumn<double> unitPrice = GeneratedColumn<double>(
+  late final GeneratedColumn<int> unitPrice = GeneratedColumn<int>(
     'unit_price',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _costMeta = const VerificationMeta('cost');
   @override
-  late final GeneratedColumn<double> cost = GeneratedColumn<double>(
+  late final GeneratedColumn<int> cost = GeneratedColumn<int>(
     'cost',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
@@ -14997,11 +15746,11 @@ class $LocalDraftCartLinesTable extends LocalDraftCartLines
     'discountAmount',
   );
   @override
-  late final GeneratedColumn<double> discountAmount = GeneratedColumn<double>(
+  late final GeneratedColumn<int> discountAmount = GeneratedColumn<int>(
     'discount_amount',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
@@ -15218,15 +15967,15 @@ class $LocalDraftCartLinesTable extends LocalDraftCartLines
         data['${effectivePrefix}quantity'],
       )!,
       unitPrice: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}unit_price'],
       )!,
       cost: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}cost'],
       )!,
       discountAmount: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}discount_amount'],
       )!,
       taxRate: attachedDatabase.typeMapping.read(
@@ -15257,9 +16006,9 @@ class LocalDraftCartLine extends DataClass
   final String? sku;
   final String? barcode;
   final int quantity;
-  final double unitPrice;
-  final double cost;
-  final double discountAmount;
+  final int unitPrice;
+  final int cost;
+  final int discountAmount;
   final double taxRate;
   final DateTime updatedAt;
   const LocalDraftCartLine({
@@ -15296,9 +16045,9 @@ class LocalDraftCartLine extends DataClass
       map['barcode'] = Variable<String>(barcode);
     }
     map['quantity'] = Variable<int>(quantity);
-    map['unit_price'] = Variable<double>(unitPrice);
-    map['cost'] = Variable<double>(cost);
-    map['discount_amount'] = Variable<double>(discountAmount);
+    map['unit_price'] = Variable<int>(unitPrice);
+    map['cost'] = Variable<int>(cost);
+    map['discount_amount'] = Variable<int>(discountAmount);
     map['tax_rate'] = Variable<double>(taxRate);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -15342,9 +16091,9 @@ class LocalDraftCartLine extends DataClass
       sku: serializer.fromJson<String?>(json['sku']),
       barcode: serializer.fromJson<String?>(json['barcode']),
       quantity: serializer.fromJson<int>(json['quantity']),
-      unitPrice: serializer.fromJson<double>(json['unitPrice']),
-      cost: serializer.fromJson<double>(json['cost']),
-      discountAmount: serializer.fromJson<double>(json['discountAmount']),
+      unitPrice: serializer.fromJson<int>(json['unitPrice']),
+      cost: serializer.fromJson<int>(json['cost']),
+      discountAmount: serializer.fromJson<int>(json['discountAmount']),
       taxRate: serializer.fromJson<double>(json['taxRate']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -15362,9 +16111,9 @@ class LocalDraftCartLine extends DataClass
       'sku': serializer.toJson<String?>(sku),
       'barcode': serializer.toJson<String?>(barcode),
       'quantity': serializer.toJson<int>(quantity),
-      'unitPrice': serializer.toJson<double>(unitPrice),
-      'cost': serializer.toJson<double>(cost),
-      'discountAmount': serializer.toJson<double>(discountAmount),
+      'unitPrice': serializer.toJson<int>(unitPrice),
+      'cost': serializer.toJson<int>(cost),
+      'discountAmount': serializer.toJson<int>(discountAmount),
       'taxRate': serializer.toJson<double>(taxRate),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -15380,9 +16129,9 @@ class LocalDraftCartLine extends DataClass
     Value<String?> sku = const Value.absent(),
     Value<String?> barcode = const Value.absent(),
     int? quantity,
-    double? unitPrice,
-    double? cost,
-    double? discountAmount,
+    int? unitPrice,
+    int? cost,
+    int? discountAmount,
     double? taxRate,
     DateTime? updatedAt,
   }) => LocalDraftCartLine(
@@ -15500,9 +16249,9 @@ class LocalDraftCartLinesCompanion extends UpdateCompanion<LocalDraftCartLine> {
   final Value<String?> sku;
   final Value<String?> barcode;
   final Value<int> quantity;
-  final Value<double> unitPrice;
-  final Value<double> cost;
-  final Value<double> discountAmount;
+  final Value<int> unitPrice;
+  final Value<int> cost;
+  final Value<int> discountAmount;
   final Value<double> taxRate;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -15533,7 +16282,7 @@ class LocalDraftCartLinesCompanion extends UpdateCompanion<LocalDraftCartLine> {
     this.sku = const Value.absent(),
     this.barcode = const Value.absent(),
     required int quantity,
-    required double unitPrice,
+    required int unitPrice,
     this.cost = const Value.absent(),
     this.discountAmount = const Value.absent(),
     this.taxRate = const Value.absent(),
@@ -15557,9 +16306,9 @@ class LocalDraftCartLinesCompanion extends UpdateCompanion<LocalDraftCartLine> {
     Expression<String>? sku,
     Expression<String>? barcode,
     Expression<int>? quantity,
-    Expression<double>? unitPrice,
-    Expression<double>? cost,
-    Expression<double>? discountAmount,
+    Expression<int>? unitPrice,
+    Expression<int>? cost,
+    Expression<int>? discountAmount,
     Expression<double>? taxRate,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -15593,9 +16342,9 @@ class LocalDraftCartLinesCompanion extends UpdateCompanion<LocalDraftCartLine> {
     Value<String?>? sku,
     Value<String?>? barcode,
     Value<int>? quantity,
-    Value<double>? unitPrice,
-    Value<double>? cost,
-    Value<double>? discountAmount,
+    Value<int>? unitPrice,
+    Value<int>? cost,
+    Value<int>? discountAmount,
     Value<double>? taxRate,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -15650,13 +16399,13 @@ class LocalDraftCartLinesCompanion extends UpdateCompanion<LocalDraftCartLine> {
       map['quantity'] = Variable<int>(quantity.value);
     }
     if (unitPrice.present) {
-      map['unit_price'] = Variable<double>(unitPrice.value);
+      map['unit_price'] = Variable<int>(unitPrice.value);
     }
     if (cost.present) {
-      map['cost'] = Variable<double>(cost.value);
+      map['cost'] = Variable<int>(cost.value);
     }
     if (discountAmount.present) {
-      map['discount_amount'] = Variable<double>(discountAmount.value);
+      map['discount_amount'] = Variable<int>(discountAmount.value);
     }
     if (taxRate.present) {
       map['tax_rate'] = Variable<double>(taxRate.value);
@@ -15731,6 +16480,9 @@ class $LocalReturnsTable extends LocalReturns
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_invoices (local_id) ON DELETE RESTRICT',
+    ),
   );
   static const VerificationMeta _orderLocalIdMeta = const VerificationMeta(
     'orderLocalId',
@@ -15742,6 +16494,9 @@ class $LocalReturnsTable extends LocalReturns
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_orders (local_id) ON DELETE RESTRICT',
+    ),
   );
   static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
   @override
@@ -15756,11 +16511,11 @@ class $LocalReturnsTable extends LocalReturns
     'refundAmount',
   );
   @override
-  late final GeneratedColumn<double> refundAmount = GeneratedColumn<double>(
+  late final GeneratedColumn<int> refundAmount = GeneratedColumn<int>(
     'refund_amount',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
@@ -15784,6 +16539,9 @@ class $LocalReturnsTable extends LocalReturns
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_users (local_id) ON DELETE SET NULL',
+    ),
   );
   static const VerificationMeta _shiftLocalIdMeta = const VerificationMeta(
     'shiftLocalId',
@@ -15795,6 +16553,9 @@ class $LocalReturnsTable extends LocalReturns
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_shifts (local_id) ON DELETE RESTRICT',
+    ),
   );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
@@ -15946,7 +16707,7 @@ class $LocalReturnsTable extends LocalReturns
         data['${effectivePrefix}reason'],
       ),
       refundAmount: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}refund_amount'],
       )!,
       status: attachedDatabase.typeMapping.read(
@@ -15980,7 +16741,7 @@ class LocalReturn extends DataClass implements Insertable<LocalReturn> {
   final String? invoiceLocalId;
   final String? orderLocalId;
   final String? reason;
-  final double refundAmount;
+  final int refundAmount;
   final String status;
   final String? createdByUserId;
   final String? shiftLocalId;
@@ -16011,7 +16772,7 @@ class LocalReturn extends DataClass implements Insertable<LocalReturn> {
     if (!nullToAbsent || reason != null) {
       map['reason'] = Variable<String>(reason);
     }
-    map['refund_amount'] = Variable<double>(refundAmount);
+    map['refund_amount'] = Variable<int>(refundAmount);
     map['status'] = Variable<String>(status);
     if (!nullToAbsent || createdByUserId != null) {
       map['created_by_user_id'] = Variable<String>(createdByUserId);
@@ -16059,7 +16820,7 @@ class LocalReturn extends DataClass implements Insertable<LocalReturn> {
       invoiceLocalId: serializer.fromJson<String?>(json['invoiceLocalId']),
       orderLocalId: serializer.fromJson<String?>(json['orderLocalId']),
       reason: serializer.fromJson<String?>(json['reason']),
-      refundAmount: serializer.fromJson<double>(json['refundAmount']),
+      refundAmount: serializer.fromJson<int>(json['refundAmount']),
       status: serializer.fromJson<String>(json['status']),
       createdByUserId: serializer.fromJson<String?>(json['createdByUserId']),
       shiftLocalId: serializer.fromJson<String?>(json['shiftLocalId']),
@@ -16075,7 +16836,7 @@ class LocalReturn extends DataClass implements Insertable<LocalReturn> {
       'invoiceLocalId': serializer.toJson<String?>(invoiceLocalId),
       'orderLocalId': serializer.toJson<String?>(orderLocalId),
       'reason': serializer.toJson<String?>(reason),
-      'refundAmount': serializer.toJson<double>(refundAmount),
+      'refundAmount': serializer.toJson<int>(refundAmount),
       'status': serializer.toJson<String>(status),
       'createdByUserId': serializer.toJson<String?>(createdByUserId),
       'shiftLocalId': serializer.toJson<String?>(shiftLocalId),
@@ -16089,7 +16850,7 @@ class LocalReturn extends DataClass implements Insertable<LocalReturn> {
     Value<String?> invoiceLocalId = const Value.absent(),
     Value<String?> orderLocalId = const Value.absent(),
     Value<String?> reason = const Value.absent(),
-    double? refundAmount,
+    int? refundAmount,
     String? status,
     Value<String?> createdByUserId = const Value.absent(),
     Value<String?> shiftLocalId = const Value.absent(),
@@ -16189,7 +16950,7 @@ class LocalReturnsCompanion extends UpdateCompanion<LocalReturn> {
   final Value<String?> invoiceLocalId;
   final Value<String?> orderLocalId;
   final Value<String?> reason;
-  final Value<double> refundAmount;
+  final Value<int> refundAmount;
   final Value<String> status;
   final Value<String?> createdByUserId;
   final Value<String?> shiftLocalId;
@@ -16229,7 +16990,7 @@ class LocalReturnsCompanion extends UpdateCompanion<LocalReturn> {
     Expression<String>? invoiceLocalId,
     Expression<String>? orderLocalId,
     Expression<String>? reason,
-    Expression<double>? refundAmount,
+    Expression<int>? refundAmount,
     Expression<String>? status,
     Expression<String>? createdByUserId,
     Expression<String>? shiftLocalId,
@@ -16257,7 +17018,7 @@ class LocalReturnsCompanion extends UpdateCompanion<LocalReturn> {
     Value<String?>? invoiceLocalId,
     Value<String?>? orderLocalId,
     Value<String?>? reason,
-    Value<double>? refundAmount,
+    Value<int>? refundAmount,
     Value<String>? status,
     Value<String?>? createdByUserId,
     Value<String?>? shiftLocalId,
@@ -16298,7 +17059,7 @@ class LocalReturnsCompanion extends UpdateCompanion<LocalReturn> {
       map['reason'] = Variable<String>(reason.value);
     }
     if (refundAmount.present) {
-      map['refund_amount'] = Variable<double>(refundAmount.value);
+      map['refund_amount'] = Variable<int>(refundAmount.value);
     }
     if (status.present) {
       map['status'] = Variable<String>(status.value);
@@ -16364,6 +17125,9 @@ class $LocalReturnItemsTable extends LocalReturnItems
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_returns (local_id) ON DELETE CASCADE',
+    ),
   );
   static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
     'workspaceId',
@@ -16386,6 +17150,9 @@ class $LocalReturnItemsTable extends LocalReturnItems
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_order_items (local_id) ON DELETE RESTRICT',
+    ),
   );
   static const VerificationMeta _productLocalIdMeta = const VerificationMeta(
     'productLocalId',
@@ -16397,6 +17164,9 @@ class $LocalReturnItemsTable extends LocalReturnItems
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_products (local_id) ON DELETE SET NULL',
+    ),
   );
   static const VerificationMeta _productNameSnapshotMeta =
       const VerificationMeta('productNameSnapshot');
@@ -16424,11 +17194,11 @@ class $LocalReturnItemsTable extends LocalReturnItems
     'refundAmount',
   );
   @override
-  late final GeneratedColumn<double> refundAmount = GeneratedColumn<double>(
+  late final GeneratedColumn<int> refundAmount = GeneratedColumn<int>(
     'refund_amount',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
   @override
@@ -16570,7 +17340,7 @@ class $LocalReturnItemsTable extends LocalReturnItems
         data['${effectivePrefix}quantity'],
       )!,
       refundAmount: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}refund_amount'],
       )!,
     );
@@ -16590,7 +17360,7 @@ class LocalReturnItem extends DataClass implements Insertable<LocalReturnItem> {
   final String? productLocalId;
   final String productNameSnapshot;
   final int quantity;
-  final double refundAmount;
+  final int refundAmount;
   const LocalReturnItem({
     required this.localId,
     required this.returnLocalId,
@@ -16615,7 +17385,7 @@ class LocalReturnItem extends DataClass implements Insertable<LocalReturnItem> {
     }
     map['product_name_snapshot'] = Variable<String>(productNameSnapshot);
     map['quantity'] = Variable<int>(quantity);
-    map['refund_amount'] = Variable<double>(refundAmount);
+    map['refund_amount'] = Variable<int>(refundAmount);
     return map;
   }
 
@@ -16651,7 +17421,7 @@ class LocalReturnItem extends DataClass implements Insertable<LocalReturnItem> {
         json['productNameSnapshot'],
       ),
       quantity: serializer.fromJson<int>(json['quantity']),
-      refundAmount: serializer.fromJson<double>(json['refundAmount']),
+      refundAmount: serializer.fromJson<int>(json['refundAmount']),
     );
   }
   @override
@@ -16665,7 +17435,7 @@ class LocalReturnItem extends DataClass implements Insertable<LocalReturnItem> {
       'productLocalId': serializer.toJson<String?>(productLocalId),
       'productNameSnapshot': serializer.toJson<String>(productNameSnapshot),
       'quantity': serializer.toJson<int>(quantity),
-      'refundAmount': serializer.toJson<double>(refundAmount),
+      'refundAmount': serializer.toJson<int>(refundAmount),
     };
   }
 
@@ -16677,7 +17447,7 @@ class LocalReturnItem extends DataClass implements Insertable<LocalReturnItem> {
     Value<String?> productLocalId = const Value.absent(),
     String? productNameSnapshot,
     int? quantity,
-    double? refundAmount,
+    int? refundAmount,
   }) => LocalReturnItem(
     localId: localId ?? this.localId,
     returnLocalId: returnLocalId ?? this.returnLocalId,
@@ -16765,7 +17535,7 @@ class LocalReturnItemsCompanion extends UpdateCompanion<LocalReturnItem> {
   final Value<String?> productLocalId;
   final Value<String> productNameSnapshot;
   final Value<int> quantity;
-  final Value<double> refundAmount;
+  final Value<int> refundAmount;
   final Value<int> rowid;
   const LocalReturnItemsCompanion({
     this.localId = const Value.absent(),
@@ -16786,7 +17556,7 @@ class LocalReturnItemsCompanion extends UpdateCompanion<LocalReturnItem> {
     this.productLocalId = const Value.absent(),
     required String productNameSnapshot,
     required int quantity,
-    required double refundAmount,
+    required int refundAmount,
     this.rowid = const Value.absent(),
   }) : localId = Value(localId),
        returnLocalId = Value(returnLocalId),
@@ -16802,7 +17572,7 @@ class LocalReturnItemsCompanion extends UpdateCompanion<LocalReturnItem> {
     Expression<String>? productLocalId,
     Expression<String>? productNameSnapshot,
     Expression<int>? quantity,
-    Expression<double>? refundAmount,
+    Expression<int>? refundAmount,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -16827,7 +17597,7 @@ class LocalReturnItemsCompanion extends UpdateCompanion<LocalReturnItem> {
     Value<String?>? productLocalId,
     Value<String>? productNameSnapshot,
     Value<int>? quantity,
-    Value<double>? refundAmount,
+    Value<int>? refundAmount,
     Value<int>? rowid,
   }) {
     return LocalReturnItemsCompanion(
@@ -16870,7 +17640,7 @@ class LocalReturnItemsCompanion extends UpdateCompanion<LocalReturnItem> {
       map['quantity'] = Variable<int>(quantity.value);
     }
     if (refundAmount.present) {
-      map['refund_amount'] = Variable<double>(refundAmount.value);
+      map['refund_amount'] = Variable<int>(refundAmount.value);
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
@@ -16889,688 +17659,6 @@ class LocalReturnItemsCompanion extends UpdateCompanion<LocalReturnItem> {
           ..write('productNameSnapshot: $productNameSnapshot, ')
           ..write('quantity: $quantity, ')
           ..write('refundAmount: $refundAmount, ')
-          ..write('rowid: $rowid')
-          ..write(')'))
-        .toString();
-  }
-}
-
-class $LocalShiftsTable extends LocalShifts
-    with TableInfo<$LocalShiftsTable, LocalShift> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $LocalShiftsTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _localIdMeta = const VerificationMeta(
-    'localId',
-  );
-  @override
-  late final GeneratedColumn<String> localId = GeneratedColumn<String>(
-    'local_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
-    'workspaceId',
-  );
-  @override
-  late final GeneratedColumn<int> workspaceId = GeneratedColumn<int>(
-    'workspace_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
-  @override
-  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
-    'user_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _openedAtMeta = const VerificationMeta(
-    'openedAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> openedAt = GeneratedColumn<DateTime>(
-    'opened_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _closedAtMeta = const VerificationMeta(
-    'closedAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> closedAt = GeneratedColumn<DateTime>(
-    'closed_at',
-    aliasedName,
-    true,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _openingCashMeta = const VerificationMeta(
-    'openingCash',
-  );
-  @override
-  late final GeneratedColumn<double> openingCash = GeneratedColumn<double>(
-    'opening_cash',
-    aliasedName,
-    false,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _closingCashMeta = const VerificationMeta(
-    'closingCash',
-  );
-  @override
-  late final GeneratedColumn<double> closingCash = GeneratedColumn<double>(
-    'closing_cash',
-    aliasedName,
-    true,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _expectedCashMeta = const VerificationMeta(
-    'expectedCash',
-  );
-  @override
-  late final GeneratedColumn<double> expectedCash = GeneratedColumn<double>(
-    'expected_cash',
-    aliasedName,
-    true,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _actualCashMeta = const VerificationMeta(
-    'actualCash',
-  );
-  @override
-  late final GeneratedColumn<double> actualCash = GeneratedColumn<double>(
-    'actual_cash',
-    aliasedName,
-    true,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _differenceMeta = const VerificationMeta(
-    'difference',
-  );
-  @override
-  late final GeneratedColumn<double> difference = GeneratedColumn<double>(
-    'difference',
-    aliasedName,
-    true,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _statusMeta = const VerificationMeta('status');
-  @override
-  late final GeneratedColumn<String> status = GeneratedColumn<String>(
-    'status',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant('open'),
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    localId,
-    workspaceId,
-    userId,
-    openedAt,
-    closedAt,
-    openingCash,
-    closingCash,
-    expectedCash,
-    actualCash,
-    difference,
-    status,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'local_shifts';
-  @override
-  VerificationContext validateIntegrity(
-    Insertable<LocalShift> instance, {
-    bool isInserting = false,
-  }) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('local_id')) {
-      context.handle(
-        _localIdMeta,
-        localId.isAcceptableOrUnknown(data['local_id']!, _localIdMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_localIdMeta);
-    }
-    if (data.containsKey('workspace_id')) {
-      context.handle(
-        _workspaceIdMeta,
-        workspaceId.isAcceptableOrUnknown(
-          data['workspace_id']!,
-          _workspaceIdMeta,
-        ),
-      );
-    } else if (isInserting) {
-      context.missing(_workspaceIdMeta);
-    }
-    if (data.containsKey('user_id')) {
-      context.handle(
-        _userIdMeta,
-        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_userIdMeta);
-    }
-    if (data.containsKey('opened_at')) {
-      context.handle(
-        _openedAtMeta,
-        openedAt.isAcceptableOrUnknown(data['opened_at']!, _openedAtMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_openedAtMeta);
-    }
-    if (data.containsKey('closed_at')) {
-      context.handle(
-        _closedAtMeta,
-        closedAt.isAcceptableOrUnknown(data['closed_at']!, _closedAtMeta),
-      );
-    }
-    if (data.containsKey('opening_cash')) {
-      context.handle(
-        _openingCashMeta,
-        openingCash.isAcceptableOrUnknown(
-          data['opening_cash']!,
-          _openingCashMeta,
-        ),
-      );
-    }
-    if (data.containsKey('closing_cash')) {
-      context.handle(
-        _closingCashMeta,
-        closingCash.isAcceptableOrUnknown(
-          data['closing_cash']!,
-          _closingCashMeta,
-        ),
-      );
-    }
-    if (data.containsKey('expected_cash')) {
-      context.handle(
-        _expectedCashMeta,
-        expectedCash.isAcceptableOrUnknown(
-          data['expected_cash']!,
-          _expectedCashMeta,
-        ),
-      );
-    }
-    if (data.containsKey('actual_cash')) {
-      context.handle(
-        _actualCashMeta,
-        actualCash.isAcceptableOrUnknown(data['actual_cash']!, _actualCashMeta),
-      );
-    }
-    if (data.containsKey('difference')) {
-      context.handle(
-        _differenceMeta,
-        difference.isAcceptableOrUnknown(data['difference']!, _differenceMeta),
-      );
-    }
-    if (data.containsKey('status')) {
-      context.handle(
-        _statusMeta,
-        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
-      );
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {localId};
-  @override
-  LocalShift map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return LocalShift(
-      localId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}local_id'],
-      )!,
-      workspaceId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}workspace_id'],
-      )!,
-      userId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}user_id'],
-      )!,
-      openedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}opened_at'],
-      )!,
-      closedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}closed_at'],
-      ),
-      openingCash: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}opening_cash'],
-      )!,
-      closingCash: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}closing_cash'],
-      ),
-      expectedCash: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}expected_cash'],
-      ),
-      actualCash: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}actual_cash'],
-      ),
-      difference: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}difference'],
-      ),
-      status: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}status'],
-      )!,
-    );
-  }
-
-  @override
-  $LocalShiftsTable createAlias(String alias) {
-    return $LocalShiftsTable(attachedDatabase, alias);
-  }
-}
-
-class LocalShift extends DataClass implements Insertable<LocalShift> {
-  final String localId;
-  final int workspaceId;
-  final String userId;
-  final DateTime openedAt;
-  final DateTime? closedAt;
-  final double openingCash;
-  final double? closingCash;
-  final double? expectedCash;
-  final double? actualCash;
-  final double? difference;
-  final String status;
-  const LocalShift({
-    required this.localId,
-    required this.workspaceId,
-    required this.userId,
-    required this.openedAt,
-    this.closedAt,
-    required this.openingCash,
-    this.closingCash,
-    this.expectedCash,
-    this.actualCash,
-    this.difference,
-    required this.status,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['local_id'] = Variable<String>(localId);
-    map['workspace_id'] = Variable<int>(workspaceId);
-    map['user_id'] = Variable<String>(userId);
-    map['opened_at'] = Variable<DateTime>(openedAt);
-    if (!nullToAbsent || closedAt != null) {
-      map['closed_at'] = Variable<DateTime>(closedAt);
-    }
-    map['opening_cash'] = Variable<double>(openingCash);
-    if (!nullToAbsent || closingCash != null) {
-      map['closing_cash'] = Variable<double>(closingCash);
-    }
-    if (!nullToAbsent || expectedCash != null) {
-      map['expected_cash'] = Variable<double>(expectedCash);
-    }
-    if (!nullToAbsent || actualCash != null) {
-      map['actual_cash'] = Variable<double>(actualCash);
-    }
-    if (!nullToAbsent || difference != null) {
-      map['difference'] = Variable<double>(difference);
-    }
-    map['status'] = Variable<String>(status);
-    return map;
-  }
-
-  LocalShiftsCompanion toCompanion(bool nullToAbsent) {
-    return LocalShiftsCompanion(
-      localId: Value(localId),
-      workspaceId: Value(workspaceId),
-      userId: Value(userId),
-      openedAt: Value(openedAt),
-      closedAt: closedAt == null && nullToAbsent
-          ? const Value.absent()
-          : Value(closedAt),
-      openingCash: Value(openingCash),
-      closingCash: closingCash == null && nullToAbsent
-          ? const Value.absent()
-          : Value(closingCash),
-      expectedCash: expectedCash == null && nullToAbsent
-          ? const Value.absent()
-          : Value(expectedCash),
-      actualCash: actualCash == null && nullToAbsent
-          ? const Value.absent()
-          : Value(actualCash),
-      difference: difference == null && nullToAbsent
-          ? const Value.absent()
-          : Value(difference),
-      status: Value(status),
-    );
-  }
-
-  factory LocalShift.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return LocalShift(
-      localId: serializer.fromJson<String>(json['localId']),
-      workspaceId: serializer.fromJson<int>(json['workspaceId']),
-      userId: serializer.fromJson<String>(json['userId']),
-      openedAt: serializer.fromJson<DateTime>(json['openedAt']),
-      closedAt: serializer.fromJson<DateTime?>(json['closedAt']),
-      openingCash: serializer.fromJson<double>(json['openingCash']),
-      closingCash: serializer.fromJson<double?>(json['closingCash']),
-      expectedCash: serializer.fromJson<double?>(json['expectedCash']),
-      actualCash: serializer.fromJson<double?>(json['actualCash']),
-      difference: serializer.fromJson<double?>(json['difference']),
-      status: serializer.fromJson<String>(json['status']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'localId': serializer.toJson<String>(localId),
-      'workspaceId': serializer.toJson<int>(workspaceId),
-      'userId': serializer.toJson<String>(userId),
-      'openedAt': serializer.toJson<DateTime>(openedAt),
-      'closedAt': serializer.toJson<DateTime?>(closedAt),
-      'openingCash': serializer.toJson<double>(openingCash),
-      'closingCash': serializer.toJson<double?>(closingCash),
-      'expectedCash': serializer.toJson<double?>(expectedCash),
-      'actualCash': serializer.toJson<double?>(actualCash),
-      'difference': serializer.toJson<double?>(difference),
-      'status': serializer.toJson<String>(status),
-    };
-  }
-
-  LocalShift copyWith({
-    String? localId,
-    int? workspaceId,
-    String? userId,
-    DateTime? openedAt,
-    Value<DateTime?> closedAt = const Value.absent(),
-    double? openingCash,
-    Value<double?> closingCash = const Value.absent(),
-    Value<double?> expectedCash = const Value.absent(),
-    Value<double?> actualCash = const Value.absent(),
-    Value<double?> difference = const Value.absent(),
-    String? status,
-  }) => LocalShift(
-    localId: localId ?? this.localId,
-    workspaceId: workspaceId ?? this.workspaceId,
-    userId: userId ?? this.userId,
-    openedAt: openedAt ?? this.openedAt,
-    closedAt: closedAt.present ? closedAt.value : this.closedAt,
-    openingCash: openingCash ?? this.openingCash,
-    closingCash: closingCash.present ? closingCash.value : this.closingCash,
-    expectedCash: expectedCash.present ? expectedCash.value : this.expectedCash,
-    actualCash: actualCash.present ? actualCash.value : this.actualCash,
-    difference: difference.present ? difference.value : this.difference,
-    status: status ?? this.status,
-  );
-  LocalShift copyWithCompanion(LocalShiftsCompanion data) {
-    return LocalShift(
-      localId: data.localId.present ? data.localId.value : this.localId,
-      workspaceId: data.workspaceId.present
-          ? data.workspaceId.value
-          : this.workspaceId,
-      userId: data.userId.present ? data.userId.value : this.userId,
-      openedAt: data.openedAt.present ? data.openedAt.value : this.openedAt,
-      closedAt: data.closedAt.present ? data.closedAt.value : this.closedAt,
-      openingCash: data.openingCash.present
-          ? data.openingCash.value
-          : this.openingCash,
-      closingCash: data.closingCash.present
-          ? data.closingCash.value
-          : this.closingCash,
-      expectedCash: data.expectedCash.present
-          ? data.expectedCash.value
-          : this.expectedCash,
-      actualCash: data.actualCash.present
-          ? data.actualCash.value
-          : this.actualCash,
-      difference: data.difference.present
-          ? data.difference.value
-          : this.difference,
-      status: data.status.present ? data.status.value : this.status,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('LocalShift(')
-          ..write('localId: $localId, ')
-          ..write('workspaceId: $workspaceId, ')
-          ..write('userId: $userId, ')
-          ..write('openedAt: $openedAt, ')
-          ..write('closedAt: $closedAt, ')
-          ..write('openingCash: $openingCash, ')
-          ..write('closingCash: $closingCash, ')
-          ..write('expectedCash: $expectedCash, ')
-          ..write('actualCash: $actualCash, ')
-          ..write('difference: $difference, ')
-          ..write('status: $status')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    localId,
-    workspaceId,
-    userId,
-    openedAt,
-    closedAt,
-    openingCash,
-    closingCash,
-    expectedCash,
-    actualCash,
-    difference,
-    status,
-  );
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is LocalShift &&
-          other.localId == this.localId &&
-          other.workspaceId == this.workspaceId &&
-          other.userId == this.userId &&
-          other.openedAt == this.openedAt &&
-          other.closedAt == this.closedAt &&
-          other.openingCash == this.openingCash &&
-          other.closingCash == this.closingCash &&
-          other.expectedCash == this.expectedCash &&
-          other.actualCash == this.actualCash &&
-          other.difference == this.difference &&
-          other.status == this.status);
-}
-
-class LocalShiftsCompanion extends UpdateCompanion<LocalShift> {
-  final Value<String> localId;
-  final Value<int> workspaceId;
-  final Value<String> userId;
-  final Value<DateTime> openedAt;
-  final Value<DateTime?> closedAt;
-  final Value<double> openingCash;
-  final Value<double?> closingCash;
-  final Value<double?> expectedCash;
-  final Value<double?> actualCash;
-  final Value<double?> difference;
-  final Value<String> status;
-  final Value<int> rowid;
-  const LocalShiftsCompanion({
-    this.localId = const Value.absent(),
-    this.workspaceId = const Value.absent(),
-    this.userId = const Value.absent(),
-    this.openedAt = const Value.absent(),
-    this.closedAt = const Value.absent(),
-    this.openingCash = const Value.absent(),
-    this.closingCash = const Value.absent(),
-    this.expectedCash = const Value.absent(),
-    this.actualCash = const Value.absent(),
-    this.difference = const Value.absent(),
-    this.status = const Value.absent(),
-    this.rowid = const Value.absent(),
-  });
-  LocalShiftsCompanion.insert({
-    required String localId,
-    required int workspaceId,
-    required String userId,
-    required DateTime openedAt,
-    this.closedAt = const Value.absent(),
-    this.openingCash = const Value.absent(),
-    this.closingCash = const Value.absent(),
-    this.expectedCash = const Value.absent(),
-    this.actualCash = const Value.absent(),
-    this.difference = const Value.absent(),
-    this.status = const Value.absent(),
-    this.rowid = const Value.absent(),
-  }) : localId = Value(localId),
-       workspaceId = Value(workspaceId),
-       userId = Value(userId),
-       openedAt = Value(openedAt);
-  static Insertable<LocalShift> custom({
-    Expression<String>? localId,
-    Expression<int>? workspaceId,
-    Expression<String>? userId,
-    Expression<DateTime>? openedAt,
-    Expression<DateTime>? closedAt,
-    Expression<double>? openingCash,
-    Expression<double>? closingCash,
-    Expression<double>? expectedCash,
-    Expression<double>? actualCash,
-    Expression<double>? difference,
-    Expression<String>? status,
-    Expression<int>? rowid,
-  }) {
-    return RawValuesInsertable({
-      if (localId != null) 'local_id': localId,
-      if (workspaceId != null) 'workspace_id': workspaceId,
-      if (userId != null) 'user_id': userId,
-      if (openedAt != null) 'opened_at': openedAt,
-      if (closedAt != null) 'closed_at': closedAt,
-      if (openingCash != null) 'opening_cash': openingCash,
-      if (closingCash != null) 'closing_cash': closingCash,
-      if (expectedCash != null) 'expected_cash': expectedCash,
-      if (actualCash != null) 'actual_cash': actualCash,
-      if (difference != null) 'difference': difference,
-      if (status != null) 'status': status,
-      if (rowid != null) 'rowid': rowid,
-    });
-  }
-
-  LocalShiftsCompanion copyWith({
-    Value<String>? localId,
-    Value<int>? workspaceId,
-    Value<String>? userId,
-    Value<DateTime>? openedAt,
-    Value<DateTime?>? closedAt,
-    Value<double>? openingCash,
-    Value<double?>? closingCash,
-    Value<double?>? expectedCash,
-    Value<double?>? actualCash,
-    Value<double?>? difference,
-    Value<String>? status,
-    Value<int>? rowid,
-  }) {
-    return LocalShiftsCompanion(
-      localId: localId ?? this.localId,
-      workspaceId: workspaceId ?? this.workspaceId,
-      userId: userId ?? this.userId,
-      openedAt: openedAt ?? this.openedAt,
-      closedAt: closedAt ?? this.closedAt,
-      openingCash: openingCash ?? this.openingCash,
-      closingCash: closingCash ?? this.closingCash,
-      expectedCash: expectedCash ?? this.expectedCash,
-      actualCash: actualCash ?? this.actualCash,
-      difference: difference ?? this.difference,
-      status: status ?? this.status,
-      rowid: rowid ?? this.rowid,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (localId.present) {
-      map['local_id'] = Variable<String>(localId.value);
-    }
-    if (workspaceId.present) {
-      map['workspace_id'] = Variable<int>(workspaceId.value);
-    }
-    if (userId.present) {
-      map['user_id'] = Variable<String>(userId.value);
-    }
-    if (openedAt.present) {
-      map['opened_at'] = Variable<DateTime>(openedAt.value);
-    }
-    if (closedAt.present) {
-      map['closed_at'] = Variable<DateTime>(closedAt.value);
-    }
-    if (openingCash.present) {
-      map['opening_cash'] = Variable<double>(openingCash.value);
-    }
-    if (closingCash.present) {
-      map['closing_cash'] = Variable<double>(closingCash.value);
-    }
-    if (expectedCash.present) {
-      map['expected_cash'] = Variable<double>(expectedCash.value);
-    }
-    if (actualCash.present) {
-      map['actual_cash'] = Variable<double>(actualCash.value);
-    }
-    if (difference.present) {
-      map['difference'] = Variable<double>(difference.value);
-    }
-    if (status.present) {
-      map['status'] = Variable<String>(status.value);
-    }
-    if (rowid.present) {
-      map['rowid'] = Variable<int>(rowid.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('LocalShiftsCompanion(')
-          ..write('localId: $localId, ')
-          ..write('workspaceId: $workspaceId, ')
-          ..write('userId: $userId, ')
-          ..write('openedAt: $openedAt, ')
-          ..write('closedAt: $closedAt, ')
-          ..write('openingCash: $openingCash, ')
-          ..write('closingCash: $closingCash, ')
-          ..write('expectedCash: $expectedCash, ')
-          ..write('actualCash: $actualCash, ')
-          ..write('difference: $difference, ')
-          ..write('status: $status, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -17615,6 +17703,9 @@ class $LocalCashMovementsTable extends LocalCashMovements
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_shifts (local_id) ON DELETE RESTRICT',
+    ),
   );
   static const VerificationMeta _typeMeta = const VerificationMeta('type');
   @override
@@ -17627,11 +17718,11 @@ class $LocalCashMovementsTable extends LocalCashMovements
   );
   static const VerificationMeta _amountMeta = const VerificationMeta('amount');
   @override
-  late final GeneratedColumn<double> amount = GeneratedColumn<double>(
+  late final GeneratedColumn<int> amount = GeneratedColumn<int>(
     'amount',
     aliasedName,
     false,
-    type: DriftSqlType.double,
+    type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
@@ -17664,6 +17755,9 @@ class $LocalCashMovementsTable extends LocalCashMovements
     true,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES local_users (local_id) ON DELETE SET NULL',
+    ),
   );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
@@ -17804,7 +17898,7 @@ class $LocalCashMovementsTable extends LocalCashMovements
         data['${effectivePrefix}type'],
       )!,
       amount: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
+        DriftSqlType.int,
         data['${effectivePrefix}amount'],
       )!,
       reason: attachedDatabase.typeMapping.read(
@@ -17838,7 +17932,7 @@ class LocalCashMovement extends DataClass
   final int workspaceId;
   final String shiftLocalId;
   final String type;
-  final double amount;
+  final int amount;
   final String? reason;
   final String? referenceId;
   final String? createdByUserId;
@@ -17861,7 +17955,7 @@ class LocalCashMovement extends DataClass
     map['workspace_id'] = Variable<int>(workspaceId);
     map['shift_local_id'] = Variable<String>(shiftLocalId);
     map['type'] = Variable<String>(type);
-    map['amount'] = Variable<double>(amount);
+    map['amount'] = Variable<int>(amount);
     if (!nullToAbsent || reason != null) {
       map['reason'] = Variable<String>(reason);
     }
@@ -17905,7 +17999,7 @@ class LocalCashMovement extends DataClass
       workspaceId: serializer.fromJson<int>(json['workspaceId']),
       shiftLocalId: serializer.fromJson<String>(json['shiftLocalId']),
       type: serializer.fromJson<String>(json['type']),
-      amount: serializer.fromJson<double>(json['amount']),
+      amount: serializer.fromJson<int>(json['amount']),
       reason: serializer.fromJson<String?>(json['reason']),
       referenceId: serializer.fromJson<String?>(json['referenceId']),
       createdByUserId: serializer.fromJson<String?>(json['createdByUserId']),
@@ -17920,7 +18014,7 @@ class LocalCashMovement extends DataClass
       'workspaceId': serializer.toJson<int>(workspaceId),
       'shiftLocalId': serializer.toJson<String>(shiftLocalId),
       'type': serializer.toJson<String>(type),
-      'amount': serializer.toJson<double>(amount),
+      'amount': serializer.toJson<int>(amount),
       'reason': serializer.toJson<String?>(reason),
       'referenceId': serializer.toJson<String?>(referenceId),
       'createdByUserId': serializer.toJson<String?>(createdByUserId),
@@ -17933,7 +18027,7 @@ class LocalCashMovement extends DataClass
     int? workspaceId,
     String? shiftLocalId,
     String? type,
-    double? amount,
+    int? amount,
     Value<String?> reason = const Value.absent(),
     Value<String?> referenceId = const Value.absent(),
     Value<String?> createdByUserId = const Value.absent(),
@@ -18021,7 +18115,7 @@ class LocalCashMovementsCompanion extends UpdateCompanion<LocalCashMovement> {
   final Value<int> workspaceId;
   final Value<String> shiftLocalId;
   final Value<String> type;
-  final Value<double> amount;
+  final Value<int> amount;
   final Value<String?> reason;
   final Value<String?> referenceId;
   final Value<String?> createdByUserId;
@@ -18044,7 +18138,7 @@ class LocalCashMovementsCompanion extends UpdateCompanion<LocalCashMovement> {
     required int workspaceId,
     required String shiftLocalId,
     required String type,
-    required double amount,
+    required int amount,
     this.reason = const Value.absent(),
     this.referenceId = const Value.absent(),
     this.createdByUserId = const Value.absent(),
@@ -18061,7 +18155,7 @@ class LocalCashMovementsCompanion extends UpdateCompanion<LocalCashMovement> {
     Expression<int>? workspaceId,
     Expression<String>? shiftLocalId,
     Expression<String>? type,
-    Expression<double>? amount,
+    Expression<int>? amount,
     Expression<String>? reason,
     Expression<String>? referenceId,
     Expression<String>? createdByUserId,
@@ -18087,7 +18181,7 @@ class LocalCashMovementsCompanion extends UpdateCompanion<LocalCashMovement> {
     Value<int>? workspaceId,
     Value<String>? shiftLocalId,
     Value<String>? type,
-    Value<double>? amount,
+    Value<int>? amount,
     Value<String?>? reason,
     Value<String?>? referenceId,
     Value<String?>? createdByUserId,
@@ -18124,7 +18218,7 @@ class LocalCashMovementsCompanion extends UpdateCompanion<LocalCashMovement> {
       map['type'] = Variable<String>(type.value);
     }
     if (amount.present) {
-      map['amount'] = Variable<double>(amount.value);
+      map['amount'] = Variable<int>(amount.value);
     }
     if (reason.present) {
       map['reason'] = Variable<String>(reason.value);
@@ -18172,14 +18266,17 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $LocalProductsTable localProducts = $LocalProductsTable(this);
   late final $LocalTablesTable localTables = $LocalTablesTable(this);
   late final $LocalCustomersTable localCustomers = $LocalCustomersTable(this);
+  late final $LocalUsersTable localUsers = $LocalUsersTable(this);
+  late final $LocalSessionsTable localSessions = $LocalSessionsTable(this);
   late final $LocalOrdersTable localOrders = $LocalOrdersTable(this);
   late final $LocalOrderItemsTable localOrderItems = $LocalOrderItemsTable(
     this,
   );
   late final $LocalStockMovementsTable localStockMovements =
       $LocalStockMovementsTable(this);
-  late final $LocalPaymentsTable localPayments = $LocalPaymentsTable(this);
   late final $LocalInvoicesTable localInvoices = $LocalInvoicesTable(this);
+  late final $LocalShiftsTable localShifts = $LocalShiftsTable(this);
+  late final $LocalPaymentsTable localPayments = $LocalPaymentsTable(this);
   late final $LocalSettingsTable localSettings = $LocalSettingsTable(this);
   late final $LocalPermissionsTable localPermissions = $LocalPermissionsTable(
     this,
@@ -18188,9 +18285,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SyncConflictsTable syncConflicts = $SyncConflictsTable(this);
   late final $SyncMetadataTable syncMetadata = $SyncMetadataTable(this);
   late final $LocalStoresTable localStores = $LocalStoresTable(this);
-  late final $LocalUsersTable localUsers = $LocalUsersTable(this);
   late final $LocalSequencesTable localSequences = $LocalSequencesTable(this);
-  late final $LocalSessionsTable localSessions = $LocalSessionsTable(this);
   late final $LocalDraftCartsTable localDraftCarts = $LocalDraftCartsTable(
     this,
   );
@@ -18200,7 +18295,6 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $LocalReturnItemsTable localReturnItems = $LocalReturnItemsTable(
     this,
   );
-  late final $LocalShiftsTable localShifts = $LocalShiftsTable(this);
   late final $LocalCashMovementsTable localCashMovements =
       $LocalCashMovementsTable(this);
   @override
@@ -18213,27 +18307,156 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     localProducts,
     localTables,
     localCustomers,
+    localUsers,
+    localSessions,
     localOrders,
     localOrderItems,
     localStockMovements,
-    localPayments,
     localInvoices,
+    localShifts,
+    localPayments,
     localSettings,
     localPermissions,
     syncQueueItems,
     syncConflicts,
     syncMetadata,
     localStores,
-    localUsers,
     localSequences,
-    localSessions,
     localDraftCarts,
     localDraftCartLines,
     localReturns,
     localReturnItems,
-    localShifts,
     localCashMovements,
   ];
+  @override
+  StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_categories',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_products', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_users',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_sessions', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_users',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_sessions', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_tables',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_orders', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_sessions',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_orders', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_customers',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_orders', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_users',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_orders', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_orders',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_order_items', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_products',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_order_items', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_products',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_stock_movements', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_users',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_invoices', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_tables',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_draft_carts', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_customers',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_draft_carts', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_draft_carts',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_draft_cart_lines', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_users',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_returns', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_returns',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_return_items', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_products',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_return_items', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'local_users',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('local_cash_movements', kind: UpdateKind.update)],
+    ),
+  ]);
 }
 
 typedef $$LocalDevicesTableCreateCompanionBuilder =
@@ -18528,6 +18751,39 @@ typedef $$LocalCategoriesTableUpdateCompanionBuilder =
       Value<int> rowid,
     });
 
+final class $$LocalCategoriesTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $LocalCategoriesTable, LocalCategory> {
+  $$LocalCategoriesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static MultiTypedResultKey<$LocalProductsTable, List<LocalProduct>>
+  _localProductsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localProducts,
+    aliasName: $_aliasNameGenerator(
+      db.localCategories.localId,
+      db.localProducts.categoryLocalId,
+    ),
+  );
+
+  $$LocalProductsTableProcessedTableManager get localProductsRefs {
+    final manager = $$LocalProductsTableTableManager($_db, $_db.localProducts)
+        .filter(
+          (f) => f.categoryLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_localProductsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
 class $$LocalCategoriesTableFilterComposer
     extends Composer<_$AppDatabase, $LocalCategoriesTable> {
   $$LocalCategoriesTableFilterComposer({
@@ -18586,6 +18842,31 @@ class $$LocalCategoriesTableFilterComposer
     column: $table.serverVersion,
     builder: (column) => ColumnFilters(column),
   );
+
+  Expression<bool> localProductsRefs(
+    Expression<bool> Function($$LocalProductsTableFilterComposer f) f,
+  ) {
+    final $$LocalProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localProducts,
+      getReferencedColumn: (t) => t.categoryLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.localProducts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalCategoriesTableOrderingComposer
@@ -18690,6 +18971,31 @@ class $$LocalCategoriesTableAnnotationComposer
     column: $table.serverVersion,
     builder: (column) => column,
   );
+
+  Expression<T> localProductsRefs<T extends Object>(
+    Expression<T> Function($$LocalProductsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localProducts,
+      getReferencedColumn: (t) => t.categoryLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localProducts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalCategoriesTableTableManager
@@ -18703,12 +19009,9 @@ class $$LocalCategoriesTableTableManager
           $$LocalCategoriesTableAnnotationComposer,
           $$LocalCategoriesTableCreateCompanionBuilder,
           $$LocalCategoriesTableUpdateCompanionBuilder,
-          (
-            LocalCategory,
-            BaseReferences<_$AppDatabase, $LocalCategoriesTable, LocalCategory>,
-          ),
+          (LocalCategory, $$LocalCategoriesTableReferences),
           LocalCategory,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool localProductsRefs})
         > {
   $$LocalCategoriesTableTableManager(
     _$AppDatabase db,
@@ -18776,9 +19079,47 @@ class $$LocalCategoriesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LocalCategoriesTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({localProductsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [
+                if (localProductsRefs) db.localProducts,
+              ],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (localProductsRefs)
+                    await $_getPrefetchedData<
+                      LocalCategory,
+                      $LocalCategoriesTable,
+                      LocalProduct
+                    >(
+                      currentTable: table,
+                      referencedTable: $$LocalCategoriesTableReferences
+                          ._localProductsRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$LocalCategoriesTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).localProductsRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where(
+                            (e) => e.categoryLocalId == item.localId,
+                          ),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
         ),
       );
 }
@@ -18793,12 +19134,9 @@ typedef $$LocalCategoriesTableProcessedTableManager =
       $$LocalCategoriesTableAnnotationComposer,
       $$LocalCategoriesTableCreateCompanionBuilder,
       $$LocalCategoriesTableUpdateCompanionBuilder,
-      (
-        LocalCategory,
-        BaseReferences<_$AppDatabase, $LocalCategoriesTable, LocalCategory>,
-      ),
+      (LocalCategory, $$LocalCategoriesTableReferences),
       LocalCategory,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool localProductsRefs})
     >;
 typedef $$LocalProductsTableCreateCompanionBuilder =
     LocalProductsCompanion Function({
@@ -18811,12 +19149,12 @@ typedef $$LocalProductsTableCreateCompanionBuilder =
       Value<String?> sku,
       Value<String?> barcode,
       Value<String?> itemType,
-      Value<double> price,
+      Value<int> price,
       Value<bool> isActive,
       Value<bool> isDeleted,
       Value<String> payloadJson,
       Value<int?> stock,
-      Value<double> cost,
+      Value<int> cost,
       Value<double> taxRate,
       Value<bool> trackStock,
       Value<String?> imagePath,
@@ -18836,12 +19174,12 @@ typedef $$LocalProductsTableUpdateCompanionBuilder =
       Value<String?> sku,
       Value<String?> barcode,
       Value<String?> itemType,
-      Value<double> price,
+      Value<int> price,
       Value<bool> isActive,
       Value<bool> isDeleted,
       Value<String> payloadJson,
       Value<int?> stock,
-      Value<double> cost,
+      Value<int> cost,
       Value<double> taxRate,
       Value<bool> trackStock,
       Value<String?> imagePath,
@@ -18850,6 +19188,151 @@ typedef $$LocalProductsTableUpdateCompanionBuilder =
       Value<int?> serverVersion,
       Value<int> rowid,
     });
+
+final class $$LocalProductsTableReferences
+    extends BaseReferences<_$AppDatabase, $LocalProductsTable, LocalProduct> {
+  $$LocalProductsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $LocalCategoriesTable _categoryLocalIdTable(_$AppDatabase db) =>
+      db.localCategories.createAlias(
+        $_aliasNameGenerator(
+          db.localProducts.categoryLocalId,
+          db.localCategories.localId,
+        ),
+      );
+
+  $$LocalCategoriesTableProcessedTableManager? get categoryLocalId {
+    final $_column = $_itemColumn<String>('category_local_id');
+    if ($_column == null) return null;
+    final manager = $$LocalCategoriesTableTableManager(
+      $_db,
+      $_db.localCategories,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_categoryLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalOrderItemsTable, List<LocalOrderItem>>
+  _localOrderItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localOrderItems,
+    aliasName: $_aliasNameGenerator(
+      db.localProducts.localId,
+      db.localOrderItems.productLocalId,
+    ),
+  );
+
+  $$LocalOrderItemsTableProcessedTableManager get localOrderItemsRefs {
+    final manager =
+        $$LocalOrderItemsTableTableManager($_db, $_db.localOrderItems).filter(
+          (f) => f.productLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _localOrderItemsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $LocalStockMovementsTable,
+    List<LocalStockMovement>
+  >
+  _localStockMovementsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.localStockMovements,
+        aliasName: $_aliasNameGenerator(
+          db.localProducts.localId,
+          db.localStockMovements.productLocalId,
+        ),
+      );
+
+  $$LocalStockMovementsTableProcessedTableManager get localStockMovementsRefs {
+    final manager =
+        $$LocalStockMovementsTableTableManager(
+          $_db,
+          $_db.localStockMovements,
+        ).filter(
+          (f) => f.productLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _localStockMovementsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $LocalDraftCartLinesTable,
+    List<LocalDraftCartLine>
+  >
+  _localDraftCartLinesRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.localDraftCartLines,
+        aliasName: $_aliasNameGenerator(
+          db.localProducts.localId,
+          db.localDraftCartLines.productLocalId,
+        ),
+      );
+
+  $$LocalDraftCartLinesTableProcessedTableManager get localDraftCartLinesRefs {
+    final manager =
+        $$LocalDraftCartLinesTableTableManager(
+          $_db,
+          $_db.localDraftCartLines,
+        ).filter(
+          (f) => f.productLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _localDraftCartLinesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalReturnItemsTable, List<LocalReturnItem>>
+  _localReturnItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localReturnItems,
+    aliasName: $_aliasNameGenerator(
+      db.localProducts.localId,
+      db.localReturnItems.productLocalId,
+    ),
+  );
+
+  $$LocalReturnItemsTableProcessedTableManager get localReturnItemsRefs {
+    final manager =
+        $$LocalReturnItemsTableTableManager($_db, $_db.localReturnItems).filter(
+          (f) => f.productLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _localReturnItemsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
 
 class $$LocalProductsTableFilterComposer
     extends Composer<_$AppDatabase, $LocalProductsTable> {
@@ -18872,11 +19355,6 @@ class $$LocalProductsTableFilterComposer
 
   ColumnFilters<int> get serverId => $composableBuilder(
     column: $table.serverId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get categoryLocalId => $composableBuilder(
-    column: $table.categoryLocalId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -18905,7 +19383,7 @@ class $$LocalProductsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get price => $composableBuilder(
+  ColumnFilters<int> get price => $composableBuilder(
     column: $table.price,
     builder: (column) => ColumnFilters(column),
   );
@@ -18930,7 +19408,7 @@ class $$LocalProductsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get cost => $composableBuilder(
+  ColumnFilters<int> get cost => $composableBuilder(
     column: $table.cost,
     builder: (column) => ColumnFilters(column),
   );
@@ -18964,6 +19442,129 @@ class $$LocalProductsTableFilterComposer
     column: $table.serverVersion,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$LocalCategoriesTableFilterComposer get categoryLocalId {
+    final $$LocalCategoriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.categoryLocalId,
+      referencedTable: $db.localCategories,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalCategoriesTableFilterComposer(
+            $db: $db,
+            $table: $db.localCategories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> localOrderItemsRefs(
+    Expression<bool> Function($$LocalOrderItemsTableFilterComposer f) f,
+  ) {
+    final $$LocalOrderItemsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localOrderItems,
+      getReferencedColumn: (t) => t.productLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrderItemsTableFilterComposer(
+            $db: $db,
+            $table: $db.localOrderItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> localStockMovementsRefs(
+    Expression<bool> Function($$LocalStockMovementsTableFilterComposer f) f,
+  ) {
+    final $$LocalStockMovementsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localStockMovements,
+      getReferencedColumn: (t) => t.productLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalStockMovementsTableFilterComposer(
+            $db: $db,
+            $table: $db.localStockMovements,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> localDraftCartLinesRefs(
+    Expression<bool> Function($$LocalDraftCartLinesTableFilterComposer f) f,
+  ) {
+    final $$LocalDraftCartLinesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localDraftCartLines,
+      getReferencedColumn: (t) => t.productLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalDraftCartLinesTableFilterComposer(
+            $db: $db,
+            $table: $db.localDraftCartLines,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> localReturnItemsRefs(
+    Expression<bool> Function($$LocalReturnItemsTableFilterComposer f) f,
+  ) {
+    final $$LocalReturnItemsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localReturnItems,
+      getReferencedColumn: (t) => t.productLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalReturnItemsTableFilterComposer(
+            $db: $db,
+            $table: $db.localReturnItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalProductsTableOrderingComposer
@@ -18987,11 +19588,6 @@ class $$LocalProductsTableOrderingComposer
 
   ColumnOrderings<int> get serverId => $composableBuilder(
     column: $table.serverId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get categoryLocalId => $composableBuilder(
-    column: $table.categoryLocalId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -19020,7 +19616,7 @@ class $$LocalProductsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get price => $composableBuilder(
+  ColumnOrderings<int> get price => $composableBuilder(
     column: $table.price,
     builder: (column) => ColumnOrderings(column),
   );
@@ -19045,7 +19641,7 @@ class $$LocalProductsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get cost => $composableBuilder(
+  ColumnOrderings<int> get cost => $composableBuilder(
     column: $table.cost,
     builder: (column) => ColumnOrderings(column),
   );
@@ -19079,6 +19675,29 @@ class $$LocalProductsTableOrderingComposer
     column: $table.serverVersion,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$LocalCategoriesTableOrderingComposer get categoryLocalId {
+    final $$LocalCategoriesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.categoryLocalId,
+      referencedTable: $db.localCategories,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalCategoriesTableOrderingComposer(
+            $db: $db,
+            $table: $db.localCategories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalProductsTableAnnotationComposer
@@ -19101,11 +19720,6 @@ class $$LocalProductsTableAnnotationComposer
   GeneratedColumn<int> get serverId =>
       $composableBuilder(column: $table.serverId, builder: (column) => column);
 
-  GeneratedColumn<String> get categoryLocalId => $composableBuilder(
-    column: $table.categoryLocalId,
-    builder: (column) => column,
-  );
-
   GeneratedColumn<int> get categoryServerId => $composableBuilder(
     column: $table.categoryServerId,
     builder: (column) => column,
@@ -19123,7 +19737,7 @@ class $$LocalProductsTableAnnotationComposer
   GeneratedColumn<String> get itemType =>
       $composableBuilder(column: $table.itemType, builder: (column) => column);
 
-  GeneratedColumn<double> get price =>
+  GeneratedColumn<int> get price =>
       $composableBuilder(column: $table.price, builder: (column) => column);
 
   GeneratedColumn<bool> get isActive =>
@@ -19140,7 +19754,7 @@ class $$LocalProductsTableAnnotationComposer
   GeneratedColumn<int> get stock =>
       $composableBuilder(column: $table.stock, builder: (column) => column);
 
-  GeneratedColumn<double> get cost =>
+  GeneratedColumn<int> get cost =>
       $composableBuilder(column: $table.cost, builder: (column) => column);
 
   GeneratedColumn<double> get taxRate =>
@@ -19164,6 +19778,131 @@ class $$LocalProductsTableAnnotationComposer
     column: $table.serverVersion,
     builder: (column) => column,
   );
+
+  $$LocalCategoriesTableAnnotationComposer get categoryLocalId {
+    final $$LocalCategoriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.categoryLocalId,
+      referencedTable: $db.localCategories,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalCategoriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localCategories,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> localOrderItemsRefs<T extends Object>(
+    Expression<T> Function($$LocalOrderItemsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalOrderItemsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localOrderItems,
+      getReferencedColumn: (t) => t.productLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrderItemsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localOrderItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> localStockMovementsRefs<T extends Object>(
+    Expression<T> Function($$LocalStockMovementsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalStockMovementsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.localId,
+          referencedTable: $db.localStockMovements,
+          getReferencedColumn: (t) => t.productLocalId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$LocalStockMovementsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.localStockMovements,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> localDraftCartLinesRefs<T extends Object>(
+    Expression<T> Function($$LocalDraftCartLinesTableAnnotationComposer a) f,
+  ) {
+    final $$LocalDraftCartLinesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.localId,
+          referencedTable: $db.localDraftCartLines,
+          getReferencedColumn: (t) => t.productLocalId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$LocalDraftCartLinesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.localDraftCartLines,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> localReturnItemsRefs<T extends Object>(
+    Expression<T> Function($$LocalReturnItemsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalReturnItemsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localReturnItems,
+      getReferencedColumn: (t) => t.productLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalReturnItemsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localReturnItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalProductsTableTableManager
@@ -19177,12 +19916,15 @@ class $$LocalProductsTableTableManager
           $$LocalProductsTableAnnotationComposer,
           $$LocalProductsTableCreateCompanionBuilder,
           $$LocalProductsTableUpdateCompanionBuilder,
-          (
-            LocalProduct,
-            BaseReferences<_$AppDatabase, $LocalProductsTable, LocalProduct>,
-          ),
+          (LocalProduct, $$LocalProductsTableReferences),
           LocalProduct,
-          PrefetchHooks Function()
+          PrefetchHooks Function({
+            bool categoryLocalId,
+            bool localOrderItemsRefs,
+            bool localStockMovementsRefs,
+            bool localDraftCartLinesRefs,
+            bool localReturnItemsRefs,
+          })
         > {
   $$LocalProductsTableTableManager(_$AppDatabase db, $LocalProductsTable table)
     : super(
@@ -19206,12 +19948,12 @@ class $$LocalProductsTableTableManager
                 Value<String?> sku = const Value.absent(),
                 Value<String?> barcode = const Value.absent(),
                 Value<String?> itemType = const Value.absent(),
-                Value<double> price = const Value.absent(),
+                Value<int> price = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<String> payloadJson = const Value.absent(),
                 Value<int?> stock = const Value.absent(),
-                Value<double> cost = const Value.absent(),
+                Value<int> cost = const Value.absent(),
                 Value<double> taxRate = const Value.absent(),
                 Value<bool> trackStock = const Value.absent(),
                 Value<String?> imagePath = const Value.absent(),
@@ -19254,12 +19996,12 @@ class $$LocalProductsTableTableManager
                 Value<String?> sku = const Value.absent(),
                 Value<String?> barcode = const Value.absent(),
                 Value<String?> itemType = const Value.absent(),
-                Value<double> price = const Value.absent(),
+                Value<int> price = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<String> payloadJson = const Value.absent(),
                 Value<int?> stock = const Value.absent(),
-                Value<double> cost = const Value.absent(),
+                Value<int> cost = const Value.absent(),
                 Value<double> taxRate = const Value.absent(),
                 Value<bool> trackStock = const Value.absent(),
                 Value<String?> imagePath = const Value.absent(),
@@ -19292,9 +20034,153 @@ class $$LocalProductsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LocalProductsTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback:
+              ({
+                categoryLocalId = false,
+                localOrderItemsRefs = false,
+                localStockMovementsRefs = false,
+                localDraftCartLinesRefs = false,
+                localReturnItemsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (localOrderItemsRefs) db.localOrderItems,
+                    if (localStockMovementsRefs) db.localStockMovements,
+                    if (localDraftCartLinesRefs) db.localDraftCartLines,
+                    if (localReturnItemsRefs) db.localReturnItems,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (categoryLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.categoryLocalId,
+                                    referencedTable:
+                                        $$LocalProductsTableReferences
+                                            ._categoryLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalProductsTableReferences
+                                            ._categoryLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (localOrderItemsRefs)
+                        await $_getPrefetchedData<
+                          LocalProduct,
+                          $LocalProductsTable,
+                          LocalOrderItem
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalProductsTableReferences
+                              ._localOrderItemsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalProductsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localOrderItemsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.productLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (localStockMovementsRefs)
+                        await $_getPrefetchedData<
+                          LocalProduct,
+                          $LocalProductsTable,
+                          LocalStockMovement
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalProductsTableReferences
+                              ._localStockMovementsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalProductsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localStockMovementsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.productLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (localDraftCartLinesRefs)
+                        await $_getPrefetchedData<
+                          LocalProduct,
+                          $LocalProductsTable,
+                          LocalDraftCartLine
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalProductsTableReferences
+                              ._localDraftCartLinesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalProductsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localDraftCartLinesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.productLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (localReturnItemsRefs)
+                        await $_getPrefetchedData<
+                          LocalProduct,
+                          $LocalProductsTable,
+                          LocalReturnItem
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalProductsTableReferences
+                              ._localReturnItemsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalProductsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localReturnItemsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.productLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
         ),
       );
 }
@@ -19309,12 +20195,15 @@ typedef $$LocalProductsTableProcessedTableManager =
       $$LocalProductsTableAnnotationComposer,
       $$LocalProductsTableCreateCompanionBuilder,
       $$LocalProductsTableUpdateCompanionBuilder,
-      (
-        LocalProduct,
-        BaseReferences<_$AppDatabase, $LocalProductsTable, LocalProduct>,
-      ),
+      (LocalProduct, $$LocalProductsTableReferences),
       LocalProduct,
-      PrefetchHooks Function()
+      PrefetchHooks Function({
+        bool categoryLocalId,
+        bool localOrderItemsRefs,
+        bool localStockMovementsRefs,
+        bool localDraftCartLinesRefs,
+        bool localReturnItemsRefs,
+      })
     >;
 typedef $$LocalTablesTableCreateCompanionBuilder =
     LocalTablesCompanion Function({
@@ -19348,6 +20237,82 @@ typedef $$LocalTablesTableUpdateCompanionBuilder =
       Value<int?> serverVersion,
       Value<int> rowid,
     });
+
+final class $$LocalTablesTableReferences
+    extends BaseReferences<_$AppDatabase, $LocalTablesTable, LocalTable> {
+  $$LocalTablesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$LocalSessionsTable, List<LocalSession>>
+  _localSessionsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localSessions,
+    aliasName: $_aliasNameGenerator(
+      db.localTables.localId,
+      db.localSessions.tableLocalId,
+    ),
+  );
+
+  $$LocalSessionsTableProcessedTableManager get localSessionsRefs {
+    final manager = $$LocalSessionsTableTableManager($_db, $_db.localSessions)
+        .filter(
+          (f) => f.tableLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_localSessionsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalOrdersTable, List<LocalOrder>>
+  _localOrdersRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localOrders,
+    aliasName: $_aliasNameGenerator(
+      db.localTables.localId,
+      db.localOrders.tableLocalId,
+    ),
+  );
+
+  $$LocalOrdersTableProcessedTableManager get localOrdersRefs {
+    final manager = $$LocalOrdersTableTableManager($_db, $_db.localOrders)
+        .filter(
+          (f) => f.tableLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_localOrdersRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalDraftCartsTable, List<LocalDraftCart>>
+  _localDraftCartsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localDraftCarts,
+    aliasName: $_aliasNameGenerator(
+      db.localTables.localId,
+      db.localDraftCarts.tableLocalId,
+    ),
+  );
+
+  $$LocalDraftCartsTableProcessedTableManager get localDraftCartsRefs {
+    final manager =
+        $$LocalDraftCartsTableTableManager($_db, $_db.localDraftCarts).filter(
+          (f) => f.tableLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _localDraftCartsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
 
 class $$LocalTablesTableFilterComposer
     extends Composer<_$AppDatabase, $LocalTablesTable> {
@@ -19417,6 +20382,81 @@ class $$LocalTablesTableFilterComposer
     column: $table.serverVersion,
     builder: (column) => ColumnFilters(column),
   );
+
+  Expression<bool> localSessionsRefs(
+    Expression<bool> Function($$LocalSessionsTableFilterComposer f) f,
+  ) {
+    final $$LocalSessionsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localSessions,
+      getReferencedColumn: (t) => t.tableLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalSessionsTableFilterComposer(
+            $db: $db,
+            $table: $db.localSessions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> localOrdersRefs(
+    Expression<bool> Function($$LocalOrdersTableFilterComposer f) f,
+  ) {
+    final $$LocalOrdersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localOrders,
+      getReferencedColumn: (t) => t.tableLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrdersTableFilterComposer(
+            $db: $db,
+            $table: $db.localOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> localDraftCartsRefs(
+    Expression<bool> Function($$LocalDraftCartsTableFilterComposer f) f,
+  ) {
+    final $$LocalDraftCartsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localDraftCarts,
+      getReferencedColumn: (t) => t.tableLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalDraftCartsTableFilterComposer(
+            $db: $db,
+            $table: $db.localDraftCarts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalTablesTableOrderingComposer
@@ -19543,6 +20583,81 @@ class $$LocalTablesTableAnnotationComposer
     column: $table.serverVersion,
     builder: (column) => column,
   );
+
+  Expression<T> localSessionsRefs<T extends Object>(
+    Expression<T> Function($$LocalSessionsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalSessionsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localSessions,
+      getReferencedColumn: (t) => t.tableLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalSessionsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localSessions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> localOrdersRefs<T extends Object>(
+    Expression<T> Function($$LocalOrdersTableAnnotationComposer a) f,
+  ) {
+    final $$LocalOrdersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localOrders,
+      getReferencedColumn: (t) => t.tableLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrdersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> localDraftCartsRefs<T extends Object>(
+    Expression<T> Function($$LocalDraftCartsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalDraftCartsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localDraftCarts,
+      getReferencedColumn: (t) => t.tableLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalDraftCartsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localDraftCarts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalTablesTableTableManager
@@ -19556,12 +20671,13 @@ class $$LocalTablesTableTableManager
           $$LocalTablesTableAnnotationComposer,
           $$LocalTablesTableCreateCompanionBuilder,
           $$LocalTablesTableUpdateCompanionBuilder,
-          (
-            LocalTable,
-            BaseReferences<_$AppDatabase, $LocalTablesTable, LocalTable>,
-          ),
+          (LocalTable, $$LocalTablesTableReferences),
           LocalTable,
-          PrefetchHooks Function()
+          PrefetchHooks Function({
+            bool localSessionsRefs,
+            bool localOrdersRefs,
+            bool localDraftCartsRefs,
+          })
         > {
   $$LocalTablesTableTableManager(_$AppDatabase db, $LocalTablesTable table)
     : super(
@@ -19635,9 +20751,96 @@ class $$LocalTablesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LocalTablesTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback:
+              ({
+                localSessionsRefs = false,
+                localOrdersRefs = false,
+                localDraftCartsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (localSessionsRefs) db.localSessions,
+                    if (localOrdersRefs) db.localOrders,
+                    if (localDraftCartsRefs) db.localDraftCarts,
+                  ],
+                  addJoins: null,
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (localSessionsRefs)
+                        await $_getPrefetchedData<
+                          LocalTable,
+                          $LocalTablesTable,
+                          LocalSession
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalTablesTableReferences
+                              ._localSessionsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalTablesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localSessionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.tableLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (localOrdersRefs)
+                        await $_getPrefetchedData<
+                          LocalTable,
+                          $LocalTablesTable,
+                          LocalOrder
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalTablesTableReferences
+                              ._localOrdersRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalTablesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localOrdersRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.tableLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (localDraftCartsRefs)
+                        await $_getPrefetchedData<
+                          LocalTable,
+                          $LocalTablesTable,
+                          LocalDraftCart
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalTablesTableReferences
+                              ._localDraftCartsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalTablesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localDraftCartsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.tableLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
         ),
       );
 }
@@ -19652,12 +20855,13 @@ typedef $$LocalTablesTableProcessedTableManager =
       $$LocalTablesTableAnnotationComposer,
       $$LocalTablesTableCreateCompanionBuilder,
       $$LocalTablesTableUpdateCompanionBuilder,
-      (
-        LocalTable,
-        BaseReferences<_$AppDatabase, $LocalTablesTable, LocalTable>,
-      ),
+      (LocalTable, $$LocalTablesTableReferences),
       LocalTable,
-      PrefetchHooks Function()
+      PrefetchHooks Function({
+        bool localSessionsRefs,
+        bool localOrdersRefs,
+        bool localDraftCartsRefs,
+      })
     >;
 typedef $$LocalCustomersTableCreateCompanionBuilder =
     LocalCustomersCompanion Function({
@@ -19689,6 +20893,63 @@ typedef $$LocalCustomersTableUpdateCompanionBuilder =
       Value<String> syncStatus,
       Value<int> rowid,
     });
+
+final class $$LocalCustomersTableReferences
+    extends BaseReferences<_$AppDatabase, $LocalCustomersTable, LocalCustomer> {
+  $$LocalCustomersTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static MultiTypedResultKey<$LocalOrdersTable, List<LocalOrder>>
+  _localOrdersRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localOrders,
+    aliasName: $_aliasNameGenerator(
+      db.localCustomers.localId,
+      db.localOrders.customerLocalId,
+    ),
+  );
+
+  $$LocalOrdersTableProcessedTableManager get localOrdersRefs {
+    final manager = $$LocalOrdersTableTableManager($_db, $_db.localOrders)
+        .filter(
+          (f) => f.customerLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_localOrdersRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalDraftCartsTable, List<LocalDraftCart>>
+  _localDraftCartsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localDraftCarts,
+    aliasName: $_aliasNameGenerator(
+      db.localCustomers.localId,
+      db.localDraftCarts.customerLocalId,
+    ),
+  );
+
+  $$LocalDraftCartsTableProcessedTableManager get localDraftCartsRefs {
+    final manager =
+        $$LocalDraftCartsTableTableManager($_db, $_db.localDraftCarts).filter(
+          (f) => f.customerLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _localDraftCartsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
 
 class $$LocalCustomersTableFilterComposer
     extends Composer<_$AppDatabase, $LocalCustomersTable> {
@@ -19753,6 +21014,56 @@ class $$LocalCustomersTableFilterComposer
     column: $table.syncStatus,
     builder: (column) => ColumnFilters(column),
   );
+
+  Expression<bool> localOrdersRefs(
+    Expression<bool> Function($$LocalOrdersTableFilterComposer f) f,
+  ) {
+    final $$LocalOrdersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localOrders,
+      getReferencedColumn: (t) => t.customerLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrdersTableFilterComposer(
+            $db: $db,
+            $table: $db.localOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> localDraftCartsRefs(
+    Expression<bool> Function($$LocalDraftCartsTableFilterComposer f) f,
+  ) {
+    final $$LocalDraftCartsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localDraftCarts,
+      getReferencedColumn: (t) => t.customerLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalDraftCartsTableFilterComposer(
+            $db: $db,
+            $table: $db.localDraftCarts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalCustomersTableOrderingComposer
@@ -19867,6 +21178,56 @@ class $$LocalCustomersTableAnnotationComposer
     column: $table.syncStatus,
     builder: (column) => column,
   );
+
+  Expression<T> localOrdersRefs<T extends Object>(
+    Expression<T> Function($$LocalOrdersTableAnnotationComposer a) f,
+  ) {
+    final $$LocalOrdersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localOrders,
+      getReferencedColumn: (t) => t.customerLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrdersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> localDraftCartsRefs<T extends Object>(
+    Expression<T> Function($$LocalDraftCartsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalDraftCartsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localDraftCarts,
+      getReferencedColumn: (t) => t.customerLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalDraftCartsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localDraftCarts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalCustomersTableTableManager
@@ -19880,12 +21241,12 @@ class $$LocalCustomersTableTableManager
           $$LocalCustomersTableAnnotationComposer,
           $$LocalCustomersTableCreateCompanionBuilder,
           $$LocalCustomersTableUpdateCompanionBuilder,
-          (
-            LocalCustomer,
-            BaseReferences<_$AppDatabase, $LocalCustomersTable, LocalCustomer>,
-          ),
+          (LocalCustomer, $$LocalCustomersTableReferences),
           LocalCustomer,
-          PrefetchHooks Function()
+          PrefetchHooks Function({
+            bool localOrdersRefs,
+            bool localDraftCartsRefs,
+          })
         > {
   $$LocalCustomersTableTableManager(
     _$AppDatabase db,
@@ -19957,9 +21318,70 @@ class $$LocalCustomersTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LocalCustomersTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback:
+              ({localOrdersRefs = false, localDraftCartsRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (localOrdersRefs) db.localOrders,
+                    if (localDraftCartsRefs) db.localDraftCarts,
+                  ],
+                  addJoins: null,
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (localOrdersRefs)
+                        await $_getPrefetchedData<
+                          LocalCustomer,
+                          $LocalCustomersTable,
+                          LocalOrder
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalCustomersTableReferences
+                              ._localOrdersRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalCustomersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localOrdersRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.customerLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (localDraftCartsRefs)
+                        await $_getPrefetchedData<
+                          LocalCustomer,
+                          $LocalCustomersTable,
+                          LocalDraftCart
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalCustomersTableReferences
+                              ._localDraftCartsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalCustomersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localDraftCartsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.customerLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
         ),
       );
 }
@@ -19974,12 +21396,1584 @@ typedef $$LocalCustomersTableProcessedTableManager =
       $$LocalCustomersTableAnnotationComposer,
       $$LocalCustomersTableCreateCompanionBuilder,
       $$LocalCustomersTableUpdateCompanionBuilder,
-      (
-        LocalCustomer,
-        BaseReferences<_$AppDatabase, $LocalCustomersTable, LocalCustomer>,
-      ),
+      (LocalCustomer, $$LocalCustomersTableReferences),
       LocalCustomer,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool localOrdersRefs, bool localDraftCartsRefs})
+    >;
+typedef $$LocalUsersTableCreateCompanionBuilder =
+    LocalUsersCompanion Function({
+      required String localId,
+      required int workspaceId,
+      required String name,
+      required String username,
+      required String pinSalt,
+      required String pinHash,
+      Value<String> role,
+      Value<bool> isActive,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$LocalUsersTableUpdateCompanionBuilder =
+    LocalUsersCompanion Function({
+      Value<String> localId,
+      Value<int> workspaceId,
+      Value<String> name,
+      Value<String> username,
+      Value<String> pinSalt,
+      Value<String> pinHash,
+      Value<String> role,
+      Value<bool> isActive,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+final class $$LocalUsersTableReferences
+    extends BaseReferences<_$AppDatabase, $LocalUsersTable, LocalUser> {
+  $$LocalUsersTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$LocalOrdersTable, List<LocalOrder>>
+  _localOrdersRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localOrders,
+    aliasName: $_aliasNameGenerator(
+      db.localUsers.localId,
+      db.localOrders.createdByUserId,
+    ),
+  );
+
+  $$LocalOrdersTableProcessedTableManager get localOrdersRefs {
+    final manager = $$LocalOrdersTableTableManager($_db, $_db.localOrders)
+        .filter(
+          (f) => f.createdByUserId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_localOrdersRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalInvoicesTable, List<LocalInvoice>>
+  _localInvoicesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localInvoices,
+    aliasName: $_aliasNameGenerator(
+      db.localUsers.localId,
+      db.localInvoices.createdByUserId,
+    ),
+  );
+
+  $$LocalInvoicesTableProcessedTableManager get localInvoicesRefs {
+    final manager = $$LocalInvoicesTableTableManager($_db, $_db.localInvoices)
+        .filter(
+          (f) => f.createdByUserId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_localInvoicesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalShiftsTable, List<LocalShift>>
+  _localShiftsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localShifts,
+    aliasName: $_aliasNameGenerator(
+      db.localUsers.localId,
+      db.localShifts.userId,
+    ),
+  );
+
+  $$LocalShiftsTableProcessedTableManager get localShiftsRefs {
+    final manager = $$LocalShiftsTableTableManager($_db, $_db.localShifts)
+        .filter(
+          (f) => f.userId.localId.sqlEquals($_itemColumn<String>('local_id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_localShiftsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalReturnsTable, List<LocalReturn>>
+  _localReturnsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localReturns,
+    aliasName: $_aliasNameGenerator(
+      db.localUsers.localId,
+      db.localReturns.createdByUserId,
+    ),
+  );
+
+  $$LocalReturnsTableProcessedTableManager get localReturnsRefs {
+    final manager = $$LocalReturnsTableTableManager($_db, $_db.localReturns)
+        .filter(
+          (f) => f.createdByUserId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_localReturnsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalCashMovementsTable, List<LocalCashMovement>>
+  _localCashMovementsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.localCashMovements,
+        aliasName: $_aliasNameGenerator(
+          db.localUsers.localId,
+          db.localCashMovements.createdByUserId,
+        ),
+      );
+
+  $$LocalCashMovementsTableProcessedTableManager get localCashMovementsRefs {
+    final manager =
+        $$LocalCashMovementsTableTableManager(
+          $_db,
+          $_db.localCashMovements,
+        ).filter(
+          (f) => f.createdByUserId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _localCashMovementsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$LocalUsersTableFilterComposer
+    extends Composer<_$AppDatabase, $LocalUsersTable> {
+  $$LocalUsersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get localId => $composableBuilder(
+    column: $table.localId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get username => $composableBuilder(
+    column: $table.username,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pinSalt => $composableBuilder(
+    column: $table.pinSalt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pinHash => $composableBuilder(
+    column: $table.pinHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get role => $composableBuilder(
+    column: $table.role,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> localOrdersRefs(
+    Expression<bool> Function($$LocalOrdersTableFilterComposer f) f,
+  ) {
+    final $$LocalOrdersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localOrders,
+      getReferencedColumn: (t) => t.createdByUserId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrdersTableFilterComposer(
+            $db: $db,
+            $table: $db.localOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> localInvoicesRefs(
+    Expression<bool> Function($$LocalInvoicesTableFilterComposer f) f,
+  ) {
+    final $$LocalInvoicesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localInvoices,
+      getReferencedColumn: (t) => t.createdByUserId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalInvoicesTableFilterComposer(
+            $db: $db,
+            $table: $db.localInvoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> localShiftsRefs(
+    Expression<bool> Function($$LocalShiftsTableFilterComposer f) f,
+  ) {
+    final $$LocalShiftsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localShifts,
+      getReferencedColumn: (t) => t.userId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalShiftsTableFilterComposer(
+            $db: $db,
+            $table: $db.localShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> localReturnsRefs(
+    Expression<bool> Function($$LocalReturnsTableFilterComposer f) f,
+  ) {
+    final $$LocalReturnsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localReturns,
+      getReferencedColumn: (t) => t.createdByUserId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalReturnsTableFilterComposer(
+            $db: $db,
+            $table: $db.localReturns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> localCashMovementsRefs(
+    Expression<bool> Function($$LocalCashMovementsTableFilterComposer f) f,
+  ) {
+    final $$LocalCashMovementsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localCashMovements,
+      getReferencedColumn: (t) => t.createdByUserId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalCashMovementsTableFilterComposer(
+            $db: $db,
+            $table: $db.localCashMovements,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$LocalUsersTableOrderingComposer
+    extends Composer<_$AppDatabase, $LocalUsersTable> {
+  $$LocalUsersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get localId => $composableBuilder(
+    column: $table.localId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get username => $composableBuilder(
+    column: $table.username,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get pinSalt => $composableBuilder(
+    column: $table.pinSalt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get pinHash => $composableBuilder(
+    column: $table.pinHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get role => $composableBuilder(
+    column: $table.role,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LocalUsersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LocalUsersTable> {
+  $$LocalUsersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get localId =>
+      $composableBuilder(column: $table.localId, builder: (column) => column);
+
+  GeneratedColumn<int> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get username =>
+      $composableBuilder(column: $table.username, builder: (column) => column);
+
+  GeneratedColumn<String> get pinSalt =>
+      $composableBuilder(column: $table.pinSalt, builder: (column) => column);
+
+  GeneratedColumn<String> get pinHash =>
+      $composableBuilder(column: $table.pinHash, builder: (column) => column);
+
+  GeneratedColumn<String> get role =>
+      $composableBuilder(column: $table.role, builder: (column) => column);
+
+  GeneratedColumn<bool> get isActive =>
+      $composableBuilder(column: $table.isActive, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  Expression<T> localOrdersRefs<T extends Object>(
+    Expression<T> Function($$LocalOrdersTableAnnotationComposer a) f,
+  ) {
+    final $$LocalOrdersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localOrders,
+      getReferencedColumn: (t) => t.createdByUserId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrdersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> localInvoicesRefs<T extends Object>(
+    Expression<T> Function($$LocalInvoicesTableAnnotationComposer a) f,
+  ) {
+    final $$LocalInvoicesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localInvoices,
+      getReferencedColumn: (t) => t.createdByUserId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalInvoicesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localInvoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> localShiftsRefs<T extends Object>(
+    Expression<T> Function($$LocalShiftsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalShiftsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localShifts,
+      getReferencedColumn: (t) => t.userId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalShiftsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> localReturnsRefs<T extends Object>(
+    Expression<T> Function($$LocalReturnsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalReturnsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localReturns,
+      getReferencedColumn: (t) => t.createdByUserId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalReturnsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localReturns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> localCashMovementsRefs<T extends Object>(
+    Expression<T> Function($$LocalCashMovementsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalCashMovementsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.localId,
+          referencedTable: $db.localCashMovements,
+          getReferencedColumn: (t) => t.createdByUserId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$LocalCashMovementsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.localCashMovements,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$LocalUsersTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LocalUsersTable,
+          LocalUser,
+          $$LocalUsersTableFilterComposer,
+          $$LocalUsersTableOrderingComposer,
+          $$LocalUsersTableAnnotationComposer,
+          $$LocalUsersTableCreateCompanionBuilder,
+          $$LocalUsersTableUpdateCompanionBuilder,
+          (LocalUser, $$LocalUsersTableReferences),
+          LocalUser,
+          PrefetchHooks Function({
+            bool localOrdersRefs,
+            bool localInvoicesRefs,
+            bool localShiftsRefs,
+            bool localReturnsRefs,
+            bool localCashMovementsRefs,
+          })
+        > {
+  $$LocalUsersTableTableManager(_$AppDatabase db, $LocalUsersTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LocalUsersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LocalUsersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LocalUsersTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> localId = const Value.absent(),
+                Value<int> workspaceId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> username = const Value.absent(),
+                Value<String> pinSalt = const Value.absent(),
+                Value<String> pinHash = const Value.absent(),
+                Value<String> role = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalUsersCompanion(
+                localId: localId,
+                workspaceId: workspaceId,
+                name: name,
+                username: username,
+                pinSalt: pinSalt,
+                pinHash: pinHash,
+                role: role,
+                isActive: isActive,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String localId,
+                required int workspaceId,
+                required String name,
+                required String username,
+                required String pinSalt,
+                required String pinHash,
+                Value<String> role = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => LocalUsersCompanion.insert(
+                localId: localId,
+                workspaceId: workspaceId,
+                name: name,
+                username: username,
+                pinSalt: pinSalt,
+                pinHash: pinHash,
+                role: role,
+                isActive: isActive,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LocalUsersTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                localOrdersRefs = false,
+                localInvoicesRefs = false,
+                localShiftsRefs = false,
+                localReturnsRefs = false,
+                localCashMovementsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (localOrdersRefs) db.localOrders,
+                    if (localInvoicesRefs) db.localInvoices,
+                    if (localShiftsRefs) db.localShifts,
+                    if (localReturnsRefs) db.localReturns,
+                    if (localCashMovementsRefs) db.localCashMovements,
+                  ],
+                  addJoins: null,
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (localOrdersRefs)
+                        await $_getPrefetchedData<
+                          LocalUser,
+                          $LocalUsersTable,
+                          LocalOrder
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalUsersTableReferences
+                              ._localOrdersRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalUsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localOrdersRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.createdByUserId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (localInvoicesRefs)
+                        await $_getPrefetchedData<
+                          LocalUser,
+                          $LocalUsersTable,
+                          LocalInvoice
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalUsersTableReferences
+                              ._localInvoicesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalUsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localInvoicesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.createdByUserId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (localShiftsRefs)
+                        await $_getPrefetchedData<
+                          LocalUser,
+                          $LocalUsersTable,
+                          LocalShift
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalUsersTableReferences
+                              ._localShiftsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalUsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localShiftsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.userId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (localReturnsRefs)
+                        await $_getPrefetchedData<
+                          LocalUser,
+                          $LocalUsersTable,
+                          LocalReturn
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalUsersTableReferences
+                              ._localReturnsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalUsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localReturnsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.createdByUserId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (localCashMovementsRefs)
+                        await $_getPrefetchedData<
+                          LocalUser,
+                          $LocalUsersTable,
+                          LocalCashMovement
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalUsersTableReferences
+                              ._localCashMovementsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalUsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localCashMovementsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.createdByUserId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$LocalUsersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LocalUsersTable,
+      LocalUser,
+      $$LocalUsersTableFilterComposer,
+      $$LocalUsersTableOrderingComposer,
+      $$LocalUsersTableAnnotationComposer,
+      $$LocalUsersTableCreateCompanionBuilder,
+      $$LocalUsersTableUpdateCompanionBuilder,
+      (LocalUser, $$LocalUsersTableReferences),
+      LocalUser,
+      PrefetchHooks Function({
+        bool localOrdersRefs,
+        bool localInvoicesRefs,
+        bool localShiftsRefs,
+        bool localReturnsRefs,
+        bool localCashMovementsRefs,
+      })
+    >;
+typedef $$LocalSessionsTableCreateCompanionBuilder =
+    LocalSessionsCompanion Function({
+      required String localId,
+      required int workspaceId,
+      required String tableLocalId,
+      Value<String> status,
+      required DateTime openedAt,
+      Value<DateTime?> closedAt,
+      Value<String?> openedByUserId,
+      Value<String?> closedByUserId,
+      Value<String?> notes,
+      Value<int> discountAmount,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$LocalSessionsTableUpdateCompanionBuilder =
+    LocalSessionsCompanion Function({
+      Value<String> localId,
+      Value<int> workspaceId,
+      Value<String> tableLocalId,
+      Value<String> status,
+      Value<DateTime> openedAt,
+      Value<DateTime?> closedAt,
+      Value<String?> openedByUserId,
+      Value<String?> closedByUserId,
+      Value<String?> notes,
+      Value<int> discountAmount,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+final class $$LocalSessionsTableReferences
+    extends BaseReferences<_$AppDatabase, $LocalSessionsTable, LocalSession> {
+  $$LocalSessionsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $LocalTablesTable _tableLocalIdTable(_$AppDatabase db) =>
+      db.localTables.createAlias(
+        $_aliasNameGenerator(
+          db.localSessions.tableLocalId,
+          db.localTables.localId,
+        ),
+      );
+
+  $$LocalTablesTableProcessedTableManager get tableLocalId {
+    final $_column = $_itemColumn<String>('table_local_id')!;
+
+    final manager = $$LocalTablesTableTableManager(
+      $_db,
+      $_db.localTables,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_tableLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $LocalUsersTable _openedByUserIdTable(_$AppDatabase db) =>
+      db.localUsers.createAlias(
+        $_aliasNameGenerator(
+          db.localSessions.openedByUserId,
+          db.localUsers.localId,
+        ),
+      );
+
+  $$LocalUsersTableProcessedTableManager? get openedByUserId {
+    final $_column = $_itemColumn<String>('opened_by_user_id');
+    if ($_column == null) return null;
+    final manager = $$LocalUsersTableTableManager(
+      $_db,
+      $_db.localUsers,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_openedByUserIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $LocalUsersTable _closedByUserIdTable(_$AppDatabase db) =>
+      db.localUsers.createAlias(
+        $_aliasNameGenerator(
+          db.localSessions.closedByUserId,
+          db.localUsers.localId,
+        ),
+      );
+
+  $$LocalUsersTableProcessedTableManager? get closedByUserId {
+    final $_column = $_itemColumn<String>('closed_by_user_id');
+    if ($_column == null) return null;
+    final manager = $$LocalUsersTableTableManager(
+      $_db,
+      $_db.localUsers,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_closedByUserIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalOrdersTable, List<LocalOrder>>
+  _localOrdersRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localOrders,
+    aliasName: $_aliasNameGenerator(
+      db.localSessions.localId,
+      db.localOrders.sessionLocalId,
+    ),
+  );
+
+  $$LocalOrdersTableProcessedTableManager get localOrdersRefs {
+    final manager = $$LocalOrdersTableTableManager($_db, $_db.localOrders)
+        .filter(
+          (f) => f.sessionLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_localOrdersRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$LocalSessionsTableFilterComposer
+    extends Composer<_$AppDatabase, $LocalSessionsTable> {
+  $$LocalSessionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get localId => $composableBuilder(
+    column: $table.localId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get openedAt => $composableBuilder(
+    column: $table.openedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get closedAt => $composableBuilder(
+    column: $table.closedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get discountAmount => $composableBuilder(
+    column: $table.discountAmount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$LocalTablesTableFilterComposer get tableLocalId {
+    final $$LocalTablesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tableLocalId,
+      referencedTable: $db.localTables,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalTablesTableFilterComposer(
+            $db: $db,
+            $table: $db.localTables,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalUsersTableFilterComposer get openedByUserId {
+    final $$LocalUsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.openedByUserId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableFilterComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalUsersTableFilterComposer get closedByUserId {
+    final $$LocalUsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.closedByUserId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableFilterComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> localOrdersRefs(
+    Expression<bool> Function($$LocalOrdersTableFilterComposer f) f,
+  ) {
+    final $$LocalOrdersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localOrders,
+      getReferencedColumn: (t) => t.sessionLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrdersTableFilterComposer(
+            $db: $db,
+            $table: $db.localOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$LocalSessionsTableOrderingComposer
+    extends Composer<_$AppDatabase, $LocalSessionsTable> {
+  $$LocalSessionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get localId => $composableBuilder(
+    column: $table.localId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get openedAt => $composableBuilder(
+    column: $table.openedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get closedAt => $composableBuilder(
+    column: $table.closedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get discountAmount => $composableBuilder(
+    column: $table.discountAmount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$LocalTablesTableOrderingComposer get tableLocalId {
+    final $$LocalTablesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tableLocalId,
+      referencedTable: $db.localTables,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalTablesTableOrderingComposer(
+            $db: $db,
+            $table: $db.localTables,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalUsersTableOrderingComposer get openedByUserId {
+    final $$LocalUsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.openedByUserId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalUsersTableOrderingComposer get closedByUserId {
+    final $$LocalUsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.closedByUserId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$LocalSessionsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LocalSessionsTable> {
+  $$LocalSessionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get localId =>
+      $composableBuilder(column: $table.localId, builder: (column) => column);
+
+  GeneratedColumn<int> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get openedAt =>
+      $composableBuilder(column: $table.openedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get closedAt =>
+      $composableBuilder(column: $table.closedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get notes =>
+      $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<int> get discountAmount => $composableBuilder(
+    column: $table.discountAmount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$LocalTablesTableAnnotationComposer get tableLocalId {
+    final $$LocalTablesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tableLocalId,
+      referencedTable: $db.localTables,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalTablesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localTables,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalUsersTableAnnotationComposer get openedByUserId {
+    final $$LocalUsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.openedByUserId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalUsersTableAnnotationComposer get closedByUserId {
+    final $$LocalUsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.closedByUserId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> localOrdersRefs<T extends Object>(
+    Expression<T> Function($$LocalOrdersTableAnnotationComposer a) f,
+  ) {
+    final $$LocalOrdersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localOrders,
+      getReferencedColumn: (t) => t.sessionLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrdersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$LocalSessionsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LocalSessionsTable,
+          LocalSession,
+          $$LocalSessionsTableFilterComposer,
+          $$LocalSessionsTableOrderingComposer,
+          $$LocalSessionsTableAnnotationComposer,
+          $$LocalSessionsTableCreateCompanionBuilder,
+          $$LocalSessionsTableUpdateCompanionBuilder,
+          (LocalSession, $$LocalSessionsTableReferences),
+          LocalSession,
+          PrefetchHooks Function({
+            bool tableLocalId,
+            bool openedByUserId,
+            bool closedByUserId,
+            bool localOrdersRefs,
+          })
+        > {
+  $$LocalSessionsTableTableManager(_$AppDatabase db, $LocalSessionsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LocalSessionsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LocalSessionsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LocalSessionsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> localId = const Value.absent(),
+                Value<int> workspaceId = const Value.absent(),
+                Value<String> tableLocalId = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<DateTime> openedAt = const Value.absent(),
+                Value<DateTime?> closedAt = const Value.absent(),
+                Value<String?> openedByUserId = const Value.absent(),
+                Value<String?> closedByUserId = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<int> discountAmount = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalSessionsCompanion(
+                localId: localId,
+                workspaceId: workspaceId,
+                tableLocalId: tableLocalId,
+                status: status,
+                openedAt: openedAt,
+                closedAt: closedAt,
+                openedByUserId: openedByUserId,
+                closedByUserId: closedByUserId,
+                notes: notes,
+                discountAmount: discountAmount,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String localId,
+                required int workspaceId,
+                required String tableLocalId,
+                Value<String> status = const Value.absent(),
+                required DateTime openedAt,
+                Value<DateTime?> closedAt = const Value.absent(),
+                Value<String?> openedByUserId = const Value.absent(),
+                Value<String?> closedByUserId = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<int> discountAmount = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => LocalSessionsCompanion.insert(
+                localId: localId,
+                workspaceId: workspaceId,
+                tableLocalId: tableLocalId,
+                status: status,
+                openedAt: openedAt,
+                closedAt: closedAt,
+                openedByUserId: openedByUserId,
+                closedByUserId: closedByUserId,
+                notes: notes,
+                discountAmount: discountAmount,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LocalSessionsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                tableLocalId = false,
+                openedByUserId = false,
+                closedByUserId = false,
+                localOrdersRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (localOrdersRefs) db.localOrders,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (tableLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.tableLocalId,
+                                    referencedTable:
+                                        $$LocalSessionsTableReferences
+                                            ._tableLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalSessionsTableReferences
+                                            ._tableLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+                        if (openedByUserId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.openedByUserId,
+                                    referencedTable:
+                                        $$LocalSessionsTableReferences
+                                            ._openedByUserIdTable(db),
+                                    referencedColumn:
+                                        $$LocalSessionsTableReferences
+                                            ._openedByUserIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+                        if (closedByUserId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.closedByUserId,
+                                    referencedTable:
+                                        $$LocalSessionsTableReferences
+                                            ._closedByUserIdTable(db),
+                                    referencedColumn:
+                                        $$LocalSessionsTableReferences
+                                            ._closedByUserIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (localOrdersRefs)
+                        await $_getPrefetchedData<
+                          LocalSession,
+                          $LocalSessionsTable,
+                          LocalOrder
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalSessionsTableReferences
+                              ._localOrdersRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalSessionsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localOrdersRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.sessionLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$LocalSessionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LocalSessionsTable,
+      LocalSession,
+      $$LocalSessionsTableFilterComposer,
+      $$LocalSessionsTableOrderingComposer,
+      $$LocalSessionsTableAnnotationComposer,
+      $$LocalSessionsTableCreateCompanionBuilder,
+      $$LocalSessionsTableUpdateCompanionBuilder,
+      (LocalSession, $$LocalSessionsTableReferences),
+      LocalSession,
+      PrefetchHooks Function({
+        bool tableLocalId,
+        bool openedByUserId,
+        bool closedByUserId,
+        bool localOrdersRefs,
+      })
     >;
 typedef $$LocalOrdersTableCreateCompanionBuilder =
     LocalOrdersCompanion Function({
@@ -19996,11 +22990,11 @@ typedef $$LocalOrdersTableCreateCompanionBuilder =
       Value<String?> customerLocalId,
       Value<String?> createdByUserId,
       Value<String?> notes,
-      Value<double> subtotal,
-      Value<double> taxAmount,
-      Value<double> discountAmount,
+      Value<int> subtotal,
+      Value<int> taxAmount,
+      Value<int> discountAmount,
       Value<double> discountPercent,
-      Value<double> totalAmount,
+      Value<int> totalAmount,
       Value<String> posStatus,
       Value<String> paymentStatus,
       Value<String> fulfillmentStatus,
@@ -20028,11 +23022,11 @@ typedef $$LocalOrdersTableUpdateCompanionBuilder =
       Value<String?> customerLocalId,
       Value<String?> createdByUserId,
       Value<String?> notes,
-      Value<double> subtotal,
-      Value<double> taxAmount,
-      Value<double> discountAmount,
+      Value<int> subtotal,
+      Value<int> taxAmount,
+      Value<int> discountAmount,
       Value<double> discountPercent,
-      Value<double> totalAmount,
+      Value<int> totalAmount,
       Value<String> posStatus,
       Value<String> paymentStatus,
       Value<String> fulfillmentStatus,
@@ -20045,6 +23039,193 @@ typedef $$LocalOrdersTableUpdateCompanionBuilder =
       Value<DateTime?> syncedAt,
       Value<int> rowid,
     });
+
+final class $$LocalOrdersTableReferences
+    extends BaseReferences<_$AppDatabase, $LocalOrdersTable, LocalOrder> {
+  $$LocalOrdersTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $LocalTablesTable _tableLocalIdTable(_$AppDatabase db) =>
+      db.localTables.createAlias(
+        $_aliasNameGenerator(
+          db.localOrders.tableLocalId,
+          db.localTables.localId,
+        ),
+      );
+
+  $$LocalTablesTableProcessedTableManager? get tableLocalId {
+    final $_column = $_itemColumn<String>('table_local_id');
+    if ($_column == null) return null;
+    final manager = $$LocalTablesTableTableManager(
+      $_db,
+      $_db.localTables,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_tableLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $LocalSessionsTable _sessionLocalIdTable(_$AppDatabase db) =>
+      db.localSessions.createAlias(
+        $_aliasNameGenerator(
+          db.localOrders.sessionLocalId,
+          db.localSessions.localId,
+        ),
+      );
+
+  $$LocalSessionsTableProcessedTableManager? get sessionLocalId {
+    final $_column = $_itemColumn<String>('session_local_id');
+    if ($_column == null) return null;
+    final manager = $$LocalSessionsTableTableManager(
+      $_db,
+      $_db.localSessions,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_sessionLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $LocalCustomersTable _customerLocalIdTable(_$AppDatabase db) =>
+      db.localCustomers.createAlias(
+        $_aliasNameGenerator(
+          db.localOrders.customerLocalId,
+          db.localCustomers.localId,
+        ),
+      );
+
+  $$LocalCustomersTableProcessedTableManager? get customerLocalId {
+    final $_column = $_itemColumn<String>('customer_local_id');
+    if ($_column == null) return null;
+    final manager = $$LocalCustomersTableTableManager(
+      $_db,
+      $_db.localCustomers,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_customerLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $LocalUsersTable _createdByUserIdTable(_$AppDatabase db) =>
+      db.localUsers.createAlias(
+        $_aliasNameGenerator(
+          db.localOrders.createdByUserId,
+          db.localUsers.localId,
+        ),
+      );
+
+  $$LocalUsersTableProcessedTableManager? get createdByUserId {
+    final $_column = $_itemColumn<String>('created_by_user_id');
+    if ($_column == null) return null;
+    final manager = $$LocalUsersTableTableManager(
+      $_db,
+      $_db.localUsers,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_createdByUserIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalOrderItemsTable, List<LocalOrderItem>>
+  _localOrderItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localOrderItems,
+    aliasName: $_aliasNameGenerator(
+      db.localOrders.localId,
+      db.localOrderItems.orderLocalId,
+    ),
+  );
+
+  $$LocalOrderItemsTableProcessedTableManager get localOrderItemsRefs {
+    final manager =
+        $$LocalOrderItemsTableTableManager($_db, $_db.localOrderItems).filter(
+          (f) => f.orderLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _localOrderItemsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalInvoicesTable, List<LocalInvoice>>
+  _localInvoicesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localInvoices,
+    aliasName: $_aliasNameGenerator(
+      db.localOrders.localId,
+      db.localInvoices.orderLocalId,
+    ),
+  );
+
+  $$LocalInvoicesTableProcessedTableManager get localInvoicesRefs {
+    final manager = $$LocalInvoicesTableTableManager($_db, $_db.localInvoices)
+        .filter(
+          (f) => f.orderLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_localInvoicesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalPaymentsTable, List<LocalPayment>>
+  _localPaymentsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localPayments,
+    aliasName: $_aliasNameGenerator(
+      db.localOrders.localId,
+      db.localPayments.orderLocalId,
+    ),
+  );
+
+  $$LocalPaymentsTableProcessedTableManager get localPaymentsRefs {
+    final manager = $$LocalPaymentsTableTableManager($_db, $_db.localPayments)
+        .filter(
+          (f) => f.orderLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_localPaymentsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalReturnsTable, List<LocalReturn>>
+  _localReturnsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localReturns,
+    aliasName: $_aliasNameGenerator(
+      db.localOrders.localId,
+      db.localReturns.orderLocalId,
+    ),
+  );
+
+  $$LocalReturnsTableProcessedTableManager get localReturnsRefs {
+    final manager = $$LocalReturnsTableTableManager($_db, $_db.localReturns)
+        .filter(
+          (f) => f.orderLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_localReturnsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
 
 class $$LocalOrdersTableFilterComposer
     extends Composer<_$AppDatabase, $LocalOrdersTable> {
@@ -20095,42 +23276,22 @@ class $$LocalOrdersTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get tableLocalId => $composableBuilder(
-    column: $table.tableLocalId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get sessionLocalId => $composableBuilder(
-    column: $table.sessionLocalId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get customerLocalId => $composableBuilder(
-    column: $table.customerLocalId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get createdByUserId => $composableBuilder(
-    column: $table.createdByUserId,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<String> get notes => $composableBuilder(
     column: $table.notes,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get subtotal => $composableBuilder(
+  ColumnFilters<int> get subtotal => $composableBuilder(
     column: $table.subtotal,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get taxAmount => $composableBuilder(
+  ColumnFilters<int> get taxAmount => $composableBuilder(
     column: $table.taxAmount,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get discountAmount => $composableBuilder(
+  ColumnFilters<int> get discountAmount => $composableBuilder(
     column: $table.discountAmount,
     builder: (column) => ColumnFilters(column),
   );
@@ -20140,7 +23301,7 @@ class $$LocalOrdersTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get totalAmount => $composableBuilder(
+  ColumnFilters<int> get totalAmount => $composableBuilder(
     column: $table.totalAmount,
     builder: (column) => ColumnFilters(column),
   );
@@ -20194,6 +23355,198 @@ class $$LocalOrdersTableFilterComposer
     column: $table.syncedAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$LocalTablesTableFilterComposer get tableLocalId {
+    final $$LocalTablesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tableLocalId,
+      referencedTable: $db.localTables,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalTablesTableFilterComposer(
+            $db: $db,
+            $table: $db.localTables,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalSessionsTableFilterComposer get sessionLocalId {
+    final $$LocalSessionsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.sessionLocalId,
+      referencedTable: $db.localSessions,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalSessionsTableFilterComposer(
+            $db: $db,
+            $table: $db.localSessions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalCustomersTableFilterComposer get customerLocalId {
+    final $$LocalCustomersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.customerLocalId,
+      referencedTable: $db.localCustomers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalCustomersTableFilterComposer(
+            $db: $db,
+            $table: $db.localCustomers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalUsersTableFilterComposer get createdByUserId {
+    final $$LocalUsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdByUserId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableFilterComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> localOrderItemsRefs(
+    Expression<bool> Function($$LocalOrderItemsTableFilterComposer f) f,
+  ) {
+    final $$LocalOrderItemsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localOrderItems,
+      getReferencedColumn: (t) => t.orderLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrderItemsTableFilterComposer(
+            $db: $db,
+            $table: $db.localOrderItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> localInvoicesRefs(
+    Expression<bool> Function($$LocalInvoicesTableFilterComposer f) f,
+  ) {
+    final $$LocalInvoicesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localInvoices,
+      getReferencedColumn: (t) => t.orderLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalInvoicesTableFilterComposer(
+            $db: $db,
+            $table: $db.localInvoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> localPaymentsRefs(
+    Expression<bool> Function($$LocalPaymentsTableFilterComposer f) f,
+  ) {
+    final $$LocalPaymentsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localPayments,
+      getReferencedColumn: (t) => t.orderLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalPaymentsTableFilterComposer(
+            $db: $db,
+            $table: $db.localPayments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> localReturnsRefs(
+    Expression<bool> Function($$LocalReturnsTableFilterComposer f) f,
+  ) {
+    final $$LocalReturnsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localReturns,
+      getReferencedColumn: (t) => t.orderLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalReturnsTableFilterComposer(
+            $db: $db,
+            $table: $db.localReturns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalOrdersTableOrderingComposer
@@ -20245,42 +23598,22 @@ class $$LocalOrdersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get tableLocalId => $composableBuilder(
-    column: $table.tableLocalId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get sessionLocalId => $composableBuilder(
-    column: $table.sessionLocalId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get customerLocalId => $composableBuilder(
-    column: $table.customerLocalId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get createdByUserId => $composableBuilder(
-    column: $table.createdByUserId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<String> get notes => $composableBuilder(
     column: $table.notes,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get subtotal => $composableBuilder(
+  ColumnOrderings<int> get subtotal => $composableBuilder(
     column: $table.subtotal,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get taxAmount => $composableBuilder(
+  ColumnOrderings<int> get taxAmount => $composableBuilder(
     column: $table.taxAmount,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get discountAmount => $composableBuilder(
+  ColumnOrderings<int> get discountAmount => $composableBuilder(
     column: $table.discountAmount,
     builder: (column) => ColumnOrderings(column),
   );
@@ -20290,7 +23623,7 @@ class $$LocalOrdersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get totalAmount => $composableBuilder(
+  ColumnOrderings<int> get totalAmount => $composableBuilder(
     column: $table.totalAmount,
     builder: (column) => ColumnOrderings(column),
   );
@@ -20344,6 +23677,98 @@ class $$LocalOrdersTableOrderingComposer
     column: $table.syncedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$LocalTablesTableOrderingComposer get tableLocalId {
+    final $$LocalTablesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tableLocalId,
+      referencedTable: $db.localTables,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalTablesTableOrderingComposer(
+            $db: $db,
+            $table: $db.localTables,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalSessionsTableOrderingComposer get sessionLocalId {
+    final $$LocalSessionsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.sessionLocalId,
+      referencedTable: $db.localSessions,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalSessionsTableOrderingComposer(
+            $db: $db,
+            $table: $db.localSessions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalCustomersTableOrderingComposer get customerLocalId {
+    final $$LocalCustomersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.customerLocalId,
+      referencedTable: $db.localCustomers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalCustomersTableOrderingComposer(
+            $db: $db,
+            $table: $db.localCustomers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalUsersTableOrderingComposer get createdByUserId {
+    final $$LocalUsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdByUserId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalOrdersTableAnnotationComposer
@@ -20387,36 +23812,16 @@ class $$LocalOrdersTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<String> get tableLocalId => $composableBuilder(
-    column: $table.tableLocalId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get sessionLocalId => $composableBuilder(
-    column: $table.sessionLocalId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get customerLocalId => $composableBuilder(
-    column: $table.customerLocalId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get createdByUserId => $composableBuilder(
-    column: $table.createdByUserId,
-    builder: (column) => column,
-  );
-
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
 
-  GeneratedColumn<double> get subtotal =>
+  GeneratedColumn<int> get subtotal =>
       $composableBuilder(column: $table.subtotal, builder: (column) => column);
 
-  GeneratedColumn<double> get taxAmount =>
+  GeneratedColumn<int> get taxAmount =>
       $composableBuilder(column: $table.taxAmount, builder: (column) => column);
 
-  GeneratedColumn<double> get discountAmount => $composableBuilder(
+  GeneratedColumn<int> get discountAmount => $composableBuilder(
     column: $table.discountAmount,
     builder: (column) => column,
   );
@@ -20426,7 +23831,7 @@ class $$LocalOrdersTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<double> get totalAmount => $composableBuilder(
+  GeneratedColumn<int> get totalAmount => $composableBuilder(
     column: $table.totalAmount,
     builder: (column) => column,
   );
@@ -20470,6 +23875,198 @@ class $$LocalOrdersTableAnnotationComposer
 
   GeneratedColumn<DateTime> get syncedAt =>
       $composableBuilder(column: $table.syncedAt, builder: (column) => column);
+
+  $$LocalTablesTableAnnotationComposer get tableLocalId {
+    final $$LocalTablesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tableLocalId,
+      referencedTable: $db.localTables,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalTablesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localTables,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalSessionsTableAnnotationComposer get sessionLocalId {
+    final $$LocalSessionsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.sessionLocalId,
+      referencedTable: $db.localSessions,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalSessionsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localSessions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalCustomersTableAnnotationComposer get customerLocalId {
+    final $$LocalCustomersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.customerLocalId,
+      referencedTable: $db.localCustomers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalCustomersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localCustomers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalUsersTableAnnotationComposer get createdByUserId {
+    final $$LocalUsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdByUserId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> localOrderItemsRefs<T extends Object>(
+    Expression<T> Function($$LocalOrderItemsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalOrderItemsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localOrderItems,
+      getReferencedColumn: (t) => t.orderLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrderItemsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localOrderItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> localInvoicesRefs<T extends Object>(
+    Expression<T> Function($$LocalInvoicesTableAnnotationComposer a) f,
+  ) {
+    final $$LocalInvoicesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localInvoices,
+      getReferencedColumn: (t) => t.orderLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalInvoicesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localInvoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> localPaymentsRefs<T extends Object>(
+    Expression<T> Function($$LocalPaymentsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalPaymentsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localPayments,
+      getReferencedColumn: (t) => t.orderLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalPaymentsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localPayments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> localReturnsRefs<T extends Object>(
+    Expression<T> Function($$LocalReturnsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalReturnsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localReturns,
+      getReferencedColumn: (t) => t.orderLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalReturnsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localReturns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalOrdersTableTableManager
@@ -20483,12 +24080,18 @@ class $$LocalOrdersTableTableManager
           $$LocalOrdersTableAnnotationComposer,
           $$LocalOrdersTableCreateCompanionBuilder,
           $$LocalOrdersTableUpdateCompanionBuilder,
-          (
-            LocalOrder,
-            BaseReferences<_$AppDatabase, $LocalOrdersTable, LocalOrder>,
-          ),
+          (LocalOrder, $$LocalOrdersTableReferences),
           LocalOrder,
-          PrefetchHooks Function()
+          PrefetchHooks Function({
+            bool tableLocalId,
+            bool sessionLocalId,
+            bool customerLocalId,
+            bool createdByUserId,
+            bool localOrderItemsRefs,
+            bool localInvoicesRefs,
+            bool localPaymentsRefs,
+            bool localReturnsRefs,
+          })
         > {
   $$LocalOrdersTableTableManager(_$AppDatabase db, $LocalOrdersTable table)
     : super(
@@ -20516,11 +24119,11 @@ class $$LocalOrdersTableTableManager
                 Value<String?> customerLocalId = const Value.absent(),
                 Value<String?> createdByUserId = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
-                Value<double> subtotal = const Value.absent(),
-                Value<double> taxAmount = const Value.absent(),
-                Value<double> discountAmount = const Value.absent(),
+                Value<int> subtotal = const Value.absent(),
+                Value<int> taxAmount = const Value.absent(),
+                Value<int> discountAmount = const Value.absent(),
                 Value<double> discountPercent = const Value.absent(),
-                Value<double> totalAmount = const Value.absent(),
+                Value<int> totalAmount = const Value.absent(),
                 Value<String> posStatus = const Value.absent(),
                 Value<String> paymentStatus = const Value.absent(),
                 Value<String> fulfillmentStatus = const Value.absent(),
@@ -20578,11 +24181,11 @@ class $$LocalOrdersTableTableManager
                 Value<String?> customerLocalId = const Value.absent(),
                 Value<String?> createdByUserId = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
-                Value<double> subtotal = const Value.absent(),
-                Value<double> taxAmount = const Value.absent(),
-                Value<double> discountAmount = const Value.absent(),
+                Value<int> subtotal = const Value.absent(),
+                Value<int> taxAmount = const Value.absent(),
+                Value<int> discountAmount = const Value.absent(),
                 Value<double> discountPercent = const Value.absent(),
-                Value<double> totalAmount = const Value.absent(),
+                Value<int> totalAmount = const Value.absent(),
                 Value<String> posStatus = const Value.absent(),
                 Value<String> paymentStatus = const Value.absent(),
                 Value<String> fulfillmentStatus = const Value.absent(),
@@ -20626,9 +24229,201 @@ class $$LocalOrdersTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LocalOrdersTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback:
+              ({
+                tableLocalId = false,
+                sessionLocalId = false,
+                customerLocalId = false,
+                createdByUserId = false,
+                localOrderItemsRefs = false,
+                localInvoicesRefs = false,
+                localPaymentsRefs = false,
+                localReturnsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (localOrderItemsRefs) db.localOrderItems,
+                    if (localInvoicesRefs) db.localInvoices,
+                    if (localPaymentsRefs) db.localPayments,
+                    if (localReturnsRefs) db.localReturns,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (tableLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.tableLocalId,
+                                    referencedTable:
+                                        $$LocalOrdersTableReferences
+                                            ._tableLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalOrdersTableReferences
+                                            ._tableLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+                        if (sessionLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.sessionLocalId,
+                                    referencedTable:
+                                        $$LocalOrdersTableReferences
+                                            ._sessionLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalOrdersTableReferences
+                                            ._sessionLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+                        if (customerLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.customerLocalId,
+                                    referencedTable:
+                                        $$LocalOrdersTableReferences
+                                            ._customerLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalOrdersTableReferences
+                                            ._customerLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+                        if (createdByUserId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.createdByUserId,
+                                    referencedTable:
+                                        $$LocalOrdersTableReferences
+                                            ._createdByUserIdTable(db),
+                                    referencedColumn:
+                                        $$LocalOrdersTableReferences
+                                            ._createdByUserIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (localOrderItemsRefs)
+                        await $_getPrefetchedData<
+                          LocalOrder,
+                          $LocalOrdersTable,
+                          LocalOrderItem
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalOrdersTableReferences
+                              ._localOrderItemsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalOrdersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localOrderItemsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.orderLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (localInvoicesRefs)
+                        await $_getPrefetchedData<
+                          LocalOrder,
+                          $LocalOrdersTable,
+                          LocalInvoice
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalOrdersTableReferences
+                              ._localInvoicesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalOrdersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localInvoicesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.orderLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (localPaymentsRefs)
+                        await $_getPrefetchedData<
+                          LocalOrder,
+                          $LocalOrdersTable,
+                          LocalPayment
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalOrdersTableReferences
+                              ._localPaymentsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalOrdersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localPaymentsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.orderLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (localReturnsRefs)
+                        await $_getPrefetchedData<
+                          LocalOrder,
+                          $LocalOrdersTable,
+                          LocalReturn
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalOrdersTableReferences
+                              ._localReturnsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalOrdersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localReturnsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.orderLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
         ),
       );
 }
@@ -20643,12 +24438,18 @@ typedef $$LocalOrdersTableProcessedTableManager =
       $$LocalOrdersTableAnnotationComposer,
       $$LocalOrdersTableCreateCompanionBuilder,
       $$LocalOrdersTableUpdateCompanionBuilder,
-      (
-        LocalOrder,
-        BaseReferences<_$AppDatabase, $LocalOrdersTable, LocalOrder>,
-      ),
+      (LocalOrder, $$LocalOrdersTableReferences),
       LocalOrder,
-      PrefetchHooks Function()
+      PrefetchHooks Function({
+        bool tableLocalId,
+        bool sessionLocalId,
+        bool customerLocalId,
+        bool createdByUserId,
+        bool localOrderItemsRefs,
+        bool localInvoicesRefs,
+        bool localPaymentsRefs,
+        bool localReturnsRefs,
+      })
     >;
 typedef $$LocalOrderItemsTableCreateCompanionBuilder =
     LocalOrderItemsCompanion Function({
@@ -20662,12 +24463,12 @@ typedef $$LocalOrderItemsTableCreateCompanionBuilder =
       Value<String?> skuSnapshot,
       Value<String?> barcodeSnapshot,
       required int quantity,
-      required double unitPrice,
-      Value<double> costSnapshot,
-      Value<double> discountAmount,
+      required int unitPrice,
+      Value<int> costSnapshot,
+      Value<int> discountAmount,
       Value<double> taxRate,
-      Value<double> taxAmount,
-      required double totalAmount,
+      Value<int> taxAmount,
+      required int totalAmount,
       Value<String?> notes,
       Value<bool> isRemoved,
       Value<DateTime?> createdAt,
@@ -20686,18 +24487,97 @@ typedef $$LocalOrderItemsTableUpdateCompanionBuilder =
       Value<String?> skuSnapshot,
       Value<String?> barcodeSnapshot,
       Value<int> quantity,
-      Value<double> unitPrice,
-      Value<double> costSnapshot,
-      Value<double> discountAmount,
+      Value<int> unitPrice,
+      Value<int> costSnapshot,
+      Value<int> discountAmount,
       Value<double> taxRate,
-      Value<double> taxAmount,
-      Value<double> totalAmount,
+      Value<int> taxAmount,
+      Value<int> totalAmount,
       Value<String?> notes,
       Value<bool> isRemoved,
       Value<DateTime?> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
+
+final class $$LocalOrderItemsTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $LocalOrderItemsTable, LocalOrderItem> {
+  $$LocalOrderItemsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $LocalOrdersTable _orderLocalIdTable(_$AppDatabase db) =>
+      db.localOrders.createAlias(
+        $_aliasNameGenerator(
+          db.localOrderItems.orderLocalId,
+          db.localOrders.localId,
+        ),
+      );
+
+  $$LocalOrdersTableProcessedTableManager get orderLocalId {
+    final $_column = $_itemColumn<String>('order_local_id')!;
+
+    final manager = $$LocalOrdersTableTableManager(
+      $_db,
+      $_db.localOrders,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_orderLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $LocalProductsTable _productLocalIdTable(_$AppDatabase db) =>
+      db.localProducts.createAlias(
+        $_aliasNameGenerator(
+          db.localOrderItems.productLocalId,
+          db.localProducts.localId,
+        ),
+      );
+
+  $$LocalProductsTableProcessedTableManager? get productLocalId {
+    final $_column = $_itemColumn<String>('product_local_id');
+    if ($_column == null) return null;
+    final manager = $$LocalProductsTableTableManager(
+      $_db,
+      $_db.localProducts,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_productLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalReturnItemsTable, List<LocalReturnItem>>
+  _localReturnItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localReturnItems,
+    aliasName: $_aliasNameGenerator(
+      db.localOrderItems.localId,
+      db.localReturnItems.orderItemLocalId,
+    ),
+  );
+
+  $$LocalReturnItemsTableProcessedTableManager get localReturnItemsRefs {
+    final manager =
+        $$LocalReturnItemsTableTableManager($_db, $_db.localReturnItems).filter(
+          (f) => f.orderItemLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _localReturnItemsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
 
 class $$LocalOrderItemsTableFilterComposer
     extends Composer<_$AppDatabase, $LocalOrderItemsTable> {
@@ -20718,11 +24598,6 @@ class $$LocalOrderItemsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get orderLocalId => $composableBuilder(
-    column: $table.orderLocalId,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<int> get serverId => $composableBuilder(
     column: $table.serverId,
     builder: (column) => ColumnFilters(column),
@@ -20730,11 +24605,6 @@ class $$LocalOrderItemsTableFilterComposer
 
   ColumnFilters<int> get productServerId => $composableBuilder(
     column: $table.productServerId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get productLocalId => $composableBuilder(
-    column: $table.productLocalId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -20758,17 +24628,17 @@ class $$LocalOrderItemsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get unitPrice => $composableBuilder(
+  ColumnFilters<int> get unitPrice => $composableBuilder(
     column: $table.unitPrice,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get costSnapshot => $composableBuilder(
+  ColumnFilters<int> get costSnapshot => $composableBuilder(
     column: $table.costSnapshot,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get discountAmount => $composableBuilder(
+  ColumnFilters<int> get discountAmount => $composableBuilder(
     column: $table.discountAmount,
     builder: (column) => ColumnFilters(column),
   );
@@ -20778,12 +24648,12 @@ class $$LocalOrderItemsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get taxAmount => $composableBuilder(
+  ColumnFilters<int> get taxAmount => $composableBuilder(
     column: $table.taxAmount,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get totalAmount => $composableBuilder(
+  ColumnFilters<int> get totalAmount => $composableBuilder(
     column: $table.totalAmount,
     builder: (column) => ColumnFilters(column),
   );
@@ -20807,6 +24677,77 @@ class $$LocalOrderItemsTableFilterComposer
     column: $table.updatedAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$LocalOrdersTableFilterComposer get orderLocalId {
+    final $$LocalOrdersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.orderLocalId,
+      referencedTable: $db.localOrders,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrdersTableFilterComposer(
+            $db: $db,
+            $table: $db.localOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalProductsTableFilterComposer get productLocalId {
+    final $$LocalProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productLocalId,
+      referencedTable: $db.localProducts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.localProducts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> localReturnItemsRefs(
+    Expression<bool> Function($$LocalReturnItemsTableFilterComposer f) f,
+  ) {
+    final $$LocalReturnItemsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localReturnItems,
+      getReferencedColumn: (t) => t.orderItemLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalReturnItemsTableFilterComposer(
+            $db: $db,
+            $table: $db.localReturnItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalOrderItemsTableOrderingComposer
@@ -20828,11 +24769,6 @@ class $$LocalOrderItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get orderLocalId => $composableBuilder(
-    column: $table.orderLocalId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<int> get serverId => $composableBuilder(
     column: $table.serverId,
     builder: (column) => ColumnOrderings(column),
@@ -20840,11 +24776,6 @@ class $$LocalOrderItemsTableOrderingComposer
 
   ColumnOrderings<int> get productServerId => $composableBuilder(
     column: $table.productServerId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get productLocalId => $composableBuilder(
-    column: $table.productLocalId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -20868,17 +24799,17 @@ class $$LocalOrderItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get unitPrice => $composableBuilder(
+  ColumnOrderings<int> get unitPrice => $composableBuilder(
     column: $table.unitPrice,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get costSnapshot => $composableBuilder(
+  ColumnOrderings<int> get costSnapshot => $composableBuilder(
     column: $table.costSnapshot,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get discountAmount => $composableBuilder(
+  ColumnOrderings<int> get discountAmount => $composableBuilder(
     column: $table.discountAmount,
     builder: (column) => ColumnOrderings(column),
   );
@@ -20888,12 +24819,12 @@ class $$LocalOrderItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get taxAmount => $composableBuilder(
+  ColumnOrderings<int> get taxAmount => $composableBuilder(
     column: $table.taxAmount,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get totalAmount => $composableBuilder(
+  ColumnOrderings<int> get totalAmount => $composableBuilder(
     column: $table.totalAmount,
     builder: (column) => ColumnOrderings(column),
   );
@@ -20917,6 +24848,52 @@ class $$LocalOrderItemsTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$LocalOrdersTableOrderingComposer get orderLocalId {
+    final $$LocalOrdersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.orderLocalId,
+      referencedTable: $db.localOrders,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrdersTableOrderingComposer(
+            $db: $db,
+            $table: $db.localOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalProductsTableOrderingComposer get productLocalId {
+    final $$LocalProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productLocalId,
+      referencedTable: $db.localProducts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.localProducts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalOrderItemsTableAnnotationComposer
@@ -20936,21 +24913,11 @@ class $$LocalOrderItemsTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<String> get orderLocalId => $composableBuilder(
-    column: $table.orderLocalId,
-    builder: (column) => column,
-  );
-
   GeneratedColumn<int> get serverId =>
       $composableBuilder(column: $table.serverId, builder: (column) => column);
 
   GeneratedColumn<int> get productServerId => $composableBuilder(
     column: $table.productServerId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get productLocalId => $composableBuilder(
-    column: $table.productLocalId,
     builder: (column) => column,
   );
 
@@ -20970,15 +24937,15 @@ class $$LocalOrderItemsTableAnnotationComposer
   GeneratedColumn<int> get quantity =>
       $composableBuilder(column: $table.quantity, builder: (column) => column);
 
-  GeneratedColumn<double> get unitPrice =>
+  GeneratedColumn<int> get unitPrice =>
       $composableBuilder(column: $table.unitPrice, builder: (column) => column);
 
-  GeneratedColumn<double> get costSnapshot => $composableBuilder(
+  GeneratedColumn<int> get costSnapshot => $composableBuilder(
     column: $table.costSnapshot,
     builder: (column) => column,
   );
 
-  GeneratedColumn<double> get discountAmount => $composableBuilder(
+  GeneratedColumn<int> get discountAmount => $composableBuilder(
     column: $table.discountAmount,
     builder: (column) => column,
   );
@@ -20986,10 +24953,10 @@ class $$LocalOrderItemsTableAnnotationComposer
   GeneratedColumn<double> get taxRate =>
       $composableBuilder(column: $table.taxRate, builder: (column) => column);
 
-  GeneratedColumn<double> get taxAmount =>
+  GeneratedColumn<int> get taxAmount =>
       $composableBuilder(column: $table.taxAmount, builder: (column) => column);
 
-  GeneratedColumn<double> get totalAmount => $composableBuilder(
+  GeneratedColumn<int> get totalAmount => $composableBuilder(
     column: $table.totalAmount,
     builder: (column) => column,
   );
@@ -21005,6 +24972,77 @@ class $$LocalOrderItemsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$LocalOrdersTableAnnotationComposer get orderLocalId {
+    final $$LocalOrdersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.orderLocalId,
+      referencedTable: $db.localOrders,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrdersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalProductsTableAnnotationComposer get productLocalId {
+    final $$LocalProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productLocalId,
+      referencedTable: $db.localProducts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localProducts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> localReturnItemsRefs<T extends Object>(
+    Expression<T> Function($$LocalReturnItemsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalReturnItemsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localReturnItems,
+      getReferencedColumn: (t) => t.orderItemLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalReturnItemsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localReturnItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalOrderItemsTableTableManager
@@ -21018,16 +25056,13 @@ class $$LocalOrderItemsTableTableManager
           $$LocalOrderItemsTableAnnotationComposer,
           $$LocalOrderItemsTableCreateCompanionBuilder,
           $$LocalOrderItemsTableUpdateCompanionBuilder,
-          (
-            LocalOrderItem,
-            BaseReferences<
-              _$AppDatabase,
-              $LocalOrderItemsTable,
-              LocalOrderItem
-            >,
-          ),
+          (LocalOrderItem, $$LocalOrderItemsTableReferences),
           LocalOrderItem,
-          PrefetchHooks Function()
+          PrefetchHooks Function({
+            bool orderLocalId,
+            bool productLocalId,
+            bool localReturnItemsRefs,
+          })
         > {
   $$LocalOrderItemsTableTableManager(
     _$AppDatabase db,
@@ -21054,12 +25089,12 @@ class $$LocalOrderItemsTableTableManager
                 Value<String?> skuSnapshot = const Value.absent(),
                 Value<String?> barcodeSnapshot = const Value.absent(),
                 Value<int> quantity = const Value.absent(),
-                Value<double> unitPrice = const Value.absent(),
-                Value<double> costSnapshot = const Value.absent(),
-                Value<double> discountAmount = const Value.absent(),
+                Value<int> unitPrice = const Value.absent(),
+                Value<int> costSnapshot = const Value.absent(),
+                Value<int> discountAmount = const Value.absent(),
                 Value<double> taxRate = const Value.absent(),
-                Value<double> taxAmount = const Value.absent(),
-                Value<double> totalAmount = const Value.absent(),
+                Value<int> taxAmount = const Value.absent(),
+                Value<int> totalAmount = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<bool> isRemoved = const Value.absent(),
                 Value<DateTime?> createdAt = const Value.absent(),
@@ -21100,12 +25135,12 @@ class $$LocalOrderItemsTableTableManager
                 Value<String?> skuSnapshot = const Value.absent(),
                 Value<String?> barcodeSnapshot = const Value.absent(),
                 required int quantity,
-                required double unitPrice,
-                Value<double> costSnapshot = const Value.absent(),
-                Value<double> discountAmount = const Value.absent(),
+                required int unitPrice,
+                Value<int> costSnapshot = const Value.absent(),
+                Value<int> discountAmount = const Value.absent(),
                 Value<double> taxRate = const Value.absent(),
-                Value<double> taxAmount = const Value.absent(),
-                required double totalAmount,
+                Value<int> taxAmount = const Value.absent(),
+                required int totalAmount,
                 Value<String?> notes = const Value.absent(),
                 Value<bool> isRemoved = const Value.absent(),
                 Value<DateTime?> createdAt = const Value.absent(),
@@ -21135,9 +25170,100 @@ class $$LocalOrderItemsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LocalOrderItemsTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback:
+              ({
+                orderLocalId = false,
+                productLocalId = false,
+                localReturnItemsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (localReturnItemsRefs) db.localReturnItems,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (orderLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.orderLocalId,
+                                    referencedTable:
+                                        $$LocalOrderItemsTableReferences
+                                            ._orderLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalOrderItemsTableReferences
+                                            ._orderLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+                        if (productLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.productLocalId,
+                                    referencedTable:
+                                        $$LocalOrderItemsTableReferences
+                                            ._productLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalOrderItemsTableReferences
+                                            ._productLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (localReturnItemsRefs)
+                        await $_getPrefetchedData<
+                          LocalOrderItem,
+                          $LocalOrderItemsTable,
+                          LocalReturnItem
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalOrderItemsTableReferences
+                              ._localReturnItemsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalOrderItemsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localReturnItemsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.orderItemLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
         ),
       );
 }
@@ -21152,12 +25278,13 @@ typedef $$LocalOrderItemsTableProcessedTableManager =
       $$LocalOrderItemsTableAnnotationComposer,
       $$LocalOrderItemsTableCreateCompanionBuilder,
       $$LocalOrderItemsTableUpdateCompanionBuilder,
-      (
-        LocalOrderItem,
-        BaseReferences<_$AppDatabase, $LocalOrderItemsTable, LocalOrderItem>,
-      ),
+      (LocalOrderItem, $$LocalOrderItemsTableReferences),
       LocalOrderItem,
-      PrefetchHooks Function()
+      PrefetchHooks Function({
+        bool orderLocalId,
+        bool productLocalId,
+        bool localReturnItemsRefs,
+      })
     >;
 typedef $$LocalStockMovementsTableCreateCompanionBuilder =
     LocalStockMovementsCompanion Function({
@@ -21202,6 +25329,42 @@ typedef $$LocalStockMovementsTableUpdateCompanionBuilder =
       Value<int> rowid,
     });
 
+final class $$LocalStockMovementsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $LocalStockMovementsTable,
+          LocalStockMovement
+        > {
+  $$LocalStockMovementsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $LocalProductsTable _productLocalIdTable(_$AppDatabase db) =>
+      db.localProducts.createAlias(
+        $_aliasNameGenerator(
+          db.localStockMovements.productLocalId,
+          db.localProducts.localId,
+        ),
+      );
+
+  $$LocalProductsTableProcessedTableManager? get productLocalId {
+    final $_column = $_itemColumn<String>('product_local_id');
+    if ($_column == null) return null;
+    final manager = $$LocalProductsTableTableManager(
+      $_db,
+      $_db.localProducts,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_productLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
 class $$LocalStockMovementsTableFilterComposer
     extends Composer<_$AppDatabase, $LocalStockMovementsTable> {
   $$LocalStockMovementsTableFilterComposer({
@@ -21223,11 +25386,6 @@ class $$LocalStockMovementsTableFilterComposer
 
   ColumnFilters<String> get deviceId => $composableBuilder(
     column: $table.deviceId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get productLocalId => $composableBuilder(
-    column: $table.productLocalId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -21295,6 +25453,29 @@ class $$LocalStockMovementsTableFilterComposer
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$LocalProductsTableFilterComposer get productLocalId {
+    final $$LocalProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productLocalId,
+      referencedTable: $db.localProducts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.localProducts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalStockMovementsTableOrderingComposer
@@ -21318,11 +25499,6 @@ class $$LocalStockMovementsTableOrderingComposer
 
   ColumnOrderings<String> get deviceId => $composableBuilder(
     column: $table.deviceId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get productLocalId => $composableBuilder(
-    column: $table.productLocalId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -21390,6 +25566,29 @@ class $$LocalStockMovementsTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$LocalProductsTableOrderingComposer get productLocalId {
+    final $$LocalProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productLocalId,
+      referencedTable: $db.localProducts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.localProducts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalStockMovementsTableAnnotationComposer
@@ -21411,11 +25610,6 @@ class $$LocalStockMovementsTableAnnotationComposer
 
   GeneratedColumn<String> get deviceId =>
       $composableBuilder(column: $table.deviceId, builder: (column) => column);
-
-  GeneratedColumn<String> get productLocalId => $composableBuilder(
-    column: $table.productLocalId,
-    builder: (column) => column,
-  );
 
   GeneratedColumn<int> get productServerId => $composableBuilder(
     column: $table.productServerId,
@@ -21473,6 +25667,29 @@ class $$LocalStockMovementsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$LocalProductsTableAnnotationComposer get productLocalId {
+    final $$LocalProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productLocalId,
+      referencedTable: $db.localProducts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localProducts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalStockMovementsTableTableManager
@@ -21486,16 +25703,9 @@ class $$LocalStockMovementsTableTableManager
           $$LocalStockMovementsTableAnnotationComposer,
           $$LocalStockMovementsTableCreateCompanionBuilder,
           $$LocalStockMovementsTableUpdateCompanionBuilder,
-          (
-            LocalStockMovement,
-            BaseReferences<
-              _$AppDatabase,
-              $LocalStockMovementsTable,
-              LocalStockMovement
-            >,
-          ),
+          (LocalStockMovement, $$LocalStockMovementsTableReferences),
           LocalStockMovement,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool productLocalId})
         > {
   $$LocalStockMovementsTableTableManager(
     _$AppDatabase db,
@@ -21597,9 +25807,56 @@ class $$LocalStockMovementsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LocalStockMovementsTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({productLocalId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (productLocalId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.productLocalId,
+                                referencedTable:
+                                    $$LocalStockMovementsTableReferences
+                                        ._productLocalIdTable(db),
+                                referencedColumn:
+                                    $$LocalStockMovementsTableReferences
+                                        ._productLocalIdTable(db)
+                                        .localId,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
         ),
       );
 }
@@ -21614,399 +25871,9 @@ typedef $$LocalStockMovementsTableProcessedTableManager =
       $$LocalStockMovementsTableAnnotationComposer,
       $$LocalStockMovementsTableCreateCompanionBuilder,
       $$LocalStockMovementsTableUpdateCompanionBuilder,
-      (
-        LocalStockMovement,
-        BaseReferences<
-          _$AppDatabase,
-          $LocalStockMovementsTable,
-          LocalStockMovement
-        >,
-      ),
+      (LocalStockMovement, $$LocalStockMovementsTableReferences),
       LocalStockMovement,
-      PrefetchHooks Function()
-    >;
-typedef $$LocalPaymentsTableCreateCompanionBuilder =
-    LocalPaymentsCompanion Function({
-      required String localId,
-      required int workspaceId,
-      required String deviceId,
-      Value<int?> serverId,
-      Value<String?> orderLocalId,
-      Value<String?> invoiceLocalId,
-      required String method,
-      required double amount,
-      Value<double?> tendered,
-      Value<double> changeDue,
-      Value<String?> shiftLocalId,
-      Value<String> syncStatus,
-      required String clientReference,
-      required DateTime createdAt,
-      Value<int> rowid,
-    });
-typedef $$LocalPaymentsTableUpdateCompanionBuilder =
-    LocalPaymentsCompanion Function({
-      Value<String> localId,
-      Value<int> workspaceId,
-      Value<String> deviceId,
-      Value<int?> serverId,
-      Value<String?> orderLocalId,
-      Value<String?> invoiceLocalId,
-      Value<String> method,
-      Value<double> amount,
-      Value<double?> tendered,
-      Value<double> changeDue,
-      Value<String?> shiftLocalId,
-      Value<String> syncStatus,
-      Value<String> clientReference,
-      Value<DateTime> createdAt,
-      Value<int> rowid,
-    });
-
-class $$LocalPaymentsTableFilterComposer
-    extends Composer<_$AppDatabase, $LocalPaymentsTable> {
-  $$LocalPaymentsTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<String> get localId => $composableBuilder(
-    column: $table.localId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get workspaceId => $composableBuilder(
-    column: $table.workspaceId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get deviceId => $composableBuilder(
-    column: $table.deviceId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get serverId => $composableBuilder(
-    column: $table.serverId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get orderLocalId => $composableBuilder(
-    column: $table.orderLocalId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get invoiceLocalId => $composableBuilder(
-    column: $table.invoiceLocalId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get method => $composableBuilder(
-    column: $table.method,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get amount => $composableBuilder(
-    column: $table.amount,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get tendered => $composableBuilder(
-    column: $table.tendered,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get changeDue => $composableBuilder(
-    column: $table.changeDue,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get shiftLocalId => $composableBuilder(
-    column: $table.shiftLocalId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get syncStatus => $composableBuilder(
-    column: $table.syncStatus,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get clientReference => $composableBuilder(
-    column: $table.clientReference,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnFilters(column),
-  );
-}
-
-class $$LocalPaymentsTableOrderingComposer
-    extends Composer<_$AppDatabase, $LocalPaymentsTable> {
-  $$LocalPaymentsTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<String> get localId => $composableBuilder(
-    column: $table.localId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get workspaceId => $composableBuilder(
-    column: $table.workspaceId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get deviceId => $composableBuilder(
-    column: $table.deviceId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get serverId => $composableBuilder(
-    column: $table.serverId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get orderLocalId => $composableBuilder(
-    column: $table.orderLocalId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get invoiceLocalId => $composableBuilder(
-    column: $table.invoiceLocalId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get method => $composableBuilder(
-    column: $table.method,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get amount => $composableBuilder(
-    column: $table.amount,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get tendered => $composableBuilder(
-    column: $table.tendered,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get changeDue => $composableBuilder(
-    column: $table.changeDue,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get shiftLocalId => $composableBuilder(
-    column: $table.shiftLocalId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get syncStatus => $composableBuilder(
-    column: $table.syncStatus,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get clientReference => $composableBuilder(
-    column: $table.clientReference,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-}
-
-class $$LocalPaymentsTableAnnotationComposer
-    extends Composer<_$AppDatabase, $LocalPaymentsTable> {
-  $$LocalPaymentsTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<String> get localId =>
-      $composableBuilder(column: $table.localId, builder: (column) => column);
-
-  GeneratedColumn<int> get workspaceId => $composableBuilder(
-    column: $table.workspaceId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get deviceId =>
-      $composableBuilder(column: $table.deviceId, builder: (column) => column);
-
-  GeneratedColumn<int> get serverId =>
-      $composableBuilder(column: $table.serverId, builder: (column) => column);
-
-  GeneratedColumn<String> get orderLocalId => $composableBuilder(
-    column: $table.orderLocalId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get invoiceLocalId => $composableBuilder(
-    column: $table.invoiceLocalId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get method =>
-      $composableBuilder(column: $table.method, builder: (column) => column);
-
-  GeneratedColumn<double> get amount =>
-      $composableBuilder(column: $table.amount, builder: (column) => column);
-
-  GeneratedColumn<double> get tendered =>
-      $composableBuilder(column: $table.tendered, builder: (column) => column);
-
-  GeneratedColumn<double> get changeDue =>
-      $composableBuilder(column: $table.changeDue, builder: (column) => column);
-
-  GeneratedColumn<String> get shiftLocalId => $composableBuilder(
-    column: $table.shiftLocalId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get syncStatus => $composableBuilder(
-    column: $table.syncStatus,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get clientReference => $composableBuilder(
-    column: $table.clientReference,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<DateTime> get createdAt =>
-      $composableBuilder(column: $table.createdAt, builder: (column) => column);
-}
-
-class $$LocalPaymentsTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $LocalPaymentsTable,
-          LocalPayment,
-          $$LocalPaymentsTableFilterComposer,
-          $$LocalPaymentsTableOrderingComposer,
-          $$LocalPaymentsTableAnnotationComposer,
-          $$LocalPaymentsTableCreateCompanionBuilder,
-          $$LocalPaymentsTableUpdateCompanionBuilder,
-          (
-            LocalPayment,
-            BaseReferences<_$AppDatabase, $LocalPaymentsTable, LocalPayment>,
-          ),
-          LocalPayment,
-          PrefetchHooks Function()
-        > {
-  $$LocalPaymentsTableTableManager(_$AppDatabase db, $LocalPaymentsTable table)
-    : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$LocalPaymentsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$LocalPaymentsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$LocalPaymentsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<String> localId = const Value.absent(),
-                Value<int> workspaceId = const Value.absent(),
-                Value<String> deviceId = const Value.absent(),
-                Value<int?> serverId = const Value.absent(),
-                Value<String?> orderLocalId = const Value.absent(),
-                Value<String?> invoiceLocalId = const Value.absent(),
-                Value<String> method = const Value.absent(),
-                Value<double> amount = const Value.absent(),
-                Value<double?> tendered = const Value.absent(),
-                Value<double> changeDue = const Value.absent(),
-                Value<String?> shiftLocalId = const Value.absent(),
-                Value<String> syncStatus = const Value.absent(),
-                Value<String> clientReference = const Value.absent(),
-                Value<DateTime> createdAt = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => LocalPaymentsCompanion(
-                localId: localId,
-                workspaceId: workspaceId,
-                deviceId: deviceId,
-                serverId: serverId,
-                orderLocalId: orderLocalId,
-                invoiceLocalId: invoiceLocalId,
-                method: method,
-                amount: amount,
-                tendered: tendered,
-                changeDue: changeDue,
-                shiftLocalId: shiftLocalId,
-                syncStatus: syncStatus,
-                clientReference: clientReference,
-                createdAt: createdAt,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                required String localId,
-                required int workspaceId,
-                required String deviceId,
-                Value<int?> serverId = const Value.absent(),
-                Value<String?> orderLocalId = const Value.absent(),
-                Value<String?> invoiceLocalId = const Value.absent(),
-                required String method,
-                required double amount,
-                Value<double?> tendered = const Value.absent(),
-                Value<double> changeDue = const Value.absent(),
-                Value<String?> shiftLocalId = const Value.absent(),
-                Value<String> syncStatus = const Value.absent(),
-                required String clientReference,
-                required DateTime createdAt,
-                Value<int> rowid = const Value.absent(),
-              }) => LocalPaymentsCompanion.insert(
-                localId: localId,
-                workspaceId: workspaceId,
-                deviceId: deviceId,
-                serverId: serverId,
-                orderLocalId: orderLocalId,
-                invoiceLocalId: invoiceLocalId,
-                method: method,
-                amount: amount,
-                tendered: tendered,
-                changeDue: changeDue,
-                shiftLocalId: shiftLocalId,
-                syncStatus: syncStatus,
-                clientReference: clientReference,
-                createdAt: createdAt,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
-          prefetchHooksCallback: null,
-        ),
-      );
-}
-
-typedef $$LocalPaymentsTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $LocalPaymentsTable,
-      LocalPayment,
-      $$LocalPaymentsTableFilterComposer,
-      $$LocalPaymentsTableOrderingComposer,
-      $$LocalPaymentsTableAnnotationComposer,
-      $$LocalPaymentsTableCreateCompanionBuilder,
-      $$LocalPaymentsTableUpdateCompanionBuilder,
-      (
-        LocalPayment,
-        BaseReferences<_$AppDatabase, $LocalPaymentsTable, LocalPayment>,
-      ),
-      LocalPayment,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool productLocalId})
     >;
 typedef $$LocalInvoicesTableCreateCompanionBuilder =
     LocalInvoicesCompanion Function({
@@ -22019,10 +25886,10 @@ typedef $$LocalInvoicesTableCreateCompanionBuilder =
       Value<String?> serverInvoiceNumber,
       Value<String?> orderLocalId,
       Value<String> status,
-      Value<double> subtotal,
-      Value<double> discountAmount,
-      Value<double> taxAmount,
-      Value<double> totalAmount,
+      Value<int> subtotal,
+      Value<int> discountAmount,
+      Value<int> taxAmount,
+      Value<int> totalAmount,
       Value<String?> createdByUserId,
       Value<String> syncStatus,
       Value<String> payloadJson,
@@ -22040,16 +25907,115 @@ typedef $$LocalInvoicesTableUpdateCompanionBuilder =
       Value<String?> serverInvoiceNumber,
       Value<String?> orderLocalId,
       Value<String> status,
-      Value<double> subtotal,
-      Value<double> discountAmount,
-      Value<double> taxAmount,
-      Value<double> totalAmount,
+      Value<int> subtotal,
+      Value<int> discountAmount,
+      Value<int> taxAmount,
+      Value<int> totalAmount,
       Value<String?> createdByUserId,
       Value<String> syncStatus,
       Value<String> payloadJson,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
+
+final class $$LocalInvoicesTableReferences
+    extends BaseReferences<_$AppDatabase, $LocalInvoicesTable, LocalInvoice> {
+  $$LocalInvoicesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $LocalOrdersTable _orderLocalIdTable(_$AppDatabase db) =>
+      db.localOrders.createAlias(
+        $_aliasNameGenerator(
+          db.localInvoices.orderLocalId,
+          db.localOrders.localId,
+        ),
+      );
+
+  $$LocalOrdersTableProcessedTableManager? get orderLocalId {
+    final $_column = $_itemColumn<String>('order_local_id');
+    if ($_column == null) return null;
+    final manager = $$LocalOrdersTableTableManager(
+      $_db,
+      $_db.localOrders,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_orderLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $LocalUsersTable _createdByUserIdTable(_$AppDatabase db) =>
+      db.localUsers.createAlias(
+        $_aliasNameGenerator(
+          db.localInvoices.createdByUserId,
+          db.localUsers.localId,
+        ),
+      );
+
+  $$LocalUsersTableProcessedTableManager? get createdByUserId {
+    final $_column = $_itemColumn<String>('created_by_user_id');
+    if ($_column == null) return null;
+    final manager = $$LocalUsersTableTableManager(
+      $_db,
+      $_db.localUsers,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_createdByUserIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalPaymentsTable, List<LocalPayment>>
+  _localPaymentsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localPayments,
+    aliasName: $_aliasNameGenerator(
+      db.localInvoices.localId,
+      db.localPayments.invoiceLocalId,
+    ),
+  );
+
+  $$LocalPaymentsTableProcessedTableManager get localPaymentsRefs {
+    final manager = $$LocalPaymentsTableTableManager($_db, $_db.localPayments)
+        .filter(
+          (f) => f.invoiceLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_localPaymentsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalReturnsTable, List<LocalReturn>>
+  _localReturnsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localReturns,
+    aliasName: $_aliasNameGenerator(
+      db.localInvoices.localId,
+      db.localReturns.invoiceLocalId,
+    ),
+  );
+
+  $$LocalReturnsTableProcessedTableManager get localReturnsRefs {
+    final manager = $$LocalReturnsTableTableManager($_db, $_db.localReturns)
+        .filter(
+          (f) => f.invoiceLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_localReturnsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
 
 class $$LocalInvoicesTableFilterComposer
     extends Composer<_$AppDatabase, $LocalInvoicesTable> {
@@ -22095,38 +26061,28 @@ class $$LocalInvoicesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get orderLocalId => $composableBuilder(
-    column: $table.orderLocalId,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<String> get status => $composableBuilder(
     column: $table.status,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get subtotal => $composableBuilder(
+  ColumnFilters<int> get subtotal => $composableBuilder(
     column: $table.subtotal,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get discountAmount => $composableBuilder(
+  ColumnFilters<int> get discountAmount => $composableBuilder(
     column: $table.discountAmount,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get taxAmount => $composableBuilder(
+  ColumnFilters<int> get taxAmount => $composableBuilder(
     column: $table.taxAmount,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get totalAmount => $composableBuilder(
+  ColumnFilters<int> get totalAmount => $composableBuilder(
     column: $table.totalAmount,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get createdByUserId => $composableBuilder(
-    column: $table.createdByUserId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -22144,6 +26100,102 @@ class $$LocalInvoicesTableFilterComposer
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$LocalOrdersTableFilterComposer get orderLocalId {
+    final $$LocalOrdersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.orderLocalId,
+      referencedTable: $db.localOrders,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrdersTableFilterComposer(
+            $db: $db,
+            $table: $db.localOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalUsersTableFilterComposer get createdByUserId {
+    final $$LocalUsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdByUserId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableFilterComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> localPaymentsRefs(
+    Expression<bool> Function($$LocalPaymentsTableFilterComposer f) f,
+  ) {
+    final $$LocalPaymentsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localPayments,
+      getReferencedColumn: (t) => t.invoiceLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalPaymentsTableFilterComposer(
+            $db: $db,
+            $table: $db.localPayments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> localReturnsRefs(
+    Expression<bool> Function($$LocalReturnsTableFilterComposer f) f,
+  ) {
+    final $$LocalReturnsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localReturns,
+      getReferencedColumn: (t) => t.invoiceLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalReturnsTableFilterComposer(
+            $db: $db,
+            $table: $db.localReturns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalInvoicesTableOrderingComposer
@@ -22190,38 +26242,28 @@ class $$LocalInvoicesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get orderLocalId => $composableBuilder(
-    column: $table.orderLocalId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<String> get status => $composableBuilder(
     column: $table.status,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get subtotal => $composableBuilder(
+  ColumnOrderings<int> get subtotal => $composableBuilder(
     column: $table.subtotal,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get discountAmount => $composableBuilder(
+  ColumnOrderings<int> get discountAmount => $composableBuilder(
     column: $table.discountAmount,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get taxAmount => $composableBuilder(
+  ColumnOrderings<int> get taxAmount => $composableBuilder(
     column: $table.taxAmount,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get totalAmount => $composableBuilder(
+  ColumnOrderings<int> get totalAmount => $composableBuilder(
     column: $table.totalAmount,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get createdByUserId => $composableBuilder(
-    column: $table.createdByUserId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -22239,6 +26281,52 @@ class $$LocalInvoicesTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$LocalOrdersTableOrderingComposer get orderLocalId {
+    final $$LocalOrdersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.orderLocalId,
+      referencedTable: $db.localOrders,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrdersTableOrderingComposer(
+            $db: $db,
+            $table: $db.localOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalUsersTableOrderingComposer get createdByUserId {
+    final $$LocalUsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdByUserId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalInvoicesTableAnnotationComposer
@@ -22279,32 +26367,22 @@ class $$LocalInvoicesTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<String> get orderLocalId => $composableBuilder(
-    column: $table.orderLocalId,
-    builder: (column) => column,
-  );
-
   GeneratedColumn<String> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
 
-  GeneratedColumn<double> get subtotal =>
+  GeneratedColumn<int> get subtotal =>
       $composableBuilder(column: $table.subtotal, builder: (column) => column);
 
-  GeneratedColumn<double> get discountAmount => $composableBuilder(
+  GeneratedColumn<int> get discountAmount => $composableBuilder(
     column: $table.discountAmount,
     builder: (column) => column,
   );
 
-  GeneratedColumn<double> get taxAmount =>
+  GeneratedColumn<int> get taxAmount =>
       $composableBuilder(column: $table.taxAmount, builder: (column) => column);
 
-  GeneratedColumn<double> get totalAmount => $composableBuilder(
+  GeneratedColumn<int> get totalAmount => $composableBuilder(
     column: $table.totalAmount,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get createdByUserId => $composableBuilder(
-    column: $table.createdByUserId,
     builder: (column) => column,
   );
 
@@ -22320,6 +26398,102 @@ class $$LocalInvoicesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$LocalOrdersTableAnnotationComposer get orderLocalId {
+    final $$LocalOrdersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.orderLocalId,
+      referencedTable: $db.localOrders,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrdersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalUsersTableAnnotationComposer get createdByUserId {
+    final $$LocalUsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdByUserId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> localPaymentsRefs<T extends Object>(
+    Expression<T> Function($$LocalPaymentsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalPaymentsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localPayments,
+      getReferencedColumn: (t) => t.invoiceLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalPaymentsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localPayments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> localReturnsRefs<T extends Object>(
+    Expression<T> Function($$LocalReturnsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalReturnsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localReturns,
+      getReferencedColumn: (t) => t.invoiceLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalReturnsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localReturns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalInvoicesTableTableManager
@@ -22333,12 +26507,14 @@ class $$LocalInvoicesTableTableManager
           $$LocalInvoicesTableAnnotationComposer,
           $$LocalInvoicesTableCreateCompanionBuilder,
           $$LocalInvoicesTableUpdateCompanionBuilder,
-          (
-            LocalInvoice,
-            BaseReferences<_$AppDatabase, $LocalInvoicesTable, LocalInvoice>,
-          ),
+          (LocalInvoice, $$LocalInvoicesTableReferences),
           LocalInvoice,
-          PrefetchHooks Function()
+          PrefetchHooks Function({
+            bool orderLocalId,
+            bool createdByUserId,
+            bool localPaymentsRefs,
+            bool localReturnsRefs,
+          })
         > {
   $$LocalInvoicesTableTableManager(_$AppDatabase db, $LocalInvoicesTable table)
     : super(
@@ -22362,10 +26538,10 @@ class $$LocalInvoicesTableTableManager
                 Value<String?> serverInvoiceNumber = const Value.absent(),
                 Value<String?> orderLocalId = const Value.absent(),
                 Value<String> status = const Value.absent(),
-                Value<double> subtotal = const Value.absent(),
-                Value<double> discountAmount = const Value.absent(),
-                Value<double> taxAmount = const Value.absent(),
-                Value<double> totalAmount = const Value.absent(),
+                Value<int> subtotal = const Value.absent(),
+                Value<int> discountAmount = const Value.absent(),
+                Value<int> taxAmount = const Value.absent(),
+                Value<int> totalAmount = const Value.absent(),
                 Value<String?> createdByUserId = const Value.absent(),
                 Value<String> syncStatus = const Value.absent(),
                 Value<String> payloadJson = const Value.absent(),
@@ -22402,10 +26578,10 @@ class $$LocalInvoicesTableTableManager
                 Value<String?> serverInvoiceNumber = const Value.absent(),
                 Value<String?> orderLocalId = const Value.absent(),
                 Value<String> status = const Value.absent(),
-                Value<double> subtotal = const Value.absent(),
-                Value<double> discountAmount = const Value.absent(),
-                Value<double> taxAmount = const Value.absent(),
-                Value<double> totalAmount = const Value.absent(),
+                Value<int> subtotal = const Value.absent(),
+                Value<int> discountAmount = const Value.absent(),
+                Value<int> taxAmount = const Value.absent(),
+                Value<int> totalAmount = const Value.absent(),
                 Value<String?> createdByUserId = const Value.absent(),
                 Value<String> syncStatus = const Value.absent(),
                 Value<String> payloadJson = const Value.absent(),
@@ -22432,9 +26608,123 @@ class $$LocalInvoicesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LocalInvoicesTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback:
+              ({
+                orderLocalId = false,
+                createdByUserId = false,
+                localPaymentsRefs = false,
+                localReturnsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (localPaymentsRefs) db.localPayments,
+                    if (localReturnsRefs) db.localReturns,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (orderLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.orderLocalId,
+                                    referencedTable:
+                                        $$LocalInvoicesTableReferences
+                                            ._orderLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalInvoicesTableReferences
+                                            ._orderLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+                        if (createdByUserId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.createdByUserId,
+                                    referencedTable:
+                                        $$LocalInvoicesTableReferences
+                                            ._createdByUserIdTable(db),
+                                    referencedColumn:
+                                        $$LocalInvoicesTableReferences
+                                            ._createdByUserIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (localPaymentsRefs)
+                        await $_getPrefetchedData<
+                          LocalInvoice,
+                          $LocalInvoicesTable,
+                          LocalPayment
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalInvoicesTableReferences
+                              ._localPaymentsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalInvoicesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localPaymentsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.invoiceLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (localReturnsRefs)
+                        await $_getPrefetchedData<
+                          LocalInvoice,
+                          $LocalInvoicesTable,
+                          LocalReturn
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalInvoicesTableReferences
+                              ._localReturnsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalInvoicesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localReturnsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.invoiceLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
         ),
       );
 }
@@ -22449,12 +26739,1475 @@ typedef $$LocalInvoicesTableProcessedTableManager =
       $$LocalInvoicesTableAnnotationComposer,
       $$LocalInvoicesTableCreateCompanionBuilder,
       $$LocalInvoicesTableUpdateCompanionBuilder,
-      (
-        LocalInvoice,
-        BaseReferences<_$AppDatabase, $LocalInvoicesTable, LocalInvoice>,
-      ),
+      (LocalInvoice, $$LocalInvoicesTableReferences),
       LocalInvoice,
-      PrefetchHooks Function()
+      PrefetchHooks Function({
+        bool orderLocalId,
+        bool createdByUserId,
+        bool localPaymentsRefs,
+        bool localReturnsRefs,
+      })
+    >;
+typedef $$LocalShiftsTableCreateCompanionBuilder =
+    LocalShiftsCompanion Function({
+      required String localId,
+      required int workspaceId,
+      Value<String?> userId,
+      required DateTime openedAt,
+      Value<DateTime?> closedAt,
+      Value<int> openingCash,
+      Value<int?> closingCash,
+      Value<int?> expectedCash,
+      Value<int?> actualCash,
+      Value<int?> difference,
+      Value<String> status,
+      Value<int> rowid,
+    });
+typedef $$LocalShiftsTableUpdateCompanionBuilder =
+    LocalShiftsCompanion Function({
+      Value<String> localId,
+      Value<int> workspaceId,
+      Value<String?> userId,
+      Value<DateTime> openedAt,
+      Value<DateTime?> closedAt,
+      Value<int> openingCash,
+      Value<int?> closingCash,
+      Value<int?> expectedCash,
+      Value<int?> actualCash,
+      Value<int?> difference,
+      Value<String> status,
+      Value<int> rowid,
+    });
+
+final class $$LocalShiftsTableReferences
+    extends BaseReferences<_$AppDatabase, $LocalShiftsTable, LocalShift> {
+  $$LocalShiftsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $LocalUsersTable _userIdTable(_$AppDatabase db) =>
+      db.localUsers.createAlias(
+        $_aliasNameGenerator(db.localShifts.userId, db.localUsers.localId),
+      );
+
+  $$LocalUsersTableProcessedTableManager? get userId {
+    final $_column = $_itemColumn<String>('user_id');
+    if ($_column == null) return null;
+    final manager = $$LocalUsersTableTableManager(
+      $_db,
+      $_db.localUsers,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_userIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalPaymentsTable, List<LocalPayment>>
+  _localPaymentsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localPayments,
+    aliasName: $_aliasNameGenerator(
+      db.localShifts.localId,
+      db.localPayments.shiftLocalId,
+    ),
+  );
+
+  $$LocalPaymentsTableProcessedTableManager get localPaymentsRefs {
+    final manager = $$LocalPaymentsTableTableManager($_db, $_db.localPayments)
+        .filter(
+          (f) => f.shiftLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_localPaymentsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalReturnsTable, List<LocalReturn>>
+  _localReturnsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localReturns,
+    aliasName: $_aliasNameGenerator(
+      db.localShifts.localId,
+      db.localReturns.shiftLocalId,
+    ),
+  );
+
+  $$LocalReturnsTableProcessedTableManager get localReturnsRefs {
+    final manager = $$LocalReturnsTableTableManager($_db, $_db.localReturns)
+        .filter(
+          (f) => f.shiftLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_localReturnsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalCashMovementsTable, List<LocalCashMovement>>
+  _localCashMovementsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.localCashMovements,
+        aliasName: $_aliasNameGenerator(
+          db.localShifts.localId,
+          db.localCashMovements.shiftLocalId,
+        ),
+      );
+
+  $$LocalCashMovementsTableProcessedTableManager get localCashMovementsRefs {
+    final manager =
+        $$LocalCashMovementsTableTableManager(
+          $_db,
+          $_db.localCashMovements,
+        ).filter(
+          (f) => f.shiftLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _localCashMovementsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$LocalShiftsTableFilterComposer
+    extends Composer<_$AppDatabase, $LocalShiftsTable> {
+  $$LocalShiftsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get localId => $composableBuilder(
+    column: $table.localId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get openedAt => $composableBuilder(
+    column: $table.openedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get closedAt => $composableBuilder(
+    column: $table.closedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get openingCash => $composableBuilder(
+    column: $table.openingCash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get closingCash => $composableBuilder(
+    column: $table.closingCash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get expectedCash => $composableBuilder(
+    column: $table.expectedCash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get actualCash => $composableBuilder(
+    column: $table.actualCash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get difference => $composableBuilder(
+    column: $table.difference,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$LocalUsersTableFilterComposer get userId {
+    final $$LocalUsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.userId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableFilterComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> localPaymentsRefs(
+    Expression<bool> Function($$LocalPaymentsTableFilterComposer f) f,
+  ) {
+    final $$LocalPaymentsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localPayments,
+      getReferencedColumn: (t) => t.shiftLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalPaymentsTableFilterComposer(
+            $db: $db,
+            $table: $db.localPayments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> localReturnsRefs(
+    Expression<bool> Function($$LocalReturnsTableFilterComposer f) f,
+  ) {
+    final $$LocalReturnsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localReturns,
+      getReferencedColumn: (t) => t.shiftLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalReturnsTableFilterComposer(
+            $db: $db,
+            $table: $db.localReturns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> localCashMovementsRefs(
+    Expression<bool> Function($$LocalCashMovementsTableFilterComposer f) f,
+  ) {
+    final $$LocalCashMovementsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localCashMovements,
+      getReferencedColumn: (t) => t.shiftLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalCashMovementsTableFilterComposer(
+            $db: $db,
+            $table: $db.localCashMovements,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$LocalShiftsTableOrderingComposer
+    extends Composer<_$AppDatabase, $LocalShiftsTable> {
+  $$LocalShiftsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get localId => $composableBuilder(
+    column: $table.localId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get openedAt => $composableBuilder(
+    column: $table.openedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get closedAt => $composableBuilder(
+    column: $table.closedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get openingCash => $composableBuilder(
+    column: $table.openingCash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get closingCash => $composableBuilder(
+    column: $table.closingCash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get expectedCash => $composableBuilder(
+    column: $table.expectedCash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get actualCash => $composableBuilder(
+    column: $table.actualCash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get difference => $composableBuilder(
+    column: $table.difference,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$LocalUsersTableOrderingComposer get userId {
+    final $$LocalUsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.userId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$LocalShiftsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LocalShiftsTable> {
+  $$LocalShiftsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get localId =>
+      $composableBuilder(column: $table.localId, builder: (column) => column);
+
+  GeneratedColumn<int> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get openedAt =>
+      $composableBuilder(column: $table.openedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get closedAt =>
+      $composableBuilder(column: $table.closedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get openingCash => $composableBuilder(
+    column: $table.openingCash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get closingCash => $composableBuilder(
+    column: $table.closingCash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get expectedCash => $composableBuilder(
+    column: $table.expectedCash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get actualCash => $composableBuilder(
+    column: $table.actualCash,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get difference => $composableBuilder(
+    column: $table.difference,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  $$LocalUsersTableAnnotationComposer get userId {
+    final $$LocalUsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.userId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> localPaymentsRefs<T extends Object>(
+    Expression<T> Function($$LocalPaymentsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalPaymentsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localPayments,
+      getReferencedColumn: (t) => t.shiftLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalPaymentsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localPayments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> localReturnsRefs<T extends Object>(
+    Expression<T> Function($$LocalReturnsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalReturnsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localReturns,
+      getReferencedColumn: (t) => t.shiftLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalReturnsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localReturns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> localCashMovementsRefs<T extends Object>(
+    Expression<T> Function($$LocalCashMovementsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalCashMovementsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.localId,
+          referencedTable: $db.localCashMovements,
+          getReferencedColumn: (t) => t.shiftLocalId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$LocalCashMovementsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.localCashMovements,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$LocalShiftsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LocalShiftsTable,
+          LocalShift,
+          $$LocalShiftsTableFilterComposer,
+          $$LocalShiftsTableOrderingComposer,
+          $$LocalShiftsTableAnnotationComposer,
+          $$LocalShiftsTableCreateCompanionBuilder,
+          $$LocalShiftsTableUpdateCompanionBuilder,
+          (LocalShift, $$LocalShiftsTableReferences),
+          LocalShift,
+          PrefetchHooks Function({
+            bool userId,
+            bool localPaymentsRefs,
+            bool localReturnsRefs,
+            bool localCashMovementsRefs,
+          })
+        > {
+  $$LocalShiftsTableTableManager(_$AppDatabase db, $LocalShiftsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LocalShiftsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LocalShiftsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LocalShiftsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> localId = const Value.absent(),
+                Value<int> workspaceId = const Value.absent(),
+                Value<String?> userId = const Value.absent(),
+                Value<DateTime> openedAt = const Value.absent(),
+                Value<DateTime?> closedAt = const Value.absent(),
+                Value<int> openingCash = const Value.absent(),
+                Value<int?> closingCash = const Value.absent(),
+                Value<int?> expectedCash = const Value.absent(),
+                Value<int?> actualCash = const Value.absent(),
+                Value<int?> difference = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalShiftsCompanion(
+                localId: localId,
+                workspaceId: workspaceId,
+                userId: userId,
+                openedAt: openedAt,
+                closedAt: closedAt,
+                openingCash: openingCash,
+                closingCash: closingCash,
+                expectedCash: expectedCash,
+                actualCash: actualCash,
+                difference: difference,
+                status: status,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String localId,
+                required int workspaceId,
+                Value<String?> userId = const Value.absent(),
+                required DateTime openedAt,
+                Value<DateTime?> closedAt = const Value.absent(),
+                Value<int> openingCash = const Value.absent(),
+                Value<int?> closingCash = const Value.absent(),
+                Value<int?> expectedCash = const Value.absent(),
+                Value<int?> actualCash = const Value.absent(),
+                Value<int?> difference = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalShiftsCompanion.insert(
+                localId: localId,
+                workspaceId: workspaceId,
+                userId: userId,
+                openedAt: openedAt,
+                closedAt: closedAt,
+                openingCash: openingCash,
+                closingCash: closingCash,
+                expectedCash: expectedCash,
+                actualCash: actualCash,
+                difference: difference,
+                status: status,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LocalShiftsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                userId = false,
+                localPaymentsRefs = false,
+                localReturnsRefs = false,
+                localCashMovementsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (localPaymentsRefs) db.localPayments,
+                    if (localReturnsRefs) db.localReturns,
+                    if (localCashMovementsRefs) db.localCashMovements,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (userId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.userId,
+                                    referencedTable:
+                                        $$LocalShiftsTableReferences
+                                            ._userIdTable(db),
+                                    referencedColumn:
+                                        $$LocalShiftsTableReferences
+                                            ._userIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (localPaymentsRefs)
+                        await $_getPrefetchedData<
+                          LocalShift,
+                          $LocalShiftsTable,
+                          LocalPayment
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalShiftsTableReferences
+                              ._localPaymentsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalShiftsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localPaymentsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.shiftLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (localReturnsRefs)
+                        await $_getPrefetchedData<
+                          LocalShift,
+                          $LocalShiftsTable,
+                          LocalReturn
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalShiftsTableReferences
+                              ._localReturnsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalShiftsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localReturnsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.shiftLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (localCashMovementsRefs)
+                        await $_getPrefetchedData<
+                          LocalShift,
+                          $LocalShiftsTable,
+                          LocalCashMovement
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalShiftsTableReferences
+                              ._localCashMovementsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalShiftsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localCashMovementsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.shiftLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$LocalShiftsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LocalShiftsTable,
+      LocalShift,
+      $$LocalShiftsTableFilterComposer,
+      $$LocalShiftsTableOrderingComposer,
+      $$LocalShiftsTableAnnotationComposer,
+      $$LocalShiftsTableCreateCompanionBuilder,
+      $$LocalShiftsTableUpdateCompanionBuilder,
+      (LocalShift, $$LocalShiftsTableReferences),
+      LocalShift,
+      PrefetchHooks Function({
+        bool userId,
+        bool localPaymentsRefs,
+        bool localReturnsRefs,
+        bool localCashMovementsRefs,
+      })
+    >;
+typedef $$LocalPaymentsTableCreateCompanionBuilder =
+    LocalPaymentsCompanion Function({
+      required String localId,
+      required int workspaceId,
+      required String deviceId,
+      Value<int?> serverId,
+      Value<String?> orderLocalId,
+      Value<String?> invoiceLocalId,
+      required String method,
+      required int amount,
+      Value<int?> tendered,
+      Value<int> changeDue,
+      Value<String?> shiftLocalId,
+      Value<String> syncStatus,
+      required String clientReference,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$LocalPaymentsTableUpdateCompanionBuilder =
+    LocalPaymentsCompanion Function({
+      Value<String> localId,
+      Value<int> workspaceId,
+      Value<String> deviceId,
+      Value<int?> serverId,
+      Value<String?> orderLocalId,
+      Value<String?> invoiceLocalId,
+      Value<String> method,
+      Value<int> amount,
+      Value<int?> tendered,
+      Value<int> changeDue,
+      Value<String?> shiftLocalId,
+      Value<String> syncStatus,
+      Value<String> clientReference,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$LocalPaymentsTableReferences
+    extends BaseReferences<_$AppDatabase, $LocalPaymentsTable, LocalPayment> {
+  $$LocalPaymentsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $LocalOrdersTable _orderLocalIdTable(_$AppDatabase db) =>
+      db.localOrders.createAlias(
+        $_aliasNameGenerator(
+          db.localPayments.orderLocalId,
+          db.localOrders.localId,
+        ),
+      );
+
+  $$LocalOrdersTableProcessedTableManager? get orderLocalId {
+    final $_column = $_itemColumn<String>('order_local_id');
+    if ($_column == null) return null;
+    final manager = $$LocalOrdersTableTableManager(
+      $_db,
+      $_db.localOrders,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_orderLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $LocalInvoicesTable _invoiceLocalIdTable(_$AppDatabase db) =>
+      db.localInvoices.createAlias(
+        $_aliasNameGenerator(
+          db.localPayments.invoiceLocalId,
+          db.localInvoices.localId,
+        ),
+      );
+
+  $$LocalInvoicesTableProcessedTableManager? get invoiceLocalId {
+    final $_column = $_itemColumn<String>('invoice_local_id');
+    if ($_column == null) return null;
+    final manager = $$LocalInvoicesTableTableManager(
+      $_db,
+      $_db.localInvoices,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_invoiceLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $LocalShiftsTable _shiftLocalIdTable(_$AppDatabase db) =>
+      db.localShifts.createAlias(
+        $_aliasNameGenerator(
+          db.localPayments.shiftLocalId,
+          db.localShifts.localId,
+        ),
+      );
+
+  $$LocalShiftsTableProcessedTableManager? get shiftLocalId {
+    final $_column = $_itemColumn<String>('shift_local_id');
+    if ($_column == null) return null;
+    final manager = $$LocalShiftsTableTableManager(
+      $_db,
+      $_db.localShifts,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_shiftLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$LocalPaymentsTableFilterComposer
+    extends Composer<_$AppDatabase, $LocalPaymentsTable> {
+  $$LocalPaymentsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get localId => $composableBuilder(
+    column: $table.localId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get serverId => $composableBuilder(
+    column: $table.serverId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get method => $composableBuilder(
+    column: $table.method,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get tendered => $composableBuilder(
+    column: $table.tendered,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get changeDue => $composableBuilder(
+    column: $table.changeDue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncStatus => $composableBuilder(
+    column: $table.syncStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get clientReference => $composableBuilder(
+    column: $table.clientReference,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$LocalOrdersTableFilterComposer get orderLocalId {
+    final $$LocalOrdersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.orderLocalId,
+      referencedTable: $db.localOrders,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrdersTableFilterComposer(
+            $db: $db,
+            $table: $db.localOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalInvoicesTableFilterComposer get invoiceLocalId {
+    final $$LocalInvoicesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.invoiceLocalId,
+      referencedTable: $db.localInvoices,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalInvoicesTableFilterComposer(
+            $db: $db,
+            $table: $db.localInvoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalShiftsTableFilterComposer get shiftLocalId {
+    final $$LocalShiftsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftLocalId,
+      referencedTable: $db.localShifts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalShiftsTableFilterComposer(
+            $db: $db,
+            $table: $db.localShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$LocalPaymentsTableOrderingComposer
+    extends Composer<_$AppDatabase, $LocalPaymentsTable> {
+  $$LocalPaymentsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get localId => $composableBuilder(
+    column: $table.localId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get serverId => $composableBuilder(
+    column: $table.serverId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get method => $composableBuilder(
+    column: $table.method,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get tendered => $composableBuilder(
+    column: $table.tendered,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get changeDue => $composableBuilder(
+    column: $table.changeDue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get syncStatus => $composableBuilder(
+    column: $table.syncStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get clientReference => $composableBuilder(
+    column: $table.clientReference,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$LocalOrdersTableOrderingComposer get orderLocalId {
+    final $$LocalOrdersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.orderLocalId,
+      referencedTable: $db.localOrders,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrdersTableOrderingComposer(
+            $db: $db,
+            $table: $db.localOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalInvoicesTableOrderingComposer get invoiceLocalId {
+    final $$LocalInvoicesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.invoiceLocalId,
+      referencedTable: $db.localInvoices,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalInvoicesTableOrderingComposer(
+            $db: $db,
+            $table: $db.localInvoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalShiftsTableOrderingComposer get shiftLocalId {
+    final $$LocalShiftsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftLocalId,
+      referencedTable: $db.localShifts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalShiftsTableOrderingComposer(
+            $db: $db,
+            $table: $db.localShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$LocalPaymentsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LocalPaymentsTable> {
+  $$LocalPaymentsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get localId =>
+      $composableBuilder(column: $table.localId, builder: (column) => column);
+
+  GeneratedColumn<int> get workspaceId => $composableBuilder(
+    column: $table.workspaceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<int> get serverId =>
+      $composableBuilder(column: $table.serverId, builder: (column) => column);
+
+  GeneratedColumn<String> get method =>
+      $composableBuilder(column: $table.method, builder: (column) => column);
+
+  GeneratedColumn<int> get amount =>
+      $composableBuilder(column: $table.amount, builder: (column) => column);
+
+  GeneratedColumn<int> get tendered =>
+      $composableBuilder(column: $table.tendered, builder: (column) => column);
+
+  GeneratedColumn<int> get changeDue =>
+      $composableBuilder(column: $table.changeDue, builder: (column) => column);
+
+  GeneratedColumn<String> get syncStatus => $composableBuilder(
+    column: $table.syncStatus,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get clientReference => $composableBuilder(
+    column: $table.clientReference,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$LocalOrdersTableAnnotationComposer get orderLocalId {
+    final $$LocalOrdersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.orderLocalId,
+      referencedTable: $db.localOrders,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrdersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalInvoicesTableAnnotationComposer get invoiceLocalId {
+    final $$LocalInvoicesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.invoiceLocalId,
+      referencedTable: $db.localInvoices,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalInvoicesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localInvoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalShiftsTableAnnotationComposer get shiftLocalId {
+    final $$LocalShiftsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftLocalId,
+      referencedTable: $db.localShifts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalShiftsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$LocalPaymentsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LocalPaymentsTable,
+          LocalPayment,
+          $$LocalPaymentsTableFilterComposer,
+          $$LocalPaymentsTableOrderingComposer,
+          $$LocalPaymentsTableAnnotationComposer,
+          $$LocalPaymentsTableCreateCompanionBuilder,
+          $$LocalPaymentsTableUpdateCompanionBuilder,
+          (LocalPayment, $$LocalPaymentsTableReferences),
+          LocalPayment,
+          PrefetchHooks Function({
+            bool orderLocalId,
+            bool invoiceLocalId,
+            bool shiftLocalId,
+          })
+        > {
+  $$LocalPaymentsTableTableManager(_$AppDatabase db, $LocalPaymentsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LocalPaymentsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LocalPaymentsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LocalPaymentsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> localId = const Value.absent(),
+                Value<int> workspaceId = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<int?> serverId = const Value.absent(),
+                Value<String?> orderLocalId = const Value.absent(),
+                Value<String?> invoiceLocalId = const Value.absent(),
+                Value<String> method = const Value.absent(),
+                Value<int> amount = const Value.absent(),
+                Value<int?> tendered = const Value.absent(),
+                Value<int> changeDue = const Value.absent(),
+                Value<String?> shiftLocalId = const Value.absent(),
+                Value<String> syncStatus = const Value.absent(),
+                Value<String> clientReference = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalPaymentsCompanion(
+                localId: localId,
+                workspaceId: workspaceId,
+                deviceId: deviceId,
+                serverId: serverId,
+                orderLocalId: orderLocalId,
+                invoiceLocalId: invoiceLocalId,
+                method: method,
+                amount: amount,
+                tendered: tendered,
+                changeDue: changeDue,
+                shiftLocalId: shiftLocalId,
+                syncStatus: syncStatus,
+                clientReference: clientReference,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String localId,
+                required int workspaceId,
+                required String deviceId,
+                Value<int?> serverId = const Value.absent(),
+                Value<String?> orderLocalId = const Value.absent(),
+                Value<String?> invoiceLocalId = const Value.absent(),
+                required String method,
+                required int amount,
+                Value<int?> tendered = const Value.absent(),
+                Value<int> changeDue = const Value.absent(),
+                Value<String?> shiftLocalId = const Value.absent(),
+                Value<String> syncStatus = const Value.absent(),
+                required String clientReference,
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => LocalPaymentsCompanion.insert(
+                localId: localId,
+                workspaceId: workspaceId,
+                deviceId: deviceId,
+                serverId: serverId,
+                orderLocalId: orderLocalId,
+                invoiceLocalId: invoiceLocalId,
+                method: method,
+                amount: amount,
+                tendered: tendered,
+                changeDue: changeDue,
+                shiftLocalId: shiftLocalId,
+                syncStatus: syncStatus,
+                clientReference: clientReference,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LocalPaymentsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                orderLocalId = false,
+                invoiceLocalId = false,
+                shiftLocalId = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (orderLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.orderLocalId,
+                                    referencedTable:
+                                        $$LocalPaymentsTableReferences
+                                            ._orderLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalPaymentsTableReferences
+                                            ._orderLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+                        if (invoiceLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.invoiceLocalId,
+                                    referencedTable:
+                                        $$LocalPaymentsTableReferences
+                                            ._invoiceLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalPaymentsTableReferences
+                                            ._invoiceLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+                        if (shiftLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.shiftLocalId,
+                                    referencedTable:
+                                        $$LocalPaymentsTableReferences
+                                            ._shiftLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalPaymentsTableReferences
+                                            ._shiftLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$LocalPaymentsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LocalPaymentsTable,
+      LocalPayment,
+      $$LocalPaymentsTableFilterComposer,
+      $$LocalPaymentsTableOrderingComposer,
+      $$LocalPaymentsTableAnnotationComposer,
+      $$LocalPaymentsTableCreateCompanionBuilder,
+      $$LocalPaymentsTableUpdateCompanionBuilder,
+      (LocalPayment, $$LocalPaymentsTableReferences),
+      LocalPayment,
+      PrefetchHooks Function({
+        bool orderLocalId,
+        bool invoiceLocalId,
+        bool shiftLocalId,
+      })
     >;
 typedef $$LocalSettingsTableCreateCompanionBuilder =
     LocalSettingsCompanion Function({
@@ -23794,6 +29547,32 @@ typedef $$LocalStoresTableUpdateCompanionBuilder =
       Value<int> rowid,
     });
 
+final class $$LocalStoresTableReferences
+    extends BaseReferences<_$AppDatabase, $LocalStoresTable, LocalStore> {
+  $$LocalStoresTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$LocalSequencesTable, List<LocalSequence>>
+  _localSequencesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localSequences,
+    aliasName: $_aliasNameGenerator(
+      db.localStores.localId,
+      db.localSequences.storeId,
+    ),
+  );
+
+  $$LocalSequencesTableProcessedTableManager get localSequencesRefs {
+    final manager = $$LocalSequencesTableTableManager($_db, $_db.localSequences)
+        .filter(
+          (f) => f.storeId.localId.sqlEquals($_itemColumn<String>('local_id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(_localSequencesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
 class $$LocalStoresTableFilterComposer
     extends Composer<_$AppDatabase, $LocalStoresTable> {
   $$LocalStoresTableFilterComposer({
@@ -23857,6 +29636,31 @@ class $$LocalStoresTableFilterComposer
     column: $table.updatedAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  Expression<bool> localSequencesRefs(
+    Expression<bool> Function($$LocalSequencesTableFilterComposer f) f,
+  ) {
+    final $$LocalSequencesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localSequences,
+      getReferencedColumn: (t) => t.storeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalSequencesTableFilterComposer(
+            $db: $db,
+            $table: $db.localSequences,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalStoresTableOrderingComposer
@@ -23973,6 +29777,31 @@ class $$LocalStoresTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  Expression<T> localSequencesRefs<T extends Object>(
+    Expression<T> Function($$LocalSequencesTableAnnotationComposer a) f,
+  ) {
+    final $$LocalSequencesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localSequences,
+      getReferencedColumn: (t) => t.storeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalSequencesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localSequences,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalStoresTableTableManager
@@ -23986,12 +29815,9 @@ class $$LocalStoresTableTableManager
           $$LocalStoresTableAnnotationComposer,
           $$LocalStoresTableCreateCompanionBuilder,
           $$LocalStoresTableUpdateCompanionBuilder,
-          (
-            LocalStore,
-            BaseReferences<_$AppDatabase, $LocalStoresTable, LocalStore>,
-          ),
+          (LocalStore, $$LocalStoresTableReferences),
           LocalStore,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool localSequencesRefs})
         > {
   $$LocalStoresTableTableManager(_$AppDatabase db, $LocalStoresTable table)
     : super(
@@ -24061,9 +29887,47 @@ class $$LocalStoresTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LocalStoresTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({localSequencesRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [
+                if (localSequencesRefs) db.localSequences,
+              ],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (localSequencesRefs)
+                    await $_getPrefetchedData<
+                      LocalStore,
+                      $LocalStoresTable,
+                      LocalSequence
+                    >(
+                      currentTable: table,
+                      referencedTable: $$LocalStoresTableReferences
+                          ._localSequencesRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$LocalStoresTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).localSequencesRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where(
+                            (e) => e.storeId == item.localId,
+                          ),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
         ),
       );
 }
@@ -24078,306 +29942,9 @@ typedef $$LocalStoresTableProcessedTableManager =
       $$LocalStoresTableAnnotationComposer,
       $$LocalStoresTableCreateCompanionBuilder,
       $$LocalStoresTableUpdateCompanionBuilder,
-      (
-        LocalStore,
-        BaseReferences<_$AppDatabase, $LocalStoresTable, LocalStore>,
-      ),
+      (LocalStore, $$LocalStoresTableReferences),
       LocalStore,
-      PrefetchHooks Function()
-    >;
-typedef $$LocalUsersTableCreateCompanionBuilder =
-    LocalUsersCompanion Function({
-      required String localId,
-      required int workspaceId,
-      required String name,
-      required String username,
-      required String pinSalt,
-      required String pinHash,
-      Value<String> role,
-      Value<bool> isActive,
-      required DateTime createdAt,
-      required DateTime updatedAt,
-      Value<int> rowid,
-    });
-typedef $$LocalUsersTableUpdateCompanionBuilder =
-    LocalUsersCompanion Function({
-      Value<String> localId,
-      Value<int> workspaceId,
-      Value<String> name,
-      Value<String> username,
-      Value<String> pinSalt,
-      Value<String> pinHash,
-      Value<String> role,
-      Value<bool> isActive,
-      Value<DateTime> createdAt,
-      Value<DateTime> updatedAt,
-      Value<int> rowid,
-    });
-
-class $$LocalUsersTableFilterComposer
-    extends Composer<_$AppDatabase, $LocalUsersTable> {
-  $$LocalUsersTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<String> get localId => $composableBuilder(
-    column: $table.localId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get workspaceId => $composableBuilder(
-    column: $table.workspaceId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get name => $composableBuilder(
-    column: $table.name,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get username => $composableBuilder(
-    column: $table.username,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get pinSalt => $composableBuilder(
-    column: $table.pinSalt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get pinHash => $composableBuilder(
-    column: $table.pinHash,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get role => $composableBuilder(
-    column: $table.role,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get isActive => $composableBuilder(
-    column: $table.isActive,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
-    column: $table.updatedAt,
-    builder: (column) => ColumnFilters(column),
-  );
-}
-
-class $$LocalUsersTableOrderingComposer
-    extends Composer<_$AppDatabase, $LocalUsersTable> {
-  $$LocalUsersTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<String> get localId => $composableBuilder(
-    column: $table.localId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get workspaceId => $composableBuilder(
-    column: $table.workspaceId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get name => $composableBuilder(
-    column: $table.name,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get username => $composableBuilder(
-    column: $table.username,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get pinSalt => $composableBuilder(
-    column: $table.pinSalt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get pinHash => $composableBuilder(
-    column: $table.pinHash,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get role => $composableBuilder(
-    column: $table.role,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get isActive => $composableBuilder(
-    column: $table.isActive,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
-    column: $table.updatedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-}
-
-class $$LocalUsersTableAnnotationComposer
-    extends Composer<_$AppDatabase, $LocalUsersTable> {
-  $$LocalUsersTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<String> get localId =>
-      $composableBuilder(column: $table.localId, builder: (column) => column);
-
-  GeneratedColumn<int> get workspaceId => $composableBuilder(
-    column: $table.workspaceId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get name =>
-      $composableBuilder(column: $table.name, builder: (column) => column);
-
-  GeneratedColumn<String> get username =>
-      $composableBuilder(column: $table.username, builder: (column) => column);
-
-  GeneratedColumn<String> get pinSalt =>
-      $composableBuilder(column: $table.pinSalt, builder: (column) => column);
-
-  GeneratedColumn<String> get pinHash =>
-      $composableBuilder(column: $table.pinHash, builder: (column) => column);
-
-  GeneratedColumn<String> get role =>
-      $composableBuilder(column: $table.role, builder: (column) => column);
-
-  GeneratedColumn<bool> get isActive =>
-      $composableBuilder(column: $table.isActive, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get createdAt =>
-      $composableBuilder(column: $table.createdAt, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get updatedAt =>
-      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
-}
-
-class $$LocalUsersTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $LocalUsersTable,
-          LocalUser,
-          $$LocalUsersTableFilterComposer,
-          $$LocalUsersTableOrderingComposer,
-          $$LocalUsersTableAnnotationComposer,
-          $$LocalUsersTableCreateCompanionBuilder,
-          $$LocalUsersTableUpdateCompanionBuilder,
-          (
-            LocalUser,
-            BaseReferences<_$AppDatabase, $LocalUsersTable, LocalUser>,
-          ),
-          LocalUser,
-          PrefetchHooks Function()
-        > {
-  $$LocalUsersTableTableManager(_$AppDatabase db, $LocalUsersTable table)
-    : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$LocalUsersTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$LocalUsersTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$LocalUsersTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<String> localId = const Value.absent(),
-                Value<int> workspaceId = const Value.absent(),
-                Value<String> name = const Value.absent(),
-                Value<String> username = const Value.absent(),
-                Value<String> pinSalt = const Value.absent(),
-                Value<String> pinHash = const Value.absent(),
-                Value<String> role = const Value.absent(),
-                Value<bool> isActive = const Value.absent(),
-                Value<DateTime> createdAt = const Value.absent(),
-                Value<DateTime> updatedAt = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => LocalUsersCompanion(
-                localId: localId,
-                workspaceId: workspaceId,
-                name: name,
-                username: username,
-                pinSalt: pinSalt,
-                pinHash: pinHash,
-                role: role,
-                isActive: isActive,
-                createdAt: createdAt,
-                updatedAt: updatedAt,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                required String localId,
-                required int workspaceId,
-                required String name,
-                required String username,
-                required String pinSalt,
-                required String pinHash,
-                Value<String> role = const Value.absent(),
-                Value<bool> isActive = const Value.absent(),
-                required DateTime createdAt,
-                required DateTime updatedAt,
-                Value<int> rowid = const Value.absent(),
-              }) => LocalUsersCompanion.insert(
-                localId: localId,
-                workspaceId: workspaceId,
-                name: name,
-                username: username,
-                pinSalt: pinSalt,
-                pinHash: pinHash,
-                role: role,
-                isActive: isActive,
-                createdAt: createdAt,
-                updatedAt: updatedAt,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
-          prefetchHooksCallback: null,
-        ),
-      );
-}
-
-typedef $$LocalUsersTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $LocalUsersTable,
-      LocalUser,
-      $$LocalUsersTableFilterComposer,
-      $$LocalUsersTableOrderingComposer,
-      $$LocalUsersTableAnnotationComposer,
-      $$LocalUsersTableCreateCompanionBuilder,
-      $$LocalUsersTableUpdateCompanionBuilder,
-      (LocalUser, BaseReferences<_$AppDatabase, $LocalUsersTable, LocalUser>),
-      LocalUser,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool localSequencesRefs})
     >;
 typedef $$LocalSequencesTableCreateCompanionBuilder =
     LocalSequencesCompanion Function({
@@ -24396,6 +29963,34 @@ typedef $$LocalSequencesTableUpdateCompanionBuilder =
       Value<int> rowid,
     });
 
+final class $$LocalSequencesTableReferences
+    extends BaseReferences<_$AppDatabase, $LocalSequencesTable, LocalSequence> {
+  $$LocalSequencesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $LocalStoresTable _storeIdTable(_$AppDatabase db) =>
+      db.localStores.createAlias(
+        $_aliasNameGenerator(db.localSequences.storeId, db.localStores.localId),
+      );
+
+  $$LocalStoresTableProcessedTableManager get storeId {
+    final $_column = $_itemColumn<String>('store_id')!;
+
+    final manager = $$LocalStoresTableTableManager(
+      $_db,
+      $_db.localStores,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
 class $$LocalSequencesTableFilterComposer
     extends Composer<_$AppDatabase, $LocalSequencesTable> {
   $$LocalSequencesTableFilterComposer({
@@ -24405,11 +30000,6 @@ class $$LocalSequencesTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnFilters<String> get storeId => $composableBuilder(
-    column: $table.storeId,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<String> get kind => $composableBuilder(
     column: $table.kind,
     builder: (column) => ColumnFilters(column),
@@ -24424,6 +30014,29 @@ class $$LocalSequencesTableFilterComposer
     column: $table.updatedAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$LocalStoresTableFilterComposer get storeId {
+    final $$LocalStoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.localStores,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalStoresTableFilterComposer(
+            $db: $db,
+            $table: $db.localStores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalSequencesTableOrderingComposer
@@ -24435,11 +30048,6 @@ class $$LocalSequencesTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  ColumnOrderings<String> get storeId => $composableBuilder(
-    column: $table.storeId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<String> get kind => $composableBuilder(
     column: $table.kind,
     builder: (column) => ColumnOrderings(column),
@@ -24454,6 +30062,29 @@ class $$LocalSequencesTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$LocalStoresTableOrderingComposer get storeId {
+    final $$LocalStoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.localStores,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalStoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.localStores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalSequencesTableAnnotationComposer
@@ -24465,9 +30096,6 @@ class $$LocalSequencesTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  GeneratedColumn<String> get storeId =>
-      $composableBuilder(column: $table.storeId, builder: (column) => column);
-
   GeneratedColumn<String> get kind =>
       $composableBuilder(column: $table.kind, builder: (column) => column);
 
@@ -24476,6 +30104,29 @@ class $$LocalSequencesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$LocalStoresTableAnnotationComposer get storeId {
+    final $$LocalStoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.localStores,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalStoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localStores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalSequencesTableTableManager
@@ -24489,12 +30140,9 @@ class $$LocalSequencesTableTableManager
           $$LocalSequencesTableAnnotationComposer,
           $$LocalSequencesTableCreateCompanionBuilder,
           $$LocalSequencesTableUpdateCompanionBuilder,
-          (
-            LocalSequence,
-            BaseReferences<_$AppDatabase, $LocalSequencesTable, LocalSequence>,
-          ),
+          (LocalSequence, $$LocalSequencesTableReferences),
           LocalSequence,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool storeId})
         > {
   $$LocalSequencesTableTableManager(
     _$AppDatabase db,
@@ -24538,9 +30186,55 @@ class $$LocalSequencesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LocalSequencesTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({storeId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (storeId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.storeId,
+                                referencedTable: $$LocalSequencesTableReferences
+                                    ._storeIdTable(db),
+                                referencedColumn:
+                                    $$LocalSequencesTableReferences
+                                        ._storeIdTable(db)
+                                        .localId,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
         ),
       );
 }
@@ -24555,355 +30249,9 @@ typedef $$LocalSequencesTableProcessedTableManager =
       $$LocalSequencesTableAnnotationComposer,
       $$LocalSequencesTableCreateCompanionBuilder,
       $$LocalSequencesTableUpdateCompanionBuilder,
-      (
-        LocalSequence,
-        BaseReferences<_$AppDatabase, $LocalSequencesTable, LocalSequence>,
-      ),
+      (LocalSequence, $$LocalSequencesTableReferences),
       LocalSequence,
-      PrefetchHooks Function()
-    >;
-typedef $$LocalSessionsTableCreateCompanionBuilder =
-    LocalSessionsCompanion Function({
-      required String localId,
-      required int workspaceId,
-      required String tableLocalId,
-      Value<String> status,
-      required DateTime openedAt,
-      Value<DateTime?> closedAt,
-      Value<String?> openedByUserId,
-      Value<String?> closedByUserId,
-      Value<String?> notes,
-      Value<double> discountAmount,
-      required DateTime createdAt,
-      required DateTime updatedAt,
-      Value<int> rowid,
-    });
-typedef $$LocalSessionsTableUpdateCompanionBuilder =
-    LocalSessionsCompanion Function({
-      Value<String> localId,
-      Value<int> workspaceId,
-      Value<String> tableLocalId,
-      Value<String> status,
-      Value<DateTime> openedAt,
-      Value<DateTime?> closedAt,
-      Value<String?> openedByUserId,
-      Value<String?> closedByUserId,
-      Value<String?> notes,
-      Value<double> discountAmount,
-      Value<DateTime> createdAt,
-      Value<DateTime> updatedAt,
-      Value<int> rowid,
-    });
-
-class $$LocalSessionsTableFilterComposer
-    extends Composer<_$AppDatabase, $LocalSessionsTable> {
-  $$LocalSessionsTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<String> get localId => $composableBuilder(
-    column: $table.localId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get workspaceId => $composableBuilder(
-    column: $table.workspaceId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get tableLocalId => $composableBuilder(
-    column: $table.tableLocalId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get status => $composableBuilder(
-    column: $table.status,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get openedAt => $composableBuilder(
-    column: $table.openedAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get closedAt => $composableBuilder(
-    column: $table.closedAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get openedByUserId => $composableBuilder(
-    column: $table.openedByUserId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get closedByUserId => $composableBuilder(
-    column: $table.closedByUserId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get notes => $composableBuilder(
-    column: $table.notes,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get discountAmount => $composableBuilder(
-    column: $table.discountAmount,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
-    column: $table.updatedAt,
-    builder: (column) => ColumnFilters(column),
-  );
-}
-
-class $$LocalSessionsTableOrderingComposer
-    extends Composer<_$AppDatabase, $LocalSessionsTable> {
-  $$LocalSessionsTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<String> get localId => $composableBuilder(
-    column: $table.localId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get workspaceId => $composableBuilder(
-    column: $table.workspaceId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get tableLocalId => $composableBuilder(
-    column: $table.tableLocalId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get status => $composableBuilder(
-    column: $table.status,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get openedAt => $composableBuilder(
-    column: $table.openedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get closedAt => $composableBuilder(
-    column: $table.closedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get openedByUserId => $composableBuilder(
-    column: $table.openedByUserId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get closedByUserId => $composableBuilder(
-    column: $table.closedByUserId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get notes => $composableBuilder(
-    column: $table.notes,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get discountAmount => $composableBuilder(
-    column: $table.discountAmount,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
-    column: $table.updatedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-}
-
-class $$LocalSessionsTableAnnotationComposer
-    extends Composer<_$AppDatabase, $LocalSessionsTable> {
-  $$LocalSessionsTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<String> get localId =>
-      $composableBuilder(column: $table.localId, builder: (column) => column);
-
-  GeneratedColumn<int> get workspaceId => $composableBuilder(
-    column: $table.workspaceId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get tableLocalId => $composableBuilder(
-    column: $table.tableLocalId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get status =>
-      $composableBuilder(column: $table.status, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get openedAt =>
-      $composableBuilder(column: $table.openedAt, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get closedAt =>
-      $composableBuilder(column: $table.closedAt, builder: (column) => column);
-
-  GeneratedColumn<String> get openedByUserId => $composableBuilder(
-    column: $table.openedByUserId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get closedByUserId => $composableBuilder(
-    column: $table.closedByUserId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get notes =>
-      $composableBuilder(column: $table.notes, builder: (column) => column);
-
-  GeneratedColumn<double> get discountAmount => $composableBuilder(
-    column: $table.discountAmount,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<DateTime> get createdAt =>
-      $composableBuilder(column: $table.createdAt, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get updatedAt =>
-      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
-}
-
-class $$LocalSessionsTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $LocalSessionsTable,
-          LocalSession,
-          $$LocalSessionsTableFilterComposer,
-          $$LocalSessionsTableOrderingComposer,
-          $$LocalSessionsTableAnnotationComposer,
-          $$LocalSessionsTableCreateCompanionBuilder,
-          $$LocalSessionsTableUpdateCompanionBuilder,
-          (
-            LocalSession,
-            BaseReferences<_$AppDatabase, $LocalSessionsTable, LocalSession>,
-          ),
-          LocalSession,
-          PrefetchHooks Function()
-        > {
-  $$LocalSessionsTableTableManager(_$AppDatabase db, $LocalSessionsTable table)
-    : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$LocalSessionsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$LocalSessionsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$LocalSessionsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<String> localId = const Value.absent(),
-                Value<int> workspaceId = const Value.absent(),
-                Value<String> tableLocalId = const Value.absent(),
-                Value<String> status = const Value.absent(),
-                Value<DateTime> openedAt = const Value.absent(),
-                Value<DateTime?> closedAt = const Value.absent(),
-                Value<String?> openedByUserId = const Value.absent(),
-                Value<String?> closedByUserId = const Value.absent(),
-                Value<String?> notes = const Value.absent(),
-                Value<double> discountAmount = const Value.absent(),
-                Value<DateTime> createdAt = const Value.absent(),
-                Value<DateTime> updatedAt = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => LocalSessionsCompanion(
-                localId: localId,
-                workspaceId: workspaceId,
-                tableLocalId: tableLocalId,
-                status: status,
-                openedAt: openedAt,
-                closedAt: closedAt,
-                openedByUserId: openedByUserId,
-                closedByUserId: closedByUserId,
-                notes: notes,
-                discountAmount: discountAmount,
-                createdAt: createdAt,
-                updatedAt: updatedAt,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                required String localId,
-                required int workspaceId,
-                required String tableLocalId,
-                Value<String> status = const Value.absent(),
-                required DateTime openedAt,
-                Value<DateTime?> closedAt = const Value.absent(),
-                Value<String?> openedByUserId = const Value.absent(),
-                Value<String?> closedByUserId = const Value.absent(),
-                Value<String?> notes = const Value.absent(),
-                Value<double> discountAmount = const Value.absent(),
-                required DateTime createdAt,
-                required DateTime updatedAt,
-                Value<int> rowid = const Value.absent(),
-              }) => LocalSessionsCompanion.insert(
-                localId: localId,
-                workspaceId: workspaceId,
-                tableLocalId: tableLocalId,
-                status: status,
-                openedAt: openedAt,
-                closedAt: closedAt,
-                openedByUserId: openedByUserId,
-                closedByUserId: closedByUserId,
-                notes: notes,
-                discountAmount: discountAmount,
-                createdAt: createdAt,
-                updatedAt: updatedAt,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
-          prefetchHooksCallback: null,
-        ),
-      );
-}
-
-typedef $$LocalSessionsTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $LocalSessionsTable,
-      LocalSession,
-      $$LocalSessionsTableFilterComposer,
-      $$LocalSessionsTableOrderingComposer,
-      $$LocalSessionsTableAnnotationComposer,
-      $$LocalSessionsTableCreateCompanionBuilder,
-      $$LocalSessionsTableUpdateCompanionBuilder,
-      (
-        LocalSession,
-        BaseReferences<_$AppDatabase, $LocalSessionsTable, LocalSession>,
-      ),
-      LocalSession,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool storeId})
     >;
 typedef $$LocalDraftCartsTableCreateCompanionBuilder =
     LocalDraftCartsCompanion Function({
@@ -24914,7 +30262,7 @@ typedef $$LocalDraftCartsTableCreateCompanionBuilder =
       Value<int?> tableServerId,
       Value<String?> customerLocalId,
       Value<String?> notes,
-      Value<double> discountAmount,
+      Value<int> discountAmount,
       Value<double> discountPercent,
       Value<double> taxRate,
       required DateTime updatedAt,
@@ -24929,12 +30277,98 @@ typedef $$LocalDraftCartsTableUpdateCompanionBuilder =
       Value<int?> tableServerId,
       Value<String?> customerLocalId,
       Value<String?> notes,
-      Value<double> discountAmount,
+      Value<int> discountAmount,
       Value<double> discountPercent,
       Value<double> taxRate,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
+
+final class $$LocalDraftCartsTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $LocalDraftCartsTable, LocalDraftCart> {
+  $$LocalDraftCartsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $LocalTablesTable _tableLocalIdTable(_$AppDatabase db) =>
+      db.localTables.createAlias(
+        $_aliasNameGenerator(
+          db.localDraftCarts.tableLocalId,
+          db.localTables.localId,
+        ),
+      );
+
+  $$LocalTablesTableProcessedTableManager? get tableLocalId {
+    final $_column = $_itemColumn<String>('table_local_id');
+    if ($_column == null) return null;
+    final manager = $$LocalTablesTableTableManager(
+      $_db,
+      $_db.localTables,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_tableLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $LocalCustomersTable _customerLocalIdTable(_$AppDatabase db) =>
+      db.localCustomers.createAlias(
+        $_aliasNameGenerator(
+          db.localDraftCarts.customerLocalId,
+          db.localCustomers.localId,
+        ),
+      );
+
+  $$LocalCustomersTableProcessedTableManager? get customerLocalId {
+    final $_column = $_itemColumn<String>('customer_local_id');
+    if ($_column == null) return null;
+    final manager = $$LocalCustomersTableTableManager(
+      $_db,
+      $_db.localCustomers,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_customerLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $LocalDraftCartLinesTable,
+    List<LocalDraftCartLine>
+  >
+  _localDraftCartLinesRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.localDraftCartLines,
+        aliasName: $_aliasNameGenerator(
+          db.localDraftCarts.localId,
+          db.localDraftCartLines.cartLocalId,
+        ),
+      );
+
+  $$LocalDraftCartLinesTableProcessedTableManager get localDraftCartLinesRefs {
+    final manager =
+        $$LocalDraftCartLinesTableTableManager(
+          $_db,
+          $_db.localDraftCartLines,
+        ).filter(
+          (f) => f.cartLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _localDraftCartLinesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
 
 class $$LocalDraftCartsTableFilterComposer
     extends Composer<_$AppDatabase, $LocalDraftCartsTable> {
@@ -24960,18 +30394,8 @@ class $$LocalDraftCartsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get tableLocalId => $composableBuilder(
-    column: $table.tableLocalId,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<int> get tableServerId => $composableBuilder(
     column: $table.tableServerId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get customerLocalId => $composableBuilder(
-    column: $table.customerLocalId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -24980,7 +30404,7 @@ class $$LocalDraftCartsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get discountAmount => $composableBuilder(
+  ColumnFilters<int> get discountAmount => $composableBuilder(
     column: $table.discountAmount,
     builder: (column) => ColumnFilters(column),
   );
@@ -24999,6 +30423,77 @@ class $$LocalDraftCartsTableFilterComposer
     column: $table.updatedAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$LocalTablesTableFilterComposer get tableLocalId {
+    final $$LocalTablesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tableLocalId,
+      referencedTable: $db.localTables,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalTablesTableFilterComposer(
+            $db: $db,
+            $table: $db.localTables,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalCustomersTableFilterComposer get customerLocalId {
+    final $$LocalCustomersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.customerLocalId,
+      referencedTable: $db.localCustomers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalCustomersTableFilterComposer(
+            $db: $db,
+            $table: $db.localCustomers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> localDraftCartLinesRefs(
+    Expression<bool> Function($$LocalDraftCartLinesTableFilterComposer f) f,
+  ) {
+    final $$LocalDraftCartLinesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localDraftCartLines,
+      getReferencedColumn: (t) => t.cartLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalDraftCartLinesTableFilterComposer(
+            $db: $db,
+            $table: $db.localDraftCartLines,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalDraftCartsTableOrderingComposer
@@ -25025,18 +30520,8 @@ class $$LocalDraftCartsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get tableLocalId => $composableBuilder(
-    column: $table.tableLocalId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<int> get tableServerId => $composableBuilder(
     column: $table.tableServerId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get customerLocalId => $composableBuilder(
-    column: $table.customerLocalId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -25045,7 +30530,7 @@ class $$LocalDraftCartsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get discountAmount => $composableBuilder(
+  ColumnOrderings<int> get discountAmount => $composableBuilder(
     column: $table.discountAmount,
     builder: (column) => ColumnOrderings(column),
   );
@@ -25064,6 +30549,52 @@ class $$LocalDraftCartsTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$LocalTablesTableOrderingComposer get tableLocalId {
+    final $$LocalTablesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tableLocalId,
+      referencedTable: $db.localTables,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalTablesTableOrderingComposer(
+            $db: $db,
+            $table: $db.localTables,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalCustomersTableOrderingComposer get customerLocalId {
+    final $$LocalCustomersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.customerLocalId,
+      referencedTable: $db.localCustomers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalCustomersTableOrderingComposer(
+            $db: $db,
+            $table: $db.localCustomers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalDraftCartsTableAnnotationComposer
@@ -25086,25 +30617,15 @@ class $$LocalDraftCartsTableAnnotationComposer
   GeneratedColumn<String> get channel =>
       $composableBuilder(column: $table.channel, builder: (column) => column);
 
-  GeneratedColumn<String> get tableLocalId => $composableBuilder(
-    column: $table.tableLocalId,
-    builder: (column) => column,
-  );
-
   GeneratedColumn<int> get tableServerId => $composableBuilder(
     column: $table.tableServerId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get customerLocalId => $composableBuilder(
-    column: $table.customerLocalId,
     builder: (column) => column,
   );
 
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
 
-  GeneratedColumn<double> get discountAmount => $composableBuilder(
+  GeneratedColumn<int> get discountAmount => $composableBuilder(
     column: $table.discountAmount,
     builder: (column) => column,
   );
@@ -25119,6 +30640,78 @@ class $$LocalDraftCartsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$LocalTablesTableAnnotationComposer get tableLocalId {
+    final $$LocalTablesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.tableLocalId,
+      referencedTable: $db.localTables,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalTablesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localTables,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalCustomersTableAnnotationComposer get customerLocalId {
+    final $$LocalCustomersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.customerLocalId,
+      referencedTable: $db.localCustomers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalCustomersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localCustomers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> localDraftCartLinesRefs<T extends Object>(
+    Expression<T> Function($$LocalDraftCartLinesTableAnnotationComposer a) f,
+  ) {
+    final $$LocalDraftCartLinesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.localId,
+          referencedTable: $db.localDraftCartLines,
+          getReferencedColumn: (t) => t.cartLocalId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$LocalDraftCartLinesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.localDraftCartLines,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$LocalDraftCartsTableTableManager
@@ -25132,16 +30725,13 @@ class $$LocalDraftCartsTableTableManager
           $$LocalDraftCartsTableAnnotationComposer,
           $$LocalDraftCartsTableCreateCompanionBuilder,
           $$LocalDraftCartsTableUpdateCompanionBuilder,
-          (
-            LocalDraftCart,
-            BaseReferences<
-              _$AppDatabase,
-              $LocalDraftCartsTable,
-              LocalDraftCart
-            >,
-          ),
+          (LocalDraftCart, $$LocalDraftCartsTableReferences),
           LocalDraftCart,
-          PrefetchHooks Function()
+          PrefetchHooks Function({
+            bool tableLocalId,
+            bool customerLocalId,
+            bool localDraftCartLinesRefs,
+          })
         > {
   $$LocalDraftCartsTableTableManager(
     _$AppDatabase db,
@@ -25165,7 +30755,7 @@ class $$LocalDraftCartsTableTableManager
                 Value<int?> tableServerId = const Value.absent(),
                 Value<String?> customerLocalId = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
-                Value<double> discountAmount = const Value.absent(),
+                Value<int> discountAmount = const Value.absent(),
                 Value<double> discountPercent = const Value.absent(),
                 Value<double> taxRate = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -25193,7 +30783,7 @@ class $$LocalDraftCartsTableTableManager
                 Value<int?> tableServerId = const Value.absent(),
                 Value<String?> customerLocalId = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
-                Value<double> discountAmount = const Value.absent(),
+                Value<int> discountAmount = const Value.absent(),
                 Value<double> discountPercent = const Value.absent(),
                 Value<double> taxRate = const Value.absent(),
                 required DateTime updatedAt,
@@ -25213,9 +30803,100 @@ class $$LocalDraftCartsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LocalDraftCartsTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback:
+              ({
+                tableLocalId = false,
+                customerLocalId = false,
+                localDraftCartLinesRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (localDraftCartLinesRefs) db.localDraftCartLines,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (tableLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.tableLocalId,
+                                    referencedTable:
+                                        $$LocalDraftCartsTableReferences
+                                            ._tableLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalDraftCartsTableReferences
+                                            ._tableLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+                        if (customerLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.customerLocalId,
+                                    referencedTable:
+                                        $$LocalDraftCartsTableReferences
+                                            ._customerLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalDraftCartsTableReferences
+                                            ._customerLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (localDraftCartLinesRefs)
+                        await $_getPrefetchedData<
+                          LocalDraftCart,
+                          $LocalDraftCartsTable,
+                          LocalDraftCartLine
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalDraftCartsTableReferences
+                              ._localDraftCartLinesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalDraftCartsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localDraftCartLinesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.cartLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
         ),
       );
 }
@@ -25230,12 +30911,13 @@ typedef $$LocalDraftCartsTableProcessedTableManager =
       $$LocalDraftCartsTableAnnotationComposer,
       $$LocalDraftCartsTableCreateCompanionBuilder,
       $$LocalDraftCartsTableUpdateCompanionBuilder,
-      (
-        LocalDraftCart,
-        BaseReferences<_$AppDatabase, $LocalDraftCartsTable, LocalDraftCart>,
-      ),
+      (LocalDraftCart, $$LocalDraftCartsTableReferences),
       LocalDraftCart,
-      PrefetchHooks Function()
+      PrefetchHooks Function({
+        bool tableLocalId,
+        bool customerLocalId,
+        bool localDraftCartLinesRefs,
+      })
     >;
 typedef $$LocalDraftCartLinesTableCreateCompanionBuilder =
     LocalDraftCartLinesCompanion Function({
@@ -25248,9 +30930,9 @@ typedef $$LocalDraftCartLinesTableCreateCompanionBuilder =
       Value<String?> sku,
       Value<String?> barcode,
       required int quantity,
-      required double unitPrice,
-      Value<double> cost,
-      Value<double> discountAmount,
+      required int unitPrice,
+      Value<int> cost,
+      Value<int> discountAmount,
       Value<double> taxRate,
       required DateTime updatedAt,
       Value<int> rowid,
@@ -25266,13 +30948,71 @@ typedef $$LocalDraftCartLinesTableUpdateCompanionBuilder =
       Value<String?> sku,
       Value<String?> barcode,
       Value<int> quantity,
-      Value<double> unitPrice,
-      Value<double> cost,
-      Value<double> discountAmount,
+      Value<int> unitPrice,
+      Value<int> cost,
+      Value<int> discountAmount,
       Value<double> taxRate,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
+
+final class $$LocalDraftCartLinesTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $LocalDraftCartLinesTable,
+          LocalDraftCartLine
+        > {
+  $$LocalDraftCartLinesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $LocalDraftCartsTable _cartLocalIdTable(_$AppDatabase db) =>
+      db.localDraftCarts.createAlias(
+        $_aliasNameGenerator(
+          db.localDraftCartLines.cartLocalId,
+          db.localDraftCarts.localId,
+        ),
+      );
+
+  $$LocalDraftCartsTableProcessedTableManager get cartLocalId {
+    final $_column = $_itemColumn<String>('cart_local_id')!;
+
+    final manager = $$LocalDraftCartsTableTableManager(
+      $_db,
+      $_db.localDraftCarts,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_cartLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $LocalProductsTable _productLocalIdTable(_$AppDatabase db) =>
+      db.localProducts.createAlias(
+        $_aliasNameGenerator(
+          db.localDraftCartLines.productLocalId,
+          db.localProducts.localId,
+        ),
+      );
+
+  $$LocalProductsTableProcessedTableManager get productLocalId {
+    final $_column = $_itemColumn<String>('product_local_id')!;
+
+    final manager = $$LocalProductsTableTableManager(
+      $_db,
+      $_db.localProducts,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_productLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
 
 class $$LocalDraftCartLinesTableFilterComposer
     extends Composer<_$AppDatabase, $LocalDraftCartLinesTable> {
@@ -25288,18 +31028,8 @@ class $$LocalDraftCartLinesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get cartLocalId => $composableBuilder(
-    column: $table.cartLocalId,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<int> get workspaceId => $composableBuilder(
     column: $table.workspaceId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get productLocalId => $composableBuilder(
-    column: $table.productLocalId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -25328,17 +31058,17 @@ class $$LocalDraftCartLinesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get unitPrice => $composableBuilder(
+  ColumnFilters<int> get unitPrice => $composableBuilder(
     column: $table.unitPrice,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get cost => $composableBuilder(
+  ColumnFilters<int> get cost => $composableBuilder(
     column: $table.cost,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get discountAmount => $composableBuilder(
+  ColumnFilters<int> get discountAmount => $composableBuilder(
     column: $table.discountAmount,
     builder: (column) => ColumnFilters(column),
   );
@@ -25352,6 +31082,52 @@ class $$LocalDraftCartLinesTableFilterComposer
     column: $table.updatedAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$LocalDraftCartsTableFilterComposer get cartLocalId {
+    final $$LocalDraftCartsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cartLocalId,
+      referencedTable: $db.localDraftCarts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalDraftCartsTableFilterComposer(
+            $db: $db,
+            $table: $db.localDraftCarts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalProductsTableFilterComposer get productLocalId {
+    final $$LocalProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productLocalId,
+      referencedTable: $db.localProducts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.localProducts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalDraftCartLinesTableOrderingComposer
@@ -25368,18 +31144,8 @@ class $$LocalDraftCartLinesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get cartLocalId => $composableBuilder(
-    column: $table.cartLocalId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<int> get workspaceId => $composableBuilder(
     column: $table.workspaceId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get productLocalId => $composableBuilder(
-    column: $table.productLocalId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -25408,17 +31174,17 @@ class $$LocalDraftCartLinesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get unitPrice => $composableBuilder(
+  ColumnOrderings<int> get unitPrice => $composableBuilder(
     column: $table.unitPrice,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get cost => $composableBuilder(
+  ColumnOrderings<int> get cost => $composableBuilder(
     column: $table.cost,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get discountAmount => $composableBuilder(
+  ColumnOrderings<int> get discountAmount => $composableBuilder(
     column: $table.discountAmount,
     builder: (column) => ColumnOrderings(column),
   );
@@ -25432,6 +31198,52 @@ class $$LocalDraftCartLinesTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$LocalDraftCartsTableOrderingComposer get cartLocalId {
+    final $$LocalDraftCartsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cartLocalId,
+      referencedTable: $db.localDraftCarts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalDraftCartsTableOrderingComposer(
+            $db: $db,
+            $table: $db.localDraftCarts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalProductsTableOrderingComposer get productLocalId {
+    final $$LocalProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productLocalId,
+      referencedTable: $db.localProducts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.localProducts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalDraftCartLinesTableAnnotationComposer
@@ -25446,18 +31258,8 @@ class $$LocalDraftCartLinesTableAnnotationComposer
   GeneratedColumn<String> get localId =>
       $composableBuilder(column: $table.localId, builder: (column) => column);
 
-  GeneratedColumn<String> get cartLocalId => $composableBuilder(
-    column: $table.cartLocalId,
-    builder: (column) => column,
-  );
-
   GeneratedColumn<int> get workspaceId => $composableBuilder(
     column: $table.workspaceId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get productLocalId => $composableBuilder(
-    column: $table.productLocalId,
     builder: (column) => column,
   );
 
@@ -25478,13 +31280,13 @@ class $$LocalDraftCartLinesTableAnnotationComposer
   GeneratedColumn<int> get quantity =>
       $composableBuilder(column: $table.quantity, builder: (column) => column);
 
-  GeneratedColumn<double> get unitPrice =>
+  GeneratedColumn<int> get unitPrice =>
       $composableBuilder(column: $table.unitPrice, builder: (column) => column);
 
-  GeneratedColumn<double> get cost =>
+  GeneratedColumn<int> get cost =>
       $composableBuilder(column: $table.cost, builder: (column) => column);
 
-  GeneratedColumn<double> get discountAmount => $composableBuilder(
+  GeneratedColumn<int> get discountAmount => $composableBuilder(
     column: $table.discountAmount,
     builder: (column) => column,
   );
@@ -25494,6 +31296,52 @@ class $$LocalDraftCartLinesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$LocalDraftCartsTableAnnotationComposer get cartLocalId {
+    final $$LocalDraftCartsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cartLocalId,
+      referencedTable: $db.localDraftCarts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalDraftCartsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localDraftCarts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalProductsTableAnnotationComposer get productLocalId {
+    final $$LocalProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productLocalId,
+      referencedTable: $db.localProducts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localProducts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalDraftCartLinesTableTableManager
@@ -25507,16 +31355,9 @@ class $$LocalDraftCartLinesTableTableManager
           $$LocalDraftCartLinesTableAnnotationComposer,
           $$LocalDraftCartLinesTableCreateCompanionBuilder,
           $$LocalDraftCartLinesTableUpdateCompanionBuilder,
-          (
-            LocalDraftCartLine,
-            BaseReferences<
-              _$AppDatabase,
-              $LocalDraftCartLinesTable,
-              LocalDraftCartLine
-            >,
-          ),
+          (LocalDraftCartLine, $$LocalDraftCartLinesTableReferences),
           LocalDraftCartLine,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool cartLocalId, bool productLocalId})
         > {
   $$LocalDraftCartLinesTableTableManager(
     _$AppDatabase db,
@@ -25548,9 +31389,9 @@ class $$LocalDraftCartLinesTableTableManager
                 Value<String?> sku = const Value.absent(),
                 Value<String?> barcode = const Value.absent(),
                 Value<int> quantity = const Value.absent(),
-                Value<double> unitPrice = const Value.absent(),
-                Value<double> cost = const Value.absent(),
-                Value<double> discountAmount = const Value.absent(),
+                Value<int> unitPrice = const Value.absent(),
+                Value<int> cost = const Value.absent(),
+                Value<int> discountAmount = const Value.absent(),
                 Value<double> taxRate = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -25582,9 +31423,9 @@ class $$LocalDraftCartLinesTableTableManager
                 Value<String?> sku = const Value.absent(),
                 Value<String?> barcode = const Value.absent(),
                 required int quantity,
-                required double unitPrice,
-                Value<double> cost = const Value.absent(),
-                Value<double> discountAmount = const Value.absent(),
+                required int unitPrice,
+                Value<int> cost = const Value.absent(),
+                Value<int> discountAmount = const Value.absent(),
                 Value<double> taxRate = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -25606,9 +31447,72 @@ class $$LocalDraftCartLinesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LocalDraftCartLinesTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback:
+              ({cartLocalId = false, productLocalId = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (cartLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.cartLocalId,
+                                    referencedTable:
+                                        $$LocalDraftCartLinesTableReferences
+                                            ._cartLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalDraftCartLinesTableReferences
+                                            ._cartLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+                        if (productLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.productLocalId,
+                                    referencedTable:
+                                        $$LocalDraftCartLinesTableReferences
+                                            ._productLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalDraftCartLinesTableReferences
+                                            ._productLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
         ),
       );
 }
@@ -25623,16 +31527,9 @@ typedef $$LocalDraftCartLinesTableProcessedTableManager =
       $$LocalDraftCartLinesTableAnnotationComposer,
       $$LocalDraftCartLinesTableCreateCompanionBuilder,
       $$LocalDraftCartLinesTableUpdateCompanionBuilder,
-      (
-        LocalDraftCartLine,
-        BaseReferences<
-          _$AppDatabase,
-          $LocalDraftCartLinesTable,
-          LocalDraftCartLine
-        >,
-      ),
+      (LocalDraftCartLine, $$LocalDraftCartLinesTableReferences),
       LocalDraftCartLine,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool cartLocalId, bool productLocalId})
     >;
 typedef $$LocalReturnsTableCreateCompanionBuilder =
     LocalReturnsCompanion Function({
@@ -25641,7 +31538,7 @@ typedef $$LocalReturnsTableCreateCompanionBuilder =
       Value<String?> invoiceLocalId,
       Value<String?> orderLocalId,
       Value<String?> reason,
-      Value<double> refundAmount,
+      Value<int> refundAmount,
       Value<String> status,
       Value<String?> createdByUserId,
       Value<String?> shiftLocalId,
@@ -25655,13 +31552,131 @@ typedef $$LocalReturnsTableUpdateCompanionBuilder =
       Value<String?> invoiceLocalId,
       Value<String?> orderLocalId,
       Value<String?> reason,
-      Value<double> refundAmount,
+      Value<int> refundAmount,
       Value<String> status,
       Value<String?> createdByUserId,
       Value<String?> shiftLocalId,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
+
+final class $$LocalReturnsTableReferences
+    extends BaseReferences<_$AppDatabase, $LocalReturnsTable, LocalReturn> {
+  $$LocalReturnsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $LocalInvoicesTable _invoiceLocalIdTable(_$AppDatabase db) =>
+      db.localInvoices.createAlias(
+        $_aliasNameGenerator(
+          db.localReturns.invoiceLocalId,
+          db.localInvoices.localId,
+        ),
+      );
+
+  $$LocalInvoicesTableProcessedTableManager? get invoiceLocalId {
+    final $_column = $_itemColumn<String>('invoice_local_id');
+    if ($_column == null) return null;
+    final manager = $$LocalInvoicesTableTableManager(
+      $_db,
+      $_db.localInvoices,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_invoiceLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $LocalOrdersTable _orderLocalIdTable(_$AppDatabase db) =>
+      db.localOrders.createAlias(
+        $_aliasNameGenerator(
+          db.localReturns.orderLocalId,
+          db.localOrders.localId,
+        ),
+      );
+
+  $$LocalOrdersTableProcessedTableManager? get orderLocalId {
+    final $_column = $_itemColumn<String>('order_local_id');
+    if ($_column == null) return null;
+    final manager = $$LocalOrdersTableTableManager(
+      $_db,
+      $_db.localOrders,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_orderLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $LocalUsersTable _createdByUserIdTable(_$AppDatabase db) =>
+      db.localUsers.createAlias(
+        $_aliasNameGenerator(
+          db.localReturns.createdByUserId,
+          db.localUsers.localId,
+        ),
+      );
+
+  $$LocalUsersTableProcessedTableManager? get createdByUserId {
+    final $_column = $_itemColumn<String>('created_by_user_id');
+    if ($_column == null) return null;
+    final manager = $$LocalUsersTableTableManager(
+      $_db,
+      $_db.localUsers,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_createdByUserIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $LocalShiftsTable _shiftLocalIdTable(_$AppDatabase db) =>
+      db.localShifts.createAlias(
+        $_aliasNameGenerator(
+          db.localReturns.shiftLocalId,
+          db.localShifts.localId,
+        ),
+      );
+
+  $$LocalShiftsTableProcessedTableManager? get shiftLocalId {
+    final $_column = $_itemColumn<String>('shift_local_id');
+    if ($_column == null) return null;
+    final manager = $$LocalShiftsTableTableManager(
+      $_db,
+      $_db.localShifts,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_shiftLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$LocalReturnItemsTable, List<LocalReturnItem>>
+  _localReturnItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.localReturnItems,
+    aliasName: $_aliasNameGenerator(
+      db.localReturns.localId,
+      db.localReturnItems.returnLocalId,
+    ),
+  );
+
+  $$LocalReturnItemsTableProcessedTableManager get localReturnItemsRefs {
+    final manager =
+        $$LocalReturnItemsTableTableManager($_db, $_db.localReturnItems).filter(
+          (f) => f.returnLocalId.localId.sqlEquals(
+            $_itemColumn<String>('local_id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _localReturnItemsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
 
 class $$LocalReturnsTableFilterComposer
     extends Composer<_$AppDatabase, $LocalReturnsTable> {
@@ -25682,22 +31697,12 @@ class $$LocalReturnsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get invoiceLocalId => $composableBuilder(
-    column: $table.invoiceLocalId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get orderLocalId => $composableBuilder(
-    column: $table.orderLocalId,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<String> get reason => $composableBuilder(
     column: $table.reason,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get refundAmount => $composableBuilder(
+  ColumnFilters<int> get refundAmount => $composableBuilder(
     column: $table.refundAmount,
     builder: (column) => ColumnFilters(column),
   );
@@ -25707,20 +31712,127 @@ class $$LocalReturnsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get createdByUserId => $composableBuilder(
-    column: $table.createdByUserId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get shiftLocalId => $composableBuilder(
-    column: $table.shiftLocalId,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$LocalInvoicesTableFilterComposer get invoiceLocalId {
+    final $$LocalInvoicesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.invoiceLocalId,
+      referencedTable: $db.localInvoices,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalInvoicesTableFilterComposer(
+            $db: $db,
+            $table: $db.localInvoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalOrdersTableFilterComposer get orderLocalId {
+    final $$LocalOrdersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.orderLocalId,
+      referencedTable: $db.localOrders,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrdersTableFilterComposer(
+            $db: $db,
+            $table: $db.localOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalUsersTableFilterComposer get createdByUserId {
+    final $$LocalUsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdByUserId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableFilterComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalShiftsTableFilterComposer get shiftLocalId {
+    final $$LocalShiftsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftLocalId,
+      referencedTable: $db.localShifts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalShiftsTableFilterComposer(
+            $db: $db,
+            $table: $db.localShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> localReturnItemsRefs(
+    Expression<bool> Function($$LocalReturnItemsTableFilterComposer f) f,
+  ) {
+    final $$LocalReturnItemsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localReturnItems,
+      getReferencedColumn: (t) => t.returnLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalReturnItemsTableFilterComposer(
+            $db: $db,
+            $table: $db.localReturnItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalReturnsTableOrderingComposer
@@ -25742,22 +31854,12 @@ class $$LocalReturnsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get invoiceLocalId => $composableBuilder(
-    column: $table.invoiceLocalId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get orderLocalId => $composableBuilder(
-    column: $table.orderLocalId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<String> get reason => $composableBuilder(
     column: $table.reason,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get refundAmount => $composableBuilder(
+  ColumnOrderings<int> get refundAmount => $composableBuilder(
     column: $table.refundAmount,
     builder: (column) => ColumnOrderings(column),
   );
@@ -25767,20 +31869,102 @@ class $$LocalReturnsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get createdByUserId => $composableBuilder(
-    column: $table.createdByUserId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get shiftLocalId => $composableBuilder(
-    column: $table.shiftLocalId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$LocalInvoicesTableOrderingComposer get invoiceLocalId {
+    final $$LocalInvoicesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.invoiceLocalId,
+      referencedTable: $db.localInvoices,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalInvoicesTableOrderingComposer(
+            $db: $db,
+            $table: $db.localInvoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalOrdersTableOrderingComposer get orderLocalId {
+    final $$LocalOrdersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.orderLocalId,
+      referencedTable: $db.localOrders,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrdersTableOrderingComposer(
+            $db: $db,
+            $table: $db.localOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalUsersTableOrderingComposer get createdByUserId {
+    final $$LocalUsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdByUserId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalShiftsTableOrderingComposer get shiftLocalId {
+    final $$LocalShiftsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftLocalId,
+      referencedTable: $db.localShifts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalShiftsTableOrderingComposer(
+            $db: $db,
+            $table: $db.localShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalReturnsTableAnnotationComposer
@@ -25800,20 +31984,10 @@ class $$LocalReturnsTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<String> get invoiceLocalId => $composableBuilder(
-    column: $table.invoiceLocalId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get orderLocalId => $composableBuilder(
-    column: $table.orderLocalId,
-    builder: (column) => column,
-  );
-
   GeneratedColumn<String> get reason =>
       $composableBuilder(column: $table.reason, builder: (column) => column);
 
-  GeneratedColumn<double> get refundAmount => $composableBuilder(
+  GeneratedColumn<int> get refundAmount => $composableBuilder(
     column: $table.refundAmount,
     builder: (column) => column,
   );
@@ -25821,18 +31995,125 @@ class $$LocalReturnsTableAnnotationComposer
   GeneratedColumn<String> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
 
-  GeneratedColumn<String> get createdByUserId => $composableBuilder(
-    column: $table.createdByUserId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get shiftLocalId => $composableBuilder(
-    column: $table.shiftLocalId,
-    builder: (column) => column,
-  );
-
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$LocalInvoicesTableAnnotationComposer get invoiceLocalId {
+    final $$LocalInvoicesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.invoiceLocalId,
+      referencedTable: $db.localInvoices,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalInvoicesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localInvoices,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalOrdersTableAnnotationComposer get orderLocalId {
+    final $$LocalOrdersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.orderLocalId,
+      referencedTable: $db.localOrders,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrdersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalUsersTableAnnotationComposer get createdByUserId {
+    final $$LocalUsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdByUserId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalShiftsTableAnnotationComposer get shiftLocalId {
+    final $$LocalShiftsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftLocalId,
+      referencedTable: $db.localShifts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalShiftsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> localReturnItemsRefs<T extends Object>(
+    Expression<T> Function($$LocalReturnItemsTableAnnotationComposer a) f,
+  ) {
+    final $$LocalReturnItemsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.localId,
+      referencedTable: $db.localReturnItems,
+      getReferencedColumn: (t) => t.returnLocalId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalReturnItemsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localReturnItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$LocalReturnsTableTableManager
@@ -25846,12 +32127,15 @@ class $$LocalReturnsTableTableManager
           $$LocalReturnsTableAnnotationComposer,
           $$LocalReturnsTableCreateCompanionBuilder,
           $$LocalReturnsTableUpdateCompanionBuilder,
-          (
-            LocalReturn,
-            BaseReferences<_$AppDatabase, $LocalReturnsTable, LocalReturn>,
-          ),
+          (LocalReturn, $$LocalReturnsTableReferences),
           LocalReturn,
-          PrefetchHooks Function()
+          PrefetchHooks Function({
+            bool invoiceLocalId,
+            bool orderLocalId,
+            bool createdByUserId,
+            bool shiftLocalId,
+            bool localReturnItemsRefs,
+          })
         > {
   $$LocalReturnsTableTableManager(_$AppDatabase db, $LocalReturnsTable table)
     : super(
@@ -25871,7 +32155,7 @@ class $$LocalReturnsTableTableManager
                 Value<String?> invoiceLocalId = const Value.absent(),
                 Value<String?> orderLocalId = const Value.absent(),
                 Value<String?> reason = const Value.absent(),
-                Value<double> refundAmount = const Value.absent(),
+                Value<int> refundAmount = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<String?> createdByUserId = const Value.absent(),
                 Value<String?> shiftLocalId = const Value.absent(),
@@ -25897,7 +32181,7 @@ class $$LocalReturnsTableTableManager
                 Value<String?> invoiceLocalId = const Value.absent(),
                 Value<String?> orderLocalId = const Value.absent(),
                 Value<String?> reason = const Value.absent(),
-                Value<double> refundAmount = const Value.absent(),
+                Value<int> refundAmount = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<String?> createdByUserId = const Value.absent(),
                 Value<String?> shiftLocalId = const Value.absent(),
@@ -25917,9 +32201,132 @@ class $$LocalReturnsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LocalReturnsTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback:
+              ({
+                invoiceLocalId = false,
+                orderLocalId = false,
+                createdByUserId = false,
+                shiftLocalId = false,
+                localReturnItemsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (localReturnItemsRefs) db.localReturnItems,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (invoiceLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.invoiceLocalId,
+                                    referencedTable:
+                                        $$LocalReturnsTableReferences
+                                            ._invoiceLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalReturnsTableReferences
+                                            ._invoiceLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+                        if (orderLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.orderLocalId,
+                                    referencedTable:
+                                        $$LocalReturnsTableReferences
+                                            ._orderLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalReturnsTableReferences
+                                            ._orderLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+                        if (createdByUserId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.createdByUserId,
+                                    referencedTable:
+                                        $$LocalReturnsTableReferences
+                                            ._createdByUserIdTable(db),
+                                    referencedColumn:
+                                        $$LocalReturnsTableReferences
+                                            ._createdByUserIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+                        if (shiftLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.shiftLocalId,
+                                    referencedTable:
+                                        $$LocalReturnsTableReferences
+                                            ._shiftLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalReturnsTableReferences
+                                            ._shiftLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (localReturnItemsRefs)
+                        await $_getPrefetchedData<
+                          LocalReturn,
+                          $LocalReturnsTable,
+                          LocalReturnItem
+                        >(
+                          currentTable: table,
+                          referencedTable: $$LocalReturnsTableReferences
+                              ._localReturnItemsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$LocalReturnsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).localReturnItemsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.returnLocalId == item.localId,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
         ),
       );
 }
@@ -25934,12 +32341,15 @@ typedef $$LocalReturnsTableProcessedTableManager =
       $$LocalReturnsTableAnnotationComposer,
       $$LocalReturnsTableCreateCompanionBuilder,
       $$LocalReturnsTableUpdateCompanionBuilder,
-      (
-        LocalReturn,
-        BaseReferences<_$AppDatabase, $LocalReturnsTable, LocalReturn>,
-      ),
+      (LocalReturn, $$LocalReturnsTableReferences),
       LocalReturn,
-      PrefetchHooks Function()
+      PrefetchHooks Function({
+        bool invoiceLocalId,
+        bool orderLocalId,
+        bool createdByUserId,
+        bool shiftLocalId,
+        bool localReturnItemsRefs,
+      })
     >;
 typedef $$LocalReturnItemsTableCreateCompanionBuilder =
     LocalReturnItemsCompanion Function({
@@ -25950,7 +32360,7 @@ typedef $$LocalReturnItemsTableCreateCompanionBuilder =
       Value<String?> productLocalId,
       required String productNameSnapshot,
       required int quantity,
-      required double refundAmount,
+      required int refundAmount,
       Value<int> rowid,
     });
 typedef $$LocalReturnItemsTableUpdateCompanionBuilder =
@@ -25962,9 +32372,85 @@ typedef $$LocalReturnItemsTableUpdateCompanionBuilder =
       Value<String?> productLocalId,
       Value<String> productNameSnapshot,
       Value<int> quantity,
-      Value<double> refundAmount,
+      Value<int> refundAmount,
       Value<int> rowid,
     });
+
+final class $$LocalReturnItemsTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $LocalReturnItemsTable, LocalReturnItem> {
+  $$LocalReturnItemsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $LocalReturnsTable _returnLocalIdTable(_$AppDatabase db) =>
+      db.localReturns.createAlias(
+        $_aliasNameGenerator(
+          db.localReturnItems.returnLocalId,
+          db.localReturns.localId,
+        ),
+      );
+
+  $$LocalReturnsTableProcessedTableManager get returnLocalId {
+    final $_column = $_itemColumn<String>('return_local_id')!;
+
+    final manager = $$LocalReturnsTableTableManager(
+      $_db,
+      $_db.localReturns,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_returnLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $LocalOrderItemsTable _orderItemLocalIdTable(_$AppDatabase db) =>
+      db.localOrderItems.createAlias(
+        $_aliasNameGenerator(
+          db.localReturnItems.orderItemLocalId,
+          db.localOrderItems.localId,
+        ),
+      );
+
+  $$LocalOrderItemsTableProcessedTableManager? get orderItemLocalId {
+    final $_column = $_itemColumn<String>('order_item_local_id');
+    if ($_column == null) return null;
+    final manager = $$LocalOrderItemsTableTableManager(
+      $_db,
+      $_db.localOrderItems,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_orderItemLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $LocalProductsTable _productLocalIdTable(_$AppDatabase db) =>
+      db.localProducts.createAlias(
+        $_aliasNameGenerator(
+          db.localReturnItems.productLocalId,
+          db.localProducts.localId,
+        ),
+      );
+
+  $$LocalProductsTableProcessedTableManager? get productLocalId {
+    final $_column = $_itemColumn<String>('product_local_id');
+    if ($_column == null) return null;
+    final manager = $$LocalProductsTableTableManager(
+      $_db,
+      $_db.localProducts,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_productLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
 
 class $$LocalReturnItemsTableFilterComposer
     extends Composer<_$AppDatabase, $LocalReturnItemsTable> {
@@ -25980,23 +32466,8 @@ class $$LocalReturnItemsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get returnLocalId => $composableBuilder(
-    column: $table.returnLocalId,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<int> get workspaceId => $composableBuilder(
     column: $table.workspaceId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get orderItemLocalId => $composableBuilder(
-    column: $table.orderItemLocalId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get productLocalId => $composableBuilder(
-    column: $table.productLocalId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -26010,10 +32481,79 @@ class $$LocalReturnItemsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get refundAmount => $composableBuilder(
+  ColumnFilters<int> get refundAmount => $composableBuilder(
     column: $table.refundAmount,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$LocalReturnsTableFilterComposer get returnLocalId {
+    final $$LocalReturnsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.returnLocalId,
+      referencedTable: $db.localReturns,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalReturnsTableFilterComposer(
+            $db: $db,
+            $table: $db.localReturns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalOrderItemsTableFilterComposer get orderItemLocalId {
+    final $$LocalOrderItemsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.orderItemLocalId,
+      referencedTable: $db.localOrderItems,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrderItemsTableFilterComposer(
+            $db: $db,
+            $table: $db.localOrderItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalProductsTableFilterComposer get productLocalId {
+    final $$LocalProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productLocalId,
+      referencedTable: $db.localProducts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.localProducts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalReturnItemsTableOrderingComposer
@@ -26030,23 +32570,8 @@ class $$LocalReturnItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get returnLocalId => $composableBuilder(
-    column: $table.returnLocalId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<int> get workspaceId => $composableBuilder(
     column: $table.workspaceId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get orderItemLocalId => $composableBuilder(
-    column: $table.orderItemLocalId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get productLocalId => $composableBuilder(
-    column: $table.productLocalId,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -26060,10 +32585,79 @@ class $$LocalReturnItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get refundAmount => $composableBuilder(
+  ColumnOrderings<int> get refundAmount => $composableBuilder(
     column: $table.refundAmount,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$LocalReturnsTableOrderingComposer get returnLocalId {
+    final $$LocalReturnsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.returnLocalId,
+      referencedTable: $db.localReturns,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalReturnsTableOrderingComposer(
+            $db: $db,
+            $table: $db.localReturns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalOrderItemsTableOrderingComposer get orderItemLocalId {
+    final $$LocalOrderItemsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.orderItemLocalId,
+      referencedTable: $db.localOrderItems,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrderItemsTableOrderingComposer(
+            $db: $db,
+            $table: $db.localOrderItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalProductsTableOrderingComposer get productLocalId {
+    final $$LocalProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productLocalId,
+      referencedTable: $db.localProducts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.localProducts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalReturnItemsTableAnnotationComposer
@@ -26078,23 +32672,8 @@ class $$LocalReturnItemsTableAnnotationComposer
   GeneratedColumn<String> get localId =>
       $composableBuilder(column: $table.localId, builder: (column) => column);
 
-  GeneratedColumn<String> get returnLocalId => $composableBuilder(
-    column: $table.returnLocalId,
-    builder: (column) => column,
-  );
-
   GeneratedColumn<int> get workspaceId => $composableBuilder(
     column: $table.workspaceId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get orderItemLocalId => $composableBuilder(
-    column: $table.orderItemLocalId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get productLocalId => $composableBuilder(
-    column: $table.productLocalId,
     builder: (column) => column,
   );
 
@@ -26106,10 +32685,79 @@ class $$LocalReturnItemsTableAnnotationComposer
   GeneratedColumn<int> get quantity =>
       $composableBuilder(column: $table.quantity, builder: (column) => column);
 
-  GeneratedColumn<double> get refundAmount => $composableBuilder(
+  GeneratedColumn<int> get refundAmount => $composableBuilder(
     column: $table.refundAmount,
     builder: (column) => column,
   );
+
+  $$LocalReturnsTableAnnotationComposer get returnLocalId {
+    final $$LocalReturnsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.returnLocalId,
+      referencedTable: $db.localReturns,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalReturnsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localReturns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalOrderItemsTableAnnotationComposer get orderItemLocalId {
+    final $$LocalOrderItemsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.orderItemLocalId,
+      referencedTable: $db.localOrderItems,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalOrderItemsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localOrderItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalProductsTableAnnotationComposer get productLocalId {
+    final $$LocalProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productLocalId,
+      referencedTable: $db.localProducts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localProducts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalReturnItemsTableTableManager
@@ -26123,16 +32771,13 @@ class $$LocalReturnItemsTableTableManager
           $$LocalReturnItemsTableAnnotationComposer,
           $$LocalReturnItemsTableCreateCompanionBuilder,
           $$LocalReturnItemsTableUpdateCompanionBuilder,
-          (
-            LocalReturnItem,
-            BaseReferences<
-              _$AppDatabase,
-              $LocalReturnItemsTable,
-              LocalReturnItem
-            >,
-          ),
+          (LocalReturnItem, $$LocalReturnItemsTableReferences),
           LocalReturnItem,
-          PrefetchHooks Function()
+          PrefetchHooks Function({
+            bool returnLocalId,
+            bool orderItemLocalId,
+            bool productLocalId,
+          })
         > {
   $$LocalReturnItemsTableTableManager(
     _$AppDatabase db,
@@ -26156,7 +32801,7 @@ class $$LocalReturnItemsTableTableManager
                 Value<String?> productLocalId = const Value.absent(),
                 Value<String> productNameSnapshot = const Value.absent(),
                 Value<int> quantity = const Value.absent(),
-                Value<double> refundAmount = const Value.absent(),
+                Value<int> refundAmount = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalReturnItemsCompanion(
                 localId: localId,
@@ -26178,7 +32823,7 @@ class $$LocalReturnItemsTableTableManager
                 Value<String?> productLocalId = const Value.absent(),
                 required String productNameSnapshot,
                 required int quantity,
-                required double refundAmount,
+                required int refundAmount,
                 Value<int> rowid = const Value.absent(),
               }) => LocalReturnItemsCompanion.insert(
                 localId: localId,
@@ -26192,9 +32837,91 @@ class $$LocalReturnItemsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LocalReturnItemsTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback:
+              ({
+                returnLocalId = false,
+                orderItemLocalId = false,
+                productLocalId = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (returnLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.returnLocalId,
+                                    referencedTable:
+                                        $$LocalReturnItemsTableReferences
+                                            ._returnLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalReturnItemsTableReferences
+                                            ._returnLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+                        if (orderItemLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.orderItemLocalId,
+                                    referencedTable:
+                                        $$LocalReturnItemsTableReferences
+                                            ._orderItemLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalReturnItemsTableReferences
+                                            ._orderItemLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+                        if (productLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.productLocalId,
+                                    referencedTable:
+                                        $$LocalReturnItemsTableReferences
+                                            ._productLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalReturnItemsTableReferences
+                                            ._productLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
         ),
       );
 }
@@ -26209,338 +32936,13 @@ typedef $$LocalReturnItemsTableProcessedTableManager =
       $$LocalReturnItemsTableAnnotationComposer,
       $$LocalReturnItemsTableCreateCompanionBuilder,
       $$LocalReturnItemsTableUpdateCompanionBuilder,
-      (
-        LocalReturnItem,
-        BaseReferences<_$AppDatabase, $LocalReturnItemsTable, LocalReturnItem>,
-      ),
+      (LocalReturnItem, $$LocalReturnItemsTableReferences),
       LocalReturnItem,
-      PrefetchHooks Function()
-    >;
-typedef $$LocalShiftsTableCreateCompanionBuilder =
-    LocalShiftsCompanion Function({
-      required String localId,
-      required int workspaceId,
-      required String userId,
-      required DateTime openedAt,
-      Value<DateTime?> closedAt,
-      Value<double> openingCash,
-      Value<double?> closingCash,
-      Value<double?> expectedCash,
-      Value<double?> actualCash,
-      Value<double?> difference,
-      Value<String> status,
-      Value<int> rowid,
-    });
-typedef $$LocalShiftsTableUpdateCompanionBuilder =
-    LocalShiftsCompanion Function({
-      Value<String> localId,
-      Value<int> workspaceId,
-      Value<String> userId,
-      Value<DateTime> openedAt,
-      Value<DateTime?> closedAt,
-      Value<double> openingCash,
-      Value<double?> closingCash,
-      Value<double?> expectedCash,
-      Value<double?> actualCash,
-      Value<double?> difference,
-      Value<String> status,
-      Value<int> rowid,
-    });
-
-class $$LocalShiftsTableFilterComposer
-    extends Composer<_$AppDatabase, $LocalShiftsTable> {
-  $$LocalShiftsTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<String> get localId => $composableBuilder(
-    column: $table.localId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get workspaceId => $composableBuilder(
-    column: $table.workspaceId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get userId => $composableBuilder(
-    column: $table.userId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get openedAt => $composableBuilder(
-    column: $table.openedAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get closedAt => $composableBuilder(
-    column: $table.closedAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get openingCash => $composableBuilder(
-    column: $table.openingCash,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get closingCash => $composableBuilder(
-    column: $table.closingCash,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get expectedCash => $composableBuilder(
-    column: $table.expectedCash,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get actualCash => $composableBuilder(
-    column: $table.actualCash,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get difference => $composableBuilder(
-    column: $table.difference,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get status => $composableBuilder(
-    column: $table.status,
-    builder: (column) => ColumnFilters(column),
-  );
-}
-
-class $$LocalShiftsTableOrderingComposer
-    extends Composer<_$AppDatabase, $LocalShiftsTable> {
-  $$LocalShiftsTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<String> get localId => $composableBuilder(
-    column: $table.localId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get workspaceId => $composableBuilder(
-    column: $table.workspaceId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get userId => $composableBuilder(
-    column: $table.userId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get openedAt => $composableBuilder(
-    column: $table.openedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get closedAt => $composableBuilder(
-    column: $table.closedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get openingCash => $composableBuilder(
-    column: $table.openingCash,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get closingCash => $composableBuilder(
-    column: $table.closingCash,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get expectedCash => $composableBuilder(
-    column: $table.expectedCash,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get actualCash => $composableBuilder(
-    column: $table.actualCash,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get difference => $composableBuilder(
-    column: $table.difference,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get status => $composableBuilder(
-    column: $table.status,
-    builder: (column) => ColumnOrderings(column),
-  );
-}
-
-class $$LocalShiftsTableAnnotationComposer
-    extends Composer<_$AppDatabase, $LocalShiftsTable> {
-  $$LocalShiftsTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<String> get localId =>
-      $composableBuilder(column: $table.localId, builder: (column) => column);
-
-  GeneratedColumn<int> get workspaceId => $composableBuilder(
-    column: $table.workspaceId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get userId =>
-      $composableBuilder(column: $table.userId, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get openedAt =>
-      $composableBuilder(column: $table.openedAt, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get closedAt =>
-      $composableBuilder(column: $table.closedAt, builder: (column) => column);
-
-  GeneratedColumn<double> get openingCash => $composableBuilder(
-    column: $table.openingCash,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<double> get closingCash => $composableBuilder(
-    column: $table.closingCash,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<double> get expectedCash => $composableBuilder(
-    column: $table.expectedCash,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<double> get actualCash => $composableBuilder(
-    column: $table.actualCash,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<double> get difference => $composableBuilder(
-    column: $table.difference,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get status =>
-      $composableBuilder(column: $table.status, builder: (column) => column);
-}
-
-class $$LocalShiftsTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $LocalShiftsTable,
-          LocalShift,
-          $$LocalShiftsTableFilterComposer,
-          $$LocalShiftsTableOrderingComposer,
-          $$LocalShiftsTableAnnotationComposer,
-          $$LocalShiftsTableCreateCompanionBuilder,
-          $$LocalShiftsTableUpdateCompanionBuilder,
-          (
-            LocalShift,
-            BaseReferences<_$AppDatabase, $LocalShiftsTable, LocalShift>,
-          ),
-          LocalShift,
-          PrefetchHooks Function()
-        > {
-  $$LocalShiftsTableTableManager(_$AppDatabase db, $LocalShiftsTable table)
-    : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$LocalShiftsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$LocalShiftsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$LocalShiftsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<String> localId = const Value.absent(),
-                Value<int> workspaceId = const Value.absent(),
-                Value<String> userId = const Value.absent(),
-                Value<DateTime> openedAt = const Value.absent(),
-                Value<DateTime?> closedAt = const Value.absent(),
-                Value<double> openingCash = const Value.absent(),
-                Value<double?> closingCash = const Value.absent(),
-                Value<double?> expectedCash = const Value.absent(),
-                Value<double?> actualCash = const Value.absent(),
-                Value<double?> difference = const Value.absent(),
-                Value<String> status = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => LocalShiftsCompanion(
-                localId: localId,
-                workspaceId: workspaceId,
-                userId: userId,
-                openedAt: openedAt,
-                closedAt: closedAt,
-                openingCash: openingCash,
-                closingCash: closingCash,
-                expectedCash: expectedCash,
-                actualCash: actualCash,
-                difference: difference,
-                status: status,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                required String localId,
-                required int workspaceId,
-                required String userId,
-                required DateTime openedAt,
-                Value<DateTime?> closedAt = const Value.absent(),
-                Value<double> openingCash = const Value.absent(),
-                Value<double?> closingCash = const Value.absent(),
-                Value<double?> expectedCash = const Value.absent(),
-                Value<double?> actualCash = const Value.absent(),
-                Value<double?> difference = const Value.absent(),
-                Value<String> status = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => LocalShiftsCompanion.insert(
-                localId: localId,
-                workspaceId: workspaceId,
-                userId: userId,
-                openedAt: openedAt,
-                closedAt: closedAt,
-                openingCash: openingCash,
-                closingCash: closingCash,
-                expectedCash: expectedCash,
-                actualCash: actualCash,
-                difference: difference,
-                status: status,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
-          prefetchHooksCallback: null,
-        ),
-      );
-}
-
-typedef $$LocalShiftsTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $LocalShiftsTable,
-      LocalShift,
-      $$LocalShiftsTableFilterComposer,
-      $$LocalShiftsTableOrderingComposer,
-      $$LocalShiftsTableAnnotationComposer,
-      $$LocalShiftsTableCreateCompanionBuilder,
-      $$LocalShiftsTableUpdateCompanionBuilder,
-      (
-        LocalShift,
-        BaseReferences<_$AppDatabase, $LocalShiftsTable, LocalShift>,
-      ),
-      LocalShift,
-      PrefetchHooks Function()
+      PrefetchHooks Function({
+        bool returnLocalId,
+        bool orderItemLocalId,
+        bool productLocalId,
+      })
     >;
 typedef $$LocalCashMovementsTableCreateCompanionBuilder =
     LocalCashMovementsCompanion Function({
@@ -26548,7 +32950,7 @@ typedef $$LocalCashMovementsTableCreateCompanionBuilder =
       required int workspaceId,
       required String shiftLocalId,
       required String type,
-      required double amount,
+      required int amount,
       Value<String?> reason,
       Value<String?> referenceId,
       Value<String?> createdByUserId,
@@ -26561,13 +32963,71 @@ typedef $$LocalCashMovementsTableUpdateCompanionBuilder =
       Value<int> workspaceId,
       Value<String> shiftLocalId,
       Value<String> type,
-      Value<double> amount,
+      Value<int> amount,
       Value<String?> reason,
       Value<String?> referenceId,
       Value<String?> createdByUserId,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
+
+final class $$LocalCashMovementsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $LocalCashMovementsTable,
+          LocalCashMovement
+        > {
+  $$LocalCashMovementsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $LocalShiftsTable _shiftLocalIdTable(_$AppDatabase db) =>
+      db.localShifts.createAlias(
+        $_aliasNameGenerator(
+          db.localCashMovements.shiftLocalId,
+          db.localShifts.localId,
+        ),
+      );
+
+  $$LocalShiftsTableProcessedTableManager get shiftLocalId {
+    final $_column = $_itemColumn<String>('shift_local_id')!;
+
+    final manager = $$LocalShiftsTableTableManager(
+      $_db,
+      $_db.localShifts,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_shiftLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $LocalUsersTable _createdByUserIdTable(_$AppDatabase db) =>
+      db.localUsers.createAlias(
+        $_aliasNameGenerator(
+          db.localCashMovements.createdByUserId,
+          db.localUsers.localId,
+        ),
+      );
+
+  $$LocalUsersTableProcessedTableManager? get createdByUserId {
+    final $_column = $_itemColumn<String>('created_by_user_id');
+    if ($_column == null) return null;
+    final manager = $$LocalUsersTableTableManager(
+      $_db,
+      $_db.localUsers,
+    ).filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_createdByUserIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
 
 class $$LocalCashMovementsTableFilterComposer
     extends Composer<_$AppDatabase, $LocalCashMovementsTable> {
@@ -26588,17 +33048,12 @@ class $$LocalCashMovementsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get shiftLocalId => $composableBuilder(
-    column: $table.shiftLocalId,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<String> get type => $composableBuilder(
     column: $table.type,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<double> get amount => $composableBuilder(
+  ColumnFilters<int> get amount => $composableBuilder(
     column: $table.amount,
     builder: (column) => ColumnFilters(column),
   );
@@ -26613,15 +33068,56 @@ class $$LocalCashMovementsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get createdByUserId => $composableBuilder(
-    column: $table.createdByUserId,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$LocalShiftsTableFilterComposer get shiftLocalId {
+    final $$LocalShiftsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftLocalId,
+      referencedTable: $db.localShifts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalShiftsTableFilterComposer(
+            $db: $db,
+            $table: $db.localShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalUsersTableFilterComposer get createdByUserId {
+    final $$LocalUsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdByUserId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableFilterComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalCashMovementsTableOrderingComposer
@@ -26643,17 +33139,12 @@ class $$LocalCashMovementsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get shiftLocalId => $composableBuilder(
-    column: $table.shiftLocalId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<String> get type => $composableBuilder(
     column: $table.type,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get amount => $composableBuilder(
+  ColumnOrderings<int> get amount => $composableBuilder(
     column: $table.amount,
     builder: (column) => ColumnOrderings(column),
   );
@@ -26668,15 +33159,56 @@ class $$LocalCashMovementsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get createdByUserId => $composableBuilder(
-    column: $table.createdByUserId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$LocalShiftsTableOrderingComposer get shiftLocalId {
+    final $$LocalShiftsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftLocalId,
+      referencedTable: $db.localShifts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalShiftsTableOrderingComposer(
+            $db: $db,
+            $table: $db.localShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalUsersTableOrderingComposer get createdByUserId {
+    final $$LocalUsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdByUserId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalCashMovementsTableAnnotationComposer
@@ -26696,15 +33228,10 @@ class $$LocalCashMovementsTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<String> get shiftLocalId => $composableBuilder(
-    column: $table.shiftLocalId,
-    builder: (column) => column,
-  );
-
   GeneratedColumn<String> get type =>
       $composableBuilder(column: $table.type, builder: (column) => column);
 
-  GeneratedColumn<double> get amount =>
+  GeneratedColumn<int> get amount =>
       $composableBuilder(column: $table.amount, builder: (column) => column);
 
   GeneratedColumn<String> get reason =>
@@ -26715,13 +33242,54 @@ class $$LocalCashMovementsTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<String> get createdByUserId => $composableBuilder(
-    column: $table.createdByUserId,
-    builder: (column) => column,
-  );
-
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$LocalShiftsTableAnnotationComposer get shiftLocalId {
+    final $$LocalShiftsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.shiftLocalId,
+      referencedTable: $db.localShifts,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalShiftsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$LocalUsersTableAnnotationComposer get createdByUserId {
+    final $$LocalUsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdByUserId,
+      referencedTable: $db.localUsers,
+      getReferencedColumn: (t) => t.localId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$LocalUsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.localUsers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$LocalCashMovementsTableTableManager
@@ -26735,16 +33303,9 @@ class $$LocalCashMovementsTableTableManager
           $$LocalCashMovementsTableAnnotationComposer,
           $$LocalCashMovementsTableCreateCompanionBuilder,
           $$LocalCashMovementsTableUpdateCompanionBuilder,
-          (
-            LocalCashMovement,
-            BaseReferences<
-              _$AppDatabase,
-              $LocalCashMovementsTable,
-              LocalCashMovement
-            >,
-          ),
+          (LocalCashMovement, $$LocalCashMovementsTableReferences),
           LocalCashMovement,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool shiftLocalId, bool createdByUserId})
         > {
   $$LocalCashMovementsTableTableManager(
     _$AppDatabase db,
@@ -26768,7 +33329,7 @@ class $$LocalCashMovementsTableTableManager
                 Value<int> workspaceId = const Value.absent(),
                 Value<String> shiftLocalId = const Value.absent(),
                 Value<String> type = const Value.absent(),
-                Value<double> amount = const Value.absent(),
+                Value<int> amount = const Value.absent(),
                 Value<String?> reason = const Value.absent(),
                 Value<String?> referenceId = const Value.absent(),
                 Value<String?> createdByUserId = const Value.absent(),
@@ -26792,7 +33353,7 @@ class $$LocalCashMovementsTableTableManager
                 required int workspaceId,
                 required String shiftLocalId,
                 required String type,
-                required double amount,
+                required int amount,
                 Value<String?> reason = const Value.absent(),
                 Value<String?> referenceId = const Value.absent(),
                 Value<String?> createdByUserId = const Value.absent(),
@@ -26811,9 +33372,72 @@ class $$LocalCashMovementsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$LocalCashMovementsTableReferences(db, table, e),
+                ),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback:
+              ({shiftLocalId = false, createdByUserId = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (shiftLocalId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.shiftLocalId,
+                                    referencedTable:
+                                        $$LocalCashMovementsTableReferences
+                                            ._shiftLocalIdTable(db),
+                                    referencedColumn:
+                                        $$LocalCashMovementsTableReferences
+                                            ._shiftLocalIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+                        if (createdByUserId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.createdByUserId,
+                                    referencedTable:
+                                        $$LocalCashMovementsTableReferences
+                                            ._createdByUserIdTable(db),
+                                    referencedColumn:
+                                        $$LocalCashMovementsTableReferences
+                                            ._createdByUserIdTable(db)
+                                            .localId,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
         ),
       );
 }
@@ -26828,16 +33452,9 @@ typedef $$LocalCashMovementsTableProcessedTableManager =
       $$LocalCashMovementsTableAnnotationComposer,
       $$LocalCashMovementsTableCreateCompanionBuilder,
       $$LocalCashMovementsTableUpdateCompanionBuilder,
-      (
-        LocalCashMovement,
-        BaseReferences<
-          _$AppDatabase,
-          $LocalCashMovementsTable,
-          LocalCashMovement
-        >,
-      ),
+      (LocalCashMovement, $$LocalCashMovementsTableReferences),
       LocalCashMovement,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool shiftLocalId, bool createdByUserId})
     >;
 
 class $AppDatabaseManager {
@@ -26853,16 +33470,22 @@ class $AppDatabaseManager {
       $$LocalTablesTableTableManager(_db, _db.localTables);
   $$LocalCustomersTableTableManager get localCustomers =>
       $$LocalCustomersTableTableManager(_db, _db.localCustomers);
+  $$LocalUsersTableTableManager get localUsers =>
+      $$LocalUsersTableTableManager(_db, _db.localUsers);
+  $$LocalSessionsTableTableManager get localSessions =>
+      $$LocalSessionsTableTableManager(_db, _db.localSessions);
   $$LocalOrdersTableTableManager get localOrders =>
       $$LocalOrdersTableTableManager(_db, _db.localOrders);
   $$LocalOrderItemsTableTableManager get localOrderItems =>
       $$LocalOrderItemsTableTableManager(_db, _db.localOrderItems);
   $$LocalStockMovementsTableTableManager get localStockMovements =>
       $$LocalStockMovementsTableTableManager(_db, _db.localStockMovements);
-  $$LocalPaymentsTableTableManager get localPayments =>
-      $$LocalPaymentsTableTableManager(_db, _db.localPayments);
   $$LocalInvoicesTableTableManager get localInvoices =>
       $$LocalInvoicesTableTableManager(_db, _db.localInvoices);
+  $$LocalShiftsTableTableManager get localShifts =>
+      $$LocalShiftsTableTableManager(_db, _db.localShifts);
+  $$LocalPaymentsTableTableManager get localPayments =>
+      $$LocalPaymentsTableTableManager(_db, _db.localPayments);
   $$LocalSettingsTableTableManager get localSettings =>
       $$LocalSettingsTableTableManager(_db, _db.localSettings);
   $$LocalPermissionsTableTableManager get localPermissions =>
@@ -26875,12 +33498,8 @@ class $AppDatabaseManager {
       $$SyncMetadataTableTableManager(_db, _db.syncMetadata);
   $$LocalStoresTableTableManager get localStores =>
       $$LocalStoresTableTableManager(_db, _db.localStores);
-  $$LocalUsersTableTableManager get localUsers =>
-      $$LocalUsersTableTableManager(_db, _db.localUsers);
   $$LocalSequencesTableTableManager get localSequences =>
       $$LocalSequencesTableTableManager(_db, _db.localSequences);
-  $$LocalSessionsTableTableManager get localSessions =>
-      $$LocalSessionsTableTableManager(_db, _db.localSessions);
   $$LocalDraftCartsTableTableManager get localDraftCarts =>
       $$LocalDraftCartsTableTableManager(_db, _db.localDraftCarts);
   $$LocalDraftCartLinesTableTableManager get localDraftCartLines =>
@@ -26889,8 +33508,6 @@ class $AppDatabaseManager {
       $$LocalReturnsTableTableManager(_db, _db.localReturns);
   $$LocalReturnItemsTableTableManager get localReturnItems =>
       $$LocalReturnItemsTableTableManager(_db, _db.localReturnItems);
-  $$LocalShiftsTableTableManager get localShifts =>
-      $$LocalShiftsTableTableManager(_db, _db.localShifts);
   $$LocalCashMovementsTableTableManager get localCashMovements =>
       $$LocalCashMovementsTableTableManager(_db, _db.localCashMovements);
 }

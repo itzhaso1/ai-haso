@@ -154,7 +154,7 @@ void main() {
     expect(open.first.strategy, 'keep_local_pending');
     final local = await db.select(db.localOrders).getSingle();
     expect(local.syncStatus, 'pending');
-    expect(local.totalAmount, 5);
+    expect(local.totalAmount, 500);
   });
 
   test('customer offline create enqueues sync_queue', () async {

@@ -41,9 +41,9 @@ class ShiftService {
             LocalShiftsCompanion.insert(
               localId: id,
               workspaceId: workspaceId,
-              userId: userId,
+              userId: Value(userId),
               openedAt: now,
-              openingCash: Value(openingCash),
+              openingCash: Value(Money.toCents(openingCash)),
             ),
           );
       await _db
@@ -54,7 +54,7 @@ class ShiftService {
               workspaceId: workspaceId,
               shiftLocalId: id,
               type: 'opening',
-              amount: openingCash,
+              amount: Money.toCents(openingCash),
               reason: const Value('افتتاح الصندوق'),
               createdByUserId: Value(userId),
               createdAt: now,
@@ -75,7 +75,7 @@ class ShiftService {
     var cashOut = 0;
     var expenses = 0;
     for (final row in rows) {
-      final cents = Money.toCents(row.amount);
+      final cents = row.amount;
       switch (row.type) {
         case 'opening':
           opening += cents;
@@ -124,7 +124,7 @@ class ShiftService {
             workspaceId: workspaceId,
             shiftLocalId: shiftId,
             type: type,
-            amount: amount,
+            amount: Money.toCents(amount),
             reason: Value(reason),
             createdByUserId: Value(userId),
             createdAt: DateTime.now(),
@@ -162,7 +162,7 @@ class ShiftService {
               workspaceId: workspaceId,
               shiftLocalId: shiftId,
               type: 'closing',
-              amount: actualCash,
+              amount: Money.toCents(actualCash),
               reason: const Value('إغلاق الصندوق'),
               createdByUserId: Value(shift.userId),
               createdAt: now,
@@ -174,10 +174,10 @@ class ShiftService {
         LocalShiftsCompanion(
           status: const Value('closed'),
           closedAt: Value(now),
-          closingCash: Value(actualCash),
-          expectedCash: Value(expected),
-          actualCash: Value(actualCash),
-          difference: Value(diff),
+          closingCash: Value(Money.toCents(actualCash)),
+          expectedCash: Value(Money.toCents(expected)),
+          actualCash: Value(Money.toCents(actualCash)),
+          difference: Value(Money.toCents(diff)),
         ),
       );
       return {

@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../local_db/app_database.dart';
+import '../pos/domain/pricing_service.dart';
 import '../local_db/local_ids.dart';
 import '../offline/offline_store.dart';
 import '../offline/pending_order.dart';
@@ -86,12 +87,14 @@ class OrdersRepository {
               clientReference: key,
               orderType: 'table',
               tableServerId: Value(tableId),
-              tableLocalId: Value(tableLocalId),
+              tableLocalId: Value(
+                await _db.existingFk('local_tables', 'local_id', tableLocalId),
+              ),
               notes: Value(notes),
-              subtotal: Value(totals.subtotal),
+              subtotal: Value(Money.toCents(totals.subtotal)),
               taxAmount: const Value(0),
               discountAmount: const Value(0),
-              totalAmount: Value(totals.subtotal),
+              totalAmount: Value(Money.toCents(totals.subtotal)),
               posStatus: const Value('new'),
               paymentStatus: const Value('unpaid'),
               syncStatus: const Value('pending'),
@@ -111,23 +114,28 @@ class OrdersRepository {
                   (item['pos_menu_item_id'] as num?)?.toInt(),
                 ),
                 productLocalId: Value(
-                  (item['pos_menu_item_id'] as num?) == null
-                      ? null
-                      : LocalIds.product(
-                          workspaceId,
-                          (item['pos_menu_item_id'] as num).toInt(),
-                        ),
+                  await _db.existingFk(
+                    'local_products',
+                    'local_id',
+                    (item['pos_menu_item_id'] as num?) == null
+                        ? null
+                        : LocalIds.product(
+                            workspaceId,
+                            (item['pos_menu_item_id'] as num).toInt(),
+                          ),
+                  ),
                 ),
                 name: '${item['name'] ?? item['product_name'] ?? 'صنف'}',
                 quantity: (item['quantity'] as num).toInt(),
-                unitPrice: (item['unit_price'] as num?)?.toDouble() ?? 0,
+                unitPrice: Money.toCents((item['unit_price'] as num?) ?? 0),
                 discountAmount: Value(
-                  (item['discount_amount'] as num?)?.toDouble() ?? 0,
+                  Money.toCents((item['discount_amount'] as num?) ?? 0),
                 ),
-                totalAmount:
-                    (item['total_amount'] as num?)?.toDouble() ??
-                    ((item['quantity'] as num).toDouble() *
-                        ((item['unit_price'] as num?)?.toDouble() ?? 0)),
+                totalAmount: Money.toCents(
+                  (item['total_amount'] as num?) ??
+                      ((item['quantity'] as num).toDouble() *
+                          ((item['unit_price'] as num?)?.toDouble() ?? 0)),
+                ),
                 updatedAt: now,
               ),
             );
@@ -204,10 +212,10 @@ class OrdersRepository {
               clientReference: key,
               orderType: 'takeaway',
               notes: Value(notes),
-              subtotal: Value(totals.subtotal),
+              subtotal: Value(Money.toCents(totals.subtotal)),
               taxAmount: const Value(0),
               discountAmount: const Value(0),
-              totalAmount: Value(totals.subtotal),
+              totalAmount: Value(Money.toCents(totals.subtotal)),
               posStatus: const Value('new'),
               paymentStatus: const Value('unpaid'),
               syncStatus: const Value('pending'),
@@ -227,23 +235,28 @@ class OrdersRepository {
                   (item['pos_menu_item_id'] as num?)?.toInt(),
                 ),
                 productLocalId: Value(
-                  (item['pos_menu_item_id'] as num?) == null
-                      ? null
-                      : LocalIds.product(
-                          workspaceId,
-                          (item['pos_menu_item_id'] as num).toInt(),
-                        ),
+                  await _db.existingFk(
+                    'local_products',
+                    'local_id',
+                    (item['pos_menu_item_id'] as num?) == null
+                        ? null
+                        : LocalIds.product(
+                            workspaceId,
+                            (item['pos_menu_item_id'] as num).toInt(),
+                          ),
+                  ),
                 ),
                 name: '${item['name'] ?? item['product_name'] ?? 'صنف'}',
                 quantity: (item['quantity'] as num).toInt(),
-                unitPrice: (item['unit_price'] as num?)?.toDouble() ?? 0,
+                unitPrice: Money.toCents((item['unit_price'] as num?) ?? 0),
                 discountAmount: Value(
-                  (item['discount_amount'] as num?)?.toDouble() ?? 0,
+                  Money.toCents((item['discount_amount'] as num?) ?? 0),
                 ),
-                totalAmount:
-                    (item['total_amount'] as num?)?.toDouble() ??
-                    ((item['quantity'] as num).toDouble() *
-                        ((item['unit_price'] as num?)?.toDouble() ?? 0)),
+                totalAmount: Money.toCents(
+                  (item['total_amount'] as num?) ??
+                      ((item['quantity'] as num).toDouble() *
+                          ((item['unit_price'] as num?)?.toDouble() ?? 0)),
+                ),
                 updatedAt: now,
               ),
             );
@@ -303,8 +316,8 @@ class OrdersRepository {
           .write(
             LocalOrdersCompanion(
               notes: Value(notes),
-              subtotal: Value(totals.subtotal),
-              totalAmount: Value(totals.subtotal),
+              subtotal: Value(Money.toCents(totals.subtotal)),
+              totalAmount: Value(Money.toCents(totals.subtotal)),
               syncStatus: const Value('pending'),
               lastError: const Value(null),
               updatedAt: Value(now),
@@ -328,23 +341,28 @@ class OrdersRepository {
                   (item['pos_menu_item_id'] as num?)?.toInt(),
                 ),
                 productLocalId: Value(
-                  (item['pos_menu_item_id'] as num?) == null
-                      ? null
-                      : LocalIds.product(
-                          workspaceId,
-                          (item['pos_menu_item_id'] as num).toInt(),
-                        ),
+                  await _db.existingFk(
+                    'local_products',
+                    'local_id',
+                    (item['pos_menu_item_id'] as num?) == null
+                        ? null
+                        : LocalIds.product(
+                            workspaceId,
+                            (item['pos_menu_item_id'] as num).toInt(),
+                          ),
+                  ),
                 ),
                 name: '${item['name'] ?? item['product_name'] ?? 'صنف'}',
                 quantity: (item['quantity'] as num).toInt(),
-                unitPrice: (item['unit_price'] as num?)?.toDouble() ?? 0,
+                unitPrice: Money.toCents((item['unit_price'] as num?) ?? 0),
                 discountAmount: Value(
-                  (item['discount_amount'] as num?)?.toDouble() ?? 0,
+                  Money.toCents((item['discount_amount'] as num?) ?? 0),
                 ),
-                totalAmount:
-                    (item['total_amount'] as num?)?.toDouble() ??
-                    ((item['quantity'] as num).toDouble() *
-                        ((item['unit_price'] as num?)?.toDouble() ?? 0)),
+                totalAmount: Money.toCents(
+                  (item['total_amount'] as num?) ??
+                      ((item['quantity'] as num).toDouble() *
+                          ((item['unit_price'] as num?)?.toDouble() ?? 0)),
+                ),
                 updatedAt: now,
               ),
             );
@@ -680,10 +698,10 @@ class OrdersRepository {
     final invoicePayload = {
       'local_id': invoiceLocalId,
       'invoice_number': invoiceNumber,
-      'total_amount': order.totalAmount,
-      'subtotal': order.subtotal,
-      'tax_amount': order.taxAmount,
-      'discount_amount': order.discountAmount,
+      'total_amount': Money.fromCents(order.totalAmount),
+      'subtotal': Money.fromCents(order.subtotal),
+      'tax_amount': Money.fromCents(order.taxAmount),
+      'discount_amount': Money.fromCents(order.discountAmount),
       'payment_method': method,
       'closed_at': now.toUtc().toIso8601String(),
       'order_local_id': orderLocalId,
@@ -693,8 +711,8 @@ class OrdersRepository {
           {
             'item_name': item.name,
             'quantity': item.quantity,
-            'unit_price': item.unitPrice,
-            'total_amount': item.totalAmount,
+            'unit_price': Money.fromCents(item.unitPrice),
+            'total_amount': Money.fromCents(item.totalAmount),
           },
       ],
       'sync_status': 'pending',
@@ -856,10 +874,10 @@ class OrdersRepository {
       },
       'last_error': order.lastError,
       'notes': order.notes,
-      'discount_amount': order.discountAmount,
-      'tax_amount': order.taxAmount,
-      'total_amount': order.totalAmount,
-      'subtotal': order.subtotal,
+      'discount_amount': Money.fromCents(order.discountAmount),
+      'tax_amount': Money.fromCents(order.taxAmount),
+      'total_amount': Money.fromCents(order.totalAmount),
+      'subtotal': Money.fromCents(order.subtotal),
       'client_reference': order.clientReference,
       'dining_table_id': order.tableServerId,
       'workspace_id': order.workspaceId,
@@ -872,9 +890,9 @@ class OrdersRepository {
             'pos_menu_item_id': item.productServerId,
             'product_name': item.name,
             'quantity': item.quantity,
-            'unit_price': item.unitPrice,
-            'discount_amount': item.discountAmount,
-            'total_amount': item.totalAmount,
+            'unit_price': Money.fromCents(item.unitPrice),
+            'discount_amount': Money.fromCents(item.discountAmount),
+            'total_amount': Money.fromCents(item.totalAmount),
           },
       ],
     };
@@ -927,7 +945,13 @@ class OrdersRepository {
               localId: _newItemId(),
               workspaceId: workspaceId,
               deviceId: deviceId,
-              productLocalId: Value(productLocalId),
+              productLocalId: Value(
+                await _db.existingFk(
+                  'local_products',
+                  'local_id',
+                  productLocalId,
+                ),
+              ),
               productServerId: Value(productServerId),
               catalogProductId: Value(catalogProductId),
               kind: 'sale',

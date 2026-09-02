@@ -1,9 +1,9 @@
 import '../pos_errors.dart';
 
-/// Single money policy: integer minor units (cents) inside the engine.
+/// Single money policy: integer minor units (cents) in domain and SQLite.
 ///
-/// Persistence still uses REAL columns, but every write is derived from cents
-/// so `0.1 + 0.2` cannot drift away from `0.3`.
+/// `10.50` persists as `1050`. UI/API boundaries convert with [toCents] /
+/// [fromCents]. Never add `double` prices inside business logic.
 class Money {
   const Money._();
 

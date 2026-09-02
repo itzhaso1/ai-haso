@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../local_db/app_database.dart';
+import '../domain/pricing_service.dart';
 import '../pos_permissions.dart';
 
 class CatalogAdminService {
@@ -61,8 +62,8 @@ class CatalogAdminService {
             name: name.trim(),
             sku: Value(sku),
             barcode: Value(barcode),
-            price: Value(price),
-            cost: Value(cost),
+            price: Value(Money.toCents(price)),
+            cost: Value(Money.toCents(cost)),
             taxRate: Value(taxRate),
             stock: Value(stock),
             trackStock: Value(trackStock || stock != null),
@@ -94,8 +95,12 @@ class CatalogAdminService {
         .write(
           LocalProductsCompanion(
             name: name == null ? const Value.absent() : Value(name),
-            price: price == null ? const Value.absent() : Value(price),
-            cost: cost == null ? const Value.absent() : Value(cost),
+            price: price == null
+                ? const Value.absent()
+                : Value(Money.toCents(price)),
+            cost: cost == null
+                ? const Value.absent()
+                : Value(Money.toCents(cost)),
             sku: sku == null ? const Value.absent() : Value(sku),
             barcode: barcode == null ? const Value.absent() : Value(barcode),
             stock: stock == null ? const Value.absent() : Value(stock),
@@ -131,12 +136,12 @@ class CatalogAdminService {
       'id': row.localId,
       'local_id': row.localId,
       'name': row.name,
-      'price': row.price,
+      'price': Money.fromCents(row.price),
       'barcode': row.barcode,
       'sku': row.sku,
       'stock': row.stock,
       'tax_rate': row.taxRate,
-      'cost': row.cost,
+      'cost': Money.fromCents(row.cost),
     };
   }
 

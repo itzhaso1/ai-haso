@@ -44,7 +44,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -178,8 +178,306 @@ class AppDatabase extends _$AppDatabase {
         await remapLegacyStandaloneWorkspaceIfNeeded();
         await _createPerfIndexes();
       }
+      if (from < 7) {
+        await migrateToIntegerMoneyAndForeignKeys(m);
+        await _createPerfIndexes();
+      }
     },
   );
+
+  static const _moneyColumns = {
+    'local_products': {'price', 'cost'},
+    'local_orders': {
+      'subtotal',
+      'tax_amount',
+      'discount_amount',
+      'total_amount',
+    },
+    'local_order_items': {
+      'unit_price',
+      'cost_snapshot',
+      'discount_amount',
+      'tax_amount',
+      'total_amount',
+    },
+    'local_payments': {'amount', 'tendered', 'change_due'},
+    'local_invoices': {
+      'subtotal',
+      'discount_amount',
+      'tax_amount',
+      'total_amount',
+    },
+    'local_sessions': {'discount_amount'},
+    'local_draft_carts': {'discount_amount'},
+    'local_draft_cart_lines': {'unit_price', 'cost', 'discount_amount'},
+    'local_returns': {'refund_amount'},
+    'local_return_items': {'refund_amount'},
+    'local_shifts': {
+      'opening_cash',
+      'closing_cash',
+      'expected_cash',
+      'actual_cash',
+      'difference',
+    },
+    'local_cash_movements': {'amount'},
+  };
+
+  /// v7: convert REAL major-units to INTEGER cents and rebuild FK tables.
+  Future<void> migrateToIntegerMoneyAndForeignKeys(Migrator m) async {
+    await customStatement('PRAGMA foreign_keys = OFF');
+    await _deleteOrphanChildren();
+    final tables = <TableInfo>[
+      localProducts,
+      localSequences,
+      localSessions,
+      localShifts,
+      localOrders,
+      localOrderItems,
+      localInvoices,
+      localPayments,
+      localReturns,
+      localReturnItems,
+      localStockMovements,
+      localCashMovements,
+      localDraftCarts,
+      localDraftCartLines,
+    ];
+    for (final table in tables) {
+      await _rebuildTableWithCents(m, table);
+    }
+    await _nullDanglingForeignKeys();
+    await customStatement('PRAGMA foreign_keys = ON');
+  }
+
+  Future<void> _deleteOrphanChildren() async {
+    await customStatement(
+      'DELETE FROM local_order_items WHERE order_local_id NOT IN '
+      '(SELECT local_id FROM local_orders)',
+    );
+    await customStatement(
+      'UPDATE local_order_items SET product_local_id = NULL '
+      'WHERE product_local_id IS NOT NULL AND product_local_id NOT IN '
+      '(SELECT local_id FROM local_products)',
+    );
+    await customStatement(
+      'UPDATE local_orders SET table_local_id = NULL '
+      'WHERE table_local_id IS NOT NULL AND table_local_id NOT IN '
+      '(SELECT local_id FROM local_tables)',
+    );
+    await customStatement(
+      'UPDATE local_orders SET session_local_id = NULL '
+      'WHERE session_local_id IS NOT NULL AND session_local_id NOT IN '
+      '(SELECT local_id FROM local_sessions)',
+    );
+    await customStatement(
+      'UPDATE local_orders SET customer_local_id = NULL '
+      'WHERE customer_local_id IS NOT NULL AND customer_local_id NOT IN '
+      '(SELECT local_id FROM local_customers)',
+    );
+    await customStatement(
+      'UPDATE local_orders SET created_by_user_id = NULL '
+      'WHERE created_by_user_id IS NOT NULL AND created_by_user_id NOT IN '
+      '(SELECT local_id FROM local_users)',
+    );
+    await customStatement(
+      'UPDATE local_invoices SET order_local_id = NULL '
+      'WHERE order_local_id IS NOT NULL AND order_local_id NOT IN '
+      '(SELECT local_id FROM local_orders)',
+    );
+    await customStatement(
+      'UPDATE local_invoices SET created_by_user_id = NULL '
+      'WHERE created_by_user_id IS NOT NULL AND created_by_user_id NOT IN '
+      '(SELECT local_id FROM local_users)',
+    );
+    await customStatement(
+      'UPDATE local_payments SET order_local_id = NULL '
+      'WHERE order_local_id IS NOT NULL AND order_local_id NOT IN '
+      '(SELECT local_id FROM local_orders)',
+    );
+    await customStatement(
+      'UPDATE local_payments SET invoice_local_id = NULL '
+      'WHERE invoice_local_id IS NOT NULL AND invoice_local_id NOT IN '
+      '(SELECT local_id FROM local_invoices)',
+    );
+    await customStatement(
+      'UPDATE local_payments SET shift_local_id = NULL '
+      'WHERE shift_local_id IS NOT NULL AND shift_local_id NOT IN '
+      '(SELECT local_id FROM local_shifts)',
+    );
+    await customStatement(
+      'DELETE FROM local_return_items WHERE return_local_id NOT IN '
+      '(SELECT local_id FROM local_returns)',
+    );
+    await customStatement(
+      'UPDATE local_returns SET invoice_local_id = NULL '
+      'WHERE invoice_local_id IS NOT NULL AND invoice_local_id NOT IN '
+      '(SELECT local_id FROM local_invoices)',
+    );
+    await customStatement(
+      'UPDATE local_returns SET order_local_id = NULL '
+      'WHERE order_local_id IS NOT NULL AND order_local_id NOT IN '
+      '(SELECT local_id FROM local_orders)',
+    );
+    await customStatement(
+      'UPDATE local_returns SET shift_local_id = NULL '
+      'WHERE shift_local_id IS NOT NULL AND shift_local_id NOT IN '
+      '(SELECT local_id FROM local_shifts)',
+    );
+    await customStatement(
+      'UPDATE local_returns SET created_by_user_id = NULL '
+      'WHERE created_by_user_id IS NOT NULL AND created_by_user_id NOT IN '
+      '(SELECT local_id FROM local_users)',
+    );
+    await customStatement(
+      'UPDATE local_return_items SET order_item_local_id = NULL '
+      'WHERE order_item_local_id IS NOT NULL AND order_item_local_id NOT IN '
+      '(SELECT local_id FROM local_order_items)',
+    );
+    await customStatement(
+      'UPDATE local_return_items SET product_local_id = NULL '
+      'WHERE product_local_id IS NOT NULL AND product_local_id NOT IN '
+      '(SELECT local_id FROM local_products)',
+    );
+    await customStatement(
+      'UPDATE local_stock_movements SET product_local_id = NULL '
+      'WHERE product_local_id IS NOT NULL AND product_local_id NOT IN '
+      '(SELECT local_id FROM local_products)',
+    );
+    await customStatement(
+      'UPDATE local_cash_movements SET created_by_user_id = NULL '
+      'WHERE created_by_user_id IS NOT NULL AND created_by_user_id NOT IN '
+      '(SELECT local_id FROM local_users)',
+    );
+    await customStatement(
+      'DELETE FROM local_cash_movements WHERE shift_local_id NOT IN '
+      '(SELECT local_id FROM local_shifts)',
+    );
+    await customStatement(
+      'DELETE FROM local_sequences WHERE store_id NOT IN '
+      '(SELECT local_id FROM local_stores)',
+    );
+    await customStatement(
+      'DELETE FROM local_sessions WHERE table_local_id NOT IN '
+      '(SELECT local_id FROM local_tables)',
+    );
+    await customStatement(
+      'DELETE FROM local_draft_cart_lines WHERE cart_local_id NOT IN '
+      '(SELECT local_id FROM local_draft_carts)',
+    );
+    await customStatement(
+      'DELETE FROM local_draft_cart_lines WHERE product_local_id NOT IN '
+      '(SELECT local_id FROM local_products)',
+    );
+    await customStatement(
+      'UPDATE local_draft_carts SET table_local_id = NULL '
+      'WHERE table_local_id IS NOT NULL AND table_local_id NOT IN '
+      '(SELECT local_id FROM local_tables)',
+    );
+    await customStatement(
+      'UPDATE local_draft_carts SET customer_local_id = NULL '
+      'WHERE customer_local_id IS NOT NULL AND customer_local_id NOT IN '
+      '(SELECT local_id FROM local_customers)',
+    );
+  }
+
+  Future<void> _nullDanglingForeignKeys() async {
+    await customStatement(
+      'UPDATE local_products SET category_local_id = NULL '
+      'WHERE category_local_id IS NOT NULL AND category_local_id NOT IN '
+      '(SELECT local_id FROM local_categories)',
+    );
+    await customStatement(
+      'UPDATE local_shifts SET user_id = NULL '
+      'WHERE user_id IS NOT NULL AND user_id NOT IN '
+      '(SELECT local_id FROM local_users)',
+    );
+    await customStatement(
+      'UPDATE local_order_items SET product_local_id = NULL '
+      'WHERE product_local_id IS NOT NULL AND product_local_id NOT IN '
+      '(SELECT local_id FROM local_products)',
+    );
+    await customStatement(
+      'UPDATE local_orders SET table_local_id = NULL '
+      'WHERE table_local_id IS NOT NULL AND table_local_id NOT IN '
+      '(SELECT local_id FROM local_tables)',
+    );
+    await customStatement(
+      'UPDATE local_orders SET session_local_id = NULL '
+      'WHERE session_local_id IS NOT NULL AND session_local_id NOT IN '
+      '(SELECT local_id FROM local_sessions)',
+    );
+    await customStatement(
+      'UPDATE local_orders SET customer_local_id = NULL '
+      'WHERE customer_local_id IS NOT NULL AND customer_local_id NOT IN '
+      '(SELECT local_id FROM local_customers)',
+    );
+    await customStatement(
+      'UPDATE local_orders SET created_by_user_id = NULL '
+      'WHERE created_by_user_id IS NOT NULL AND created_by_user_id NOT IN '
+      '(SELECT local_id FROM local_users)',
+    );
+    await customStatement(
+      'UPDATE local_invoices SET created_by_user_id = NULL '
+      'WHERE created_by_user_id IS NOT NULL AND created_by_user_id NOT IN '
+      '(SELECT local_id FROM local_users)',
+    );
+    await customStatement(
+      'UPDATE local_returns SET created_by_user_id = NULL '
+      'WHERE created_by_user_id IS NOT NULL AND created_by_user_id NOT IN '
+      '(SELECT local_id FROM local_users)',
+    );
+    await customStatement(
+      'UPDATE local_cash_movements SET created_by_user_id = NULL '
+      'WHERE created_by_user_id IS NOT NULL AND created_by_user_id NOT IN '
+      '(SELECT local_id FROM local_users)',
+    );
+    await customStatement(
+      'UPDATE local_sessions SET opened_by_user_id = NULL '
+      'WHERE opened_by_user_id IS NOT NULL AND opened_by_user_id NOT IN '
+      '(SELECT local_id FROM local_users)',
+    );
+    await customStatement(
+      'UPDATE local_sessions SET closed_by_user_id = NULL '
+      'WHERE closed_by_user_id IS NOT NULL AND closed_by_user_id NOT IN '
+      '(SELECT local_id FROM local_users)',
+    );
+  }
+
+  Future<void> _rebuildTableWithCents(Migrator m, TableInfo table) async {
+    final name = table.actualTableName;
+    final exists = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      variables: [Variable.withString(name)],
+    ).get();
+    if (exists.isEmpty) {
+      await m.createTable(table);
+      return;
+    }
+    final oldName = '${name}__v6';
+    await customStatement('ALTER TABLE $name RENAME TO $oldName');
+    await m.createTable(table);
+    final oldCols = await customSelect('PRAGMA table_info($oldName)').get();
+    final newCols = await customSelect('PRAGMA table_info($name)').get();
+    final oldNames = {for (final c in oldCols) '${c.data['name']}'};
+    final newNames = [for (final c in newCols) '${c.data['name']}'];
+    final shared = [for (final n in newNames) if (oldNames.contains(n)) n];
+    if (shared.isEmpty) {
+      await customStatement('DROP TABLE $oldName');
+      return;
+    }
+    final money = _moneyColumns[name] ?? const <String>{};
+    final selects = [
+      for (final n in shared)
+        money.contains(n)
+            ? 'CAST(ROUND(COALESCE($n, 0) * 100.0) AS INTEGER)'
+            : n,
+    ];
+    await customStatement(
+      'INSERT INTO $name (${shared.join(',')}) '
+      'SELECT ${selects.join(',')} FROM $oldName',
+    );
+    await customStatement('DROP TABLE $oldName');
+  }
 
   /// Remap pre-audit standalone rows from Laravel-looking workspace `1`
   /// to the reserved standalone scope. Never remaps a connected / synced store.
@@ -368,4 +666,20 @@ class AppDatabase extends _$AppDatabase {
 
   /// File-backed DB for restart / durability tests.
   static AppDatabase file(File file) => AppDatabase(NativeDatabase(file));
+
+  /// Returns [id] only when the parent row exists. Connected-mode writers
+  /// mint synthetic ids before the parent is pulled; those become NULL so
+  /// SQLite foreign keys stay valid. Server ids remain the correlation key.
+  Future<String?> existingFk(
+    String tableName,
+    String column,
+    String? id,
+  ) async {
+    if (id == null || id.isEmpty) return null;
+    final rows = await customSelect(
+      'SELECT 1 FROM $tableName WHERE $column = ? LIMIT 1',
+      variables: [Variable.withString(id)],
+    ).get();
+    return rows.isEmpty ? null : id;
+  }
 }

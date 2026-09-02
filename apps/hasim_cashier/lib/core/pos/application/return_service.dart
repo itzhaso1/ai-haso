@@ -3,7 +3,6 @@ import 'package:uuid/uuid.dart';
 
 import '../../local_db/app_database.dart';
 import '../../local_db/workspace_scope.dart';
-import '../domain/pricing_service.dart';
 import '../pos_errors.dart';
 import '../pos_permissions.dart';
 import 'stock_engine.dart';
@@ -121,7 +120,7 @@ class ReturnService {
         }
         final unitCents = item.quantity == 0
             ? 0
-            : Money.toCents(item.totalAmount) ~/ item.quantity;
+            : item.totalAmount ~/ item.quantity;
         final amountCents = unitCents * line.quantity;
         refundCents += amountCents;
         await _db
@@ -135,7 +134,7 @@ class ReturnService {
                 productLocalId: Value(item.productLocalId),
                 productNameSnapshot: item.name,
                 quantity: line.quantity,
-                refundAmount: Money.fromCents(amountCents),
+                refundAmount: amountCents,
               ),
             );
         if (item.productLocalId != null) {
@@ -157,7 +156,7 @@ class ReturnService {
             ..where((t) => t.localId.equals(returnId)))
           .write(
             LocalReturnsCompanion(
-              refundAmount: Value(Money.fromCents(refundCents)),
+              refundAmount: Value(refundCents),
             ),
           );
 
@@ -178,7 +177,7 @@ class ReturnService {
                 workspaceId: workspaceId,
                 shiftLocalId: shiftLocalId,
                 type: 'refund',
-                amount: Money.fromCents(refundCents),
+                amount: refundCents,
                 reason: Value(reason ?? 'مرتجع'),
                 referenceId: Value(returnId),
                 createdByUserId: Value(createdByUserId),

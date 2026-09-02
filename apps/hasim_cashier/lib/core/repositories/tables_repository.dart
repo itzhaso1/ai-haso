@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../api/cashier_api.dart';
 import '../local_db/app_database.dart';
+import '../pos/domain/pricing_service.dart';
 import '../local_db/local_ids.dart';
 import 'sync_queue_repository.dart';
 
@@ -344,7 +345,7 @@ class TablesRepository {
               workspaceId: workspaceId,
               deviceId: deviceId.trim(),
               invoiceNumber: Value(invoiceNumber),
-              totalAmount: Value(total),
+              totalAmount: Value(Money.toCents(total)),
               syncStatus: const Value('pending'),
               payloadJson: Value(jsonEncode(invoicePayload)),
               createdAt: now,
@@ -357,7 +358,7 @@ class TablesRepository {
               deviceId: deviceId.trim(),
               invoiceLocalId: Value(invoiceLocalId),
               method: method,
-              amount: total,
+              amount: Money.toCents(total),
               syncStatus: const Value('pending'),
               clientReference: closeClientId,
               createdAt: now,
@@ -797,7 +798,7 @@ class TablesRepository {
     final now = DateTime.now();
 
     await _db.transaction(() async {
-      var newSubtotal = 0.0;
+      var newSubtotal = 0;
       for (final move in moveItems) {
         final itemLocalId = '${move['item_local_id'] ?? ''}';
         final qty = (move['quantity'] as num?)?.toInt() ?? 0;

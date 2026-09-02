@@ -1,8 +1,8 @@
 import 'package:drift/drift.dart';
 
 /// Local POS tables — Drift is the operational source of truth.
+/// Money columns are INTEGER minor units (cents). Rates stay REAL.
 /// `serverId` is nullable so Standalone works without Laravel.
-/// Connected Mode may fill serverId later; localId never changes.
 
 class LocalDevices extends Table {
   TextColumn get deviceId => text()();
@@ -38,18 +38,22 @@ class LocalProducts extends Table {
   TextColumn get localId => text()();
   IntColumn get workspaceId => integer()();
   IntColumn get serverId => integer().nullable()();
-  TextColumn get categoryLocalId => text().nullable()();
+  TextColumn get categoryLocalId => text().nullable().references(
+    LocalCategories,
+    #localId,
+    onDelete: KeyAction.setNull,
+  )();
   IntColumn get categoryServerId => integer().nullable()();
   TextColumn get name => text()();
   TextColumn get sku => text().nullable()();
   TextColumn get barcode => text().nullable()();
   TextColumn get itemType => text().nullable()();
-  RealColumn get price => real().withDefault(const Constant(0))();
+  IntColumn get price => integer().withDefault(const Constant(0))();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   TextColumn get payloadJson => text().withDefault(const Constant('{}'))();
   IntColumn get stock => integer().nullable()();
-  RealColumn get cost => real().withDefault(const Constant(0))();
+  IntColumn get cost => integer().withDefault(const Constant(0))();
   RealColumn get taxRate => real().withDefault(const Constant(0))();
   BoolColumn get trackStock => boolean().withDefault(const Constant(false))();
   TextColumn get imagePath => text().nullable()();
@@ -105,16 +109,32 @@ class LocalOrders extends Table {
   TextColumn get orderNumber => text().nullable()();
   TextColumn get orderType => text()();
   IntColumn get tableServerId => integer().nullable()();
-  TextColumn get tableLocalId => text().nullable()();
-  TextColumn get sessionLocalId => text().nullable()();
-  TextColumn get customerLocalId => text().nullable()();
-  TextColumn get createdByUserId => text().nullable()();
+  TextColumn get tableLocalId => text().nullable().references(
+    LocalTables,
+    #localId,
+    onDelete: KeyAction.setNull,
+  )();
+  TextColumn get sessionLocalId => text().nullable().references(
+    LocalSessions,
+    #localId,
+    onDelete: KeyAction.setNull,
+  )();
+  TextColumn get customerLocalId => text().nullable().references(
+    LocalCustomers,
+    #localId,
+    onDelete: KeyAction.setNull,
+  )();
+  TextColumn get createdByUserId => text().nullable().references(
+    LocalUsers,
+    #localId,
+    onDelete: KeyAction.setNull,
+  )();
   TextColumn get notes => text().nullable()();
-  RealColumn get subtotal => real().withDefault(const Constant(0))();
-  RealColumn get taxAmount => real().withDefault(const Constant(0))();
-  RealColumn get discountAmount => real().withDefault(const Constant(0))();
+  IntColumn get subtotal => integer().withDefault(const Constant(0))();
+  IntColumn get taxAmount => integer().withDefault(const Constant(0))();
+  IntColumn get discountAmount => integer().withDefault(const Constant(0))();
   RealColumn get discountPercent => real().withDefault(const Constant(0))();
-  RealColumn get totalAmount => real().withDefault(const Constant(0))();
+  IntColumn get totalAmount => integer().withDefault(const Constant(0))();
   TextColumn get posStatus => text().withDefault(const Constant('new'))();
   TextColumn get paymentStatus =>
       text().withDefault(const Constant('unpaid'))();
@@ -135,20 +155,28 @@ class LocalOrders extends Table {
 class LocalOrderItems extends Table {
   TextColumn get localId => text()();
   IntColumn get workspaceId => integer()();
-  TextColumn get orderLocalId => text()();
+  TextColumn get orderLocalId => text().references(
+    LocalOrders,
+    #localId,
+    onDelete: KeyAction.cascade,
+  )();
   IntColumn get serverId => integer().nullable()();
   IntColumn get productServerId => integer().nullable()();
-  TextColumn get productLocalId => text().nullable()();
+  TextColumn get productLocalId => text().nullable().references(
+    LocalProducts,
+    #localId,
+    onDelete: KeyAction.setNull,
+  )();
   TextColumn get name => text()();
   TextColumn get skuSnapshot => text().nullable()();
   TextColumn get barcodeSnapshot => text().nullable()();
   IntColumn get quantity => integer()();
-  RealColumn get unitPrice => real()();
-  RealColumn get costSnapshot => real().withDefault(const Constant(0))();
-  RealColumn get discountAmount => real().withDefault(const Constant(0))();
+  IntColumn get unitPrice => integer()();
+  IntColumn get costSnapshot => integer().withDefault(const Constant(0))();
+  IntColumn get discountAmount => integer().withDefault(const Constant(0))();
   RealColumn get taxRate => real().withDefault(const Constant(0))();
-  RealColumn get taxAmount => real().withDefault(const Constant(0))();
-  RealColumn get totalAmount => real()();
+  IntColumn get taxAmount => integer().withDefault(const Constant(0))();
+  IntColumn get totalAmount => integer()();
   TextColumn get notes => text().nullable()();
   BoolColumn get isRemoved => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().nullable()();
@@ -162,7 +190,11 @@ class LocalStockMovements extends Table {
   TextColumn get localId => text()();
   IntColumn get workspaceId => integer()();
   TextColumn get deviceId => text()();
-  TextColumn get productLocalId => text().nullable()();
+  TextColumn get productLocalId => text().nullable().references(
+    LocalProducts,
+    #localId,
+    onDelete: KeyAction.setNull,
+  )();
   IntColumn get productServerId => integer().nullable()();
   IntColumn get catalogProductId => integer().nullable()();
   TextColumn get kind => text()();
@@ -186,13 +218,25 @@ class LocalPayments extends Table {
   IntColumn get workspaceId => integer()();
   TextColumn get deviceId => text()();
   IntColumn get serverId => integer().nullable()();
-  TextColumn get orderLocalId => text().nullable()();
-  TextColumn get invoiceLocalId => text().nullable()();
+  TextColumn get orderLocalId => text().nullable().references(
+    LocalOrders,
+    #localId,
+    onDelete: KeyAction.restrict,
+  )();
+  TextColumn get invoiceLocalId => text().nullable().references(
+    LocalInvoices,
+    #localId,
+    onDelete: KeyAction.restrict,
+  )();
   TextColumn get method => text()();
-  RealColumn get amount => real()();
-  RealColumn get tendered => real().nullable()();
-  RealColumn get changeDue => real().withDefault(const Constant(0))();
-  TextColumn get shiftLocalId => text().nullable()();
+  IntColumn get amount => integer()();
+  IntColumn get tendered => integer().nullable()();
+  IntColumn get changeDue => integer().withDefault(const Constant(0))();
+  TextColumn get shiftLocalId => text().nullable().references(
+    LocalShifts,
+    #localId,
+    onDelete: KeyAction.restrict,
+  )();
   TextColumn get syncStatus => text().withDefault(const Constant('pending'))();
   TextColumn get clientReference => text()();
   DateTimeColumn get createdAt => dateTime()();
@@ -209,13 +253,21 @@ class LocalInvoices extends Table {
   TextColumn get invoiceNumber => text().nullable()();
   TextColumn get localInvoiceNumber => text().nullable()();
   TextColumn get serverInvoiceNumber => text().nullable()();
-  TextColumn get orderLocalId => text().nullable()();
+  TextColumn get orderLocalId => text().nullable().references(
+    LocalOrders,
+    #localId,
+    onDelete: KeyAction.restrict,
+  )();
   TextColumn get status => text().withDefault(const Constant('closed'))();
-  RealColumn get subtotal => real().withDefault(const Constant(0))();
-  RealColumn get discountAmount => real().withDefault(const Constant(0))();
-  RealColumn get taxAmount => real().withDefault(const Constant(0))();
-  RealColumn get totalAmount => real().withDefault(const Constant(0))();
-  TextColumn get createdByUserId => text().nullable()();
+  IntColumn get subtotal => integer().withDefault(const Constant(0))();
+  IntColumn get discountAmount => integer().withDefault(const Constant(0))();
+  IntColumn get taxAmount => integer().withDefault(const Constant(0))();
+  IntColumn get totalAmount => integer().withDefault(const Constant(0))();
+  TextColumn get createdByUserId => text().nullable().references(
+    LocalUsers,
+    #localId,
+    onDelete: KeyAction.setNull,
+  )();
   TextColumn get syncStatus => text().withDefault(const Constant('pending'))();
   TextColumn get payloadJson => text().withDefault(const Constant('{}'))();
   DateTimeColumn get createdAt => dateTime()();
@@ -325,7 +377,8 @@ class LocalUsers extends Table {
 }
 
 class LocalSequences extends Table {
-  TextColumn get storeId => text()();
+  TextColumn get storeId =>
+      text().references(LocalStores, #localId, onDelete: KeyAction.restrict)();
   TextColumn get kind => text()();
   IntColumn get nextValue => integer()();
   DateTimeColumn get updatedAt => dateTime()();
@@ -337,14 +390,23 @@ class LocalSequences extends Table {
 class LocalSessions extends Table {
   TextColumn get localId => text()();
   IntColumn get workspaceId => integer()();
-  TextColumn get tableLocalId => text()();
+  TextColumn get tableLocalId =>
+      text().references(LocalTables, #localId, onDelete: KeyAction.restrict)();
   TextColumn get status => text().withDefault(const Constant('open'))();
   DateTimeColumn get openedAt => dateTime()();
   DateTimeColumn get closedAt => dateTime().nullable()();
-  TextColumn get openedByUserId => text().nullable()();
-  TextColumn get closedByUserId => text().nullable()();
+  TextColumn get openedByUserId => text().nullable().references(
+    LocalUsers,
+    #localId,
+    onDelete: KeyAction.setNull,
+  )();
+  TextColumn get closedByUserId => text().nullable().references(
+    LocalUsers,
+    #localId,
+    onDelete: KeyAction.setNull,
+  )();
   TextColumn get notes => text().nullable()();
-  RealColumn get discountAmount => real().withDefault(const Constant(0))();
+  IntColumn get discountAmount => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
 
@@ -356,11 +418,19 @@ class LocalDraftCarts extends Table {
   TextColumn get localId => text()();
   IntColumn get workspaceId => integer()();
   TextColumn get channel => text()();
-  TextColumn get tableLocalId => text().nullable()();
+  TextColumn get tableLocalId => text().nullable().references(
+    LocalTables,
+    #localId,
+    onDelete: KeyAction.setNull,
+  )();
   IntColumn get tableServerId => integer().nullable()();
-  TextColumn get customerLocalId => text().nullable()();
+  TextColumn get customerLocalId => text().nullable().references(
+    LocalCustomers,
+    #localId,
+    onDelete: KeyAction.setNull,
+  )();
   TextColumn get notes => text().nullable()();
-  RealColumn get discountAmount => real().withDefault(const Constant(0))();
+  IntColumn get discountAmount => integer().withDefault(const Constant(0))();
   RealColumn get discountPercent => real().withDefault(const Constant(0))();
   RealColumn get taxRate => real().withDefault(const Constant(0))();
   DateTimeColumn get updatedAt => dateTime()();
@@ -371,17 +441,25 @@ class LocalDraftCarts extends Table {
 
 class LocalDraftCartLines extends Table {
   TextColumn get localId => text()();
-  TextColumn get cartLocalId => text()();
+  TextColumn get cartLocalId => text().references(
+    LocalDraftCarts,
+    #localId,
+    onDelete: KeyAction.cascade,
+  )();
   IntColumn get workspaceId => integer()();
-  TextColumn get productLocalId => text()();
+  TextColumn get productLocalId => text().references(
+    LocalProducts,
+    #localId,
+    onDelete: KeyAction.restrict,
+  )();
   IntColumn get productServerId => integer().nullable()();
   TextColumn get name => text()();
   TextColumn get sku => text().nullable()();
   TextColumn get barcode => text().nullable()();
   IntColumn get quantity => integer()();
-  RealColumn get unitPrice => real()();
-  RealColumn get cost => real().withDefault(const Constant(0))();
-  RealColumn get discountAmount => real().withDefault(const Constant(0))();
+  IntColumn get unitPrice => integer()();
+  IntColumn get cost => integer().withDefault(const Constant(0))();
+  IntColumn get discountAmount => integer().withDefault(const Constant(0))();
   RealColumn get taxRate => real().withDefault(const Constant(0))();
   DateTimeColumn get updatedAt => dateTime()();
 
@@ -392,13 +470,29 @@ class LocalDraftCartLines extends Table {
 class LocalReturns extends Table {
   TextColumn get localId => text()();
   IntColumn get workspaceId => integer()();
-  TextColumn get invoiceLocalId => text().nullable()();
-  TextColumn get orderLocalId => text().nullable()();
+  TextColumn get invoiceLocalId => text().nullable().references(
+    LocalInvoices,
+    #localId,
+    onDelete: KeyAction.restrict,
+  )();
+  TextColumn get orderLocalId => text().nullable().references(
+    LocalOrders,
+    #localId,
+    onDelete: KeyAction.restrict,
+  )();
   TextColumn get reason => text().nullable()();
-  RealColumn get refundAmount => real().withDefault(const Constant(0))();
+  IntColumn get refundAmount => integer().withDefault(const Constant(0))();
   TextColumn get status => text().withDefault(const Constant('completed'))();
-  TextColumn get createdByUserId => text().nullable()();
-  TextColumn get shiftLocalId => text().nullable()();
+  TextColumn get createdByUserId => text().nullable().references(
+    LocalUsers,
+    #localId,
+    onDelete: KeyAction.setNull,
+  )();
+  TextColumn get shiftLocalId => text().nullable().references(
+    LocalShifts,
+    #localId,
+    onDelete: KeyAction.restrict,
+  )();
   DateTimeColumn get createdAt => dateTime()();
 
   @override
@@ -407,13 +501,25 @@ class LocalReturns extends Table {
 
 class LocalReturnItems extends Table {
   TextColumn get localId => text()();
-  TextColumn get returnLocalId => text()();
+  TextColumn get returnLocalId => text().references(
+    LocalReturns,
+    #localId,
+    onDelete: KeyAction.cascade,
+  )();
   IntColumn get workspaceId => integer()();
-  TextColumn get orderItemLocalId => text().nullable()();
-  TextColumn get productLocalId => text().nullable()();
+  TextColumn get orderItemLocalId => text().nullable().references(
+    LocalOrderItems,
+    #localId,
+    onDelete: KeyAction.restrict,
+  )();
+  TextColumn get productLocalId => text().nullable().references(
+    LocalProducts,
+    #localId,
+    onDelete: KeyAction.setNull,
+  )();
   TextColumn get productNameSnapshot => text()();
   IntColumn get quantity => integer()();
-  RealColumn get refundAmount => real()();
+  IntColumn get refundAmount => integer()();
 
   @override
   Set<Column<Object>> get primaryKey => {localId};
@@ -422,14 +528,18 @@ class LocalReturnItems extends Table {
 class LocalShifts extends Table {
   TextColumn get localId => text()();
   IntColumn get workspaceId => integer()();
-  TextColumn get userId => text()();
+  TextColumn get userId => text().nullable().references(
+    LocalUsers,
+    #localId,
+    onDelete: KeyAction.restrict,
+  )();
   DateTimeColumn get openedAt => dateTime()();
   DateTimeColumn get closedAt => dateTime().nullable()();
-  RealColumn get openingCash => real().withDefault(const Constant(0))();
-  RealColumn get closingCash => real().nullable()();
-  RealColumn get expectedCash => real().nullable()();
-  RealColumn get actualCash => real().nullable()();
-  RealColumn get difference => real().nullable()();
+  IntColumn get openingCash => integer().withDefault(const Constant(0))();
+  IntColumn get closingCash => integer().nullable()();
+  IntColumn get expectedCash => integer().nullable()();
+  IntColumn get actualCash => integer().nullable()();
+  IntColumn get difference => integer().nullable()();
   TextColumn get status => text().withDefault(const Constant('open'))();
 
   @override
@@ -439,12 +549,20 @@ class LocalShifts extends Table {
 class LocalCashMovements extends Table {
   TextColumn get localId => text()();
   IntColumn get workspaceId => integer()();
-  TextColumn get shiftLocalId => text()();
+  TextColumn get shiftLocalId => text().references(
+    LocalShifts,
+    #localId,
+    onDelete: KeyAction.restrict,
+  )();
   TextColumn get type => text()();
-  RealColumn get amount => real()();
+  IntColumn get amount => integer()();
   TextColumn get reason => text().nullable()();
   TextColumn get referenceId => text().nullable()();
-  TextColumn get createdByUserId => text().nullable()();
+  TextColumn get createdByUserId => text().nullable().references(
+    LocalUsers,
+    #localId,
+    onDelete: KeyAction.setNull,
+  )();
   DateTimeColumn get createdAt => dateTime()();
 
   @override

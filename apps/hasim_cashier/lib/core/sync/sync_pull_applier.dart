@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../local_db/app_database.dart';
+import '../pos/domain/pricing_service.dart';
 import '../local_db/local_ids.dart';
 import '../local_db/workspace_scope.dart';
 import '../repositories/sync_conflict_repository.dart';
@@ -166,7 +167,7 @@ class SyncPullApplier {
             sku: Value(data['sku'] as String?),
             barcode: Value(data['barcode'] as String?),
             itemType: Value(data['item_type'] as String?),
-            price: Value((data['price'] as num?)?.toDouble() ?? 0),
+            price: Value(Money.toCents((data['price'] as num?) ?? 0)),
             isActive: Value(data['is_active'] != false),
             isDeleted: const Value(false),
             payloadJson: Value(jsonEncode({...data, 'id': serverId})),
@@ -352,17 +353,21 @@ class SyncPullApplier {
             orderType: '${data['order_type'] ?? local?.orderType ?? 'table'}',
             tableServerId: Value(tableServerId),
             tableLocalId: Value(
-              tableServerId == null
-                  ? null
-                  : LocalIds.table(workspaceId, tableServerId),
+              await _db.existingFk(
+                'local_tables',
+                'local_id',
+                tableServerId == null
+                    ? null
+                    : LocalIds.table(workspaceId, tableServerId),
+              ),
             ),
             notes: Value(data['notes'] as String?),
-            subtotal: Value((data['subtotal'] as num?)?.toDouble() ?? 0),
-            taxAmount: Value((data['tax_amount'] as num?)?.toDouble() ?? 0),
+            subtotal: Value(Money.toCents((data['subtotal'] as num?) ?? 0)),
+            taxAmount: Value(Money.toCents((data['tax_amount'] as num?) ?? 0)),
             discountAmount:
-                Value((data['discount_amount'] as num?)?.toDouble() ?? 0),
+                Value(Money.toCents((data['discount_amount'] as num?) ?? 0)),
             totalAmount:
-                Value((data['total_amount'] as num?)?.toDouble() ?? 0),
+                Value(Money.toCents((data['total_amount'] as num?) ?? 0)),
             posStatus: Value('${data['pos_status'] ?? 'new'}'),
             paymentStatus: Value('${data['payment_status'] ?? 'unpaid'}'),
             syncStatus: const Value('synced'),
@@ -395,17 +400,21 @@ class SyncPullApplier {
               serverId: Value(itemServerId),
               productServerId: Value(productServerId),
               productLocalId: Value(
-                productServerId == null
-                    ? null
-                    : LocalIds.product(workspaceId, productServerId),
+                await _db.existingFk(
+                  'local_products',
+                  'local_id',
+                  productServerId == null
+                      ? null
+                      : LocalIds.product(workspaceId, productServerId),
+                ),
               ),
               name: '${item['product_name'] ?? item['name'] ?? 'صنف'}',
               quantity: (item['quantity'] as num?)?.toInt() ?? 0,
-              unitPrice: (item['unit_price'] as num?)?.toDouble() ?? 0,
+              unitPrice: Money.toCents((item['unit_price'] as num?) ?? 0),
               discountAmount: Value(
-                (item['discount_amount'] as num?)?.toDouble() ?? 0,
+                Money.toCents((item['discount_amount'] as num?) ?? 0),
               ),
-              totalAmount: (item['total_amount'] as num?)?.toDouble() ?? 0,
+              totalAmount: Money.toCents((item['total_amount'] as num?) ?? 0),
               updatedAt: now,
             ),
           );
@@ -560,7 +569,9 @@ class SyncPullApplier {
               deviceId: ourDeviceId ?? 'server',
               serverId: Value(serverId),
               invoiceNumber: Value(data['invoice_number']?.toString()),
-              totalAmount: Value((data['total_amount'] as num?)?.toDouble() ?? 0),
+              totalAmount: Value(
+                Money.toCents((data['total_amount'] as num?) ?? 0),
+              ),
               syncStatus: const Value('synced'),
               payloadJson: Value(jsonEncode({...data, 'id': serverId})),
               createdAt: existing?.createdAt ?? DateTime.now(),
@@ -578,9 +589,11 @@ class SyncPullApplier {
             deviceId: ourDeviceId ?? 'server',
             serverId: Value(serverId),
             method: '${data['method'] ?? data['payment_method'] ?? 'cash'}',
-            amount: (data['amount'] as num?)?.toDouble() ??
-                (data['total_amount'] as num?)?.toDouble() ??
-                0,
+            amount: Money.toCents(
+              (data['amount'] as num?) ??
+                  (data['total_amount'] as num?) ??
+                  0,
+            ),
             syncStatus: const Value('synced'),
             clientReference: '${data['client_reference'] ?? paymentLocalId}',
             createdAt: DateTime.now(),

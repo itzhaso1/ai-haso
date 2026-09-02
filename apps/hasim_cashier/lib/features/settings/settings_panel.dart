@@ -363,6 +363,37 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
     ).showSnackBar(const SnackBar(content: Text('تمت إضافة الطاولة محلياً.')));
   }
 
+  Future<String?> _askBackupPassword({required String title}) async {
+    final password = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: password,
+          obscureText: true,
+          decoration: const InputDecoration(
+            labelText: 'كلمة مرور النسخة (6 أحرف على الأقل)',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('متابعة'),
+          ),
+        ],
+      ),
+    );
+    final value = password.text;
+    password.dispose();
+    if (ok != true) return null;
+    return value;
+  }
+
   Future<void> _exportBackup() async {
     if (!CashierPermissions.canBackup(_perms)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -372,11 +403,14 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
     }
     final workspaceId = ref.read(workspaceIdProvider);
     if (workspaceId == null) return;
+    final password = await _askBackupPassword(title: 'تشفير النسخة الاحتياطية');
+    if (password == null) return;
     try {
       final file = await ref
           .read(backupServiceProvider)
           .exportBackup(
             workspaceId: workspaceId,
+            password: password,
             permissions: _perms,
           );
       if (!mounted) return;
@@ -427,13 +461,20 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
       ),
     );
     if (ok != true) return;
+    final password = await _askBackupPassword(title: 'كلمة مرور النسخة');
+    if (password == null) return;
     try {
-      await ref
-          .read(backupServiceProvider)
-          .exportBackup(workspaceId: workspaceId, permissions: _perms);
-      await ref
-          .read(backupServiceProvider)
-          .restoreFile(chosen, confirmed: true, permissions: _perms);
+      await ref.read(backupServiceProvider).exportBackup(
+            workspaceId: workspaceId,
+            password: password,
+            permissions: _perms,
+          );
+      await ref.read(backupServiceProvider).restoreFile(
+            chosen,
+            confirmed: true,
+            password: password,
+            permissions: _perms,
+          );
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,

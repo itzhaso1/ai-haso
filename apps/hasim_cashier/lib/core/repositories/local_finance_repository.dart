@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../local_db/app_database.dart';
+import '../pos/domain/pricing_service.dart';
 import '../util/json_numbers.dart';
 
 /// Local invoices + daily report aggregates from SQLite (offline-capable).
@@ -83,14 +84,14 @@ class LocalFinanceRepository {
       for (final o in dayOrders) {
         if (o.posStatus == 'cancelled') continue;
         if (o.paymentStatus == 'paid' || o.posStatus == 'completed') {
-          salesTotal += o.totalAmount;
+          salesTotal += Money.fromCents(o.totalAmount);
         }
       }
     }
 
     final byMethod = <String, double>{};
     for (final p in dayPayments) {
-      byMethod[p.method] = (byMethod[p.method] ?? 0) + p.amount;
+      byMethod[p.method] = (byMethod[p.method] ?? 0) + Money.fromCents(p.amount);
     }
     if (byMethod.isEmpty) {
       for (final inv in invoices) {
@@ -112,7 +113,7 @@ class LocalFinanceRepository {
         'order_type': o.orderType,
         'pos_status': o.posStatus,
         'payment_status': o.paymentStatus,
-        'total_amount': o.totalAmount,
+        'total_amount': Money.fromCents(o.totalAmount),
         'created_at': o.createdAt.toIso8601String(),
       };
       allOrders.add(map);
@@ -120,9 +121,9 @@ class LocalFinanceRepository {
       if (o.paymentStatus == 'paid' || o.posStatus == 'completed') {
         closedOrders.add(map);
         if (o.orderType == 'table') {
-          tableSales += o.totalAmount;
+          tableSales += Money.fromCents(o.totalAmount);
         } else {
-          takeawaySales += o.totalAmount;
+          takeawaySales += Money.fromCents(o.totalAmount);
         }
       } else {
         openCount++;
@@ -193,7 +194,7 @@ class LocalFinanceRepository {
       'local_id': row.localId,
       'server_id': row.serverId,
       'invoice_number': row.invoiceNumber ?? payload['invoice_number'],
-      'total_amount': row.totalAmount,
+      'total_amount': Money.fromCents(row.totalAmount),
       'sync_status': row.syncStatus,
       'created_at': row.createdAt.toIso8601String(),
       'closed_at':

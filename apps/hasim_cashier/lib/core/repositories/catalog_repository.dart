@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../local_db/app_database.dart';
+import '../pos/domain/pricing_service.dart';
 
 /// Catalog reads come from Local DB (workspace-scoped). Network refresh is optional.
 class CatalogRepository {
@@ -31,8 +32,8 @@ class CatalogRepository {
           'sku': row.sku,
           'barcode': row.barcode,
           'item_type': row.itemType,
-          'price': row.price,
-          'cost': row.cost,
+          'price': Money.fromCents(row.price),
+          'cost': Money.fromCents(row.cost),
           'tax_rate': row.taxRate,
           'stock': row.stock,
           'category_local_id': row.categoryLocalId,

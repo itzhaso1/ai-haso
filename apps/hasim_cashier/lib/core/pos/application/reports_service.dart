@@ -57,24 +57,24 @@ class LocalReportsService {
     var taxCents = 0;
     var grossCents = 0;
     for (final inv in invoices) {
-      subtotalCents += Money.toCents(inv.subtotal);
-      discountCents += Money.toCents(inv.discountAmount);
-      taxCents += Money.toCents(inv.taxAmount);
-      grossCents += Money.toCents(inv.totalAmount);
+      subtotalCents += inv.subtotal;
+      discountCents += inv.discountAmount;
+      taxCents += inv.taxAmount;
+      grossCents += inv.totalAmount;
     }
     if (grossCents <= 0) {
       for (final o in orders.where((o) => o.paymentStatus == 'paid')) {
-        subtotalCents += Money.toCents(o.subtotal);
-        discountCents += Money.toCents(o.discountAmount);
-        taxCents += Money.toCents(o.taxAmount);
-        grossCents += Money.toCents(o.totalAmount);
+        subtotalCents += o.subtotal;
+        discountCents += o.discountAmount;
+        taxCents += o.taxAmount;
+        grossCents += o.totalAmount;
       }
     }
 
     final byMethod = <String, int>{};
     final byMethodCount = <String, int>{};
     for (final p in payments) {
-      byMethod[p.method] = (byMethod[p.method] ?? 0) + Money.toCents(p.amount);
+      byMethod[p.method] = (byMethod[p.method] ?? 0) + p.amount;
       byMethodCount[p.method] = (byMethodCount[p.method] ?? 0) + 1;
     }
 
@@ -93,15 +93,15 @@ class LocalReportsService {
     var cogsCents = 0;
     for (final i in items) {
       itemQty[i.name] = (itemQty[i.name] ?? 0) + i.quantity;
-      itemRev[i.name] = (itemRev[i.name] ?? 0) + Money.toCents(i.totalAmount);
-      cogsCents += Money.toCents(i.costSnapshot) * i.quantity;
+      itemRev[i.name] = (itemRev[i.name] ?? 0) + i.totalAmount;
+      cogsCents += i.costSnapshot * i.quantity;
     }
     final top = itemQty.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
     var returnCents = 0;
     for (final r in returns) {
-      returnCents += Money.toCents(r.refundAmount);
+      returnCents += r.refundAmount;
     }
     final netCents = grossCents - returnCents;
 
@@ -146,9 +146,9 @@ class LocalReportsService {
             'id': inv.localId,
             'local_id': inv.localId,
             'invoice_number': inv.localInvoiceNumber ?? inv.invoiceNumber,
-            'total_amount': inv.totalAmount,
-            'tax_amount': inv.taxAmount,
-            'discount_amount': inv.discountAmount,
+            'total_amount': Money.fromCents(inv.totalAmount),
+            'tax_amount': Money.fromCents(inv.taxAmount),
+            'discount_amount': Money.fromCents(inv.discountAmount),
             'created_at': inv.createdAt.toIso8601String(),
           },
       ],

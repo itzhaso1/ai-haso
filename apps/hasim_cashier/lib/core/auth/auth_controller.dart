@@ -204,7 +204,7 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
       if (wid is int) {
         _ref.read(workspaceIdProvider.notifier).state = wid;
       }
-      if (PosMode.isStandaloneToken(restored.token)) {
+      if (!PosMode.admitRestoredSession(restored.token)) {
         final localAuth = _ref.read(localAuthServiceProvider);
         final store = await localAuth.anyStore();
         if (store != null) {

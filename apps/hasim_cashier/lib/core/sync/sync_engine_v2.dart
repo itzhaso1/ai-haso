@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 
 import '../api/cashier_api.dart';
 import '../local_db/app_database.dart';
+import '../pos/domain/pricing_service.dart';
 import '../local_db/workspace_scope.dart';
 import '../repositories/sync_queue_repository.dart';
 import 'sync_pull_applier.dart';
@@ -937,9 +938,9 @@ class SyncEngineV2 {
           ),
           invoiceNumber: Value(data['invoice_number']?.toString()),
           totalAmount: Value(
-            (data['total_amount'] as num?)?.toDouble() ??
-                existing?.totalAmount ??
-                0,
+            data['total_amount'] is num
+                ? Money.toCents(data['total_amount'] as num)
+                : (existing?.totalAmount ?? 0),
           ),
           syncStatus: const Value('synced'),
           payloadJson: Value(jsonEncode(merged)),
@@ -1068,9 +1069,9 @@ class SyncEngineV2 {
             invoice?['invoice_number']?.toString() ?? existing?.invoiceNumber,
           ),
           totalAmount: Value(
-            (invoice?['total_amount'] as num?)?.toDouble() ??
-                existing?.totalAmount ??
-                0,
+            invoice?['total_amount'] is num
+                ? Money.toCents(invoice?['total_amount'] as num)
+                : (existing?.totalAmount ?? 0),
           ),
           syncStatus: const Value('synced'),
           payloadJson: Value(jsonEncode(merged)),
@@ -1150,9 +1151,9 @@ class SyncEngineV2 {
           serverId: Value((data['invoice_id'] as num?)?.toInt()),
           invoiceNumber: Value(data['invoice_number']?.toString()),
           totalAmount: Value(
-            (data['total_amount'] as num?)?.toDouble() ??
-                existing?.totalAmount ??
-                0,
+            data['total_amount'] is num
+                ? Money.toCents(data['total_amount'] as num)
+                : (existing?.totalAmount ?? 0),
           ),
           syncStatus: const Value('synced'),
           payloadJson: Value(jsonEncode(merged)),
