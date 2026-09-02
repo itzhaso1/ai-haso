@@ -71,14 +71,19 @@ class _CustomersPanelState extends ConsumerState<CustomersPanel> {
             if (item is Map) list.add(Map<String, dynamic>.from(item));
           }
         }
-        if (list.isNotEmpty && mounted) {
+        if (list.isNotEmpty) {
+          await ref.read(customersRepositoryProvider).upsertRemoteSnapshot(
+                workspaceId: workspaceId,
+                customers: list,
+              );
+        }
+        final refreshed = await ref.read(customersRepositoryProvider).list(
+              workspaceId: workspaceId,
+              query: _search.text,
+            );
+        if (mounted) {
           setState(() {
-            _customers = list;
-            _loading = false;
-          });
-        } else if (mounted && local.isEmpty) {
-          setState(() {
-            _customers = local;
+            _customers = refreshed.isNotEmpty ? refreshed : list;
             _loading = false;
           });
         }

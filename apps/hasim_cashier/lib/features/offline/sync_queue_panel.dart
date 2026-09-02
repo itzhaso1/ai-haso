@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
-import '../../core/offline/offline_store.dart';
+import '../../core/local_db/local_db_providers.dart';
 import '../../core/sync/pos_sync_coordinator.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
 import '../../core/widgets/hasim_widgets.dart';
 
-/// Visible sync queue: Pending / Syncing / Synced / Failed + Retry.
+/// Visible sync queue backed by SQLite sync_queue_items (not Hive).
 class SyncQueuePanel extends ConsumerStatefulWidget {
   const SyncQueuePanel({super.key});
 
@@ -26,13 +26,17 @@ class _SyncQueuePanelState extends ConsumerState<SyncQueuePanel> {
     _reload();
   }
 
-  void _reload() {
-    setState(() {
-      _records = OfflineStore.instance
-          .allOrderRecords(workspaceId: ref.read(workspaceIdProvider))
-          .take(40)
-          .toList();
-    });
+  Future<void> _reload() async {
+    final workspaceId = ref.read(workspaceIdProvider);
+    if (workspaceId == null) {
+      setState(() => _records = const []);
+      return;
+    }
+    final rows = await ref
+        .read(syncQueueRepositoryProvider)
+        .recentForPanel(workspaceId: workspaceId);
+    if (!mounted) return;
+    setState(() => _records = rows);
   }
 
   String _label(String? status) => switch (status) {
@@ -40,6 +44,7 @@ class _SyncQueuePanelState extends ConsumerState<SyncQueuePanel> {
         'syncing' => 'Syncing',
         'synced' => 'Synced',
         'failed' => 'Failed',
+        'cancelled' => 'Cancelled',
         _ => status ?? '—',
       };
 
@@ -61,12 +66,33 @@ class _SyncQueuePanelState extends ConsumerState<SyncQueuePanel> {
 
   Future<void> _flush() async {
     setState(() => _busy = true);
+    final workspaceId = ref.read(workspaceIdProvider);
+    final deviceId =
+        await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
     await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
-          workspaceId: ref.read(workspaceIdProvider),
+          workspaceId: workspaceId,
+          deviceId: deviceId,
         );
     if (!mounted) return;
     setState(() => _busy = false);
-    _reload();
+    await _reload();
+  }
+
+  Future<void> _retry(Map<String, dynamic> row) async {
+    final localId = '${row['local_id'] ?? ''}';
+    if (localId.isEmpty) return;
+    setState(() => _busy = true);
+    final workspaceId = ref.read(workspaceIdProvider);
+    final deviceId =
+        await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
+    await ref.read(posSyncCoordinatorProvider).retryOne(
+          localId,
+          workspaceId: workspaceId,
+          deviceId: deviceId,
+        );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    await _reload();
   }
 
   @override
@@ -118,16 +144,16 @@ class _SyncQueuePanelState extends ConsumerState<SyncQueuePanel> {
                         : 0;
                     return HsCard(
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Row(
                             children: [
                               Expanded(
                                 child: Text(
-                                  'محلي ${'${row['local_id']}'.substring(0, 8)}…',
+                                  '${row['entity_type']}/${row['operation']} · ${row['client_reference']}',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w800,
-                                    fontSize: 12,
+                                    fontSize: 13,
                                   ),
                                 ),
                               ),
@@ -139,14 +165,14 @@ class _SyncQueuePanelState extends ConsumerState<SyncQueuePanel> {
                                 decoration: BoxDecoration(
                                   color: _bg(status),
                                   borderRadius:
-                                      BorderRadius.circular(HasimRadius.pill),
+                                      BorderRadius.circular(HasimRadius.sm),
                                 ),
                                 child: Text(
                                   _label(status),
                                   style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w800,
                                     color: _fg(status),
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 11,
                                   ),
                                 ),
                               ),
@@ -154,9 +180,9 @@ class _SyncQueuePanelState extends ConsumerState<SyncQueuePanel> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            '${row['created_at'] ?? ''} · $itemsCount أصناف',
+                            'أصناف: $itemsCount · محاولات: ${row['attempts'] ?? 0}',
                             style: const TextStyle(
-                              fontSize: 11,
+                              fontSize: 12,
                               color: HasimColors.muted,
                             ),
                           ),
@@ -165,7 +191,7 @@ class _SyncQueuePanelState extends ConsumerState<SyncQueuePanel> {
                             Text(
                               '${row['last_error']}',
                               style: const TextStyle(
-                                fontSize: 11,
+                                fontSize: 12,
                                 color: HasimColors.danger,
                               ),
                             ),
@@ -173,19 +199,10 @@ class _SyncQueuePanelState extends ConsumerState<SyncQueuePanel> {
                           if (status == 'failed' || status == 'pending') ...[
                             const SizedBox(height: 8),
                             Align(
-                              alignment: AlignmentDirectional.centerEnd,
+                              alignment: Alignment.centerLeft,
                               child: TextButton(
-                                onPressed: () async {
-                                  await ref
-                                      .read(posSyncCoordinatorProvider)
-                                      .retryOne(
-                                        '${row['local_id']}',
-                                        workspaceId:
-                                            ref.read(workspaceIdProvider),
-                                      );
-                                  _reload();
-                                },
-                                child: const Text('Retry'),
+                                onPressed: _busy ? null : () => _retry(row),
+                                child: const Text('إعادة المحاولة'),
                               ),
                             ),
                           ],

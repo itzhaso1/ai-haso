@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../local_db/app_database.dart';
+import '../local_db/local_ids.dart';
 import 'sync_queue_repository.dart';
 
 /// Local-first customers for POS. Offline create/update → sync_queue → Laravel.
@@ -169,6 +170,44 @@ class CustomersRepository {
       }
     });
     return true;
+  }
+
+  Future<void> upsertRemoteSnapshot({
+    required int workspaceId,
+    required List<Map<String, dynamic>> customers,
+  }) async {
+    if (workspaceId <= 0) return;
+    final now = DateTime.now();
+    await _db.transaction(() async {
+      for (final raw in customers) {
+        final serverId = (raw['id'] as num?)?.toInt();
+        if (serverId == null || serverId <= 0) continue;
+        final clientRef = '${raw['client_reference'] ?? ''}'.trim();
+        final localId = clientRef.isNotEmpty
+            ? clientRef
+            : LocalIds.customer(workspaceId, serverId);
+        final existingPending = await (_db.select(_db.localCustomers)
+              ..where((t) =>
+                  t.workspaceId.equals(workspaceId) &
+                  t.localId.equals(localId) &
+                  (t.syncStatus.equals('pending') |
+                      t.syncStatus.equals('failed'))))
+            .getSingleOrNull();
+        if (existingPending != null) continue;
+        await _db.into(_db.localCustomers).insertOnConflictUpdate(
+              LocalCustomersCompanion.insert(
+                localId: localId,
+                workspaceId: workspaceId,
+                serverId: Value(serverId),
+                name: '${raw['name'] ?? ''}',
+                phone: Value(raw['phone'] as String?),
+                payloadJson: Value(jsonEncode({...raw, 'id': serverId})),
+                updatedAt: now,
+                syncStatus: const Value('synced'),
+              ),
+            );
+      }
+    });
   }
 
   Map<String, dynamic> _toDisplay(LocalCustomer row) {

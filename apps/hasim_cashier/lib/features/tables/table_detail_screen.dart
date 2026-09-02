@@ -8,7 +8,7 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/local_db/local_db_providers.dart';
 import '../../core/network/cashier_link.dart';
 import '../../core/offline/conflict_strategy.dart';
-import '../../core/offline/offline_store.dart';
+import '../../core/offline/pending_order.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
 import '../../core/pos/pos_labels.dart';
@@ -250,15 +250,9 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       return;
     }
 
-    // Pending local orders can still open a minimal shell (SQLite / Hive).
+    // Pending local orders can still open a minimal shell from SQLite.
     final hasSqlitePending = _localPendingOrders.isNotEmpty;
-    final hasHivePending = OfflineStore.instance
-        .unsyncedOrders(
-          tableId: widget.tableId,
-          workspaceId: workspaceId,
-        )
-        .isNotEmpty;
-    if (hasSqlitePending || hasHivePending) {
+    if (hasSqlitePending) {
       setState(() {
         _detail = {
           'id': widget.tableId,
@@ -509,6 +503,47 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       await _refreshLocalOrders();
       return;
     }
+    if (updated['enqueue_synced_update'] == true) {
+      final workspaceId = _workspaceId;
+      if (workspaceId == null) return;
+      final localId = '${order['local_id'] ?? ''}';
+      final resolvedLocalId = localId.isNotEmpty
+          ? localId
+          : (await ref.read(ordersRepositoryProvider).findByServerId(
+                    workspaceId: workspaceId,
+                    serverId: (order['id'] as num).toInt(),
+                  ))
+              ?.localId;
+      if (resolvedLocalId == null) return;
+      final deviceId =
+          await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
+      final payload = updated['payload'] is Map
+          ? Map<String, dynamic>.from(updated['payload'] as Map)
+          : <String, dynamic>{};
+      final ok = await ref.read(ordersRepositoryProvider).enqueueSyncedUpdate(
+            workspaceId: workspaceId,
+            deviceId: deviceId,
+            localId: resolvedLocalId,
+            apiPayload: payload,
+          );
+      if (!mounted) return;
+      if (!ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تعذر جدولة تعديل الطلب.')),
+        );
+        return;
+      }
+      await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+            workspaceId: workspaceId,
+            deviceId: deviceId,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم حفظ تعديلات الطلب.')),
+      );
+      await _load();
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('تم حفظ تعديلات الطلب.')),
     );
@@ -592,20 +627,40 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       ),
     );
     if (ok != true) return;
-    final id = (order['id'] as num?)?.toInt();
-    if (id == null) return;
-    try {
-      await ref.read(cashierApiProvider).delete('/orders/$id');
-      if (!mounted) return;
+    final workspaceId = _workspaceId;
+    if (workspaceId == null) return;
+    final localId = '${order['local_id'] ?? ''}';
+    final resolved = localId.isNotEmpty
+        ? localId
+        : (await ref.read(ordersRepositoryProvider).findByServerId(
+                  workspaceId: workspaceId,
+                  serverId: (order['id'] as num).toInt(),
+                ))
+            ?.localId;
+    if (resolved == null) return;
+    final deviceId =
+        await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
+    final queued = await ref.read(ordersRepositoryProvider).enqueueSyncedDelete(
+          workspaceId: workspaceId,
+          deviceId: deviceId,
+          localId: resolved,
+        );
+    if (!mounted) return;
+    if (!queued) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم حذف الطلب.')),
+        const SnackBar(content: Text('تعذر جدولة حذف الطلب.')),
       );
-      await _load();
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      return;
     }
+    await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+          workspaceId: workspaceId,
+          deviceId: deviceId,
+        );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تم حذف الطلب.')),
+    );
+    await _load();
   }
 
   Future<void> _editNote() async {
@@ -865,12 +920,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
               workspaceId: workspaceId,
               tableId: widget.tableId,
             );
-    final hasHivePending = workspaceId != null &&
-        OfflineStore.instance.hasUnsyncedTableOrders(
-          widget.tableId,
-          workspaceId: workspaceId,
-        );
-    if (workspaceId == null || hasSqlitePending || hasHivePending) {
+    if (workspaceId == null || hasSqlitePending) {
       if (!mounted) return;
       await showDialog<void>(
         context: context,

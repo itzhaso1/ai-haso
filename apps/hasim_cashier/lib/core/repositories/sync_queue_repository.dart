@@ -135,6 +135,44 @@ class SyncQueueRepository {
     return true;
   }
 
+  Future<List<Map<String, dynamic>>> recentForPanel({
+    required int workspaceId,
+    int limit = 80,
+  }) async {
+    return (_db.select(_db.syncQueueItems)
+          ..where((t) => t.workspaceId.equals(workspaceId))
+          ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)])
+          ..limit(limit))
+        .get()
+        .then(
+          (rows) => [
+            for (final row in rows)
+              {
+                'id': row.id,
+                'local_id': row.entityId,
+                'entity_type': row.entityType,
+                'operation': row.operation,
+                'status': row.status,
+                'client_reference': row.clientReference,
+                'attempts': row.attempts,
+                'last_error': row.lastError,
+                'created_at': row.createdAt.toIso8601String(),
+                'updated_at': row.updatedAt.toIso8601String(),
+                'payload': () {
+                  try {
+                    final decoded = jsonDecode(row.payloadJson);
+                    return decoded is Map
+                        ? Map<String, dynamic>.from(decoded)
+                        : <String, dynamic>{};
+                  } catch (_) {
+                    return <String, dynamic>{};
+                  }
+                }(),
+              },
+          ],
+        );
+  }
+
   Future<void> markSyncing(int id) async {
     await (_db.update(_db.syncQueueItems)..where((t) => t.id.equals(id))).write(
       SyncQueueItemsCompanion(

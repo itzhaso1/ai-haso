@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
+import '../../core/local_db/local_db_providers.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
 import '../../core/pos/pos_labels.dart';
@@ -51,25 +52,58 @@ class _OrdersListState extends ConsumerState<OrdersList> {
       _loading = true;
       _error = null;
     });
+    final workspaceId = ref.read(workspaceIdProvider);
+    if (workspaceId == null || workspaceId <= 0) {
+      setState(() {
+        _loading = false;
+        _error = 'لا توجد مساحة عمل';
+      });
+      return;
+    }
     try {
-      final data = await ref
-          .read(cashierApiProvider)
-          .get('/orders', query: {'status': 'running', 'per_page': 50});
-      final list = <Map<String, dynamic>>[];
-      if (data['orders'] is List) {
-        for (final item in data['orders'] as List) {
-          if (item is Map) list.add(Map<String, dynamic>.from(item));
-        }
+      final local = await ref
+          .read(ordersRepositoryProvider)
+          .listRunning(workspaceId: workspaceId);
+      if (local.isNotEmpty && mounted) {
+        setState(() {
+          _orders = local;
+          _loading = false;
+        });
       }
-      setState(() {
-        _orders = list;
-        _loading = false;
-      });
-    } on ApiException catch (e) {
-      setState(() {
-        _loading = false;
-        _error = e.message;
-      });
+      // Best-effort online enrichment for kitchen status / invoices — never
+      // replaces empty local with invented data.
+      try {
+        final data = await ref
+            .read(cashierApiProvider)
+            .get('/orders', query: {'status': 'running', 'per_page': 50});
+        final list = <Map<String, dynamic>>[];
+        if (data['orders'] is List) {
+          for (final item in data['orders'] as List) {
+            if (item is Map) list.add(Map<String, dynamic>.from(item));
+          }
+        }
+        if (!mounted) return;
+        if (list.isNotEmpty) {
+          setState(() {
+            _orders = list;
+            _loading = false;
+          });
+        } else if (local.isEmpty) {
+          setState(() {
+            _orders = local;
+            _loading = false;
+          });
+        } else {
+          setState(() => _loading = false);
+        }
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _orders = local;
+          _loading = false;
+          if (local.isEmpty) _error = 'تعذر تحميل الطلبات';
+        });
+      }
     } catch (e) {
       setState(() {
         _loading = false;

@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/local_db/local_db_providers.dart';
 import '../../core/api/cashier_api.dart';
-import '../../core/network/cashier_link.dart';
-import '../../core/offline/offline_store.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
 import '../../core/theme/hasim_colors.dart';
@@ -11,7 +10,7 @@ import '../../core/theme/hasim_radius.dart';
 import '../../core/widgets/hasim_widgets.dart';
 import '../cart/cart_controller.dart';
 
-/// Full order editor — posts real changes to `POST /orders/{id}/items`.
+/// Order editor — local-pending mutates SQLite; synced orders enqueue sync_queue.
 class TableOrderEditorDialog extends ConsumerStatefulWidget {
   const TableOrderEditorDialog({
     super.key,
@@ -71,40 +70,19 @@ class _TableOrderEditorDialogState
   }
 
   Future<void> _loadCatalog() async {
-    final cached = OfflineStore.instance.readCatalog(
-      workspaceId: ref.read(workspaceIdProvider),
-    );
-    if (!ref.read(cashierLinkProvider).isOnline) {
-      setState(() => _catalog = cached.isNotEmpty
-          ? cached
-          : (ref.read(catalogItemsProvider).valueOrNull ?? const []));
+    final workspaceId = ref.read(workspaceIdProvider);
+    List<Map<String, dynamic>> local = const [];
+    if (workspaceId != null && workspaceId > 0) {
+      local = await ref.read(catalogRepositoryProvider).products(workspaceId);
+    }
+    if (!mounted) return;
+    if (local.isNotEmpty) {
+      setState(() => _catalog = local);
       return;
     }
-    try {
-      final data = await ref
-          .read(cashierApiProvider)
-          .get('/catalog/items', query: {'per_page': 100});
-      if (!mounted) return;
-      final list = <Map<String, dynamic>>[];
-      if (data['items'] is List) {
-        for (final item in data['items'] as List) {
-          if (item is Map) list.add(Map<String, dynamic>.from(item));
-        }
-      }
-      setState(
-        () => _catalog = list.isNotEmpty
-            ? list
-            : (cached.isNotEmpty
-                ? cached
-                : (ref.read(catalogItemsProvider).valueOrNull ?? const [])),
-      );
-    } catch (_) {
-      setState(
-        () => _catalog = cached.isNotEmpty
-            ? cached
-            : (ref.read(catalogItemsProvider).valueOrNull ?? const []),
-      );
-    }
+    setState(
+      () => _catalog = ref.read(catalogItemsProvider).valueOrNull ?? const [],
+    );
   }
 
   double get _subtotal {
@@ -228,7 +206,6 @@ class _TableOrderEditorDialogState
       });
       return;
     }
-    final orderId = (widget.order['id'] as num).toInt();
     final payload = <String, dynamic>{
       'notes': _notes.text.trim(),
       if (canDiscount) 'discount_amount': _discountAmount,
@@ -250,23 +227,12 @@ class _TableOrderEditorDialogState
             },
       ],
     };
-    try {
-      final data = await ref
-          .read(cashierApiProvider)
-          .post('/orders/$orderId/items', data: payload);
-      if (!mounted) return;
-      Navigator.pop(context, data);
-    } on ApiException catch (e) {
-      setState(() {
-        _saving = false;
-        _error = e.message;
-      });
-    } catch (e) {
-      setState(() {
-        _saving = false;
-        _error = e.toString();
-      });
-    }
+    if (!mounted) return;
+    Navigator.pop(context, {
+      'enqueue_synced_update': true,
+      'payload': payload,
+      'notes': _notes.text.trim(),
+    });
   }
 
   @override

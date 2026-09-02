@@ -487,6 +487,136 @@ class OrdersRepository {
     return migrated;
   }
 
+  /// List local orders for the running POS board (workspace-scoped).
+  Future<List<Map<String, dynamic>>> listRunning({
+    required int workspaceId,
+    int limit = 100,
+  }) async {
+    if (workspaceId <= 0) return const [];
+    final rows = await (_db.select(_db.localOrders)
+          ..where((t) =>
+              t.workspaceId.equals(workspaceId) &
+              t.posStatus.isNotIn(['cancelled', 'completed']))
+          ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)])
+          ..limit(limit))
+        .get();
+    final out = <Map<String, dynamic>>[];
+    for (final row in rows) {
+      out.add(_orderToDisplay(row, await _itemsFor(row.localId)));
+    }
+    return out;
+  }
+
+  /// Queue an items update for an already-synced order (no silent API from UI).
+  Future<bool> enqueueSyncedUpdate({
+    required int workspaceId,
+    required String deviceId,
+    required String localId,
+    required Map<String, dynamic> apiPayload,
+  }) async {
+    final order = await _getScopedOrder(workspaceId, localId);
+    if (order == null) return false;
+    final serverId = order.serverId;
+    if (serverId == null || serverId <= 0) return false;
+    if (order.syncStatus == 'syncing') return false;
+
+    final payload = Map<String, dynamic>.from(apiPayload)
+      ..['server_order_id'] = serverId
+      ..['client_reference'] = order.clientReference;
+
+    await _db.transaction(() async {
+      await (_db.update(_db.localOrders)
+            ..where((t) =>
+                t.localId.equals(localId) &
+                t.workspaceId.equals(workspaceId)))
+          .write(
+        LocalOrdersCompanion(
+          notes: Value(apiPayload['notes'] as String? ?? order.notes),
+          syncStatus: const Value('pending'),
+          lastError: const Value(null),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      final existing = await _queue.findOpenOp(
+        workspaceId: workspaceId,
+        entityType: 'order',
+        entityId: localId,
+        operation: 'update',
+      );
+      if (existing != null && existing.status != 'syncing') {
+        await _queue.updateOpenPayload(
+          workspaceId: workspaceId,
+          entityType: 'order',
+          entityId: localId,
+          operation: 'update',
+          payload: payload,
+        );
+      } else if (existing == null) {
+        await _queue.enqueue(
+          workspaceId: workspaceId,
+          deviceId: deviceId.trim(),
+          entityType: 'order',
+          entityId: localId,
+          operation: 'update',
+          payload: payload,
+          clientReference: order.clientReference,
+        );
+      }
+    });
+    return true;
+  }
+
+  /// Queue delete for an already-synced order.
+  Future<bool> enqueueSyncedDelete({
+    required int workspaceId,
+    required String deviceId,
+    required String localId,
+  }) async {
+    final order = await _getScopedOrder(workspaceId, localId);
+    if (order == null) return false;
+    final serverId = order.serverId;
+    if (serverId == null || serverId <= 0) return false;
+    if (order.syncStatus == 'syncing') return false;
+
+    await _db.transaction(() async {
+      await (_db.update(_db.localOrders)
+            ..where((t) =>
+                t.localId.equals(localId) &
+                t.workspaceId.equals(workspaceId)))
+          .write(
+        LocalOrdersCompanion(
+          posStatus: const Value('cancelled'),
+          syncStatus: const Value('pending'),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      await _queue.enqueue(
+        workspaceId: workspaceId,
+        deviceId: deviceId.trim(),
+        entityType: 'order',
+        entityId: localId,
+        operation: 'delete',
+        payload: {
+          'server_order_id': serverId,
+          'client_reference': order.clientReference,
+        },
+        clientReference: '${order.clientReference}-del',
+      );
+    });
+    return true;
+  }
+
+  /// Resolve local order by server id within workspace.
+  Future<LocalOrder?> findByServerId({
+    required int workspaceId,
+    required int serverId,
+  }) {
+    return (_db.select(_db.localOrders)
+          ..where((t) =>
+              t.workspaceId.equals(workspaceId) & t.serverId.equals(serverId)))
+        .getSingleOrNull();
+  }
+
   Future<LocalOrder?> _getScopedOrder(int workspaceId, String localId) {
     return (_db.select(_db.localOrders)
           ..where((t) =>

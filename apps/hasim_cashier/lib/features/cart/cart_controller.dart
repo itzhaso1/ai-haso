@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/local_db/local_db_providers.dart';
-import '../../core/offline/offline_store.dart';
 
 @immutable
 class CartLine {
@@ -192,59 +191,44 @@ final cartControllerProvider =
 
 final catalogItemsProvider =
     FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  final api = ref.watch(cashierApiProvider);
   final workspaceId = ref.watch(workspaceIdProvider);
-  // Offline-First v2: Local DB is the preferred catalog source.
-  if (workspaceId != null && workspaceId > 0) {
-    final local =
-        await ref.read(catalogRepositoryProvider).products(workspaceId);
-    if (local.isNotEmpty) return local;
-  }
+  if (workspaceId == null || workspaceId <= 0) return const [];
+  final catalog = ref.read(catalogRepositoryProvider);
+  final local = await catalog.products(workspaceId);
+  // Best-effort remote refresh into Initial Sync path is owned by sync;
+  // providers stay local-first and never dual-write Hive.
+  if (local.isNotEmpty) return local;
   try {
-    final data = await api.get('/catalog/items', query: {'per_page': 100});
+    final data = await ref
+        .watch(cashierApiProvider)
+        .get('/catalog/items', query: {'per_page': 100});
     final items = data['items'];
     if (items is List) {
-      final list = items
+      return items
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
-      await OfflineStore.instance.cacheCatalog(list, workspaceId: workspaceId);
-      return list;
     }
-  } catch (_) {
-    final offline = OfflineStore.instance.readCatalog(workspaceId: workspaceId);
-    if (offline.isNotEmpty) return offline;
-  }
-  return OfflineStore.instance.readCatalog(workspaceId: workspaceId);
+  } catch (_) {}
+  return local;
 });
 
 final categoriesProvider =
     FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  final api = ref.watch(cashierApiProvider);
   final workspaceId = ref.watch(workspaceIdProvider);
-  if (workspaceId != null && workspaceId > 0) {
-    final local =
-        await ref.read(catalogRepositoryProvider).categories(workspaceId);
-    if (local.isNotEmpty) return local;
-  }
+  if (workspaceId == null || workspaceId <= 0) return const [];
+  final catalog = ref.read(catalogRepositoryProvider);
+  final local = await catalog.categories(workspaceId);
+  if (local.isNotEmpty) return local;
   try {
-    final data = await api.get('/catalog/categories');
+    final data = await ref.watch(cashierApiProvider).get('/catalog/categories');
     final categories = data['categories'];
     if (categories is List) {
-      final list = categories
+      return categories
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
-      await OfflineStore.instance.cacheCategories(
-        list,
-        workspaceId: workspaceId,
-      );
-      return list;
     }
-  } catch (_) {
-    final offline =
-        OfflineStore.instance.readCategories(workspaceId: workspaceId);
-    if (offline.isNotEmpty) return offline;
-  }
-  return OfflineStore.instance.readCategories(workspaceId: workspaceId);
+  } catch (_) {}
+  return local;
 });

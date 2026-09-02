@@ -113,7 +113,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     });
   }
 
-  Future<void> _enqueueLocalTableOrder({
+  Future<Map<String, dynamic>> _enqueueLocalTableOrder({
     required int tableId,
     required int workspaceId,
     required String clientRef,
@@ -122,7 +122,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
   }) async {
     final deviceId =
         await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
-    await ref.read(ordersRepositoryProvider).createTableOrder(
+    return ref.read(ordersRepositoryProvider).createTableOrder(
           workspaceId: workspaceId,
           deviceId: deviceId,
           tableId: tableId,
@@ -132,7 +132,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
         );
   }
 
-  Future<void> _enqueueLocalTakeawayOrder({
+  Future<Map<String, dynamic>> _enqueueLocalTakeawayOrder({
     required int workspaceId,
     required String clientRef,
     required String? notes,
@@ -141,7 +141,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
   }) async {
     final deviceId =
         await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
-    await ref.read(ordersRepositoryProvider).createTakeawayOrder(
+    return ref.read(ordersRepositoryProvider).createTakeawayOrder(
           workspaceId: workspaceId,
           deviceId: deviceId,
           clientReference: clientRef,
@@ -445,9 +445,6 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     final wasTable = cart.channel == OrderChannel.table;
     final tableId = cart.tableId;
     final clientRef = const Uuid().v4();
-    final payload = ref.read(cartControllerProvider.notifier).toOrderPayload(
-          clientReference: clientRef,
-        );
     final lineItems = [
       for (final line in cart.lines)
         {
@@ -458,212 +455,141 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           'total_amount': line.lineTotal,
         },
     ];
+    final workspaceId = ref.read(workspaceIdProvider);
+    if (workspaceId == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('لا توجد مساحة عمل محددة. لا يمكن حفظ الطلب محليًا.'),
+        ),
+      );
+      return;
+    }
 
-    if (!ref.read(cashierLinkProvider).allowMutations) {
-      final workspaceId = ref.read(workspaceIdProvider);
-      if (workspaceId == null) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('لا توجد مساحة عمل محددة. لا يمكن حفظ الطلب محليًا.'),
-          ),
-        );
-        return;
-      }
+    // Architecture: UI → Repository → SQLite first, then Sync Engine → Laravel.
+    Map<String, dynamic> localOrder;
+    try {
       if (wasTable) {
         if (tableId == null) return;
-        await _enqueueLocalTableOrder(
+        localOrder = await _enqueueLocalTableOrder(
           tableId: tableId,
           workspaceId: workspaceId,
           clientRef: clientRef,
           notes: cart.notes,
           items: lineItems,
         );
-        ref.read(cartControllerProvider.notifier).clear();
-        _refreshPending();
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم حفظ الطلب — بانتظار الاتصال')),
+      } else {
+        localOrder = await _enqueueLocalTakeawayOrder(
+          workspaceId: workspaceId,
+          clientRef: clientRef,
+          notes: cart.notes,
+          items: lineItems,
+          customerServerId: cart.customerId,
         );
-        openTableWorkspace(ref, tableId);
-        requestPosShellTab(ref, PosShellTab.tables);
-        return;
       }
-      await _enqueueLocalTakeawayOrder(
-        workspaceId: workspaceId,
-        clientRef: clientRef,
-        notes: cart.notes,
-        items: lineItems,
-        customerServerId: cart.customerId,
-      );
-      ref.read(cartControllerProvider.notifier).clear();
-      _refreshPending();
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم حفظ الطلب الخارجي — بانتظار الاتصال')),
+        SnackBar(content: Text('تعذر حفظ الطلب محليًا: $e')),
       );
       return;
     }
 
+    ref.read(cartControllerProvider.notifier).clear();
+    _refreshPending();
+
+    final deviceId =
+        await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
     try {
-      final data = await ref.read(cashierApiProvider).post(
-            '/orders',
-            data: payload,
-            idempotencyKey: clientRef,
+      await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+            workspaceId: workspaceId,
+            deviceId: deviceId,
           );
-      ref.read(cartControllerProvider.notifier).clear();
-      if (!mounted) return;
+      final refreshed = await ref.read(ordersRepositoryProvider).getOrder(
+            workspaceId: workspaceId,
+            localId: clientRef,
+          );
+      if (refreshed != null) localOrder = refreshed;
+    } catch (_) {
+      // Pending queue retained; cursor untouched.
+    }
+    _refreshPending();
+    if (!mounted) return;
 
-      // Table session orders: save only — no invoice/print dialog.
-      // Invoice is created only when closing the table.
-      if (wasTable) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'تم حفظ الطلب #${data['order_number'] ?? data['id']} على الطاولة.',
-            ),
-          ),
-        );
-        if (tableId != null) {
-          openTableWorkspace(ref, tableId);
-          requestPosShellTab(ref, PosShellTab.tables);
-        }
-        return;
+    if (wasTable) {
+      final label = localOrder['is_local_pending'] == true
+          ? 'تم حفظ الطلب — بانتظار المزامنة'
+          : 'تم حفظ الطلب #${localOrder['order_number'] ?? localOrder['id']} على الطاولة.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(label)));
+      if (tableId != null) {
+        openTableWorkspace(ref, tableId);
+        requestPosShellTab(ref, PosShellTab.tables);
       }
+      return;
+    }
 
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => _SuccessOrderDialog(
-          orderNumber: '${data['order_number'] ?? data['id']}',
-          onPrint: () async {
-            Navigator.pop(context);
-            try {
-              final invoiceData = await ref
+    final serverId = localOrder['id'];
+    final pending = localOrder['is_local_pending'] == true;
+    if (pending || serverId is! num) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم حفظ الطلب الخارجي — بانتظار المزامنة')),
+      );
+      return;
+    }
+
+    // Invoice/print remain online-only after successful sync confirmation.
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => _SuccessOrderDialog(
+        orderNumber: '${localOrder['order_number'] ?? serverId}',
+        onPrint: () async {
+          Navigator.pop(context);
+          try {
+            final invoiceData = await ref
+                .read(cashierApiProvider)
+                .post('/orders/$serverId/invoice');
+            if (!context.mounted) return;
+            final invoiceId = invoiceData['invoice_id'];
+            Map<String, dynamic>? invoice;
+            if (invoiceId != null) {
+              final show = await ref
                   .read(cashierApiProvider)
-                  .post('/orders/${data['id']}/invoice');
-              if (!context.mounted) return;
-              final invoiceId = invoiceData['invoice_id'];
-              Map<String, dynamic>? invoice;
-              if (invoiceId != null) {
-                final show = await ref
-                    .read(cashierApiProvider)
-                    .get('/invoices/$invoiceId');
-                invoice = show['invoice'] is Map
-                    ? Map<String, dynamic>.from(show['invoice'] as Map)
-                    : null;
-              }
-              if (!context.mounted) return;
-              if (invoice != null) {
-                final printer =
-                    await ref.read(printerServiceFutureProvider.future);
-                final result = await printer.printInvoice(invoice);
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      result.success
-                          ? 'تم إنشاء الفاتورة وطباعتها.'
-                          : 'تم إنشاء الفاتورة. ${result.message}',
-                    ),
-                  ),
-                );
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('تم إنشاء الفاتورة.')),
-                );
-              }
-            } on ApiException catch (e) {
+                  .get('/invoices/$invoiceId');
+              invoice = show['invoice'] is Map
+                  ? Map<String, dynamic>.from(show['invoice'] as Map)
+                  : null;
+            }
+            if (!context.mounted) return;
+            if (invoice != null) {
+              final printer =
+                  await ref.read(printerServiceFutureProvider.future);
+              final result = await printer.printInvoice(invoice);
               if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(e.message)),
+                SnackBar(
+                  content: Text(
+                    result.success
+                        ? 'تم إنشاء الفاتورة وطباعتها.'
+                        : 'تم إنشاء الفاتورة. ${result.message}',
+                  ),
+                ),
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('تم إنشاء الفاتورة.')),
               );
             }
-          },
-          onContinue: () => Navigator.pop(context),
-        ),
-      );
-    } on ApiException catch (e) {
-      if (wasTable) {
-        if (e.isUnavailable && tableId != null) {
-          final workspaceId = ref.read(workspaceIdProvider);
-          if (workspaceId == null) {
-            if (!mounted) return;
+          } on ApiException catch (e) {
+            if (!context.mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text(e.message)),
             );
-            return;
           }
-          await _enqueueLocalTableOrder(
-            tableId: tableId,
-            workspaceId: workspaceId,
-            clientRef: clientRef,
-            notes: cart.notes,
-            items: [
-              for (final line in cart.lines)
-                {
-                  'pos_menu_item_id': line.menuItemId,
-                  'name': line.name,
-                  'quantity': line.quantity,
-                  'unit_price': line.unitPrice,
-                  'total_amount': line.lineTotal,
-                },
-            ],
-          );
-          ref.read(cartControllerProvider.notifier).clear();
-          _refreshPending();
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('تم حفظ الطلب — بانتظار الاتصال')),
-          );
-          openTableWorkspace(ref, tableId);
-          requestPosShellTab(ref, PosShellTab.tables);
-          return;
-        }
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message)),
-        );
-        return;
-      }
-      if (e.isUnavailable) {
-        final workspaceId = ref.read(workspaceIdProvider);
-        if (workspaceId == null) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(e.message)),
-          );
-          return;
-        }
-        await _enqueueLocalTakeawayOrder(
-          workspaceId: workspaceId,
-          clientRef: clientRef,
-          notes: cart.notes,
-          items: [
-            for (final line in cart.lines)
-              {
-                'pos_menu_item_id': line.menuItemId,
-                'name': line.name,
-                'quantity': line.quantity,
-                'unit_price': line.unitPrice,
-                'total_amount': line.lineTotal,
-              },
-          ],
-          customerServerId: cart.customerId,
-        );
-        ref.read(cartControllerProvider.notifier).clear();
-        _refreshPending();
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم حفظ الطلب الخارجي — بانتظار الاتصال')),
-        );
-        return;
-      }
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
-    }
+        },
+        onContinue: () => Navigator.pop(context),
+      ),
+    );
   }
 }
 

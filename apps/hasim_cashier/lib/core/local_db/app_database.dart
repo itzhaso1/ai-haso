@@ -73,6 +73,18 @@ class AppDatabase extends _$AppDatabase {
       'CREATE INDEX IF NOT EXISTS idx_local_customers_ws '
       'ON local_customers (workspace_id, sync_status)',
     );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_orders_ws_table '
+      'ON local_orders (workspace_id, table_server_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_tables_ws_server '
+      'ON local_tables (workspace_id, server_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sync_conflicts_ws_status '
+      'ON sync_conflicts (workspace_id, status)',
+    );
   }
 
   /// Production/native opener — one SQLite file per app install.
