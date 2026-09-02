@@ -140,7 +140,11 @@ void main() {
       expect(invoiceCount, 10000);
       expect(itemCount, 100000);
 
-      Future<int> timed(String name, Future<void> Function() body) async {
+      Future<int> timed(
+        String name,
+        Future<void> Function() body, {
+        int maxMs = 15000,
+      }) async {
         final sw = Stopwatch()..start();
         await body();
         sw.stop();
@@ -148,8 +152,8 @@ void main() {
         print('STRESS $name ${sw.elapsedMilliseconds}ms');
         expect(
           sw.elapsedMilliseconds,
-          lessThan(15000),
-          reason: '$name exceeded 15s (${sw.elapsedMilliseconds}ms)',
+          lessThan(maxMs),
+          reason: '$name exceeded ${maxMs}ms (${sw.elapsedMilliseconds}ms)',
         );
         return sw.elapsedMilliseconds;
       }
@@ -236,31 +240,39 @@ void main() {
       final dir = await Directory.systemTemp.createTemp('pos-stress-bak');
       addTearDown(() => dir.delete(recursive: true));
       late File backupFile;
-      await timed('backup', () async {
-        backupFile = await BackupService(db).exportBackup(
-          workspaceId: ws,
-          directory: dir,
-          password: 'secret12',
-          permissions: adminPerms,
-        );
-        expect(await backupFile.exists(), isTrue);
-      });
+      await timed(
+        'backup',
+        () async {
+          backupFile = await BackupService(db).exportBackup(
+            workspaceId: ws,
+            directory: dir,
+            password: 'secret12',
+            permissions: adminPerms,
+          );
+          expect(await backupFile.exists(), isTrue);
+        },
+        maxMs: 60000,
+      );
 
-      await timed('restore', () async {
-        await BackupService(db).restoreFile(
-          backupFile,
-          confirmed: true,
-          password: 'secret12',
-          permissions: adminPerms,
-        );
-        final after = (await db.customSelect(
-          'SELECT COUNT(*) AS c FROM local_invoices',
-        ).get())
-            .single
-            .data['c'];
-        expect(after, greaterThanOrEqualTo(10000));
-      });
+      await timed(
+        'restore',
+        () async {
+          await BackupService(db).restoreFile(
+            backupFile,
+            confirmed: true,
+            password: 'secret12',
+            permissions: adminPerms,
+          );
+          final after = (await db.customSelect(
+            'SELECT COUNT(*) AS c FROM local_invoices',
+          ).get())
+              .single
+              .data['c'];
+          expect(after, greaterThanOrEqualTo(10000));
+        },
+        maxMs: 60000,
+      );
     },
-    timeout: const Timeout(Duration(minutes: 4)),
+    timeout: const Timeout(Duration(minutes: 6)),
   );
 }

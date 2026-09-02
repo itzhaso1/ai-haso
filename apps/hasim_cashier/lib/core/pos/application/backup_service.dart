@@ -359,18 +359,47 @@ class BackupService {
       for (final table in _restoreInsertOrder) {
         final rows = tables[table];
         if (rows is! List) continue;
-        for (final raw in rows) {
-          if (raw is! Map) continue;
-          final cols = raw.keys.map((k) => k.toString()).toList();
-          if (cols.isEmpty) continue;
-          final placeholders = List.filled(cols.length, '?').join(',');
-          await _db.customStatement(
-            'INSERT OR REPLACE INTO $table (${cols.join(',')}) VALUES ($placeholders)',
-            [for (final c in cols) raw[c]],
-          );
-        }
+        await _insertChunked(table, rows);
       }
     });
+  }
+
+  /// Multi-row INSERT stays under SQLite's variable cap (~32k).
+  Future<void> _insertChunked(String table, List rows) async {
+    const maxVars = 900;
+    var i = 0;
+    while (i < rows.length) {
+      final raw = rows[i];
+      if (raw is! Map) {
+        i++;
+        continue;
+      }
+      final cols = raw.keys.map((k) => k.toString()).toList();
+      if (cols.isEmpty) {
+        i++;
+        continue;
+      }
+      final sig = cols.join(',');
+      final perRow = cols.length;
+      final chunkSize = (maxVars / perRow).floor().clamp(1, 80);
+      final batch = <Map>[raw];
+      var j = i + 1;
+      while (j < rows.length && batch.length < chunkSize) {
+        final next = rows[j];
+        if (next is! Map) break;
+        if (next.keys.map((k) => k.toString()).join(',') != sig) break;
+        batch.add(next);
+        j++;
+      }
+      final placeholders = batch
+          .map((_) => '(${List.filled(cols.length, '?').join(',')})')
+          .join(',');
+      await _db.customStatement(
+        'INSERT OR REPLACE INTO $table (${cols.join(',')}) VALUES $placeholders',
+        [for (final row in batch) for (final c in cols) row[c]],
+      );
+      i = j;
+    }
   }
 
   void _convertMajorUnitsToCents(Map tables) {
