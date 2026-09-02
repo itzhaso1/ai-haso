@@ -24,6 +24,8 @@ flutter test
 
 `flutter_test_config.dart` يضبط sqlite3 على Linux.
 
+آخر تشغيل: `flutter test` في `apps/hasim_cashier` — **129 passed, 0 failed**.
+
 ## سيناريوهات القبول اليدوية (Standalone بدون شبكة)
 
 1. إعداد متجر + مدير PIN
