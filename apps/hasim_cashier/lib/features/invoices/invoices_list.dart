@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
+import '../../core/pos/pos_mode.dart';
 import '../../core/local_db/local_db_providers.dart';
 import '../../core/printing/printer_service.dart';
 import '../../core/theme/hasim_colors.dart';
@@ -64,7 +65,10 @@ class _InvoicesListState extends ConsumerState<InvoicesList> {
 
     try {
       final session = ref.read(authControllerProvider).valueOrNull;
-      if (session?.isLocalMode == true) {
+      if (PosMode.isStandaloneRuntime(
+        isLocalMode: session?.isLocalMode == true,
+        token: session?.token,
+      )) {
         if (!mounted) return;
         setState(() {
           _loading = false;
@@ -142,8 +146,14 @@ class _InvoicesListState extends ConsumerState<InvoicesList> {
           .read(localFinanceRepositoryProvider)
           .getInvoice(workspaceId: workspaceId, localId: localId);
     }
+    final session = ref.read(authControllerProvider).valueOrNull;
     final serverId = asInt(invoice['id'] ?? invoice['server_id']);
-    if (serverId != null && serverId > 0) {
+    if (serverId != null &&
+        serverId > 0 &&
+        !PosMode.isStandaloneRuntime(
+          isLocalMode: session?.isLocalMode == true,
+          token: session?.token,
+        )) {
       try {
         final data = await ref
             .read(cashierApiProvider)

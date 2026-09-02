@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../config/app_config.dart';
 import '../network/cashier_link.dart';
+import 'network_guard.dart';
 
 final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
   return const FlutterSecureStorage(
@@ -31,6 +32,7 @@ final dioProvider = Provider<Dio>((ref) {
   dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (options, handler) {
+        NetworkGuard.recordAttempt();
         final token = ref.read(authTokenProvider);
         final workspaceId = ref.read(workspaceIdProvider);
         final deviceId = ref.read(deviceIdHeaderProvider);

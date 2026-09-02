@@ -5,7 +5,9 @@ import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../pos/pos_mode.dart';
 import 'tables.dart';
+import 'workspace_scope.dart';
 
 part 'app_database.g.dart';
 
@@ -42,13 +44,16 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) async {
       await m.createAll();
       await _createPerfIndexes();
+    },
+    beforeOpen: (details) async {
+      await customStatement('PRAGMA foreign_keys = ON');
     },
     onUpgrade: (m, from, to) async {
       if (from < 3) {
@@ -169,8 +174,57 @@ class AppDatabase extends _$AppDatabase {
         );
         await _createPerfIndexes();
       }
+      if (from < 6) {
+        await remapLegacyStandaloneWorkspaceIfNeeded();
+        await _createPerfIndexes();
+      }
     },
   );
+
+  /// Remap pre-audit standalone rows from Laravel-looking workspace `1`
+  /// to the reserved standalone scope. Never remaps a connected / synced store.
+  Future<void> remapLegacyStandaloneWorkspaceIfNeeded() async {
+    final stores = await customSelect(
+      'SELECT local_id, workspace_id, connected_mode FROM local_stores '
+      'WHERE workspace_id = ?',
+      variables: [Variable.withInt(PosMode.legacyCollidingWorkspaceId)],
+    ).get();
+    if (stores.isEmpty) return;
+    final connected = stores.first.data['connected_mode'];
+    if (connected == 1 || connected == true) return;
+    final sync = await customSelect(
+      'SELECT value FROM sync_metadata WHERE workspace_id = ? AND key = ?',
+      variables: [
+        Variable.withInt(PosMode.legacyCollidingWorkspaceId),
+        Variable.withString(SyncMetaKeys.initialSyncCompleted),
+      ],
+    ).get();
+    if (sync.isNotEmpty && '${sync.first.data['value']}' == '1') return;
+
+    final already = await customSelect(
+      'SELECT local_id FROM local_stores WHERE workspace_id = ?',
+      variables: [Variable.withInt(PosMode.standaloneWorkspaceId)],
+    ).get();
+    if (already.isNotEmpty) return;
+
+    final tables = await customSelect(
+      "SELECT name FROM sqlite_master WHERE type = 'table' "
+      "AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'android_%'",
+    ).get();
+    for (final table in tables) {
+      final name = '${table.data['name']}';
+      final cols = await customSelect('PRAGMA table_info($name)').get();
+      final hasWorkspace = cols.any((c) => '${c.data['name']}' == 'workspace_id');
+      if (!hasWorkspace) continue;
+      await customStatement(
+        'UPDATE $name SET workspace_id = ? WHERE workspace_id = ?',
+        [
+          PosMode.standaloneWorkspaceId,
+          PosMode.legacyCollidingWorkspaceId,
+        ],
+      );
+    }
+  }
 
   Future<void> _addColumnIfMissing(
     Migrator m,
@@ -254,6 +308,47 @@ class AppDatabase extends _$AppDatabase {
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_local_draft_lines_cart '
       'ON local_draft_cart_lines (cart_local_id)',
+    );
+    await customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_local_orders_ws_client_ref_uq '
+      'ON local_orders (workspace_id, client_reference)',
+    );
+    await customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_local_orders_ws_number_uq '
+      'ON local_orders (workspace_id, order_number) '
+      'WHERE order_number IS NOT NULL',
+    );
+    await customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_local_shifts_one_open '
+      'ON local_shifts (workspace_id) WHERE status = \'open\'',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_products_barcode '
+      'ON local_products (workspace_id, barcode)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_products_sku '
+      'ON local_products (workspace_id, sku)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_invoices_ws_created '
+      'ON local_invoices (workspace_id, created_at)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_orders_ws_created '
+      'ON local_orders (workspace_id, created_at)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_payments_ws_created '
+      'ON local_payments (workspace_id, created_at)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_returns_ws_created '
+      'ON local_returns (workspace_id, created_at)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_return_items_return '
+      'ON local_return_items (return_local_id)',
     );
   }
 

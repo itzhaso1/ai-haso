@@ -2,6 +2,7 @@ import '../../local_db/app_database.dart';
 import '../../local_db/workspace_scope.dart';
 import '../../offline/offline_store.dart';
 import '../../repositories/orders_repository.dart';
+import '../pos_mode.dart';
 
 /// One-shot Hive → Drift migration. POS daily paths must not read Hive after this.
 class HiveLegacyMigration {
@@ -16,6 +17,7 @@ class HiveLegacyMigration {
     required int workspaceId,
     required String deviceId,
   }) async {
+    if (PosMode.isReservedStandaloneWorkspace(workspaceId)) return;
     final done = await _db.readMeta(workspaceId, metaKey);
     if (done == '1') return;
     await OfflineStore.instance.init();

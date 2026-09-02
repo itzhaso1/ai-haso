@@ -68,3 +68,8 @@ class UserInactive extends PosException {
 class EmptyCart extends PosException {
   const EmptyCart() : super('EmptyCart', 'السلة فارغة.');
 }
+
+class Forbidden extends PosException {
+  const Forbidden()
+    : super('Forbidden', 'ليست لديك صلاحية لتنفيذ هذه العملية.');
+}

@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../local_db/app_database.dart';
 import '../pos_errors.dart';
+import '../pos_permissions.dart';
 
 class StockEngine {
   StockEngine(this._db, {String Function()? newId})
@@ -22,9 +23,13 @@ class StockEngine {
     String? referenceId,
     String? userId,
     String? deviceId,
+    Map<String, dynamic>? permissions,
   }) async {
     if (quantity <= 0) {
       throw const InvalidDiscount();
+    }
+    if (type == 'adjustment' || type == 'manual' || type == 'damage') {
+      PosPermissions.require(permissions, PosPermissions.stockAdjust);
     }
     final product =
         await (_db.select(_db.localProducts)..where(

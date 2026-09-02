@@ -34,6 +34,20 @@ class CashierPermissions {
       can(p, 'orders.manage') ||
       can(p, 'workspace.manage');
 
+  static bool canOpenShift(Map<String, dynamic>? p) =>
+      can(p, 'shifts.open') || can(p, 'shifts.manage') || can(p, 'pos.manage');
+
+  static bool canCloseShift(Map<String, dynamic>? p) =>
+      can(p, 'shifts.close') || can(p, 'shifts.manage') || can(p, 'pos.manage');
+
+  static bool canMoveCash(Map<String, dynamic>? p) =>
+      can(p, 'cash.movement') || can(p, 'shifts.manage') || can(p, 'pos.manage');
+
+  static bool canAdjustStock(Map<String, dynamic>? p) =>
+      can(p, 'stock.adjust') || can(p, 'menu.manage') || can(p, 'workspace.manage');
+
+  static bool canBackup(Map<String, dynamic>? p) => can(p, 'workspace.manage');
+
   /// Prefer bootstrap snapshot; fall back to auth session permissions.
   static Map<String, dynamic> resolve(
     Map<String, dynamic>? bootstrap,

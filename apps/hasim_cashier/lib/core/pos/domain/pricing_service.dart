@@ -1,12 +1,22 @@
 import '../pos_errors.dart';
 
-/// Single rounding policy for the entire POS: half-up to 2 decimal places.
+/// Single money policy: integer minor units (cents) inside the engine.
+///
+/// Persistence still uses REAL columns, but every write is derived from cents
+/// so `0.1 + 0.2` cannot drift away from `0.3`.
 class Money {
   const Money._();
 
-  static double round(num value) {
-    return (value * 100).round() / 100.0;
-  }
+  static int toCents(num value) => (value * 100).round();
+
+  static double fromCents(int cents) => cents / 100.0;
+
+  static double round(num value) => fromCents(toCents(value));
+
+  static int add(int a, int b) => a + b;
+
+  static int percentOf(int cents, num percent) =>
+      toCents(fromCents(cents) * (percent / 100));
 }
 
 class PricedLine {
@@ -34,7 +44,11 @@ class PricedLine {
   final String? barcode;
   final double cost;
 
-  double get lineSubtotal => Money.round(quantity * unitPrice);
+  int get unitPriceCents => Money.toCents(unitPrice);
+
+  int get lineSubtotalCents => unitPriceCents * quantity;
+
+  double get lineSubtotal => Money.fromCents(lineSubtotalCents);
 }
 
 class PriceBreakdown {
@@ -46,6 +60,9 @@ class PriceBreakdown {
     required this.taxAmount,
     required this.total,
     required this.lineResults,
+    required this.subtotalCents,
+    required this.taxCents,
+    required this.totalCents,
   });
 
   final List<PricedLine> lines;
@@ -55,6 +72,9 @@ class PriceBreakdown {
   final double taxAmount;
   final double total;
   final List<PricedLineResult> lineResults;
+  final int subtotalCents;
+  final int taxCents;
+  final int totalCents;
 }
 
 class PricedLineResult {
@@ -64,6 +84,10 @@ class PricedLineResult {
     required this.discountAmount,
     required this.taxAmount,
     required this.total,
+    required this.lineSubtotalCents,
+    required this.discountCents,
+    required this.taxCents,
+    required this.totalCents,
   });
 
   final PricedLine line;
@@ -71,6 +95,10 @@ class PricedLineResult {
   final double discountAmount;
   final double taxAmount;
   final double total;
+  final int lineSubtotalCents;
+  final int discountCents;
+  final int taxCents;
+  final int totalCents;
 }
 
 class PricingService {
@@ -91,6 +119,9 @@ class PricingService {
         taxAmount: 0,
         total: 0,
         lineResults: [],
+        subtotalCents: 0,
+        taxCents: 0,
+        totalCents: 0,
       );
     }
     for (final line in lines) {
@@ -100,64 +131,75 @@ class PricingService {
       if (line.unitPrice < 0 || line.itemDiscount < 0) {
         throw const InvalidDiscount();
       }
-      if (line.itemDiscount > line.lineSubtotal) {
+      if (Money.toCents(line.itemDiscount) > line.lineSubtotalCents) {
         throw const InvalidDiscount();
       }
     }
 
-    var subtotal = 0.0;
-    var itemDiscountTotal = 0.0;
+    var subtotalCents = 0;
+    var itemDiscountCents = 0;
     for (final line in lines) {
-      subtotal = Money.round(subtotal + line.lineSubtotal);
-      itemDiscountTotal = Money.round(itemDiscountTotal + line.itemDiscount);
+      subtotalCents += line.lineSubtotalCents;
+      itemDiscountCents += Money.toCents(line.itemDiscount);
     }
-    final afterItems = Money.round(subtotal - itemDiscountTotal);
-    var orderDiscount = 0.0;
+    final afterItemsCents = subtotalCents - itemDiscountCents;
+    var orderDiscountCents = 0;
     if (orderDiscountPercent > 0) {
       if (orderDiscountPercent > 100) throw const InvalidDiscount();
-      orderDiscount = Money.round(afterItems * (orderDiscountPercent / 100));
+      orderDiscountCents += Money.percentOf(afterItemsCents, orderDiscountPercent);
     }
     if (orderDiscountAmount > 0) {
-      orderDiscount = Money.round(orderDiscount + orderDiscountAmount);
+      orderDiscountCents += Money.toCents(orderDiscountAmount);
     }
-    if (orderDiscount > afterItems) throw const InvalidDiscount();
+    if (orderDiscountCents > afterItemsCents) throw const InvalidDiscount();
 
-    final taxable = Money.round(afterItems - orderDiscount);
+    final taxableCents = afterItemsCents - orderDiscountCents;
     final results = <PricedLineResult>[];
-    var taxTotal = 0.0;
-    final weightBase = afterItems <= 0 ? 1.0 : afterItems;
+    var taxTotalCents = 0;
+    final weightBase = afterItemsCents <= 0 ? 1 : afterItemsCents;
 
     for (final line in lines) {
-      final lineNet = Money.round(line.lineSubtotal - line.itemDiscount);
-      final share = lineNet / weightBase;
-      final lineOrderDiscount = Money.round(orderDiscount * share);
-      final lineTaxable = Money.round(lineNet - lineOrderDiscount);
+      final lineNetCents =
+          line.lineSubtotalCents - Money.toCents(line.itemDiscount);
+      final lineOrderDiscountCents =
+          ((orderDiscountCents * lineNetCents) / weightBase).round();
+      final lineTaxableCents = lineNetCents - lineOrderDiscountCents;
       final rate = line.taxRate > 0 ? line.taxRate : fallbackTaxRate;
       if (rate < 0 || rate > 100) throw const InvalidDiscount();
-      final lineTax = Money.round(lineTaxable * (rate / 100));
-      taxTotal = Money.round(taxTotal + lineTax);
+      final lineTaxCents = Money.percentOf(lineTaxableCents, rate);
+      taxTotalCents += lineTaxCents;
+      final lineTotalCents = lineTaxableCents + lineTaxCents;
+      final discountCents =
+          Money.toCents(line.itemDiscount) + lineOrderDiscountCents;
       results.add(
         PricedLineResult(
           line: line,
           lineSubtotal: line.lineSubtotal,
-          discountAmount: Money.round(line.itemDiscount + lineOrderDiscount),
-          taxAmount: lineTax,
-          total: Money.round(lineTaxable + lineTax),
+          discountAmount: Money.fromCents(discountCents),
+          taxAmount: Money.fromCents(lineTaxCents),
+          total: Money.fromCents(lineTotalCents),
+          lineSubtotalCents: line.lineSubtotalCents,
+          discountCents: discountCents,
+          taxCents: lineTaxCents,
+          totalCents: lineTotalCents,
         ),
       );
     }
 
-    final total = Money.round(taxable + taxTotal);
-    if (total < 0) throw const InvalidDiscount();
+    final totalCents = taxableCents + taxTotalCents;
+    if (totalCents < 0) throw const InvalidDiscount();
 
     return PriceBreakdown(
       lines: lines,
-      subtotal: subtotal,
-      itemDiscountTotal: itemDiscountTotal,
-      orderDiscount: orderDiscount,
-      taxAmount: taxTotal,
-      total: total,
+      subtotal: Money.fromCents(subtotalCents),
+      itemDiscountTotal: Money.fromCents(itemDiscountCents),
+      orderDiscount: Money.fromCents(orderDiscountCents),
+      taxAmount: Money.fromCents(taxTotalCents),
+      total: Money.fromCents(totalCents),
       lineResults: results,
+      subtotalCents: subtotalCents,
+      taxCents: taxTotalCents,
+      totalCents: totalCents,
     );
   }
 }

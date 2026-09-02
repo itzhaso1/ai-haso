@@ -2,7 +2,10 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../local_db/app_database.dart';
+import '../../local_db/workspace_scope.dart';
+import '../domain/pricing_service.dart';
 import '../pos_errors.dart';
+import '../pos_permissions.dart';
 import 'stock_engine.dart';
 
 class ReturnLineInput {
@@ -32,9 +35,17 @@ class ReturnService {
     String? createdByUserId,
     String? shiftLocalId,
     String? deviceId,
+    Map<String, dynamic>? permissions,
   }) {
     if (lines.isEmpty) throw const InvalidReturnQuantity();
+    PosPermissions.require(permissions, PosPermissions.refund);
     return _db.transaction(() async {
+      await _db.writeMeta(
+        workspaceId,
+        'return_lock',
+        DateTime.now().toIso8601String(),
+        deviceId: deviceId,
+      );
       final order =
           await (_db.select(_db.localOrders)..where(
                 (t) =>
@@ -45,6 +56,11 @@ class ReturnService {
       if (order == null) {
         throw const DatabaseFailure('الطلب غير موجود.');
       }
+      // Touch the order row for a write lock without changing financials.
+      await (_db.update(_db.localOrders)
+            ..where((t) => t.localId.equals(orderLocalId)))
+          .write(LocalOrdersCompanion(updatedAt: Value(DateTime.now())));
+
       final invoice =
           await (_db.select(_db.localInvoices)..where(
                 (t) =>
@@ -61,9 +77,15 @@ class ReturnService {
               .get();
       final byId = {for (final i in items) i.localId: i};
 
-      final previous = await (_db.select(
-        _db.localReturnItems,
-      )..where((t) => t.workspaceId.equals(workspaceId))).get();
+      final previousReturns = await (_db.select(
+        _db.localReturns,
+      )..where((t) => t.orderLocalId.equals(orderLocalId))).get();
+      final returnIds = [for (final r in previousReturns) r.localId];
+      final previous = returnIds.isEmpty
+          ? const <LocalReturnItem>[]
+          : await (_db.select(
+              _db.localReturnItems,
+            )..where((t) => t.returnLocalId.isIn(returnIds))).get();
       final already = <String, int>{};
       for (final p in previous) {
         final oid = p.orderItemLocalId;
@@ -71,7 +93,7 @@ class ReturnService {
         already[oid] = (already[oid] ?? 0) + p.quantity;
       }
 
-      var refundTotal = 0.0;
+      var refundCents = 0;
       final now = DateTime.now();
       final returnId = _newId();
       await _db
@@ -97,11 +119,11 @@ class ReturnService {
         if (line.quantity <= 0 || line.quantity > item.quantity - used) {
           throw const InvalidReturnQuantity();
         }
-        final unit = item.quantity == 0
-            ? 0.0
-            : item.totalAmount / item.quantity;
-        final amount = (unit * line.quantity * 100).round() / 100.0;
-        refundTotal += amount;
+        final unitCents = item.quantity == 0
+            ? 0
+            : Money.toCents(item.totalAmount) ~/ item.quantity;
+        final amountCents = unitCents * line.quantity;
+        refundCents += amountCents;
         await _db
             .into(_db.localReturnItems)
             .insert(
@@ -113,7 +135,7 @@ class ReturnService {
                 productLocalId: Value(item.productLocalId),
                 productNameSnapshot: item.name,
                 quantity: line.quantity,
-                refundAmount: amount,
+                refundAmount: Money.fromCents(amountCents),
               ),
             );
         if (item.productLocalId != null) {
@@ -122,7 +144,7 @@ class ReturnService {
             productLocalId: item.productLocalId!,
             type: 'return',
             quantity: line.quantity,
-            allowNegative: true,
+            allowNegative: allowNegativeStock,
             referenceType: 'return',
             referenceId: returnId,
             userId: createdByUserId,
@@ -133,9 +155,21 @@ class ReturnService {
 
       await (_db.update(_db.localReturns)
             ..where((t) => t.localId.equals(returnId)))
-          .write(LocalReturnsCompanion(refundAmount: Value(refundTotal)));
+          .write(
+            LocalReturnsCompanion(
+              refundAmount: Value(Money.fromCents(refundCents)),
+            ),
+          );
 
-      if (shiftLocalId != null && refundTotal > 0) {
+      if (shiftLocalId != null && refundCents > 0) {
+        final shift =
+            await (_db.select(_db.localShifts)..where(
+                  (t) =>
+                      t.localId.equals(shiftLocalId) &
+                      t.status.equals('open'),
+                ))
+                .getSingleOrNull();
+        if (shift == null) throw const ShiftNotOpen();
         await _db
             .into(_db.localCashMovements)
             .insert(
@@ -144,7 +178,7 @@ class ReturnService {
                 workspaceId: workspaceId,
                 shiftLocalId: shiftLocalId,
                 type: 'refund',
-                amount: refundTotal,
+                amount: Money.fromCents(refundCents),
                 reason: Value(reason ?? 'مرتجع'),
                 referenceId: Value(returnId),
                 createdByUserId: Value(createdByUserId),
@@ -152,6 +186,7 @@ class ReturnService {
               ),
             );
       }
+      // Original invoice totals stay immutable.
       return returnId;
     });
   }

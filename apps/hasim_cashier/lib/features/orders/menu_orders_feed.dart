@@ -3,6 +3,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
+import '../../core/auth/auth_controller.dart';
+import '../../core/pos/pos_mode.dart';
 import '../../core/audio/menu_sound_service.dart';
 import '../../core/config/app_config.dart';
 import '../../core/network/cashier_link.dart';
@@ -85,6 +87,19 @@ class _MenuOrdersFeedState extends ConsumerState<MenuOrdersFeed> {
       });
     }
     try {
+      final session = ref.read(authControllerProvider).valueOrNull;
+      if (PosMode.isStandaloneRuntime(
+        isLocalMode: session?.isLocalMode == true,
+        token: session?.token,
+      )) {
+        if (!silent && mounted) {
+          setState(() {
+            _loading = false;
+            _error = null;
+          });
+        }
+        return;
+      }
       final data = await ref.read(cashierApiProvider).get(
         '/orders/recent-menu',
         query: {

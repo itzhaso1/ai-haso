@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/api/cashier_api.dart';
+import '../../core/auth/auth_controller.dart';
 import '../../core/local_db/local_db_providers.dart';
+import '../../core/pos/pos_mode.dart';
 import '../../core/sync/pos_sync_coordinator.dart';
 import '../../core/theme/hasim_colors.dart';
 
@@ -55,6 +57,18 @@ class _CustomersPanelState extends ConsumerState<CustomersPanel> {
           _customers = local;
           _loading = false;
         });
+      }
+      final session = ref.read(authControllerProvider).valueOrNull;
+      if (PosMode.isStandaloneRuntime(
+        isLocalMode: session?.isLocalMode == true,
+        token: session?.token,
+      )) {
+        if (!mounted) return;
+        setState(() {
+          _customers = local;
+          _loading = false;
+        });
+        return;
       }
       // Best-effort remote refresh into local store for next time.
       try {

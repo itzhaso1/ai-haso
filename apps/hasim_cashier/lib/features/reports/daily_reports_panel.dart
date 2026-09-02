@@ -6,6 +6,7 @@ import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/local_db/local_db_providers.dart';
 import '../../core/pos/application/pos_providers.dart';
+import '../../core/pos/pos_mode.dart';
 import '../../core/network/cashier_link.dart';
 import '../../core/offline/offline_store.dart';
 import '../../core/permissions/cashier_permissions.dart';
@@ -71,7 +72,10 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
 
     try {
       final session = ref.read(authControllerProvider).valueOrNull;
-      if (session?.isLocalMode == true) {
+      if (PosMode.isStandaloneRuntime(
+        isLocalMode: session?.isLocalMode == true,
+        token: session?.token,
+      )) {
         final workspaceId = ref.read(workspaceIdProvider);
         if (workspaceId != null) {
           final local = await ref

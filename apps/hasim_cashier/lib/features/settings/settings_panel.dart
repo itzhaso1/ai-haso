@@ -61,13 +61,27 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
     final sound = ref.read(menuSoundServiceProvider);
     final printer = await ref.read(printerServiceFutureProvider.future);
     Map<String, dynamic>? settings;
-    try {
-      final bootstrap = await ref.read(cashierApiProvider).get('/bootstrap');
-      if (bootstrap['settings'] is Map) {
-        settings = Map<String, dynamic>.from(bootstrap['settings'] as Map);
+    final session = ref.read(authControllerProvider).valueOrNull;
+    if (!PosMode.isStandaloneRuntime(
+      isLocalMode: session?.isLocalMode == true,
+      token: session?.token,
+    )) {
+      try {
+        final bootstrap = await ref.read(cashierApiProvider).get('/bootstrap');
+        if (bootstrap['settings'] is Map) {
+          settings = Map<String, dynamic>.from(bootstrap['settings'] as Map);
+        }
+      } catch (_) {
+        // Keep local defaults if bootstrap fails.
       }
-    } catch (_) {
-      // Keep local defaults if bootstrap fails.
+    } else {
+      final store = await ref.read(localAuthServiceProvider).anyStore();
+      if (store != null) {
+        settings = {
+          'tax_rate': store.taxRate,
+          'currency': store.currency,
+        };
+      }
     }
     if (!mounted) return;
     setState(() {
@@ -234,6 +248,7 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
             workspaceId: workspaceId,
             userId: userId,
             openingCash: double.tryParse(opening.text) ?? 0,
+            permissions: ref.read(authControllerProvider).valueOrNull?.permissions,
           );
       ref.read(currentShiftIdProvider.notifier).state = id;
       if (!mounted) return;
@@ -291,6 +306,7 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
             workspaceId: workspaceId,
             shiftId: shiftId,
             actualCash: double.tryParse(actual.text) ?? 0,
+            permissions: ref.read(authControllerProvider).valueOrNull?.permissions,
           );
       ref.read(currentShiftIdProvider.notifier).state = null;
       if (!mounted) return;
@@ -336,7 +352,11 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
     if (ok != true || name.text.trim().isEmpty) return;
     await ref
         .read(catalogAdminServiceProvider)
-        .createTable(workspaceId: workspaceId, name: name.text.trim());
+        .createTable(
+          workspaceId: workspaceId,
+          name: name.text.trim(),
+          permissions: ref.read(authControllerProvider).valueOrNull?.permissions,
+        );
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
@@ -344,12 +364,21 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
   }
 
   Future<void> _exportBackup() async {
+    if (!CashierPermissions.canBackup(_perms)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا تملك صلاحية النسخ الاحتياطي.')),
+      );
+      return;
+    }
     final workspaceId = ref.read(workspaceIdProvider);
     if (workspaceId == null) return;
     try {
       final file = await ref
           .read(backupServiceProvider)
-          .exportBackup(workspaceId: workspaceId);
+          .exportBackup(
+            workspaceId: workspaceId,
+            permissions: _perms,
+          );
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -361,6 +390,12 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
   }
 
   Future<void> _restoreBackup() async {
+    if (!CashierPermissions.canBackup(_perms)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('لا تملك صلاحية استعادة النسخة.')),
+      );
+      return;
+    }
     final workspaceId = ref.read(workspaceIdProvider);
     if (workspaceId == null) return;
     final backups = await ref.read(backupServiceProvider).listBackups();
@@ -395,10 +430,10 @@ class _SettingsPanelState extends ConsumerState<SettingsPanel> {
     try {
       await ref
           .read(backupServiceProvider)
-          .exportBackup(workspaceId: workspaceId);
+          .exportBackup(workspaceId: workspaceId, permissions: _perms);
       await ref
           .read(backupServiceProvider)
-          .restoreFile(chosen, confirmed: true);
+          .restoreFile(chosen, confirmed: true, permissions: _perms);
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,

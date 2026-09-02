@@ -9,6 +9,7 @@ import '../../core/pos/application/return_service.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
 import '../../core/pos/pos_labels.dart';
+import '../../core/pos/pos_mode.dart';
 import '../../core/sync/pos_sync_coordinator.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
@@ -75,7 +76,12 @@ class _OrdersListState extends ConsumerState<OrdersList> {
         });
       }
       final session = ref.read(authControllerProvider).valueOrNull;
-      if (session?.isLocalMode == true) return;
+      if (PosMode.isStandaloneRuntime(
+        isLocalMode: session?.isLocalMode == true,
+        token: session?.token,
+      )) {
+        return;
+      }
       // Best-effort online enrichment for kitchen status / invoices — never
       // replaces empty local with invented data.
       try {
@@ -119,6 +125,31 @@ class _OrdersListState extends ConsumerState<OrdersList> {
   }
 
   Future<void> _updateStatus(Map<String, dynamic> order, String status) async {
+    final session = ref.read(authControllerProvider).valueOrNull;
+    if (PosMode.isStandaloneRuntime(
+      isLocalMode: session?.isLocalMode == true,
+      token: session?.token,
+    )) {
+      final workspaceId = ref.read(workspaceIdProvider);
+      final localId = '${order['local_id'] ?? ''}'.trim();
+      if (workspaceId == null || localId.isEmpty) return;
+      try {
+        await ref
+            .read(kitchenLocalServiceProvider)
+            .updateStatus(
+              workspaceId: workspaceId,
+              orderLocalId: localId,
+              status: status,
+            );
+        await _load();
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
+      }
+      return;
+    }
     final id = (order['id'] as num?)?.toInt();
     if (id == null) return;
     try {
@@ -190,8 +221,11 @@ class _OrdersListState extends ConsumerState<OrdersList> {
       );
       return;
     }
-    final id = (order['id'] as num?)?.toInt();
-    if (id == null) return;
+    final localIdRaw = '${order['local_id'] ?? ''}'.trim();
+    final numericId = (order['id'] is num)
+        ? (order['id'] as num).toInt()
+        : int.tryParse('${order['id'] ?? ''}');
+    if (localIdRaw.isEmpty && numericId == null) return;
     final items = order['items'] is List
         ? (order['items'] as List).whereType<Map>().toList()
         : <Map>[];
@@ -201,7 +235,7 @@ class _OrdersListState extends ConsumerState<OrdersList> {
       builder: (ctx) => AlertDialog(
         title: const Text('مرتجع / استرداد'),
         content: Text(
-          'سيتم تسجيل مرتجع لكل أصناف الطلب #${order['order_number'] ?? id} '
+          'سيتم تسجيل مرتجع لكل أصناف الطلب #${order['order_number'] ?? localIdRaw} '
           'وتمييزه كمسترد مباشرة إن سمحت الصلاحية.',
         ),
         actions: [
@@ -220,7 +254,7 @@ class _OrdersListState extends ConsumerState<OrdersList> {
     try {
       final session = ref.read(authControllerProvider).valueOrNull;
       final workspaceId = ref.read(workspaceIdProvider);
-      final localId = order['local_id'] as String?;
+      final localId = localIdRaw.isNotEmpty ? localIdRaw : null;
       if ((session?.isLocalMode == true || localId != null) &&
           workspaceId != null &&
           localId != null) {
@@ -230,6 +264,7 @@ class _OrdersListState extends ConsumerState<OrdersList> {
         final rawItems = resolved?['items'] is List
             ? (resolved!['items'] as List).whereType<Map>().toList()
             : items;
+        final store = await ref.read(localAuthServiceProvider).anyStore();
         await ref
             .read(returnServiceProvider)
             .execute(
@@ -243,10 +278,11 @@ class _OrdersListState extends ConsumerState<OrdersList> {
                       quantity: (item['quantity'] as num?)?.toInt() ?? 1,
                     ),
               ],
-              allowNegativeStock: true,
+              allowNegativeStock: store?.allowNegativeStock ?? false,
               reason: 'مرتجع من تطبيق الكاشير',
               createdByUserId: ref.read(currentLocalUserIdProvider),
               shiftLocalId: ref.read(currentShiftIdProvider),
+              permissions: session?.permissions ?? perms,
             );
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -258,7 +294,7 @@ class _OrdersListState extends ConsumerState<OrdersList> {
       await ref
           .read(cashierApiProvider)
           .post(
-            '/orders/$id/returns',
+            '/orders/$numericId/returns',
             data: {
               'reason': 'مرتجع من تطبيق الكاشير',
               'mark_refunded': true,

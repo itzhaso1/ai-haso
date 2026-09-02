@@ -161,10 +161,13 @@ class AuthRepository {
   }
 
   Future<void> logout() async {
-    try {
-      await _api.post('/auth/logout');
-    } catch (_) {
-      // Still clear local session.
+    final token = await _storage.read(key: _tokenKey);
+    if (!PosMode.isStandaloneToken(token)) {
+      try {
+        await _api.post('/auth/logout');
+      } catch (_) {
+        // Still clear local session.
+      }
     }
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _workspaceKey);
@@ -210,10 +213,11 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
               store.connectedMode;
           _ref.read(workspaceIdProvider.notifier).state = store.workspaceId;
         }
-        if (restored.token.startsWith('standalone:')) {
-          _ref.read(currentLocalUserIdProvider.notifier).state = restored.token
-              .substring('standalone:'.length);
-        }
+        // Cold start must require PIN. Token stays on disk for next restore.
+        _ref.read(authTokenProvider.notifier).state = null;
+        _ref.read(currentLocalUserIdProvider.notifier).state = null;
+        state = const AsyncValue.data(null);
+        return;
       }
       final cached = _sessionFromCache(restored.token, restored.workspace);
       // Leave splash immediately — never block startup on /auth/me.
@@ -601,9 +605,17 @@ class AuthController extends StateNotifier<AsyncValue<AuthSession?>> {
   }
 
   Future<void> logout() async {
+    final token = _ref.read(authTokenProvider);
+    final standalone = PosMode.isStandaloneToken(token);
     await _ref.read(authRepositoryProvider).logout();
     _ref.read(authTokenProvider.notifier).state = null;
-    _ref.read(workspaceIdProvider.notifier).state = null;
+    _ref.read(currentShiftIdProvider.notifier).state = null;
+    _ref.read(currentLocalUserIdProvider.notifier).state = null;
+    if (!standalone) {
+      _ref.read(workspaceIdProvider.notifier).state = null;
+      _ref.read(currentStoreIdProvider.notifier).state = null;
+      _ref.read(posConnectedModeProvider.notifier).state = false;
+    }
     state = const AsyncValue.data(null);
   }
 }

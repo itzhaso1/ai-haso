@@ -217,9 +217,14 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
         final deviceId = await ref
             .read(deviceIdentityProvider)
             .getOrCreateDeviceId();
-        await ref
-            .read(hiveLegacyMigrationProvider)
-            .runIfNeeded(workspaceId: workspaceId, deviceId: deviceId);
+        if (!PosMode.isStandaloneRuntime(
+          isLocalMode: session?.isLocalMode == true,
+          token: session?.token,
+        )) {
+          await ref
+              .read(hiveLegacyMigrationProvider)
+              .runIfNeeded(workspaceId: workspaceId, deviceId: deviceId);
+        }
       }
       _applyBootstrapPayload({
         'pos_enabled': true,
@@ -604,6 +609,9 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
               allowNegativeStock: store?.allowNegativeStock ?? false,
               connected: !standalone && ref.read(posConnectedModeProvider),
               invoicePrefix: store?.invoicePrefix ?? 'INV-',
+              permissions: session?.permissions ?? const {},
+              clearDraftChannel: cart.channel.name,
+              clearDraftTableLocalId: cart.tableLocalId,
             ),
           );
 

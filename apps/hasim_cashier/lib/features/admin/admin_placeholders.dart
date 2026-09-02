@@ -7,6 +7,7 @@ import '../../core/local_db/local_db_providers.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
 import '../../core/pos/application/pos_providers.dart';
+import '../../core/pos/pos_mode.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/widgets/hasim_widgets.dart';
 import '../cart/cart_controller.dart';
@@ -52,7 +53,10 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
     });
     try {
       final session = ref.read(authControllerProvider).valueOrNull;
-      final standalone = session?.isLocalMode == true;
+      final standalone = PosMode.isStandaloneRuntime(
+        isLocalMode: session?.isLocalMode == true,
+        token: session?.token,
+      );
       final workspaceId = ref.read(workspaceIdProvider);
       if (standalone && workspaceId != null) {
         final items = await ref
@@ -125,7 +129,11 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
     try {
       final session = ref.read(authControllerProvider).valueOrNull;
       final workspaceId = ref.read(workspaceIdProvider);
-      if (session?.isLocalMode == true && workspaceId != null) {
+      if (PosMode.isStandaloneRuntime(
+            isLocalMode: session?.isLocalMode == true,
+            token: session?.token,
+          ) &&
+          workspaceId != null) {
         final admin = ref.read(catalogAdminServiceProvider);
         if (existing == null) {
           await admin.createProduct(
@@ -139,6 +147,7 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
             stock: (result['stock'] as num?)?.toInt(),
             trackStock: result['track_stock'] == true,
             categoryLocalId: result['category_local_id'] as String?,
+            permissions: session?.permissions ?? _perms,
           );
         } else {
           await admin.updateProduct(
@@ -150,6 +159,7 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
             barcode: result['barcode'] as String?,
             cost: (result['cost'] as num?)?.toDouble(),
             stock: (result['stock'] as num?)?.toInt(),
+            permissions: session?.permissions ?? _perms,
           );
         }
         if (!mounted) return;
@@ -210,6 +220,25 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
     );
     if (ok != true) return;
     try {
+      final session = ref.read(authControllerProvider).valueOrNull;
+      final workspaceId = ref.read(workspaceIdProvider);
+      final localId = '${item['local_id'] ?? ''}';
+      if (PosMode.isStandaloneRuntime(
+            isLocalMode: session?.isLocalMode == true,
+            token: session?.token,
+          ) &&
+          workspaceId != null &&
+          localId.isNotEmpty) {
+        await ref
+            .read(catalogAdminServiceProvider)
+            .deleteProduct(
+              workspaceId: workspaceId,
+              localId: localId,
+              permissions: session?.permissions ?? _perms,
+            );
+        await _load();
+        return;
+      }
       await ref.read(cashierApiProvider).delete('/catalog/items/${item['id']}');
       await _load();
     } on ApiException catch (e) {
@@ -267,13 +296,18 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
     try {
       final session = ref.read(authControllerProvider).valueOrNull;
       final workspaceId = ref.read(workspaceIdProvider);
-      if (session?.isLocalMode == true && workspaceId != null) {
+      if (PosMode.isStandaloneRuntime(
+            isLocalMode: session?.isLocalMode == true,
+            token: session?.token,
+          ) &&
+          workspaceId != null) {
         if (existing == null) {
           await ref
               .read(catalogAdminServiceProvider)
               .createCategory(
                 workspaceId: workspaceId,
                 name: payload['name'] as String,
+                permissions: session?.permissions ?? _perms,
               );
         }
         await _load();

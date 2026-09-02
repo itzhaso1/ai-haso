@@ -2,7 +2,9 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../local_db/app_database.dart';
+import '../domain/pricing_service.dart';
 import '../pos_errors.dart';
+import '../pos_permissions.dart';
 
 class ShiftService {
   ShiftService(this._db, {String Function()? newId})
@@ -25,7 +27,9 @@ class ShiftService {
     required int workspaceId,
     required String userId,
     required double openingCash,
+    Map<String, dynamic>? permissions,
   }) {
+    PosPermissions.require(permissions, PosPermissions.shiftOpen);
     return _db.transaction(() async {
       final open = await currentOpen(workspaceId);
       if (open != null) return open.localId;
@@ -64,37 +68,38 @@ class ShiftService {
     final rows = await (_db.select(
       _db.localCashMovements,
     )..where((t) => t.shiftLocalId.equals(shiftId))).get();
-    var opening = 0.0;
-    var sales = 0.0;
-    var cashIn = 0.0;
-    var refunds = 0.0;
-    var cashOut = 0.0;
-    var expenses = 0.0;
+    var opening = 0;
+    var sales = 0;
+    var cashIn = 0;
+    var refunds = 0;
+    var cashOut = 0;
+    var expenses = 0;
     for (final row in rows) {
+      final cents = Money.toCents(row.amount);
       switch (row.type) {
         case 'opening':
-          opening += row.amount;
+          opening += cents;
         case 'sale':
-          sales += row.amount;
+          sales += cents;
         case 'cash_in':
-          cashIn += row.amount;
+          cashIn += cents;
         case 'refund':
-          refunds += row.amount;
+          refunds += cents;
         case 'cash_out':
-          cashOut += row.amount;
+          cashOut += cents;
         case 'expense':
-          expenses += row.amount;
+          expenses += cents;
       }
     }
     final expected = opening + sales + cashIn - refunds - cashOut - expenses;
     return {
-      'opening': opening,
-      'sales': sales,
-      'cash_in': cashIn,
-      'refunds': refunds,
-      'cash_out': cashOut,
-      'expenses': expenses,
-      'expected': (expected * 100).round() / 100.0,
+      'opening': Money.fromCents(opening),
+      'sales': Money.fromCents(sales),
+      'cash_in': Money.fromCents(cashIn),
+      'refunds': Money.fromCents(refunds),
+      'cash_out': Money.fromCents(cashOut),
+      'expenses': Money.fromCents(expenses),
+      'expected': Money.fromCents(expected),
     };
   }
 
@@ -105,7 +110,10 @@ class ShiftService {
     required double amount,
     String? reason,
     String? userId,
+    Map<String, dynamic>? permissions,
   }) async {
+    PosPermissions.require(permissions, PosPermissions.cashMovement);
+    if (amount < 0) throw const InvalidDiscount();
     final open = await currentOpen(workspaceId);
     if (open == null || open.localId != shiftId) throw const ShiftNotOpen();
     await _db
@@ -128,7 +136,9 @@ class ShiftService {
     required int workspaceId,
     required String shiftId,
     required double actualCash,
+    Map<String, dynamic>? permissions,
   }) {
+    PosPermissions.require(permissions, PosPermissions.shiftClose);
     return _db.transaction(() async {
       final shift =
           await (_db.select(_db.localShifts)..where(
@@ -140,7 +150,9 @@ class ShiftService {
       if (shift == null || shift.status != 'open') throw const ShiftNotOpen();
       final breakdown = await expectedBreakdown(shiftId);
       final expected = breakdown['expected'] ?? 0;
-      final diff = ((actualCash - expected) * 100).round() / 100.0;
+      final diff = Money.fromCents(
+        Money.toCents(actualCash) - Money.toCents(expected),
+      );
       final now = DateTime.now();
       await _db
           .into(_db.localCashMovements)

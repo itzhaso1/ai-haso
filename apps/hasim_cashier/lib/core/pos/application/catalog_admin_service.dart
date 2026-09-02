@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../local_db/app_database.dart';
+import '../pos_permissions.dart';
 
 class CatalogAdminService {
   CatalogAdminService(this._db, {String Function()? newId})
@@ -14,7 +15,9 @@ class CatalogAdminService {
     required int workspaceId,
     required String name,
     int sortOrder = 0,
+    Map<String, dynamic>? permissions,
   }) async {
+    PosPermissions.require(permissions, PosPermissions.catalog);
     final id = _newId();
     final now = DateTime.now();
     await _db
@@ -43,7 +46,9 @@ class CatalogAdminService {
     double taxRate = 0,
     int? stock,
     bool trackStock = false,
+    Map<String, dynamic>? permissions,
   }) async {
+    PosPermissions.require(permissions, PosPermissions.catalog);
     final id = _newId();
     final now = DateTime.now();
     await _db
@@ -80,7 +85,9 @@ class CatalogAdminService {
     bool? trackStock,
     bool? isActive,
     String? categoryLocalId,
+    Map<String, dynamic>? permissions,
   }) async {
+    PosPermissions.require(permissions, PosPermissions.catalog);
     await (_db.update(_db.localProducts)..where(
           (t) => t.localId.equals(localId) & t.workspaceId.equals(workspaceId),
         ))
@@ -121,7 +128,7 @@ class CatalogAdminService {
             .getSingleOrNull();
     if (row == null) return null;
     return {
-      'id': row.serverId ?? row.localId,
+      'id': row.localId,
       'local_id': row.localId,
       'name': row.name,
       'price': row.price,
@@ -133,11 +140,31 @@ class CatalogAdminService {
     };
   }
 
+  Future<void> deleteProduct({
+    required int workspaceId,
+    required String localId,
+    Map<String, dynamic>? permissions,
+  }) async {
+    PosPermissions.require(permissions, PosPermissions.catalog);
+    await (_db.update(_db.localProducts)..where(
+          (t) => t.localId.equals(localId) & t.workspaceId.equals(workspaceId),
+        ))
+        .write(
+          LocalProductsCompanion(
+            isDeleted: const Value(true),
+            isActive: const Value(false),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
+  }
+
   Future<String> createTable({
     required int workspaceId,
     required String name,
     String? number,
+    Map<String, dynamic>? permissions,
   }) async {
+    PosPermissions.require(permissions, PosPermissions.catalog);
     final localId = _newId();
     final now = DateTime.now();
     await _db

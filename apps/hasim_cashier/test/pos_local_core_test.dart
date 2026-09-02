@@ -16,10 +16,13 @@ import 'package:hasim_cashier/core/pos/application/return_service.dart';
 import 'package:hasim_cashier/core/pos/application/shift_service.dart';
 import 'package:hasim_cashier/core/pos/application/stock_engine.dart';
 import 'package:hasim_cashier/core/pos/domain/pricing_service.dart';
+import 'package:hasim_cashier/core/api/network_guard.dart';
 import 'package:hasim_cashier/core/pos/pos_errors.dart';
 import 'package:hasim_cashier/core/pos/pos_mode.dart';
 import 'package:hasim_cashier/core/repositories/sync_queue_repository.dart';
 import 'package:hasim_cashier/features/cart/cart_controller.dart';
+
+const adminPerms = LocalAuthService.adminPermissions;
 
 void main() {
   late AppDatabase db;
@@ -64,11 +67,13 @@ void main() {
       stock: 10,
       trackStock: true,
       barcode: '123456',
+      permissions: adminPerms,
     );
     final shiftId = await shifts.open(
       workspaceId: PosMode.standaloneWorkspaceId,
       userId: created.user.localId,
       openingCash: 100,
+      permissions: adminPerms,
     );
     return (
       storeId: created.store.localId,
@@ -107,6 +112,7 @@ void main() {
           workspaceId: PosMode.standaloneWorkspaceId,
           deviceId: 'dev-1',
           storeId: seed.storeId,
+          permissions: adminPerms,
           clientReference: 'sale-1',
           orderType: 'takeaway',
           lines: [
@@ -167,6 +173,7 @@ void main() {
       workspaceId: PosMode.standaloneWorkspaceId,
       deviceId: 'dev-1',
       storeId: seed.storeId,
+      permissions: adminPerms,
       clientReference: 'sale-dup',
       orderType: 'delivery',
       lines: [
@@ -196,6 +203,7 @@ void main() {
           workspaceId: PosMode.standaloneWorkspaceId,
           deviceId: 'dev-1',
           storeId: seed.storeId,
+          permissions: adminPerms,
           clientReference: 'sale-stock',
           orderType: 'takeaway',
           lines: [
@@ -226,6 +234,7 @@ void main() {
         workspaceId: PosMode.standaloneWorkspaceId,
         deviceId: 'dev-1',
         storeId: seed.storeId,
+        permissions: adminPerms,
         clientReference: 'sale-split',
         orderType: 'takeaway',
         lines: [
@@ -256,6 +265,7 @@ void main() {
         workspaceId: PosMode.standaloneWorkspaceId,
         deviceId: 'dev-1',
         storeId: seed.storeId,
+        permissions: adminPerms,
         clientReference: 'sale-ret',
         orderType: 'takeaway',
         lines: [
@@ -279,6 +289,7 @@ void main() {
       lines: [ReturnLineInput(orderItemLocalId: item.localId, quantity: 1)],
       allowNegativeStock: true,
       shiftLocalId: seed.shiftId,
+      permissions: adminPerms,
       createdByUserId: seed.userId,
       deviceId: 'dev-1',
     );
@@ -292,6 +303,7 @@ void main() {
         orderLocalId: 'sale-ret',
         lines: [ReturnLineInput(orderItemLocalId: item.localId, quantity: 3)],
         allowNegativeStock: true,
+        permissions: adminPerms,
       ),
       throwsA(isA<InvalidReturnQuantity>()),
     );
@@ -303,7 +315,7 @@ void main() {
     var fileDb = AppDatabase(NativeDatabase(file));
     final store = DraftCartStore(fileDb);
     await store.save(
-      workspaceId: 1,
+      workspaceId: PosMode.standaloneWorkspaceId,
       channel: 'takeaway',
       lines: const [
         PricedLine(
@@ -318,7 +330,7 @@ void main() {
     fileDb = AppDatabase(NativeDatabase(file));
     final loaded = await DraftCartStore(
       fileDb,
-    ).load(workspaceId: 1, channel: 'takeaway');
+    ).load(workspaceId: PosMode.standaloneWorkspaceId, channel: 'takeaway');
     expect(loaded, isNotNull);
     expect(loaded!.lines.single.quantity, 2);
     expect(loaded.lines.single.name, 'شاي');
@@ -354,6 +366,7 @@ void main() {
         workspaceId: PosMode.standaloneWorkspaceId,
         deviceId: 'dev-1',
         storeId: seed.storeId,
+        permissions: adminPerms,
         clientReference: 'sale-rep',
         orderType: 'takeaway',
         lines: [
@@ -385,6 +398,7 @@ void main() {
         workspaceId: PosMode.standaloneWorkspaceId,
         deviceId: 'dev-1',
         storeId: seed.storeId,
+        permissions: adminPerms,
         clientReference: 'sale-bak',
         orderType: 'takeaway',
         lines: [
@@ -406,11 +420,17 @@ void main() {
     final file = await backup.exportBackup(
       workspaceId: PosMode.standaloneWorkspaceId,
       directory: dir,
+      permissions: adminPerms,
     );
     final payload = jsonDecode(await file.readAsString()) as Map;
-    expect(payload['format_version'], 1);
+    expect(payload['format_version'], 2);
+    expect(payload['checksum_sha256'], isNotEmpty);
     expect((payload['tables'] as Map)['local_invoices'], isNotEmpty);
-    await backup.restore(Map<String, dynamic>.from(payload), confirmed: true);
+    await backup.restore(
+      Map<String, dynamic>.from(payload),
+      confirmed: true,
+      permissions: adminPerms,
+    );
     expect(await db.select(db.localInvoices).get(), isNotEmpty);
   });
 
@@ -421,6 +441,7 @@ void main() {
         workspaceId: PosMode.standaloneWorkspaceId,
         deviceId: 'dev-1',
         storeId: seed.storeId,
+        permissions: adminPerms,
         clientReference: 'sale-shift',
         orderType: 'takeaway',
         lines: [
@@ -441,6 +462,7 @@ void main() {
       workspaceId: PosMode.standaloneWorkspaceId,
       shiftId: seed.shiftId,
       actualCash: 109,
+      permissions: adminPerms,
     );
     expect(closed['expected'], 110);
     expect(closed['difference'], -1);
@@ -456,14 +478,18 @@ void main() {
   });
 
   test('store existence makes offline POS ready without products', () async {
-    expect(await db.isOfflinePosReady(1), isFalse);
-    await auth.bootstrapStore(
+    expect(await db.isOfflinePosReady(PosMode.standaloneWorkspaceId), isFalse);
+    expect(await db.isOfflinePosReady(PosMode.legacyCollidingWorkspaceId), isFalse);
+    final created = await auth.bootstrapStore(
       storeName: 'فارغ',
       adminName: 'مدير',
       username: 'admin',
       pin: '1234',
     );
-    expect(await db.isOfflinePosReady(1), isTrue);
+    expect(created.store.workspaceId, PosMode.standaloneWorkspaceId);
+    expect(created.store.workspaceId, isNot(1));
+    expect(await db.isOfflinePosReady(PosMode.standaloneWorkspaceId), isTrue);
+    expect(await db.isOfflinePosReady(1), isFalse);
   });
 
   test('cart controller still totals after productLocalId rewrite', () {
@@ -486,5 +512,533 @@ void main() {
     expect(cart.state.taxAmount, 1.5);
     expect(cart.state.total, 16.5);
     expect(cart.state.channel, OrderChannel.takeaway);
+  });
+
+  test('money engine uses integer cents so 0.1+0.2 equals 0.3', () {
+    expect(Money.fromCents(Money.toCents(0.1) + Money.toCents(0.2)), 0.3);
+    const pricing = PricingService();
+    final quote = pricing.quote(
+      lines: const [
+        PricedLine(
+          productLocalId: 'a',
+          name: 'A',
+          quantity: 1,
+          unitPrice: 0.1,
+        ),
+        PricedLine(
+          productLocalId: 'b',
+          name: 'B',
+          quantity: 1,
+          unitPrice: 0.2,
+        ),
+      ],
+    );
+    expect(quote.total, 0.3);
+    expect(quote.totalCents, 30);
+  });
+
+  test('standalone core path never increments NetworkGuard', () async {
+    NetworkGuard.reset();
+    final seed = await seedStore();
+    await checkout.execute(
+      CheckoutCommand(
+        workspaceId: PosMode.standaloneWorkspaceId,
+        deviceId: 'dev-1',
+        storeId: seed.storeId,
+        permissions: adminPerms,
+        clientReference: 'sale-iso',
+        orderType: 'takeaway',
+        lines: [
+          PricedLine(
+            productLocalId: seed.productId,
+            name: 'برجر',
+            quantity: 1,
+            unitPrice: 10,
+          ),
+        ],
+        payments: const [
+          PaymentTender(method: 'cash', amount: 10, tendered: 10),
+        ],
+        shiftLocalId: seed.shiftId,
+      ),
+    );
+    final item = (await db.select(db.localOrderItems).get()).single;
+    await returns.execute(
+      workspaceId: PosMode.standaloneWorkspaceId,
+      orderLocalId: 'sale-iso',
+      lines: [ReturnLineInput(orderItemLocalId: item.localId, quantity: 1)],
+      allowNegativeStock: false,
+      shiftLocalId: seed.shiftId,
+      permissions: adminPerms,
+    );
+    await LocalReportsService(
+      db,
+    ).daily(workspaceId: PosMode.standaloneWorkspaceId, date: DateTime.now());
+    expect(NetworkGuard.attempts, 0);
+  });
+
+  test('sale without open shift is rejected', () async {
+    final seed = await seedStore();
+    expect(
+      () => checkout.execute(
+        CheckoutCommand(
+          workspaceId: PosMode.standaloneWorkspaceId,
+          deviceId: 'dev-1',
+          storeId: seed.storeId,
+          permissions: adminPerms,
+          clientReference: 'sale-noshift',
+          orderType: 'takeaway',
+          lines: [
+            PricedLine(
+              productLocalId: seed.productId,
+              name: 'برجر',
+              quantity: 1,
+              unitPrice: 10,
+            ),
+          ],
+          payments: const [PaymentTender(method: 'cash', amount: 10)],
+        ),
+      ),
+      throwsA(isA<ShiftNotOpen>()),
+    );
+    expect(await db.select(db.localOrders).get(), isEmpty);
+  });
+
+  test('checkout faults after each write roll back the sale', () async {
+    final seed = await seedStore();
+    Future<void> assertEmpty(CheckoutFaultPoint point) async {
+      final isolated = CheckoutService(
+        db,
+        stock,
+        numbers,
+        SyncQueueRepository(db),
+        faultForTest: point,
+      );
+      await expectLater(
+        isolated.execute(
+          CheckoutCommand(
+            workspaceId: PosMode.standaloneWorkspaceId,
+            deviceId: 'dev-1',
+            storeId: seed.storeId,
+            permissions: adminPerms,
+            clientReference: 'fault-$point',
+            orderType: 'takeaway',
+            lines: [
+              PricedLine(
+                productLocalId: seed.productId,
+                name: 'برجر',
+                quantity: 1,
+                unitPrice: 10,
+              ),
+            ],
+            payments: const [
+              PaymentTender(method: 'cash', amount: 10, tendered: 10),
+            ],
+            shiftLocalId: seed.shiftId,
+          ),
+        ),
+        throwsA(isA<DatabaseFailure>()),
+      );
+      expect(
+        await (db.select(
+          db.localOrders,
+        )..where((t) => t.clientReference.equals('fault-$point'))).get(),
+        isEmpty,
+      );
+      final product = await (db.select(
+        db.localProducts,
+      )..where((t) => t.localId.equals(seed.productId))).getSingle();
+      expect(product.stock, 10);
+    }
+
+    await assertEmpty(CheckoutFaultPoint.afterOrder);
+    await assertEmpty(CheckoutFaultPoint.afterStock);
+    await assertEmpty(CheckoutFaultPoint.afterInvoice);
+    await assertEmpty(CheckoutFaultPoint.afterPayment);
+    await assertEmpty(CheckoutFaultPoint.afterCash);
+  });
+
+  test('cashier cannot refund discount catalog or backup', () async {
+    final seed = await seedStore();
+    final cashier = LocalAuthService.permissionsFor('cashier');
+    expect(
+      () => catalog.createProduct(
+        workspaceId: PosMode.standaloneWorkspaceId,
+        name: 'ممنوع',
+        price: 1,
+        permissions: cashier,
+      ),
+      throwsA(isA<Forbidden>()),
+    );
+    expect(
+      () => checkout.execute(
+        CheckoutCommand(
+          workspaceId: PosMode.standaloneWorkspaceId,
+          deviceId: 'dev-1',
+          storeId: seed.storeId,
+          permissions: cashier,
+          clientReference: 'sale-disc',
+          orderType: 'takeaway',
+          lines: [
+            PricedLine(
+              productLocalId: seed.productId,
+              name: 'برجر',
+              quantity: 1,
+              unitPrice: 10,
+              itemDiscount: 1,
+            ),
+          ],
+          payments: const [PaymentTender(method: 'cash', amount: 9)],
+          shiftLocalId: seed.shiftId,
+        ),
+      ),
+      throwsA(isA<Forbidden>()),
+    );
+    await checkout.execute(
+      CheckoutCommand(
+        workspaceId: PosMode.standaloneWorkspaceId,
+        deviceId: 'dev-1',
+        storeId: seed.storeId,
+        permissions: adminPerms,
+        clientReference: 'sale-perm',
+        orderType: 'takeaway',
+        lines: [
+          PricedLine(
+            productLocalId: seed.productId,
+            name: 'برجر',
+            quantity: 1,
+            unitPrice: 10,
+          ),
+        ],
+        payments: const [
+          PaymentTender(method: 'cash', amount: 10, tendered: 10),
+        ],
+        shiftLocalId: seed.shiftId,
+      ),
+    );
+    final item = (await db.select(db.localOrderItems).get()).last;
+    expect(
+      () => returns.execute(
+        workspaceId: PosMode.standaloneWorkspaceId,
+        orderLocalId: 'sale-perm',
+        lines: [ReturnLineInput(orderItemLocalId: item.localId, quantity: 1)],
+        allowNegativeStock: false,
+        permissions: cashier,
+      ),
+      throwsA(isA<Forbidden>()),
+    );
+    expect(
+      () => BackupService(db).exportBackup(
+        workspaceId: PosMode.standaloneWorkspaceId,
+        permissions: cashier,
+      ),
+      throwsA(isA<Forbidden>()),
+    );
+  });
+
+  test('return does not mutate paid invoice and nets in reports', () async {
+    final seed = await seedStore();
+    await checkout.execute(
+      CheckoutCommand(
+        workspaceId: PosMode.standaloneWorkspaceId,
+        deviceId: 'dev-1',
+        storeId: seed.storeId,
+        permissions: adminPerms,
+        clientReference: 'sale-imm',
+        orderType: 'takeaway',
+        lines: [
+          PricedLine(
+            productLocalId: seed.productId,
+            name: 'برجر',
+            quantity: 2,
+            unitPrice: 10,
+          ),
+        ],
+        payments: const [
+          PaymentTender(method: 'cash', amount: 20, tendered: 20),
+        ],
+        shiftLocalId: seed.shiftId,
+      ),
+    );
+    final invoice = (await db.select(db.localInvoices).get()).single;
+    expect(invoice.totalAmount, 20);
+    final item = (await db.select(db.localOrderItems).get()).single;
+    await returns.execute(
+      workspaceId: PosMode.standaloneWorkspaceId,
+      orderLocalId: 'sale-imm',
+      lines: [ReturnLineInput(orderItemLocalId: item.localId, quantity: 1)],
+      allowNegativeStock: false,
+      shiftLocalId: seed.shiftId,
+      permissions: adminPerms,
+    );
+    final after = await (db.select(
+      db.localInvoices,
+    )..where((t) => t.localId.equals(invoice.localId))).getSingle();
+    expect(after.totalAmount, 20);
+    expect(after.payloadJson, invoice.payloadJson);
+    expect(
+      () => returns.execute(
+        workspaceId: PosMode.standaloneWorkspaceId,
+        orderLocalId: 'sale-imm',
+        lines: [ReturnLineInput(orderItemLocalId: item.localId, quantity: 2)],
+        allowNegativeStock: false,
+        permissions: adminPerms,
+      ),
+      throwsA(isA<InvalidReturnQuantity>()),
+    );
+    final report = await LocalReportsService(
+      db,
+    ).daily(workspaceId: PosMode.standaloneWorkspaceId, date: DateTime.now());
+    expect(report['summary']['invoices_total'], 20);
+    expect(report['summary']['return_amount'], 10);
+    expect(report['summary']['net_sales'], 10);
+  });
+
+  test('sale return sale keeps stock ledger consistent', () async {
+    final seed = await seedStore();
+    Future<void> sell(String ref) {
+      return checkout.execute(
+        CheckoutCommand(
+          workspaceId: PosMode.standaloneWorkspaceId,
+          deviceId: 'dev-1',
+          storeId: seed.storeId,
+          permissions: adminPerms,
+          clientReference: ref,
+          orderType: 'takeaway',
+          lines: [
+            PricedLine(
+              productLocalId: seed.productId,
+              name: 'برجر',
+              quantity: 2,
+              unitPrice: 10,
+            ),
+          ],
+          payments: const [
+            PaymentTender(method: 'cash', amount: 20, tendered: 20),
+          ],
+          shiftLocalId: seed.shiftId,
+        ),
+      );
+    }
+
+    await sell('s1');
+    var product = await (db.select(
+      db.localProducts,
+    )..where((t) => t.localId.equals(seed.productId))).getSingle();
+    expect(product.stock, 8);
+    final item = (await (db.select(
+      db.localOrderItems,
+    )..where((t) => t.orderLocalId.equals('s1'))).get()).single;
+    await returns.execute(
+      workspaceId: PosMode.standaloneWorkspaceId,
+      orderLocalId: 's1',
+      lines: [ReturnLineInput(orderItemLocalId: item.localId, quantity: 2)],
+      allowNegativeStock: false,
+      shiftLocalId: seed.shiftId,
+      permissions: adminPerms,
+    );
+    product = await (db.select(
+      db.localProducts,
+    )..where((t) => t.localId.equals(seed.productId))).getSingle();
+    expect(product.stock, 10);
+    await sell('s2');
+    product = await (db.select(
+      db.localProducts,
+    )..where((t) => t.localId.equals(seed.productId))).getSingle();
+    expect(product.stock, 8);
+    final moves = await (db.select(
+      db.localStockMovements,
+    )..where((t) => t.productLocalId.equals(seed.productId))).get();
+    expect(moves, hasLength(3));
+    for (final move in moves) {
+      expect(move.afterQuantity, move.beforeQuantity! + (
+        move.kind == 'sale' ? -move.quantity : move.quantity
+      ));
+    }
+  });
+
+  test('exact stock sells and negative stock is gated', () async {
+    final seed = await seedStore();
+    await checkout.execute(
+      CheckoutCommand(
+        workspaceId: PosMode.standaloneWorkspaceId,
+        deviceId: 'dev-1',
+        storeId: seed.storeId,
+        permissions: adminPerms,
+        clientReference: 'sale-exact',
+        orderType: 'takeaway',
+        lines: [
+          PricedLine(
+            productLocalId: seed.productId,
+            name: 'برجر',
+            quantity: 10,
+            unitPrice: 10,
+          ),
+        ],
+        payments: const [
+          PaymentTender(method: 'cash', amount: 100, tendered: 100),
+        ],
+        shiftLocalId: seed.shiftId,
+      ),
+    );
+    expect(
+      () => checkout.execute(
+        CheckoutCommand(
+          workspaceId: PosMode.standaloneWorkspaceId,
+          deviceId: 'dev-1',
+          storeId: seed.storeId,
+          permissions: adminPerms,
+          clientReference: 'sale-over',
+          orderType: 'takeaway',
+          lines: [
+            PricedLine(
+              productLocalId: seed.productId,
+              name: 'برجر',
+              quantity: 1,
+              unitPrice: 10,
+            ),
+          ],
+          payments: const [PaymentTender(method: 'cash', amount: 10)],
+          shiftLocalId: seed.shiftId,
+        ),
+      ),
+      throwsA(isA<InsufficientStock>()),
+    );
+    await checkout.execute(
+      CheckoutCommand(
+        workspaceId: PosMode.standaloneWorkspaceId,
+        deviceId: 'dev-1',
+        storeId: seed.storeId,
+        permissions: adminPerms,
+        clientReference: 'sale-neg',
+        orderType: 'takeaway',
+        lines: [
+          PricedLine(
+            productLocalId: seed.productId,
+            name: 'برجر',
+            quantity: 1,
+            unitPrice: 10,
+          ),
+        ],
+        payments: const [PaymentTender(method: 'cash', amount: 10)],
+        shiftLocalId: seed.shiftId,
+        allowNegativeStock: true,
+      ),
+    );
+    final product = await (db.select(
+      db.localProducts,
+    )..where((t) => t.localId.equals(seed.productId))).getSingle();
+    expect(product.stock, -1);
+  });
+
+  test('pin is hashed never plaintext', () async {
+    final created = await auth.bootstrapStore(
+      storeName: 'ملح',
+      adminName: 'مدير',
+      username: 'hashadmin',
+      pin: '1234',
+    );
+    expect(created.user.pinHash, isNot('1234'));
+    expect(created.user.pinHash.contains('1234'), isFalse);
+    expect(created.user.pinSalt, isNotEmpty);
+  });
+
+  test('legacy standalone workspace 1 remaps to reserved scope', () async {
+    final now = DateTime.now();
+    await db
+        .into(db.localStores)
+        .insert(
+          LocalStoresCompanion.insert(
+            localId: 'legacy-store',
+            workspaceId: 1,
+            name: 'قديم',
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+    await db.into(db.localProducts).insert(
+      LocalProductsCompanion.insert(
+        localId: 'legacy-p',
+        workspaceId: 1,
+        name: 'شاي',
+        updatedAt: now,
+      ),
+    );
+    await db.remapLegacyStandaloneWorkspaceIfNeeded();
+    final remapped = await (db.select(
+      db.localStores,
+    )..where((t) => t.localId.equals('legacy-store'))).getSingle();
+    expect(remapped.workspaceId, PosMode.standaloneWorkspaceId);
+    final product = await (db.select(
+      db.localProducts,
+    )..where((t) => t.localId.equals('legacy-p'))).getSingle();
+    expect(product.workspaceId, PosMode.standaloneWorkspaceId);
+  });
+
+  test('second open shift returns the same active shift', () async {
+    final seed = await seedStore();
+    final again = await shifts.open(
+      workspaceId: PosMode.standaloneWorkspaceId,
+      userId: seed.userId,
+      openingCash: 50,
+      permissions: adminPerms,
+    );
+    expect(again, seed.shiftId);
+    expect(
+      () => shifts.close(
+        workspaceId: PosMode.standaloneWorkspaceId,
+        shiftId: seed.shiftId,
+        actualCash: 100,
+        permissions: LocalAuthService.permissionsFor('cashier'),
+      ),
+      throwsA(isA<Forbidden>()),
+    );
+  });
+
+  test('draft cart is cleared inside checkout transaction', () async {
+    final seed = await seedStore();
+    final drafts = DraftCartStore(db);
+    await drafts.save(
+      workspaceId: PosMode.standaloneWorkspaceId,
+      channel: 'takeaway',
+      lines: [
+        PricedLine(
+          productLocalId: seed.productId,
+          name: 'برجر',
+          quantity: 1,
+          unitPrice: 10,
+        ),
+      ],
+    );
+    await checkout.execute(
+      CheckoutCommand(
+        workspaceId: PosMode.standaloneWorkspaceId,
+        deviceId: 'dev-1',
+        storeId: seed.storeId,
+        permissions: adminPerms,
+        clientReference: 'sale-draft',
+        orderType: 'takeaway',
+        lines: [
+          PricedLine(
+            productLocalId: seed.productId,
+            name: 'برجر',
+            quantity: 1,
+            unitPrice: 10,
+          ),
+        ],
+        payments: const [
+          PaymentTender(method: 'cash', amount: 10, tendered: 10),
+        ],
+        shiftLocalId: seed.shiftId,
+        clearDraftChannel: 'takeaway',
+      ),
+    );
+    expect(
+      await drafts.load(
+        workspaceId: PosMode.standaloneWorkspaceId,
+        channel: 'takeaway',
+      ),
+      isNull,
+    );
   });
 }

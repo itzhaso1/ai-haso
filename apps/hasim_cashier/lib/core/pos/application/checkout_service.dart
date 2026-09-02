@@ -4,11 +4,23 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../local_db/app_database.dart';
+import '../../local_db/workspace_scope.dart';
 import '../../repositories/sync_queue_repository.dart';
 import '../domain/pricing_service.dart';
 import '../pos_errors.dart';
+import '../pos_permissions.dart';
 import 'document_numbers.dart';
+import 'draft_cart_store.dart';
 import 'stock_engine.dart';
+
+enum CheckoutFaultPoint {
+  none,
+  afterOrder,
+  afterInvoice,
+  afterPayment,
+  afterStock,
+  afterCash,
+}
 
 class PaymentTender {
   const PaymentTender({
@@ -44,6 +56,9 @@ class CheckoutCommand {
     this.allowNegativeStock = false,
     this.connected = false,
     this.invoicePrefix = 'INV-',
+    this.permissions = const {},
+    this.clearDraftChannel,
+    this.clearDraftTableLocalId,
   });
 
   final int workspaceId;
@@ -66,6 +81,9 @@ class CheckoutCommand {
   final bool allowNegativeStock;
   final bool connected;
   final String invoicePrefix;
+  final Map<String, dynamic> permissions;
+  final String? clearDraftChannel;
+  final String? clearDraftTableLocalId;
 }
 
 class CheckoutResult {
@@ -93,6 +111,7 @@ class CheckoutService {
     this._queue, {
     this.pricing = const PricingService(),
     String Function()? newId,
+    this.faultForTest = CheckoutFaultPoint.none,
   }) : _newId = newId ?? (() => const Uuid().v4());
 
   final AppDatabase _db;
@@ -101,38 +120,45 @@ class CheckoutService {
   final SyncQueueRepository _queue;
   final PricingService pricing;
   final String Function() _newId;
+  final CheckoutFaultPoint faultForTest;
 
   Future<CheckoutResult> execute(CheckoutCommand cmd) {
     if (cmd.lines.isEmpty) {
       throw const EmptyCart();
     }
+    PosPermissions.require(cmd.permissions, PosPermissions.pay);
+    if (cmd.orderDiscountAmount > 0 || cmd.orderDiscountPercent > 0) {
+      PosPermissions.require(cmd.permissions, PosPermissions.discount);
+    }
+    for (final line in cmd.lines) {
+      if (line.itemDiscount > 0) {
+        PosPermissions.require(cmd.permissions, PosPermissions.discount);
+        break;
+      }
+    }
     return _db.transaction(() async {
-      final existing =
-          await (_db.select(_db.localOrders)..where(
+      await _db.writeMeta(
+        cmd.workspaceId,
+        'checkout_lock',
+        DateTime.now().toIso8601String(),
+        deviceId: cmd.deviceId,
+      );
+
+      final existing = await _paidOrder(cmd);
+      if (existing != null) return existing;
+
+      if (cmd.shiftLocalId == null || cmd.shiftLocalId!.isEmpty) {
+        throw const ShiftNotOpen();
+      }
+      final shift =
+          await (_db.select(_db.localShifts)..where(
                 (t) =>
-                    t.workspaceId.equals(cmd.workspaceId) &
-                    t.clientReference.equals(cmd.clientReference),
+                    t.localId.equals(cmd.shiftLocalId!) &
+                    t.workspaceId.equals(cmd.workspaceId),
               ))
               .getSingleOrNull();
-      if (existing != null && existing.paymentStatus == 'paid') {
-        final invoice =
-            await (_db.select(_db.localInvoices)..where(
-                  (t) =>
-                      t.workspaceId.equals(cmd.workspaceId) &
-                      t.orderLocalId.equals(existing.localId),
-                ))
-                .getSingleOrNull();
-        return CheckoutResult(
-          orderLocalId: existing.localId,
-          invoiceLocalId: invoice?.localId ?? existing.localId,
-          invoiceNumber:
-              invoice?.localInvoiceNumber ??
-              invoice?.invoiceNumber ??
-              existing.orderNumber ??
-              existing.localId,
-          total: existing.totalAmount,
-          changeDue: 0,
-        );
+      if (shift == null || shift.status != 'open') {
+        throw const ShiftNotOpen();
       }
 
       final quote = pricing.quote(
@@ -142,19 +168,22 @@ class CheckoutService {
         fallbackTaxRate: cmd.taxRate,
       );
 
-      var paid = 0.0;
-      var changeDue = 0.0;
+      var paidCents = 0;
+      var changeDueCents = 0;
       var hasCredit = false;
       for (final p in cmd.payments) {
         if (p.amount < 0) throw const PaymentMismatch();
         if (p.method == 'credit') hasCredit = true;
-        paid = Money.round(paid + p.amount);
+        paidCents += Money.toCents(p.amount);
         if (p.method == 'cash' && p.tendered != null) {
-          if (p.tendered! + 0.0001 < p.amount) throw const PaymentMismatch();
-          changeDue = Money.round(changeDue + (p.tendered! - p.amount));
+          if (Money.toCents(p.tendered!) < Money.toCents(p.amount)) {
+            throw const PaymentMismatch();
+          }
+          changeDueCents +=
+              Money.toCents(p.tendered!) - Money.toCents(p.amount);
         }
       }
-      if (!hasCredit && paid + 0.009 < quote.total) {
+      if (!hasCredit && paidCents < quote.totalCents) {
         throw const PaymentMismatch();
       }
 
@@ -186,7 +215,10 @@ class CheckoutService {
               subtotal: Value(quote.subtotal),
               taxAmount: Value(quote.taxAmount),
               discountAmount: Value(
-                Money.round(quote.itemDiscountTotal + quote.orderDiscount),
+                Money.fromCents(
+                  Money.toCents(quote.itemDiscountTotal) +
+                      Money.toCents(quote.orderDiscount),
+                ),
               ),
               discountPercent: Value(cmd.orderDiscountPercent),
               totalAmount: Value(quote.total),
@@ -199,6 +231,7 @@ class CheckoutService {
               completedAt: Value(now),
             ),
           );
+      await _fault(CheckoutFaultPoint.afterOrder);
 
       for (final line in quote.lineResults) {
         await _db
@@ -237,6 +270,7 @@ class CheckoutService {
           userId: cmd.createdByUserId,
           deviceId: cmd.deviceId,
         );
+        await _fault(CheckoutFaultPoint.afterStock);
       }
 
       final invoicePayload = {
@@ -244,8 +278,9 @@ class CheckoutService {
         'invoice_number': invoiceNumber,
         'order_local_id': orderId,
         'subtotal': quote.subtotal,
-        'discount_amount': Money.round(
-          quote.itemDiscountTotal + quote.orderDiscount,
+        'discount_amount': Money.fromCents(
+          Money.toCents(quote.itemDiscountTotal) +
+              Money.toCents(quote.orderDiscount),
         ),
         'tax_amount': quote.taxAmount,
         'total_amount': quote.total,
@@ -276,7 +311,10 @@ class CheckoutService {
               status: const Value('closed'),
               subtotal: Value(quote.subtotal),
               discountAmount: Value(
-                Money.round(quote.itemDiscountTotal + quote.orderDiscount),
+                Money.fromCents(
+                  Money.toCents(quote.itemDiscountTotal) +
+                      Money.toCents(quote.orderDiscount),
+                ),
               ),
               taxAmount: Value(quote.taxAmount),
               totalAmount: Value(quote.total),
@@ -286,6 +324,7 @@ class CheckoutService {
               createdAt: now,
             ),
           );
+      await _fault(CheckoutFaultPoint.afterInvoice);
 
       for (final p in cmd.payments) {
         await _db
@@ -302,7 +341,9 @@ class CheckoutService {
                 tendered: Value(p.tendered),
                 changeDue: Value(
                   p.method == 'cash' && p.tendered != null
-                      ? Money.round(p.tendered! - p.amount)
+                      ? Money.fromCents(
+                          Money.toCents(p.tendered!) - Money.toCents(p.amount),
+                        )
                       : 0,
                 ),
                 shiftLocalId: Value(cmd.shiftLocalId),
@@ -311,7 +352,8 @@ class CheckoutService {
                 createdAt: now,
               ),
             );
-        if (p.method == 'cash' && cmd.shiftLocalId != null) {
+        await _fault(CheckoutFaultPoint.afterPayment);
+        if (p.method == 'cash') {
           await _db
               .into(_db.localCashMovements)
               .insert(
@@ -327,6 +369,7 @@ class CheckoutService {
                   createdAt: now,
                 ),
               );
+          await _fault(CheckoutFaultPoint.afterCash);
         }
       }
 
@@ -353,13 +396,56 @@ class CheckoutService {
         );
       }
 
+      if (cmd.clearDraftChannel != null) {
+        await DraftCartStore(_db).clear(
+          workspaceId: cmd.workspaceId,
+          channel: cmd.clearDraftChannel!,
+          tableLocalId: cmd.clearDraftTableLocalId,
+        );
+      }
+
       return CheckoutResult(
         orderLocalId: orderId,
         invoiceLocalId: invoiceId,
         invoiceNumber: invoiceNumber,
         total: quote.total,
-        changeDue: changeDue,
+        changeDue: Money.fromCents(changeDueCents),
       );
     });
+  }
+
+  Future<CheckoutResult?> _paidOrder(CheckoutCommand cmd) async {
+    final existing =
+        await (_db.select(_db.localOrders)..where(
+              (t) =>
+                  t.workspaceId.equals(cmd.workspaceId) &
+                  t.clientReference.equals(cmd.clientReference),
+            ))
+            .getSingleOrNull();
+    if (existing == null || existing.paymentStatus != 'paid') return null;
+    final invoice =
+        await (_db.select(_db.localInvoices)..where(
+              (t) =>
+                  t.workspaceId.equals(cmd.workspaceId) &
+                  t.orderLocalId.equals(existing.localId),
+            ))
+            .getSingleOrNull();
+    return CheckoutResult(
+      orderLocalId: existing.localId,
+      invoiceLocalId: invoice?.localId ?? existing.localId,
+      invoiceNumber:
+          invoice?.localInvoiceNumber ??
+          invoice?.invoiceNumber ??
+          existing.orderNumber ??
+          existing.localId,
+      total: existing.totalAmount,
+      changeDue: 0,
+    );
+  }
+
+  Future<void> _fault(CheckoutFaultPoint point) async {
+    if (faultForTest == point) {
+      throw DatabaseFailure('injected:$point');
+    }
   }
 }

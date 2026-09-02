@@ -27,7 +27,11 @@ class LocalAuthService {
     'tables.manage': true,
     'menu.manage': true,
     'reports.view': true,
+    'shifts.open': true,
+    'shifts.close': true,
     'shifts.manage': true,
+    'cash.movement': true,
+    'stock.adjust': true,
     'workspace.manage': true,
   };
 
@@ -36,18 +40,19 @@ class LocalAuthService {
       case 'admin':
         return Map<String, dynamic>.from(adminPermissions);
       case 'manager':
-        return {...adminPermissions, 'workspace.manage': false};
+        return {
+          ...adminPermissions,
+          'workspace.manage': false,
+          'pos.manage': false,
+        };
       case 'kitchen':
         return {'pos.use': true, 'orders.manage': true, 'tables.manage': true};
       default:
         return {
           'pos.use': true,
           'orders.create': true,
-          'orders.manage': true,
-          'orders.discount': true,
-          'tables.manage': true,
+          'shifts.open': true,
           'reports.view': true,
-          'shifts.manage': true,
         };
     }
   }
