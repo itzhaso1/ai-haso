@@ -330,6 +330,15 @@ class BackupService {
 
   Future<void> _applyValidated(int workspaceId, Map tables) async {
     await _db.transaction(() async {
+      await _db.customStatement(
+        'DELETE FROM local_sequences WHERE store_id IN '
+        '(SELECT local_id FROM local_stores WHERE workspace_id = ?)',
+        [workspaceId],
+      );
+      await _db.customStatement(
+        'DELETE FROM local_stores WHERE workspace_id = ?',
+        [workspaceId],
+      );
       for (final name in _restoreDeleteOrder) {
         await _db.customStatement('DELETE FROM $name WHERE workspace_id = ?', [
           workspaceId,

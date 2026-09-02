@@ -42,7 +42,7 @@ void main() {
       );
       final ws = PosMode.standaloneWorkspaceId;
       final now = DateTime.now();
-      final nowUs = now.microsecondsSinceEpoch;
+      final nowMs = now.millisecondsSinceEpoch;
       final saleProduct = await catalog.createProduct(
         workspaceId: ws,
         name: 'بيع',
@@ -66,7 +66,7 @@ void main() {
             'price, is_active, is_deleted, payload_json, stock, cost, tax_rate, '
             'track_stock, updated_at) VALUES (?, ?, ?, ?, 199, 1, 0, "{}", 5, 50, '
             '0, 1, ?)',
-            ['p-$i', ws, 'صنف $i', 'BC-${i.toString().padLeft(6, '0')}', nowUs],
+            ['p-$i', ws, 'صنف $i', 'BC-${i.toString().padLeft(6, '0')}', nowMs],
           );
         }
         const invoices = 10000;
@@ -81,7 +81,7 @@ void main() {
             'fulfillment_status, sync_status, retry_count, created_at, '
             'updated_at) VALUES (?, ?, "dev-1", ?, "takeaway", 1000, 0, 0, '
             '1000, "completed", "paid", "unfulfilled", "local", 0, ?, ?)',
-            [orderId, ws, orderId, nowUs, nowUs],
+            [orderId, ws, orderId, nowMs, nowMs],
           );
           await db.customStatement(
             'INSERT INTO local_invoices (local_id, workspace_id, device_id, '
@@ -92,10 +92,10 @@ void main() {
             [
               invoiceId,
               ws,
-              'INV-${i.toString().padLeft(6, '0')}',
-              'INV-${i.toString().padLeft(6, '0')}',
+              'STRESS-${i.toString().padLeft(6, '0')}',
+              'STRESS-${i.toString().padLeft(6, '0')}',
               orderId,
-              nowUs,
+              nowMs,
             ],
           );
           final values = StringBuffer();
@@ -111,7 +111,7 @@ void main() {
               1,
               100,
               100,
-              nowUs,
+              nowMs,
             ]);
           }
           await db.customStatement(

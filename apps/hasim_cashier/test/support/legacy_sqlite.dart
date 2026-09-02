@@ -15,7 +15,7 @@ void writeLegacyPosDatabase({
   for (final sql in _createSql) {
     db.execute(sql);
   }
-  final now = DateTime.now().microsecondsSinceEpoch;
+  final now = DateTime.now().millisecondsSinceEpoch;
   db.execute(
     '''
     INSERT INTO local_stores (local_id, workspace_id, name, currency, timezone,

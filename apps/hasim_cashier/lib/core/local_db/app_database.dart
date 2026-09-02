@@ -250,130 +250,130 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<void> _deleteOrphanChildren() async {
-    await customStatement(
+    await _sqlIf(['local_order_items', 'local_orders'],
       'DELETE FROM local_order_items WHERE order_local_id NOT IN '
       '(SELECT local_id FROM local_orders)',
     );
-    await customStatement(
+    await _sqlIf(['local_order_items', 'local_products'],
       'UPDATE local_order_items SET product_local_id = NULL '
       'WHERE product_local_id IS NOT NULL AND product_local_id NOT IN '
       '(SELECT local_id FROM local_products)',
     );
-    await customStatement(
+    await _sqlIf(['local_orders', 'local_tables'],
       'UPDATE local_orders SET table_local_id = NULL '
       'WHERE table_local_id IS NOT NULL AND table_local_id NOT IN '
       '(SELECT local_id FROM local_tables)',
     );
-    await customStatement(
+    await _sqlIf(['local_orders', 'local_sessions'],
       'UPDATE local_orders SET session_local_id = NULL '
       'WHERE session_local_id IS NOT NULL AND session_local_id NOT IN '
       '(SELECT local_id FROM local_sessions)',
     );
-    await customStatement(
+    await _sqlIf(['local_orders', 'local_customers'],
       'UPDATE local_orders SET customer_local_id = NULL '
       'WHERE customer_local_id IS NOT NULL AND customer_local_id NOT IN '
       '(SELECT local_id FROM local_customers)',
     );
-    await customStatement(
+    await _sqlIf(['local_orders', 'local_users'],
       'UPDATE local_orders SET created_by_user_id = NULL '
       'WHERE created_by_user_id IS NOT NULL AND created_by_user_id NOT IN '
       '(SELECT local_id FROM local_users)',
     );
-    await customStatement(
+    await _sqlIf(['local_invoices', 'local_orders'],
       'UPDATE local_invoices SET order_local_id = NULL '
       'WHERE order_local_id IS NOT NULL AND order_local_id NOT IN '
       '(SELECT local_id FROM local_orders)',
     );
-    await customStatement(
+    await _sqlIf(['local_invoices', 'local_users'],
       'UPDATE local_invoices SET created_by_user_id = NULL '
       'WHERE created_by_user_id IS NOT NULL AND created_by_user_id NOT IN '
       '(SELECT local_id FROM local_users)',
     );
-    await customStatement(
+    await _sqlIf(['local_payments', 'local_orders'],
       'UPDATE local_payments SET order_local_id = NULL '
       'WHERE order_local_id IS NOT NULL AND order_local_id NOT IN '
       '(SELECT local_id FROM local_orders)',
     );
-    await customStatement(
+    await _sqlIf(['local_payments', 'local_invoices'],
       'UPDATE local_payments SET invoice_local_id = NULL '
       'WHERE invoice_local_id IS NOT NULL AND invoice_local_id NOT IN '
       '(SELECT local_id FROM local_invoices)',
     );
-    await customStatement(
+    await _sqlIf(['local_payments', 'local_shifts'],
       'UPDATE local_payments SET shift_local_id = NULL '
       'WHERE shift_local_id IS NOT NULL AND shift_local_id NOT IN '
       '(SELECT local_id FROM local_shifts)',
     );
-    await customStatement(
+    await _sqlIf(['local_return_items', 'local_returns'],
       'DELETE FROM local_return_items WHERE return_local_id NOT IN '
       '(SELECT local_id FROM local_returns)',
     );
-    await customStatement(
+    await _sqlIf(['local_returns', 'local_invoices'],
       'UPDATE local_returns SET invoice_local_id = NULL '
       'WHERE invoice_local_id IS NOT NULL AND invoice_local_id NOT IN '
       '(SELECT local_id FROM local_invoices)',
     );
-    await customStatement(
+    await _sqlIf(['local_returns', 'local_orders'],
       'UPDATE local_returns SET order_local_id = NULL '
       'WHERE order_local_id IS NOT NULL AND order_local_id NOT IN '
       '(SELECT local_id FROM local_orders)',
     );
-    await customStatement(
+    await _sqlIf(['local_returns', 'local_shifts'],
       'UPDATE local_returns SET shift_local_id = NULL '
       'WHERE shift_local_id IS NOT NULL AND shift_local_id NOT IN '
       '(SELECT local_id FROM local_shifts)',
     );
-    await customStatement(
+    await _sqlIf(['local_returns', 'local_users'],
       'UPDATE local_returns SET created_by_user_id = NULL '
       'WHERE created_by_user_id IS NOT NULL AND created_by_user_id NOT IN '
       '(SELECT local_id FROM local_users)',
     );
-    await customStatement(
+    await _sqlIf(['local_return_items', 'local_order_items'],
       'UPDATE local_return_items SET order_item_local_id = NULL '
       'WHERE order_item_local_id IS NOT NULL AND order_item_local_id NOT IN '
       '(SELECT local_id FROM local_order_items)',
     );
-    await customStatement(
+    await _sqlIf(['local_return_items', 'local_products'],
       'UPDATE local_return_items SET product_local_id = NULL '
       'WHERE product_local_id IS NOT NULL AND product_local_id NOT IN '
       '(SELECT local_id FROM local_products)',
     );
-    await customStatement(
+    await _sqlIf(['local_stock_movements', 'local_products'],
       'UPDATE local_stock_movements SET product_local_id = NULL '
       'WHERE product_local_id IS NOT NULL AND product_local_id NOT IN '
       '(SELECT local_id FROM local_products)',
     );
-    await customStatement(
+    await _sqlIf(['local_cash_movements', 'local_users'],
       'UPDATE local_cash_movements SET created_by_user_id = NULL '
       'WHERE created_by_user_id IS NOT NULL AND created_by_user_id NOT IN '
       '(SELECT local_id FROM local_users)',
     );
-    await customStatement(
+    await _sqlIf(['local_cash_movements', 'local_shifts'],
       'DELETE FROM local_cash_movements WHERE shift_local_id NOT IN '
       '(SELECT local_id FROM local_shifts)',
     );
-    await customStatement(
+    await _sqlIf(['local_sequences', 'local_stores'],
       'DELETE FROM local_sequences WHERE store_id NOT IN '
       '(SELECT local_id FROM local_stores)',
     );
-    await customStatement(
+    await _sqlIf(['local_sessions', 'local_tables'],
       'DELETE FROM local_sessions WHERE table_local_id NOT IN '
       '(SELECT local_id FROM local_tables)',
     );
-    await customStatement(
+    await _sqlIf(['local_draft_cart_lines', 'local_draft_carts'],
       'DELETE FROM local_draft_cart_lines WHERE cart_local_id NOT IN '
       '(SELECT local_id FROM local_draft_carts)',
     );
-    await customStatement(
+    await _sqlIf(['local_draft_cart_lines', 'local_products'],
       'DELETE FROM local_draft_cart_lines WHERE product_local_id NOT IN '
       '(SELECT local_id FROM local_products)',
     );
-    await customStatement(
+    await _sqlIf(['local_draft_carts', 'local_tables'],
       'UPDATE local_draft_carts SET table_local_id = NULL '
       'WHERE table_local_id IS NOT NULL AND table_local_id NOT IN '
       '(SELECT local_id FROM local_tables)',
     );
-    await customStatement(
+    await _sqlIf(['local_draft_carts', 'local_customers'],
       'UPDATE local_draft_carts SET customer_local_id = NULL '
       'WHERE customer_local_id IS NOT NULL AND customer_local_id NOT IN '
       '(SELECT local_id FROM local_customers)',
@@ -381,62 +381,62 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<void> _nullDanglingForeignKeys() async {
-    await customStatement(
+    await _sqlIf(['local_products', 'local_categories'],
       'UPDATE local_products SET category_local_id = NULL '
       'WHERE category_local_id IS NOT NULL AND category_local_id NOT IN '
       '(SELECT local_id FROM local_categories)',
     );
-    await customStatement(
+    await _sqlIf(['local_shifts', 'local_users'],
       'UPDATE local_shifts SET user_id = NULL '
       'WHERE user_id IS NOT NULL AND user_id NOT IN '
       '(SELECT local_id FROM local_users)',
     );
-    await customStatement(
+    await _sqlIf(['local_order_items', 'local_products'],
       'UPDATE local_order_items SET product_local_id = NULL '
       'WHERE product_local_id IS NOT NULL AND product_local_id NOT IN '
       '(SELECT local_id FROM local_products)',
     );
-    await customStatement(
+    await _sqlIf(['local_orders', 'local_tables'],
       'UPDATE local_orders SET table_local_id = NULL '
       'WHERE table_local_id IS NOT NULL AND table_local_id NOT IN '
       '(SELECT local_id FROM local_tables)',
     );
-    await customStatement(
+    await _sqlIf(['local_orders', 'local_sessions'],
       'UPDATE local_orders SET session_local_id = NULL '
       'WHERE session_local_id IS NOT NULL AND session_local_id NOT IN '
       '(SELECT local_id FROM local_sessions)',
     );
-    await customStatement(
+    await _sqlIf(['local_orders', 'local_customers'],
       'UPDATE local_orders SET customer_local_id = NULL '
       'WHERE customer_local_id IS NOT NULL AND customer_local_id NOT IN '
       '(SELECT local_id FROM local_customers)',
     );
-    await customStatement(
+    await _sqlIf(['local_orders', 'local_users'],
       'UPDATE local_orders SET created_by_user_id = NULL '
       'WHERE created_by_user_id IS NOT NULL AND created_by_user_id NOT IN '
       '(SELECT local_id FROM local_users)',
     );
-    await customStatement(
+    await _sqlIf(['local_invoices', 'local_users'],
       'UPDATE local_invoices SET created_by_user_id = NULL '
       'WHERE created_by_user_id IS NOT NULL AND created_by_user_id NOT IN '
       '(SELECT local_id FROM local_users)',
     );
-    await customStatement(
+    await _sqlIf(['local_returns', 'local_users'],
       'UPDATE local_returns SET created_by_user_id = NULL '
       'WHERE created_by_user_id IS NOT NULL AND created_by_user_id NOT IN '
       '(SELECT local_id FROM local_users)',
     );
-    await customStatement(
+    await _sqlIf(['local_cash_movements', 'local_users'],
       'UPDATE local_cash_movements SET created_by_user_id = NULL '
       'WHERE created_by_user_id IS NOT NULL AND created_by_user_id NOT IN '
       '(SELECT local_id FROM local_users)',
     );
-    await customStatement(
+    await _sqlIf(['local_sessions', 'local_users'],
       'UPDATE local_sessions SET opened_by_user_id = NULL '
       'WHERE opened_by_user_id IS NOT NULL AND opened_by_user_id NOT IN '
       '(SELECT local_id FROM local_users)',
     );
-    await customStatement(
+    await _sqlIf(['local_sessions', 'local_users'],
       'UPDATE local_sessions SET closed_by_user_id = NULL '
       'WHERE closed_by_user_id IS NOT NULL AND closed_by_user_id NOT IN '
       '(SELECT local_id FROM local_users)',
@@ -482,6 +482,7 @@ class AppDatabase extends _$AppDatabase {
   /// Remap pre-audit standalone rows from Laravel-looking workspace `1`
   /// to the reserved standalone scope. Never remaps a connected / synced store.
   Future<void> remapLegacyStandaloneWorkspaceIfNeeded() async {
+    if (!await _hasTable('local_stores')) return;
     final stores = await customSelect(
       'SELECT local_id, workspace_id, connected_mode FROM local_stores '
       'WHERE workspace_id = ?',
@@ -490,14 +491,16 @@ class AppDatabase extends _$AppDatabase {
     if (stores.isEmpty) return;
     final connected = stores.first.data['connected_mode'];
     if (connected == 1 || connected == true) return;
-    final sync = await customSelect(
-      'SELECT value FROM sync_metadata WHERE workspace_id = ? AND key = ?',
-      variables: [
-        Variable.withInt(PosMode.legacyCollidingWorkspaceId),
-        Variable.withString(SyncMetaKeys.initialSyncCompleted),
-      ],
-    ).get();
-    if (sync.isNotEmpty && '${sync.first.data['value']}' == '1') return;
+    if (await _hasTable('sync_metadata')) {
+      final sync = await customSelect(
+        'SELECT value FROM sync_metadata WHERE workspace_id = ? AND key = ?',
+        variables: [
+          Variable.withInt(PosMode.legacyCollidingWorkspaceId),
+          Variable.withString(SyncMetaKeys.initialSyncCompleted),
+        ],
+      ).get();
+      if (sync.isNotEmpty && '${sync.first.data['value']}' == '1') return;
+    }
 
     final already = await customSelect(
       'SELECT local_id FROM local_stores WHERE workspace_id = ?',
@@ -537,114 +540,114 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Future<void> _createPerfIndexes() async {
-    await customStatement(
+    await _safeIndex(
       'CREATE INDEX IF NOT EXISTS idx_local_orders_ws_sync '
       'ON local_orders (workspace_id, sync_status)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE INDEX IF NOT EXISTS idx_local_orders_ws_client_ref '
       'ON local_orders (workspace_id, client_reference)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE INDEX IF NOT EXISTS idx_local_order_items_order '
       'ON local_order_items (workspace_id, order_local_id)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE INDEX IF NOT EXISTS idx_local_products_ws '
       'ON local_products (workspace_id, is_deleted, is_active)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE INDEX IF NOT EXISTS idx_sync_queue_ws_status '
       'ON sync_queue_items (workspace_id, status, next_attempt_at)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE INDEX IF NOT EXISTS idx_local_customers_ws '
       'ON local_customers (workspace_id, sync_status)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE INDEX IF NOT EXISTS idx_local_orders_ws_table '
       'ON local_orders (workspace_id, table_server_id)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE INDEX IF NOT EXISTS idx_local_tables_ws_server '
       'ON local_tables (workspace_id, server_id)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE INDEX IF NOT EXISTS idx_sync_conflicts_ws_status '
       'ON sync_conflicts (workspace_id, status)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE INDEX IF NOT EXISTS idx_local_stock_movements_ws '
       'ON local_stock_movements (workspace_id, created_at)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_queue_operation_uuid '
       'ON sync_queue_items (workspace_id, operation_uuid) '
       'WHERE operation_uuid IS NOT NULL',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_local_stores_workspace '
       'ON local_stores (workspace_id)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_local_users_ws_username '
       'ON local_users (workspace_id, username)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_local_invoices_local_number '
       'ON local_invoices (workspace_id, local_invoice_number) '
       'WHERE local_invoice_number IS NOT NULL',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE INDEX IF NOT EXISTS idx_local_sessions_ws_table '
       'ON local_sessions (workspace_id, table_local_id, status)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE INDEX IF NOT EXISTS idx_local_shifts_ws_status '
       'ON local_shifts (workspace_id, status)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE INDEX IF NOT EXISTS idx_local_draft_lines_cart '
       'ON local_draft_cart_lines (cart_local_id)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_local_orders_ws_client_ref_uq '
       'ON local_orders (workspace_id, client_reference)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_local_orders_ws_number_uq '
       'ON local_orders (workspace_id, order_number) '
       'WHERE order_number IS NOT NULL',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_local_shifts_one_open '
       'ON local_shifts (workspace_id) WHERE status = \'open\'',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE INDEX IF NOT EXISTS idx_local_products_barcode '
       'ON local_products (workspace_id, barcode)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE INDEX IF NOT EXISTS idx_local_products_sku '
       'ON local_products (workspace_id, sku)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE INDEX IF NOT EXISTS idx_local_invoices_ws_created '
       'ON local_invoices (workspace_id, created_at)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE INDEX IF NOT EXISTS idx_local_orders_ws_created '
       'ON local_orders (workspace_id, created_at)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE INDEX IF NOT EXISTS idx_local_payments_ws_created '
       'ON local_payments (workspace_id, created_at)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE INDEX IF NOT EXISTS idx_local_returns_ws_created '
       'ON local_returns (workspace_id, created_at)',
     );
-    await customStatement(
+    await _safeIndex(
       'CREATE INDEX IF NOT EXISTS idx_local_return_items_return '
       'ON local_return_items (return_local_id)',
     );
@@ -681,5 +684,28 @@ class AppDatabase extends _$AppDatabase {
       variables: [Variable.withString(id)],
     ).get();
     return rows.isEmpty ? null : id;
+  }
+
+  Future<bool> _hasTable(String name) async {
+    final rows = await customSelect(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+      variables: [Variable.withString(name)],
+    ).get();
+    return rows.isNotEmpty;
+  }
+
+  Future<void> _sqlIf(List<String> tables, String sql) async {
+    for (final table in tables) {
+      if (!await _hasTable(table)) return;
+    }
+    await customStatement(sql);
+  }
+
+  Future<void> _safeIndex(String sql) async {
+    try {
+      await customStatement(sql);
+    } catch (_) {
+      // Table may be missing on incomplete pre-v7 files; createTable later.
+    }
   }
 }

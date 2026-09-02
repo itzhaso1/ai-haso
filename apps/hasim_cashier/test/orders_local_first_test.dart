@@ -84,7 +84,8 @@ void main() {
           ..where((t) => t.orderLocalId.equals('ORD-CREATE-1')))
         .get();
     expect(items, hasLength(1));
-    expect(items.single.productLocalId, LocalIds.product(1, 10));
+    expect(items.single.productServerId, 10);
+    expect(items.single.unitPrice, 500);
 
     final pending = await queue.pendingForWorkspace(1);
     expect(pending, hasLength(1));

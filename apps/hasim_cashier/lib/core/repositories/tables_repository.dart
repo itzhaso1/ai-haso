@@ -275,16 +275,16 @@ class TablesRepository {
               t.paymentStatus.isNotValue('paid')))
         .get();
 
-    var subtotal = 0.0;
-    var tax = 0.0;
-    var discount = 0.0;
-    var total = 0.0;
+    var subtotalCents = 0;
+    var taxCents = 0;
+    var discountCents = 0;
+    var totalCents = 0;
     final invoiceItems = <Map<String, dynamic>>[];
     for (final order in activeOrders) {
-      subtotal += order.subtotal;
-      tax += order.taxAmount;
-      discount += order.discountAmount;
-      total += order.totalAmount;
+      subtotalCents += order.subtotal;
+      taxCents += order.taxAmount;
+      discountCents += order.discountAmount;
+      totalCents += order.totalAmount;
       final items = await (_db.select(_db.localOrderItems)
             ..where((t) =>
                 t.orderLocalId.equals(order.localId) &
@@ -294,17 +294,18 @@ class TablesRepository {
         invoiceItems.add({
           'item_name': item.name,
           'quantity': item.quantity,
-          'unit_price': item.unitPrice,
-          'total_amount': item.totalAmount,
+          'unit_price': Money.fromCents(item.unitPrice),
+          'total_amount': Money.fromCents(item.totalAmount),
         });
       }
     }
-    if (total <= 0) {
-      total = (payload['total'] as num?)?.toDouble() ??
-          ((payload['subtotal'] as num?)?.toDouble() ?? 0);
-      subtotal = (payload['subtotal'] as num?)?.toDouble() ?? total;
-      tax = (payload['tax_amount'] as num?)?.toDouble() ?? 0;
-      discount = (payload['discount_amount'] as num?)?.toDouble() ?? 0;
+    if (totalCents <= 0) {
+      totalCents = Money.toCents(
+        (payload['total'] as num?) ?? (payload['subtotal'] as num?) ?? 0,
+      );
+      subtotalCents = Money.toCents((payload['subtotal'] as num?) ?? 0);
+      taxCents = Money.toCents((payload['tax_amount'] as num?) ?? 0);
+      discountCents = Money.toCents((payload['discount_amount'] as num?) ?? 0);
     }
 
     final method = (paymentMethod ?? 'cash').trim();
@@ -312,10 +313,10 @@ class TablesRepository {
     final invoicePayload = {
       'local_id': invoiceLocalId,
       'invoice_number': invoiceNumber,
-      'total_amount': total,
-      'subtotal': subtotal,
-      'tax_amount': tax,
-      'discount_amount': discount,
+      'total_amount': Money.fromCents(totalCents),
+      'subtotal': Money.fromCents(subtotalCents),
+      'tax_amount': Money.fromCents(taxCents),
+      'discount_amount': Money.fromCents(discountCents),
       'payment_method': method,
       'closed_at': now.toUtc().toIso8601String(),
       'table': {'id': tableServerId, 'name': table.name},
@@ -345,7 +346,7 @@ class TablesRepository {
               workspaceId: workspaceId,
               deviceId: deviceId.trim(),
               invoiceNumber: Value(invoiceNumber),
-              totalAmount: Value(Money.toCents(total)),
+              totalAmount: Value(totalCents),
               syncStatus: const Value('pending'),
               payloadJson: Value(jsonEncode(invoicePayload)),
               createdAt: now,
@@ -358,7 +359,7 @@ class TablesRepository {
               deviceId: deviceId.trim(),
               invoiceLocalId: Value(invoiceLocalId),
               method: method,
-              amount: Money.toCents(total),
+              amount: totalCents,
               syncStatus: const Value('pending'),
               clientReference: closeClientId,
               createdAt: now,
