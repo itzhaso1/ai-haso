@@ -2,15 +2,18 @@
 
 namespace App\Http\Controllers\Workspace\Finance;
 
+use App\Models\Finance\FinanceAccount;
+use App\Services\Finance\LedgerReportService;
 use App\Services\Finance\ReportService;
-use Illuminate\Support\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\View\View;
 
 class ReportController extends FinanceBaseController
 {
     public function __construct(
         private readonly ReportService $reportService,
+        private readonly LedgerReportService $ledgerReportService,
     ) {}
 
     public function index(Request $request): View
@@ -20,11 +23,49 @@ class ReportController extends FinanceBaseController
         $from = $this->resolveDate($request->input('from'), now()->startOfMonth())->toDateString();
         $to = $this->resolveDate($request->input('to'), now()->endOfMonth())->toDateString();
         $summary = $this->reportService->summary($from, $to);
+        $workspaceId = (int) $this->currentWorkspace()->id;
 
         return view('workspace.finance.reports.index', [
             'from' => $from,
             'to' => $to,
+            'profitAndLoss' => $this->ledgerReportService->profitAndLoss($workspaceId, $from, $to),
+            'trialBalance' => $this->ledgerReportService->trialBalance($workspaceId, $to),
             ...$summary,
+        ]);
+    }
+
+    public function show(Request $request, string $report): View
+    {
+        $this->authorizeFinance($request, 'reports.view');
+        $workspaceId = (int) $this->currentWorkspace()->id;
+        $from = $this->resolveDate($request->input('from'), now()->startOfMonth())->toDateString();
+        $to = $this->resolveDate($request->input('to'), now()->endOfMonth())->toDateString();
+
+        $data = match ($report) {
+            'profit-loss' => ['profitAndLoss' => $this->ledgerReportService->profitAndLoss($workspaceId, $from, $to)],
+            'balance-sheet' => ['balanceSheet' => $this->ledgerReportService->balanceSheet($workspaceId, $to)],
+            'trial-balance' => ['trialBalance' => $this->ledgerReportService->trialBalance($workspaceId, $to)],
+            'general-ledger' => [
+                'generalLedger' => $this->ledgerReportService->generalLedger(
+                    $workspaceId,
+                    $request->integer('account_id') ?: null,
+                    $from,
+                    $to
+                ),
+                'accounts' => FinanceAccount::query()->orderBy('code')->get(['id', 'code', 'name']),
+            ],
+            'ar-aging' => ['aging' => $this->ledgerReportService->aging($workspaceId, 'sales', $to)],
+            'ap-aging' => ['aging' => $this->ledgerReportService->aging($workspaceId, 'purchase', $to)],
+            'cash-flow' => ['cashFlow' => $this->ledgerReportService->cashFlow($workspaceId, $from, $to)],
+            'inventory-valuation' => ['inventoryValuation' => $this->ledgerReportService->inventoryValuation($workspaceId)],
+            default => abort(404),
+        };
+
+        return view('workspace.finance.reports.show', [
+            'report' => $report,
+            'from' => $from,
+            'to' => $to,
+            ...$data,
         ]);
     }
 

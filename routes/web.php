@@ -39,15 +39,20 @@ use App\Http\Controllers\Workspace\Finance\DashboardController as FinanceDashboa
 use App\Http\Controllers\Workspace\Finance\ExpenseController as FinanceExpenseController;
 use App\Http\Controllers\Workspace\Finance\FinanceEmployeeController;
 use App\Http\Controllers\Workspace\Finance\FiscalYearController as FinanceFiscalYearController;
+use App\Http\Controllers\Workspace\Finance\IntelligenceController as FinanceIntelligenceController;
 use App\Http\Controllers\Workspace\Finance\InvoiceController as FinanceInvoiceController;
+use App\Http\Controllers\Workspace\Finance\LeadController as FinanceLeadController;
 use App\Http\Controllers\Workspace\Finance\ModulePageController as FinanceModulePageController;
 use App\Http\Controllers\Workspace\Finance\PayrollAdjustmentController as FinancePayrollAdjustmentController;
 use App\Http\Controllers\Workspace\Finance\PriceListController as FinancePriceListController;
+use App\Http\Controllers\Workspace\Finance\ProjectController as FinanceProjectController;
+use App\Http\Controllers\Workspace\Finance\PurchaseOrderController as FinancePurchaseOrderController;
 use App\Http\Controllers\Workspace\Finance\ReportController as FinanceReportController;
 use App\Http\Controllers\Workspace\Finance\SalaryAdvanceController as FinanceSalaryAdvanceController;
 use App\Http\Controllers\Workspace\Finance\SalesController as FinanceSalesController;
 use App\Http\Controllers\Workspace\Finance\SettingsController as FinanceSettingsController;
 use App\Http\Controllers\Workspace\Finance\SupplierController as FinanceSupplierController;
+use App\Http\Controllers\Workspace\Finance\TreasuryController as FinanceTreasuryController;
 use App\Http\Controllers\Workspace\InventoryController;
 use App\Http\Controllers\Workspace\MerchantPaymentController;
 use App\Http\Controllers\Workspace\OrderController;
@@ -341,6 +346,10 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
 
         Route::middleware('workspace.feature:finance')->prefix('finance')->as('finance.')->group(function (): void {
             Route::get('/', [FinanceDashboardController::class, 'index'])->name('dashboard');
+            Route::get('search', [FinanceIntelligenceController::class, 'search'])->name('search');
+            Route::get('alerts', [FinanceIntelligenceController::class, 'alerts'])->name('alerts.index');
+            Route::get('copilot', [FinanceIntelligenceController::class, 'copilot'])->name('copilot.index');
+            Route::post('copilot', [FinanceIntelligenceController::class, 'ask'])->name('copilot.ask');
             Route::get('billing', [FinanceBillingDashboardController::class, 'index'])->name('billing.dashboard');
             Route::get('statements', [FinanceCustomerStatementController::class, 'index'])->name('statements.index');
             Route::get('statements/show', [FinanceCustomerStatementController::class, 'show'])->name('statements.show');
@@ -391,6 +400,7 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
 
             Route::get('accounting', [FinanceAccountingController::class, 'dashboard'])->name('accounting.dashboard');
             Route::get('reports', [FinanceReportController::class, 'index'])->name('reports.index');
+            Route::get('reports/{report}', [FinanceReportController::class, 'show'])->name('reports.show');
 
             Route::get('settings', [FinanceSettingsController::class, 'index'])->name('settings.index');
             Route::put('settings/company', [FinanceSettingsController::class, 'updateCompany'])->name('settings.company.update');
@@ -443,6 +453,25 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
 
             Route::get('modules/{key}', [FinanceModulePageController::class, 'placeholder'])->name('modules.show');
             Route::get('purchases', [FinanceModulePageController::class, 'purchases'])->name('purchases.index');
+            Route::get('purchase-orders', [FinancePurchaseOrderController::class, 'index'])->name('purchase-orders.index');
+            Route::post('purchase-orders', [FinancePurchaseOrderController::class, 'store'])->name('purchase-orders.store');
+            Route::post('purchase-orders/{purchaseOrder}/submit', [FinancePurchaseOrderController::class, 'submit'])->name('purchase-orders.submit');
+            Route::post('purchase-orders/{purchaseOrder}/receive', [FinancePurchaseOrderController::class, 'receive'])->name('purchase-orders.receive');
+            Route::post('purchase-orders/{purchaseOrder}/bill', [FinancePurchaseOrderController::class, 'bill'])->name('purchase-orders.bill');
+            Route::get('leads', [FinanceLeadController::class, 'index'])->name('leads.index');
+            Route::post('leads', [FinanceLeadController::class, 'store'])->name('leads.store');
+            Route::post('leads/{lead}/convert', [FinanceLeadController::class, 'convert'])->name('leads.convert');
+            Route::post('leads/{lead}/lost', [FinanceLeadController::class, 'markLost'])->name('leads.lost');
+            Route::get('projects', [FinanceProjectController::class, 'index'])->name('projects.index');
+            Route::post('projects', [FinanceProjectController::class, 'store'])->name('projects.store');
+            Route::get('treasury', [FinanceTreasuryController::class, 'index'])->name('treasury.index');
+            Route::post('treasury/transfers', [FinanceTreasuryController::class, 'transfer'])->name('treasury.transfers.store');
+            Route::post('treasury/statements', [FinanceTreasuryController::class, 'storeStatement'])->name('treasury.statements.store');
+            Route::get('treasury/statements/{statement}', [FinanceTreasuryController::class, 'showStatement'])->name('treasury.statements.show');
+            Route::post('treasury/statements/{statement}/lines', [FinanceTreasuryController::class, 'storeLines'])->name('treasury.statements.lines.store');
+            Route::post('treasury/statements/{statement}/suggest', [FinanceTreasuryController::class, 'suggest'])->name('treasury.statements.suggest');
+            Route::post('treasury/statements/{statement}/lines/{line}/match', [FinanceTreasuryController::class, 'matchLine'])->name('treasury.statements.lines.match');
+            Route::post('treasury/statements/{statement}/complete', [FinanceTreasuryController::class, 'complete'])->name('treasury.statements.complete');
             Route::get('cashbox', [FinanceModulePageController::class, 'cashbox'])->name('cashbox.index');
         });
 

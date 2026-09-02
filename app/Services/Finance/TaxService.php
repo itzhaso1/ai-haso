@@ -5,6 +5,7 @@ namespace App\Services\Finance;
 use App\Models\Finance\FinanceSetting;
 use App\Models\Finance\FinanceTaxRate;
 use App\Models\Workspace;
+use App\Support\Money\Money;
 
 class TaxService
 {
@@ -76,6 +77,6 @@ class TaxService
 
     public function roundMoney(float $amount): float
     {
-        return round($amount, 2);
+        return Money::round($amount);
     }
 }
