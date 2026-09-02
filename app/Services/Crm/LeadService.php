@@ -68,7 +68,7 @@ class LeadService
 
         $lead->update([
             'status' => 'lost',
-            'notes' => trim((string) $lead->notes.( $reason ? "\nLost: ".$reason : '')),
+            'notes' => trim((string) $lead->notes.($reason ? "\nLost: ".$reason : '')),
         ]);
 
         return $lead->fresh();

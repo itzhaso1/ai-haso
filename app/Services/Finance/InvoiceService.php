@@ -636,7 +636,7 @@ class InvoiceService
             $expenseAmount = $this->inventoryAccountingService->purchaseExpenseAmount($invoice);
             $lines = [];
 
-            if (! \App\Support\Money\Money::isZero($expenseAmount)) {
+            if (! Money::isZero($expenseAmount)) {
                 $lines[] = [
                     'account_id' => $generalExpense->id,
                     'debit' => $expenseAmount,
@@ -779,7 +779,7 @@ class InvoiceService
 
     private function money(float $value): float
     {
-        return \App\Support\Money\Money::round($value);
+        return Money::round($value);
     }
 
     /**

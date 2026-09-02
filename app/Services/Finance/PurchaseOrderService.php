@@ -6,6 +6,7 @@ use App\Models\Finance\FinancePurchaseOrder;
 use App\Models\Finance\FinancePurchaseOrderItem;
 use App\Models\Finance\FinanceSupplier;
 use App\Models\Product;
+use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Inventory\InventoryService;
 use App\Support\Money\Money;
@@ -125,7 +126,7 @@ class PurchaseOrderService
                         variantId: null,
                         type: 'add',
                         quantity: $qty,
-                        actor: $actorUserId > 0 ? \App\Models\User::query()->find($actorUserId) : null,
+                        actor: $actorUserId > 0 ? User::query()->find($actorUserId) : null,
                         referenceType: FinancePurchaseOrder::class,
                         referenceId: (int) $locked->id,
                         notes: 'purchase_order_receipt',

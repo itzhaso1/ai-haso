@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance;
 
+use App\Models\Crm\CrmLead;
 use App\Models\Customer;
 use App\Models\Finance\FinanceExpense;
 use App\Models\Finance\FinanceInvoice;
@@ -93,7 +94,7 @@ class FinanceSearchService
                     'subtitle' => $row->email,
                     'url' => route('workspace.finance.suppliers.index'),
                 ]),
-            'leads' => \App\Models\Crm\CrmLead::withoutGlobalScopes()
+            'leads' => CrmLead::withoutGlobalScopes()
                 ->where('workspace_id', $workspaceId)
                 ->where(function ($query) use ($like): void {
                     $query->where('name', 'like', $like)

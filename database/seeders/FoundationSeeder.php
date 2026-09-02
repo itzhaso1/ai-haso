@@ -2,13 +2,15 @@
 
 namespace Database\Seeders;
 
+use App\Models\MerchantDocumentType;
 use App\Models\Plan;
 use App\Models\PlatformAdmin;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Spatie\Permission\Models\Permission;
-use Spatie\Permission\PermissionRegistrar;
 use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 
 class FoundationSeeder extends Seeder
 {
@@ -221,7 +223,7 @@ class FoundationSeeder extends Seeder
 
         // Hide legacy catalog rows; keep them for existing subscriptions.
         $officialCodes = ['starter', 'pro', 'business', 'enterprise'];
-        if (\Illuminate\Support\Facades\Schema::hasColumn('plans', 'is_official')) {
+        if (Schema::hasColumn('plans', 'is_official')) {
             Plan::query()
                 ->whereNotIn('code', $officialCodes)
                 ->update([
@@ -470,7 +472,7 @@ class FoundationSeeder extends Seeder
 
     private function seedMerchantDocumentTypes(): void
     {
-        if (! \Illuminate\Support\Facades\Schema::hasTable('merchant_document_types')) {
+        if (! Schema::hasTable('merchant_document_types')) {
             return;
         }
 
@@ -502,7 +504,7 @@ class FoundationSeeder extends Seeder
         ];
 
         foreach ($types as $type) {
-            \App\Models\MerchantDocumentType::query()->updateOrCreate(
+            MerchantDocumentType::query()->updateOrCreate(
                 ['code' => $type['code']],
                 array_merge($type, ['is_active' => true])
             );

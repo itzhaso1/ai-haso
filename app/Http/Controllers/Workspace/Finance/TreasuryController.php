@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Workspace\Finance;
 use App\Models\Finance\FinanceBankStatement;
 use App\Models\Finance\FinanceBankStatementLine;
 use App\Models\Finance\FinanceTreasuryAccount;
+use App\Models\Finance\FinanceTreasuryTransfer;
 use App\Services\Finance\BankReconciliationService;
 use App\Services\Finance\TreasuryTransferService;
 use Illuminate\Http\RedirectResponse;
@@ -25,7 +26,7 @@ class TreasuryController extends FinanceBaseController
 
         return view('workspace.finance.treasury.index', [
             'accounts' => FinanceTreasuryAccount::query()->with('linkedAccount')->orderBy('type')->orderBy('name')->get(),
-            'transfers' => \App\Models\Finance\FinanceTreasuryTransfer::query()
+            'transfers' => FinanceTreasuryTransfer::query()
                 ->with(['fromAccount', 'toAccount'])
                 ->latest('id')
                 ->limit(20)

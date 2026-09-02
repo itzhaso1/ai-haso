@@ -2,7 +2,6 @@
 
 namespace App\Services\Finance;
 
-use App\Models\Finance\FinanceJournalEntry;
 use App\Models\Finance\FinanceTreasuryAccount;
 use App\Models\Finance\FinanceTreasuryTransfer;
 use App\Support\Money\Money;

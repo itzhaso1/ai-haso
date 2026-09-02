@@ -19,6 +19,7 @@ use App\Models\Projects\FinanceProject;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Finance\AccountingService;
+use App\Services\Finance\LedgerReportService;
 use App\Support\Money\Money;
 use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -110,7 +111,7 @@ class PlatformCoreTest extends TestCase
         $bank = FinanceAccount::withoutGlobalScopes()->where('workspace_id', $workspace->id)->where('code', '1100')->firstOrFail();
 
         app(WorkspaceContext::class)->set($workspace);
-        $entry = app(\App\Services\Finance\AccountingService::class)->createEntry(
+        $entry = app(AccountingService::class)->createEntry(
             workspaceId: $workspace->id,
             entryDate: now()->toDateString(),
             type: 'adjustment',
@@ -157,12 +158,12 @@ class PlatformCoreTest extends TestCase
             ->assertOk()
             ->assertSee('مدين');
 
-        $trial = app(\App\Services\Finance\LedgerReportService::class)
+        $trial = app(LedgerReportService::class)
             ->trialBalance($workspace->id, now()->toDateString());
         $this->assertTrue($trial['balanced']);
         $this->assertSame($trial['total_debit'], $trial['total_credit']);
 
-        $pnl = app(\App\Services\Finance\LedgerReportService::class)
+        $pnl = app(LedgerReportService::class)
             ->profitAndLoss($workspace->id, now()->toDateString(), now()->toDateString());
         $this->assertSame('100.00', $pnl['revenue']);
     }
