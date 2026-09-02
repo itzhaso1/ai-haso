@@ -848,85 +848,84 @@ class _CashierHome extends ConsumerWidget {
     final categories = ref.watch(categoriesProvider);
     final items = ref.watch(catalogItemsProvider);
 
+    if (isDesktop || isTablet) {
+      return Padding(
+        padding: const EdgeInsets.all(HasimSpacing.md),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (isDesktop)
+              SizedBox(
+                width: 180,
+                child: HsCard(
+                  padding: const EdgeInsets.all(8),
+                  child: categories.when(
+                    data: (list) => ListView(
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.fromLTRB(8, 4, 8, 8),
+                          child: Text(
+                            'التصنيفات',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: HasimColors.muted,
+                            ),
+                          ),
+                        ),
+                        HsCategoryTile(
+                          label: 'الكل',
+                          count: (items.valueOrNull ?? []).length,
+                          selected: selectedCategoryId == 0,
+                          onTap: () => onCategory(0),
+                        ),
+                        for (final cat in list)
+                          HsCategoryTile(
+                            label: (cat['name'] as String?) ?? '',
+                            count: (items.valueOrNull ?? [])
+                                .where((i) =>
+                                    i['pos_item_category_id'] == cat['id'])
+                                .length,
+                            selected: selectedCategoryId ==
+                                (cat['id'] as num?)?.toInt(),
+                            onTap: () =>
+                                onCategory((cat['id'] as num).toInt()),
+                          ),
+                      ],
+                    ),
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Text('$e'),
+                  ),
+                ),
+              ),
+            if (isDesktop) const SizedBox(width: 10),
+            Expanded(
+              flex: 7,
+              child: HsCard(
+                padding: const EdgeInsets.all(10),
+                child: _ProductsPanel(
+                  search: search,
+                  selectedCategoryId: selectedCategoryId,
+                  onCategory: onCategory,
+                  onSearchChanged: onSearchChanged,
+                  showMobileCategories: !isDesktop,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            SizedBox(
+              width: isDesktop ? 280 : 260,
+              child: _CartPanel(onCheckout: onCheckout),
+            ),
+          ],
+        ),
+      );
+    }
+
     return ListView(
       padding: const EdgeInsets.all(HasimSpacing.md),
       children: [
-        if (isDesktop || isTablet)
-          SizedBox(
-            height: MediaQuery.sizeOf(context).height - 220,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // RTL: first = RIGHT = categories
-                if (isDesktop)
-                  SizedBox(
-                    width: 180,
-                    child: HsCard(
-                      padding: const EdgeInsets.all(8),
-                      child: categories.when(
-                        data: (list) => ListView(
-                          children: [
-                            const Padding(
-                              padding: EdgeInsets.fromLTRB(8, 4, 8, 8),
-                              child: Text(
-                                'التصنيفات',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: HasimColors.muted,
-                                ),
-                              ),
-                            ),
-                            HsCategoryTile(
-                              label: 'الكل',
-                              count: (items.valueOrNull ?? []).length,
-                              selected: selectedCategoryId == 0,
-                              onTap: () => onCategory(0),
-                            ),
-                            for (final cat in list)
-                              HsCategoryTile(
-                                label: (cat['name'] as String?) ?? '',
-                                count: (items.valueOrNull ?? [])
-                                    .where((i) =>
-                                        i['pos_item_category_id'] == cat['id'])
-                                    .length,
-                                selected: selectedCategoryId ==
-                                    (cat['id'] as num?)?.toInt(),
-                                onTap: () =>
-                                    onCategory((cat['id'] as num).toInt()),
-                              ),
-                          ],
-                        ),
-                        loading: () =>
-                            const Center(child: CircularProgressIndicator()),
-                        error: (e, _) => Text('$e'),
-                      ),
-                    ),
-                  ),
-                if (isDesktop) const SizedBox(width: 10),
-                Expanded(
-                  flex: 7,
-                  child: HsCard(
-                    padding: const EdgeInsets.all(10),
-                    child: _ProductsPanel(
-                      search: search,
-                      selectedCategoryId: selectedCategoryId,
-                      onCategory: onCategory,
-                      onSearchChanged: onSearchChanged,
-                      showMobileCategories: !isDesktop,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                SizedBox(
-                  width: isDesktop ? 280 : 260,
-                  child: _CartPanel(onCheckout: onCheckout),
-                ),
-              ],
-            ),
-          )
-        else ...[
-          // Mobile categories: sticky horizontal strip (not dropdown), large touch targets
           categories.when(
             data: (list) => SizedBox(
               height: 52,
@@ -986,7 +985,6 @@ class _CashierHome extends ConsumerWidget {
               ),
             ),
           ),
-        ],
       ],
     );
   }
@@ -1189,6 +1187,15 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
   var _metaLoaded = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Never kick off setState from build — schedule after first frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _ensureMeta();
+    });
+  }
+
+  @override
   void dispose() {
     _notesController.dispose();
     super.dispose();
@@ -1228,7 +1235,6 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
         _notesController.text != cart.notes) {
       _notesController.text = cart.notes!;
     }
-    _ensureMeta();
 
     return HsCard(
       child: Column(

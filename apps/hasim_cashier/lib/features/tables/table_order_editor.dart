@@ -242,13 +242,18 @@ class _TableOrderEditorDialogState
     final canDiscount = CashierPermissions.canDiscount(
       ref.watch(cashierPermissionsProvider),
     );
+    final size = MediaQuery.sizeOf(context);
+    // Dialog measures with loose/unbounded height — Expanded needs a TIGHT height.
+    final dialogHeight = (size.height * 0.85).clamp(420.0, 720.0);
+    final dialogWidth = size.width >= 560 ? 520.0 : size.width - 24;
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(HasimRadius.lg),
       ),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520, maxHeight: 720),
+      child: SizedBox(
+        width: dialogWidth,
+        height: dialogHeight,
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(

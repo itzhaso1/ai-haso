@@ -149,7 +149,7 @@ class _InvoicesListState extends ConsumerState<InvoicesList> {
       }
     }
     if (!mounted) return;
-    final draft = local ?? invoice;
+    final draft = Map<String, dynamic>.from(local ?? invoice);
     draft['store_name'] = _workspaceName ?? 'كاشير حاسم';
     setState(() => _selected = draft);
   }

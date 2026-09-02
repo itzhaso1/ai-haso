@@ -259,8 +259,8 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
                     ),
                     Text(
                       _stale
-                          ? 'آخر نسخة محفوظة — غير متصل بالخادم'
-                          : 'بيانات حقيقية من Laravel — نفس مصدر لوحة الويب',
+                          ? 'عرض من البيانات المحلية — تُحدَّث عند المزامنة'
+                          : 'ملخص يومي من المبيعات والفواتير',
                       style: const TextStyle(
                         fontSize: 11,
                         color: HasimColors.muted,
@@ -527,21 +527,23 @@ class _DailyReportsPanelState extends ConsumerState<DailyReportsPanel> {
 
     return LayoutBuilder(
       builder: (context, c) {
-        final cols = c.maxWidth >= 900
+        final maxW = c.maxWidth.isFinite ? c.maxWidth : MediaQuery.sizeOf(context).width;
+        final cols = maxW >= 900
             ? 4
-            : c.maxWidth >= 520
+            : maxW >= 520
                 ? 2
                 : 1;
         final width = cols == 1
-            ? c.maxWidth
-            : (c.maxWidth - (8 * (cols - 1))) / cols;
+            ? maxW
+            : (maxW - (8 * (cols - 1))) / cols;
+        final cardW = width.isFinite && width > 0 ? width : maxW;
         return Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
             for (final card in cards)
               SizedBox(
-                width: width.isFinite && width > 0 ? width : c.maxWidth,
+                width: cardW,
                 child: HsCard(
                   color: card.$4 ? const Color(0xFFECFDF5) : HasimColors.surface,
                   borderColor:
