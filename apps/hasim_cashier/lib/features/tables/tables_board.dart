@@ -239,64 +239,74 @@ class _TablesBoardState extends ConsumerState<TablesBoard> {
           padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
-                      '${table['name']}',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w900,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${table['name']}',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
                       ),
-                    ),
+                      const Icon(
+                        Icons.chevron_left,
+                        color: HasimColors.muted,
+                        size: 20,
+                      ),
+                    ],
                   ),
-                  const Icon(
-                    Icons.chevron_left,
-                    color: HasimColors.muted,
-                    size: 20,
+                  const SizedBox(height: 6),
+                  occupied
+                      ? HsBadge.occupied(
+                          PosLabels.tableStatus(table['status'] as String?),
+                        )
+                      : HsBadge.available(
+                          PosLabels.tableStatus(table['status'] as String?),
+                        ),
+                  const SizedBox(height: 6),
+                  Text(
+                    hasSession ? 'جلسة مفتوحة' : 'مغلقة',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: hasSession ? HasimColors.ink : HasimColors.muted,
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
-              occupied
-                  ? HsBadge.occupied(
-                      PosLabels.tableStatus(table['status'] as String?),
-                    )
-                  : HsBadge.available(
-                      PosLabels.tableStatus(table['status'] as String?),
-                    ),
-              const SizedBox(height: 6),
-              Text(
-                hasSession ? 'جلسة مفتوحة' : 'مغلقة',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: hasSession ? HasimColors.ink : HasimColors.muted,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                'الطلبات: $orders',
-                style: const TextStyle(fontSize: 12, color: HasimColors.muted),
-              ),
-              if (total > 0)
-                Text(
-                  'الإجمالي: ${total.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                    color: HasimColors.ctaDark,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'الطلبات: $orders',
+                    style: const TextStyle(fontSize: 12, color: HasimColors.muted),
                   ),
-                ),
-              const SizedBox(height: 4),
-              const Text(
-                'اضغط للدخول',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: HasimColors.brand,
-                ),
+                  if (total > 0)
+                    Text(
+                      'الإجمالي: ${total.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                        color: HasimColors.ctaDark,
+                      ),
+                    ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'اضغط للدخول',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: HasimColors.brand,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

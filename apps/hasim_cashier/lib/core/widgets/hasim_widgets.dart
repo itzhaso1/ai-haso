@@ -329,11 +329,12 @@ class ProductCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(HasimRadius.md),
               border: Border.all(color: HasimColors.border),
             ),
+            // Avoid nested Expanded/Spacer — those flex patterns are a known
+            // trigger for Flutter debug semantics.parentDataDirty storms.
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(
-                  flex: 5,
                   child: ClipRRect(
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(HasimRadius.md),
@@ -362,88 +363,80 @@ class ProductCard extends StatelessWidget {
                           ),
                   ),
                 ),
-                Expanded(
-                  flex: 4,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text(
-                                name,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  height: 1.2,
-                                ),
-                              ),
-                              if (sku != null && sku!.isNotEmpty)
-                                Text(
-                                  sku!,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: HasimColors.muted,
-                                  ),
-                                ),
-                            ],
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          height: 1.2,
+                        ),
+                      ),
+                      if (sku != null && sku!.isNotEmpty)
+                        Text(
+                          sku!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: HasimColors.muted,
                           ),
                         ),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '$priceLabel $currency',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                            ),
-                            if (!available)
-                              const HsBadge(
-                                label: 'غير متاح',
-                                background: HasimColors.dangerSoft,
-                                foreground: HasimColors.danger,
-                              ),
-                          ],
+                      const SizedBox(height: 6),
+                      Text(
+                        '$priceLabel $currency',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
                         ),
-                        const SizedBox(height: 6),
-                        Container(
-                          height: 36,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: available
-                                ? HasimColors.ctaSoft
-                                : HasimColors.surfaceSoft,
-                            borderRadius:
-                                BorderRadius.circular(HasimRadius.sm),
-                            border: Border.all(
-                              color: available
-                                  ? HasimColors.cta
-                                  : HasimColors.border,
-                            ),
-                          ),
-                          child: Text(
-                            available ? '+ إضافة' : 'غير متوفر',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              color: available
-                                  ? HasimColors.ctaDark
-                                  : HasimColors.muted,
-                            ),
+                      ),
+                      if (!available) ...[
+                        const SizedBox(height: 4),
+                        const Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: HsBadge(
+                            label: 'غير متاح',
+                            background: HasimColors.dangerSoft,
+                            foreground: HasimColors.danger,
                           ),
                         ),
                       ],
-                    ),
+                      const SizedBox(height: 6),
+                      Container(
+                        height: 36,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: available
+                              ? HasimColors.ctaSoft
+                              : HasimColors.surfaceSoft,
+                          borderRadius: BorderRadius.circular(HasimRadius.sm),
+                          border: Border.all(
+                            color: available
+                                ? HasimColors.cta
+                                : HasimColors.border,
+                          ),
+                        ),
+                        child: Text(
+                          available ? '+ إضافة' : 'غير متوفر',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: available
+                                ? HasimColors.ctaDark
+                                : HasimColors.muted,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],

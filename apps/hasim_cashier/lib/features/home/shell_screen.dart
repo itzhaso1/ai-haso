@@ -1280,23 +1280,10 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
           ),
           if (cart.channel == OrderChannel.table) ...[
             const SizedBox(height: 8),
-            DropdownButtonFormField<int>(
-              value: _tables.any((t) => (t['id'] as num).toInt() == cart.tableId)
-                  ? cart.tableId
-                  : null,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'الطاولة',
-                isDense: true,
-              ),
-              items: [
-                for (final t in _tables)
-                  DropdownMenuItem(
-                    value: (t['id'] as num).toInt(),
-                    child: Text('${t['name']}'),
-                  ),
-              ],
-              onChanged: (v) => notifier.setTable(v),
+            _TablePickerField(
+              tables: _tables,
+              selectedId: cart.tableId,
+              onSelected: notifier.setTable,
             ),
           ],
           const SizedBox(height: 8),
@@ -1529,6 +1516,94 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TablePickerField extends StatelessWidget {
+  const _TablePickerField({
+    required this.tables,
+    required this.selectedId,
+    required this.onSelected,
+  });
+
+  final List<Map<String, dynamic>> tables;
+  final int? selectedId;
+  final ValueChanged<int?> onSelected;
+
+  String get _label {
+    for (final t in tables) {
+      if ((t['id'] as num?)?.toInt() == selectedId) {
+        return '${t['name']}';
+      }
+    }
+    return 'اختر الطاولة';
+  }
+
+  Future<void> _open(BuildContext context) async {
+    final picked = await showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Text(
+                  'اختر الطاولة',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+                ),
+              ),
+              if (tables.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'لا توجد طاولات محلية. أكمل المزامنة وأنت متصل.',
+                    style: TextStyle(color: HasimColors.muted),
+                  ),
+                )
+              else
+                for (final t in tables)
+                  ListTile(
+                    title: Text('${t['name']}'),
+                    selected: (t['id'] as num?)?.toInt() == selectedId,
+                    onTap: () =>
+                        Navigator.pop(ctx, (t['id'] as num).toInt()),
+                  ),
+            ],
+          ),
+        );
+      },
+    );
+    if (picked != null) onSelected(picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: HasimColors.surface,
+      borderRadius: BorderRadius.circular(HasimRadius.md),
+      child: InkWell(
+        onTap: () => _open(context),
+        borderRadius: BorderRadius.circular(HasimRadius.md),
+        child: InputDecorator(
+          decoration: const InputDecoration(
+            labelText: 'الطاولة',
+            isDense: true,
+            border: OutlineInputBorder(),
+            suffixIcon: Icon(Icons.keyboard_arrow_down),
+          ),
+          child: Text(
+            _label,
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: selectedId == null ? HasimColors.muted : HasimColors.ink,
+            ),
+          ),
+        ),
       ),
     );
   }

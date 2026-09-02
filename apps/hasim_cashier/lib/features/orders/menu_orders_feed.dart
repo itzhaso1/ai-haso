@@ -378,35 +378,18 @@ class _MenuOrdersFeedState extends ConsumerState<MenuOrdersFeed> {
                                     Row(
                                       children: [
                                         Expanded(
-                                          child: DropdownButtonFormField<String>(
-                                            value: _statusOptions
-                                                    .contains(status)
-                                                ? status
-                                                : 'new',
-                                            decoration: const InputDecoration(
-                                              isDense: true,
-                                              contentPadding:
-                                                  EdgeInsets.symmetric(
-                                                horizontal: 8,
-                                                vertical: 8,
-                                              ),
-                                            ),
-                                            items: [
-                                              for (final s in _statusOptions)
-                                                DropdownMenuItem(
-                                                  value: s,
-                                                  child: Text(
-                                                    PosLabels.status(s),
-                                                    style: const TextStyle(
-                                                      fontSize: 12,
-                                                    ),
-                                                  ),
-                                                ),
-                                            ],
+                                          child: _StatusPickerButton(
+                                            value: () {
+                                              final raw = status ?? 'new';
+                                              return _statusOptions.contains(raw)
+                                                  ? raw
+                                                  : 'new';
+                                            }(),
+                                            options: _statusOptions,
                                             onChanged: (v) {
                                               final id =
                                                   (order['id'] as num?)?.toInt();
-                                              if (v != null && id != null) {
+                                              if (id != null) {
                                                 _updateStatus(id, v);
                                               }
                                             },
@@ -441,6 +424,58 @@ class _MenuOrdersFeedState extends ConsumerState<MenuOrdersFeed> {
                         ),
         ),
       ],
+    );
+  }
+}
+
+class _StatusPickerButton extends StatelessWidget {
+  const _StatusPickerButton({
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+
+  final String value;
+  final List<String> options;
+  final ValueChanged<String> onChanged;
+
+  Future<void> _open(BuildContext context) async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            for (final s in options)
+              ListTile(
+                title: Text(PosLabels.status(s)),
+                selected: s == value,
+                onTap: () => Navigator.pop(ctx, s),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked != null && picked != value) onChanged(picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton(
+      onPressed: () => _open(context),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              PosLabels.status(value),
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            ),
+          ),
+          const Icon(Icons.keyboard_arrow_down, size: 18),
+        ],
+      ),
     );
   }
 }

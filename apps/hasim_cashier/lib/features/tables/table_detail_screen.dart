@@ -38,6 +38,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
   var _loading = true;
   var _closing = false;
   var _syncingNow = false;
+  var _moreOpen = false;
   String? _error;
   String _filter = 'all';
   final _search = TextEditingController();
@@ -1455,38 +1456,38 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
           if (!_hasSession) ...[
             _action('QR المنيو', Icons.qr_code_2_outlined, _showQr),
           ] else ...[
-            Theme(
-              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-              child: ExpansionTile(
-                initiallyExpanded: false,
-                tilePadding: const EdgeInsets.symmetric(horizontal: 8),
-                childrenPadding: EdgeInsets.zero,
-                title: const Text(
-                  'المزيد',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-                ),
-                children: [
-                  _action(
-                    'إضافة ملاحظة',
-                    Icons.sticky_note_2_outlined,
-                    _editNote,
-                  ),
-                  _action('خصم', Icons.percent, _applyDiscount),
-                  _action('QR المنيو', Icons.qr_code_2_outlined, _showQr),
-                  _action(
-                    'نقل الطاولة',
-                    Icons.swap_horiz,
-                    () => _transferOrMerge(merge: false),
-                  ),
-                  _action(
-                    'دمج طاولة',
-                    Icons.merge_type,
-                    () => _transferOrMerge(merge: true),
-                  ),
-                  _action('تقسيم الحساب', Icons.call_split, _splitBill),
-                ],
+            ListTile(
+              dense: true,
+              leading: Icon(
+                _moreOpen ? Icons.expand_less : Icons.expand_more,
+                size: 20,
               ),
+              title: const Text(
+                'المزيد',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+              ),
+              onTap: () => setState(() => _moreOpen = !_moreOpen),
             ),
+            if (_moreOpen) ...[
+              _action(
+                'إضافة ملاحظة',
+                Icons.sticky_note_2_outlined,
+                _editNote,
+              ),
+              _action('خصم', Icons.percent, _applyDiscount),
+              _action('QR المنيو', Icons.qr_code_2_outlined, _showQr),
+              _action(
+                'نقل الطاولة',
+                Icons.swap_horiz,
+                () => _transferOrMerge(merge: false),
+              ),
+              _action(
+                'دمج طاولة',
+                Icons.merge_type,
+                () => _transferOrMerge(merge: true),
+              ),
+              _action('تقسيم الحساب', Icons.call_split, _splitBill),
+            ],
             _action(
               'إلغاء الطاولة',
               Icons.delete_outline,
@@ -1875,12 +1876,19 @@ class _CloseTableFlowState extends State<CloseTableFlow> {
                           ? Column(
                               children: [
                                 for (final m in _methods)
-                                  RadioListTile<String>(
-                                    value: m.$1,
-                                    groupValue: _payment,
+                                  ListTile(
                                     title: Text(m.$2),
-                                    onChanged: (v) =>
-                                        setState(() => _payment = v ?? 'cash'),
+                                    selected: _payment == m.$1,
+                                    trailing: Icon(
+                                      _payment == m.$1
+                                          ? Icons.radio_button_checked
+                                          : Icons.radio_button_off,
+                                      color: _payment == m.$1
+                                          ? HasimColors.cta
+                                          : HasimColors.muted,
+                                    ),
+                                    onTap: () =>
+                                        setState(() => _payment = m.$1),
                                   ),
                               ],
                             )
