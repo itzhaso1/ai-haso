@@ -2,7 +2,7 @@
 
 **Branch:** `cursor/offline-first-pos-v2-757c`  
 **Base:** `cursor/cashier-ui-ux-fix-757c` @ `54806df`  
-**Status:** Phase 5+6 complete (bidirectional sync + SQLite primary / Hive POS dual-write removed)
+**Status:** Full offline POS (sessions / payments / invoices local-first; online optional sync)
 
 ## Architecture
 
@@ -10,31 +10,27 @@
 Flutter UI → Repositories → SQLite (Drift) → Sync Engine ↔ Laravel (SoT)
 ```
 
+Online is **optional** after Initial Sync: used only to push/pull with Laravel.
+
 ## Phases
 
-### Phase 1–4 — done (foundation, tables, orders queue, devices + cursor pull)
+### Phase 1–6 — done (foundation → SQLite primary)
 
-### Phase 5 — Full bidirectional sync (done)
-- Order + customer `pos_sync_changes` emission
-- Pull apply + reconcile via `client_reference`
-- Conflict detection into `sync_conflicts` (no silent LWW for orders/payments)
-- Customers local-first create + sync_queue
-- Takeaway offline via SQLite
-
-### Phase 6 — Finalize Local POS Storage (done)
-- Removed Hive POS dual-write for orders/tables
-- SQLite performance indexes
-- Customers panel / table add-order local-first
-- Hive retained only for session/bootstrap prefs + one-shot pending migrate
+### Full offline expansion — done
+- Open Session / Close (+ payment_method) / Invoice are local-first + `sync_queue`
+- SyncEngineV2 pushes `table_session` open/close and takeaway `invoice`
+- Close waits for table orders to sync before pushing close
+- Advanced ops (transfer / merge / split / discount / QR / refund / invoice_edit) remain online
 
 ## Conflict strategy
 
 | Entity | Offline? | Rule |
 |--------|----------|------|
 | Catalog / tables | cache | Server authoritative |
-| Orders (pre-invoice) | yes | Detect + keep local pending |
+| Orders | yes | Detect + keep local pending |
 | Customers | yes | Detect + keep local pending |
-| Payments / invoices / close | **no** | Online only |
+| Open/close session + payment + invoice | yes | Detect + queue; never silent LWW |
+| Transfer / merge / split / discount / QR | no | Require reconnect |
 
 ## Operational requirement
 

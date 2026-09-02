@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
@@ -61,7 +60,19 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
     return id;
   }
 
-  bool get _hasSession => _sessionId != null || _pendingSyncCount > 0;
+  String? get _sessionClientId {
+    final id = _detail?['session_client_id'];
+    if (id == null) return null;
+    final s = '$id'.trim();
+    return s.isEmpty ? null : s;
+  }
+
+  bool get _hasSession =>
+      _sessionId != null ||
+      _sessionClientId != null ||
+      _detail?['status'] == 'occupied' ||
+      _detail?['session_open'] == true ||
+      _pendingSyncCount > 0;
 
   bool get _canAddOrder =>
       _hasSession || _detail?['status'] == 'occupied';
@@ -178,6 +189,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
   }
 
   Future<bool> _ensureOnline() async {
+    // Advanced table ops (transfer/merge/split/discount/QR) still need Laravel.
     if (ConflictStrategy.forDomain('table_action') !=
         ConflictPolicy.requireOnline) {
       return true;
@@ -188,7 +200,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'عمليات الطاولات تتطلب اتصالًا بالخادم (Laravel مصدر الحقيقة).',
+            'هذه العملية المتقدمة تتطلب اتصالًا بالخادم حاليًا.',
           ),
         ),
       );
@@ -395,20 +407,32 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
 
   Future<void> _openSession() async {
     if (!_canManageTables) return;
-    if (!await _ensureOnline()) return;
+    final workspaceId = _workspaceId;
+    if (workspaceId == null || workspaceId <= 0) return;
     try {
-      await ref
-          .read(cashierApiProvider)
-          .post('/tables/${widget.tableId}/sessions/open');
+      final deviceId =
+          await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
+      await ref.read(tablesRepositoryProvider).openSessionLocal(
+            workspaceId: workspaceId,
+            deviceId: deviceId,
+            tableServerId: widget.tableId,
+          );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم فتح جلسة الطاولة.')),
       );
-      await _load();
-    } on ApiException catch (e) {
+      // Best-effort sync — offline keeps queue.
+      await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+            workspaceId: workspaceId,
+            deviceId: deviceId,
+          );
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
     }
   }
 
@@ -458,7 +482,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       );
       return;
     }
-    if (!_isLocalPending(order) && !await _ensureOnline()) return;
+    // Synced order edits are queued locally — online is optional.
     final updated = await showDialog<Map<String, dynamic>>(
       context: context,
       barrierDismissible: false,
@@ -605,7 +629,7 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
       await _refreshLocalOrders();
       return;
     }
-    if (!await _ensureOnline()) return;
+    // Synced deletes are queued locally — online is optional.
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -915,44 +939,40 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
   Future<void> _closeSession() async {
     if (!_hasSession || !_canManageTables || _closing) return;
     final workspaceId = _workspaceId;
-    final hasSqlitePending = workspaceId != null &&
-        await ref.read(ordersRepositoryProvider).hasUnsyncedForTable(
-              workspaceId: workspaceId,
-              tableId: widget.tableId,
-            );
-    if (workspaceId == null || hasSqlitePending) {
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('لا يمكن إغلاق الطاولة'),
-          content: const Text(
-            'لا يمكن إغلاق الطاولة قبل مزامنة الطلبات عند عودة الاتصال.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('حسنًا'),
-            ),
-          ],
-        ),
-      );
-      return;
+    if (workspaceId == null || workspaceId <= 0) return;
+
+    // Compute totals from local + server orders so close works fully offline.
+    final billable =
+        _orders.where((o) => o['pos_status'] != 'cancelled').toList();
+    var subtotal = ((_detail?['subtotal'] as num?) ?? 0).toDouble();
+    var discount = ((_detail?['discount_amount'] as num?) ?? 0).toDouble();
+    var tax = ((_detail?['tax_amount'] as num?) ?? 0).toDouble();
+    var total = ((_detail?['total'] as num?) ?? 0).toDouble();
+    if (total <= 0 && billable.isNotEmpty) {
+      subtotal = 0;
+      discount = 0;
+      tax = 0;
+      total = 0;
+      for (final o in billable) {
+        subtotal += ((o['subtotal'] as num?) ?? 0).toDouble();
+        discount += ((o['discount_amount'] as num?) ?? 0).toDouble();
+        tax += ((o['tax_amount'] as num?) ?? 0).toDouble();
+        total += ((o['total_amount'] as num?) ?? 0).toDouble();
+      }
     }
-    if (!await _ensureOnline()) return;
+
     final result = await showDialog<CloseTableResult>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => CloseTableFlow(
         tableName: '${_detail?['name'] ?? ''}',
-        subtotal: ((_detail?['subtotal'] as num?) ?? 0).toDouble(),
-        discount: ((_detail?['discount_amount'] as num?) ?? 0).toDouble(),
-        tax: ((_detail?['tax_amount'] as num?) ?? 0).toDouble(),
-        total: ((_detail?['total'] as num?) ?? 0).toDouble(),
+        subtotal: subtotal,
+        discount: discount,
+        tax: tax,
+        total: total,
         ordersCount: (_detail?['orders_count'] as num?)?.toInt() ??
-            _orders.where((o) => o['pos_status'] != 'cancelled').length,
-        orders: _orders
-            .where((o) => o['pos_status'] != 'cancelled')
+            billable.length,
+        orders: billable
             .map(
               (o) => {
                 'label': '#${o['order_number'] ?? o['id']}',
@@ -964,33 +984,33 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
     );
     if (result == null) return;
     setState(() => _closing = true);
-    final idempotencyKey = const Uuid().v4();
     try {
-      final data = await ref.read(cashierApiProvider).post(
-        '/tables/${widget.tableId}/sessions/$_sessionId/close',
-        data: {
-          if (result.paymentMethod != null)
-            'payment_method': result.paymentMethod,
-        },
-        idempotencyKey: idempotencyKey,
-      );
+      final deviceId =
+          await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
+      final closed = await ref.read(tablesRepositoryProvider).closeSessionLocal(
+            workspaceId: workspaceId,
+            deviceId: deviceId,
+            tableServerId: widget.tableId,
+            paymentMethod: result.paymentMethod,
+          );
       if (!mounted) return;
-      final invoice = data['invoice'] is Map
-          ? Map<String, dynamic>.from(data['invoice'] as Map)
+      final invoice = closed['invoice'] is Map
+          ? Map<String, dynamic>.from(closed['invoice'] as Map)
           : null;
+      // Best-effort sync — offline keeps payment/invoice/close in queue.
+      await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+            workspaceId: workspaceId,
+            deviceId: deviceId,
+          );
+      if (!mounted) return;
       if (invoice != null) {
         await _afterCloseInvoiceDialog(invoice);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم إغلاق الجلسة بدون فواتير.')),
+          const SnackBar(content: Text('تم إغلاق الجلسة.')),
         );
       }
       closeTableWorkspace(ref);
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      setState(() => _closing = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
       setState(() => _closing = false);
@@ -1023,12 +1043,20 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
     );
     if (choice != 'print') return;
     try {
-      final show = await ref
-          .read(cashierApiProvider)
-          .get('/invoices/${invoice['id']}');
-      final full = show['invoice'] is Map
-          ? Map<String, dynamic>.from(show['invoice'] as Map)
-          : invoice;
+      Map<String, dynamic> full = invoice;
+      final serverId = (invoice['id'] as num?)?.toInt();
+      if (serverId != null && serverId > 0) {
+        try {
+          final show = await ref
+              .read(cashierApiProvider)
+              .get('/invoices/$serverId');
+          if (show['invoice'] is Map) {
+            full = Map<String, dynamic>.from(show['invoice'] as Map);
+          }
+        } catch (_) {
+          // Print local draft when offline / not yet synced.
+        }
+      }
       final printer = await ref.read(printerServiceFutureProvider.future);
       final result = await printer.printInvoice(full);
       if (!mounted) return;
@@ -1039,10 +1067,10 @@ class _TableDetailScreenState extends ConsumerState<TableDetailScreen> {
           ),
         ),
       );
-    } on ApiException catch (e) {
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+          .showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 

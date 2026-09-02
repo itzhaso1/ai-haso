@@ -1,14 +1,15 @@
 /// Conflict handling strategy for كاشير حاسم offline sync.
 ///
-/// Laravel remains source of truth for inventory, table session state,
-/// product availability, and paid invoices.
+/// Laravel remains source of truth after sync. Daily POS (orders, sessions,
+/// payments, invoices) is local-first; online is optional for sync only.
 ///
 /// | Domain | Offline allowed | Conflict rule |
 /// |--------|-----------------|---------------|
 /// | Catalog / categories / tables | read cache + server pull | Server authoritative |
 /// | Customers | create/update offline | Detect conflict; keep local pending |
-/// | Orders (pre-invoice) | create/update/delete offline | Detect conflict; never silent LWW |
-/// | Payments / invoices / close | **online only** | Never silently overwrite |
+/// | Orders | create/update/delete offline | Detect conflict; never silent LWW |
+/// | Open/close session + payment + invoice | yes (queued) | Detect conflict; never silent LWW |
+/// | Transfer / merge / split / discount / QR / refund / invoice_edit | online | Require reconnect |
 ///
 /// On sync failure: keep local Pending/Failed record, never silent-delete.
 /// On sync success with replay (same client_reference): treat as Synced.
@@ -39,19 +40,22 @@ class ConflictStrategy {
         'category' ||
         'product_availability' =>
           ConflictPolicy.serverWins,
-        'pending_order' || 'order' || 'customer' =>
+        'pending_order' ||
+        'order' ||
+        'customer' ||
+        'open_session' ||
+        'close_table' ||
+        'payment' ||
+        'invoice' ||
+        'table_session' =>
           ConflictPolicy.detectAndRecord,
         'table_action' ||
         'refund' ||
         'invoice_edit' ||
-        'invoice' ||
-        'payment' ||
-        'close_table' ||
         'transfer' ||
         'merge' ||
         'split' ||
-        'discount' ||
-        'open_session' =>
+        'discount' =>
           ConflictPolicy.requireOnline,
         _ => ConflictPolicy.serverWins,
       };

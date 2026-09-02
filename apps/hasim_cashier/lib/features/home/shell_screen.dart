@@ -528,66 +528,62 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       return;
     }
 
-    final serverId = localOrder['id'];
-    final pending = localOrder['is_local_pending'] == true;
-    if (pending || serverId is! num) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم حفظ الطلب الخارجي — بانتظار المزامنة')),
-      );
-      return;
-    }
-
-    // Invoice/print remain online-only after successful sync confirmation.
+    // Takeaway: local invoice draft + optional print; sync when online.
+    final orderLabel =
+        '${localOrder['order_number'] ?? localOrder['id'] ?? clientRef}';
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (context) => _SuccessOrderDialog(
-        orderNumber: '${localOrder['order_number'] ?? serverId}',
+        orderNumber: orderLabel,
         onPrint: () async {
           Navigator.pop(context);
           try {
-            final invoiceData = await ref
-                .read(cashierApiProvider)
-                .post('/orders/$serverId/invoice');
+            final invoice =
+                await ref.read(ordersRepositoryProvider).enqueueInvoiceForOrder(
+                      workspaceId: workspaceId,
+                      deviceId: deviceId,
+                      orderLocalId: clientRef,
+                    );
+            await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+                  workspaceId: workspaceId,
+                  deviceId: deviceId,
+                );
             if (!context.mounted) return;
-            final invoiceId = invoiceData['invoice_id'];
-            Map<String, dynamic>? invoice;
-            if (invoiceId != null) {
-              final show = await ref
-                  .read(cashierApiProvider)
-                  .get('/invoices/$invoiceId');
-              invoice = show['invoice'] is Map
-                  ? Map<String, dynamic>.from(show['invoice'] as Map)
-                  : null;
-            }
-            if (!context.mounted) return;
-            if (invoice != null) {
-              final printer =
-                  await ref.read(printerServiceFutureProvider.future);
-              final result = await printer.printInvoice(invoice);
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    result.success
-                        ? 'تم إنشاء الفاتورة وطباعتها.'
-                        : 'تم إنشاء الفاتورة. ${result.message}',
-                  ),
-                ),
-              );
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('تم إنشاء الفاتورة.')),
-              );
-            }
-          } on ApiException catch (e) {
+            final printer =
+                await ref.read(printerServiceFutureProvider.future);
+            final result = await printer.printInvoice(invoice);
             if (!context.mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(e.message)),
+              SnackBar(
+                content: Text(
+                  result.success
+                      ? 'تم إنشاء الفاتورة وطباعتها.'
+                      : 'تم إنشاء الفاتورة. ${result.message}',
+                ),
+              ),
+            );
+          } catch (e) {
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(e.toString())),
             );
           }
         },
-        onContinue: () => Navigator.pop(context),
+        onContinue: () async {
+          Navigator.pop(context);
+          try {
+            await ref.read(ordersRepositoryProvider).enqueueInvoiceForOrder(
+                  workspaceId: workspaceId,
+                  deviceId: deviceId,
+                  orderLocalId: clientRef,
+                );
+            await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+                  workspaceId: workspaceId,
+                  deviceId: deviceId,
+                );
+          } catch (_) {}
+        },
       ),
     );
   }

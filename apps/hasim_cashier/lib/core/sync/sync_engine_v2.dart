@@ -26,12 +26,31 @@ class SyncEngineV2 {
     )? postOrderItems,
     Future<void> Function(int serverOrderId)? deleteOrder,
     Future<Map<String, dynamic>> Function(int since, int limit)? fetchChanges,
+    Future<Map<String, dynamic>> Function(
+      int tableServerId,
+      String idempotencyKey,
+    )? postSessionOpen,
+    Future<Map<String, dynamic>> Function(
+      int tableServerId,
+      int sessionServerId,
+      Map<String, dynamic> payload,
+      String idempotencyKey,
+    )? postSessionClose,
+    Future<Map<String, dynamic>> Function(
+      int orderServerId,
+      String idempotencyKey,
+    )? postInvoice,
+    Future<Map<String, dynamic>> Function(int tableServerId)? getTable,
   })  : _api = api,
         _pullApplier = pullApplier ?? SyncPullApplier(_db),
         _postOrder = postOrder,
         _postOrderItems = postOrderItems,
         _deleteOrder = deleteOrder,
-        _fetchChanges = fetchChanges;
+        _fetchChanges = fetchChanges,
+        _postSessionOpen = postSessionOpen,
+        _postSessionClose = postSessionClose,
+        _postInvoice = postInvoice,
+        _getTable = getTable;
 
   final AppDatabase _db;
   final SyncQueueRepository _queue;
@@ -48,6 +67,21 @@ class SyncEngineV2 {
   final Future<void> Function(int serverOrderId)? _deleteOrder;
   final Future<Map<String, dynamic>> Function(int since, int limit)?
       _fetchChanges;
+  final Future<Map<String, dynamic>> Function(
+    int tableServerId,
+    String idempotencyKey,
+  )? _postSessionOpen;
+  final Future<Map<String, dynamic>> Function(
+    int tableServerId,
+    int sessionServerId,
+    Map<String, dynamic> payload,
+    String idempotencyKey,
+  )? _postSessionClose;
+  final Future<Map<String, dynamic>> Function(
+    int orderServerId,
+    String idempotencyKey,
+  )? _postInvoice;
+  final Future<Map<String, dynamic>> Function(int tableServerId)? _getTable;
 
   var _flushing = false;
   bool get isFlushing => _flushing;
@@ -151,7 +185,13 @@ class SyncEngineV2 {
     try {
       await _queue.recoverStuckSyncing(workspaceId);
       final rows = await _queue.pendingForWorkspace(workspaceId);
-      for (final row in rows) {
+      final ordered = [...rows]..sort((a, b) {
+          final pa = _pushPriority(a);
+          final pb = _pushPriority(b);
+          if (pa != pb) return pa.compareTo(pb);
+          return a.createdAt.compareTo(b.createdAt);
+        });
+      for (final row in ordered) {
         if (row.workspaceId != workspaceId) continue;
         if (row.status == 'cancelled' || row.status == 'synced') continue;
         if (row.nextAttemptAt != null &&
@@ -159,15 +199,50 @@ class SyncEngineV2 {
           kept++;
           continue;
         }
-        if (row.entityType != 'order' && row.entityType != 'customer') {
+        final supported = row.entityType == 'order' ||
+            row.entityType == 'customer' ||
+            row.entityType == 'table_session' ||
+            row.entityType == 'invoice';
+        if (!supported) {
           kept++;
           continue;
+        }
+
+        // Close / takeaway invoice wait until dependent orders are pushed.
+        if (row.entityType == 'table_session' && row.operation == 'close') {
+          final payload = _decode(row.payloadJson);
+          final tableId = (payload['table_server_id'] as num?)?.toInt();
+          if (tableId != null &&
+              await _hasUnsyncedOrdersForTable(workspaceId, tableId)) {
+            kept++;
+            continue;
+          }
+        }
+        if (row.entityType == 'invoice' && row.operation == 'create') {
+          final payload = _decode(row.payloadJson);
+          final orderLocalId = '${payload['order_local_id'] ?? ''}';
+          if (orderLocalId.isNotEmpty &&
+              await _orderNeedsServerId(workspaceId, orderLocalId)) {
+            kept++;
+            continue;
+          }
         }
 
         await _queue.markSyncing(row.id);
         try {
           if (row.entityType == 'customer') {
             await _pushCustomer(row);
+            synced++;
+          } else if (row.entityType == 'table_session' &&
+              row.operation == 'open') {
+            await _pushSessionOpen(row);
+            synced++;
+          } else if (row.entityType == 'table_session' &&
+              row.operation == 'close') {
+            await _pushSessionClose(row);
+            synced++;
+          } else if (row.entityType == 'invoice') {
+            await _pushInvoice(row);
             synced++;
           } else if (row.operation == 'create') {
             await _pushCreate(row);
@@ -231,6 +306,280 @@ class SyncEngineV2 {
     } finally {
       _flushing = false;
     }
+  }
+
+  int _pushPriority(SyncQueueItem row) {
+    if (row.entityType == 'customer') return 0;
+    if (row.entityType == 'table_session' && row.operation == 'open') return 1;
+    if (row.entityType == 'order') return 2;
+    if (row.entityType == 'invoice') return 3;
+    if (row.entityType == 'table_session' && row.operation == 'close') return 4;
+    return 9;
+  }
+
+  Future<bool> _hasUnsyncedOrdersForTable(int workspaceId, int tableId) async {
+    final rows = await (_db.select(_db.localOrders)
+          ..where((t) =>
+              t.workspaceId.equals(workspaceId) &
+              t.tableServerId.equals(tableId) &
+              t.posStatus.isNotValue('cancelled') &
+              (t.syncStatus.equals('pending') |
+                  t.syncStatus.equals('syncing') |
+                  t.syncStatus.equals('failed'))))
+        .get();
+    return rows.isNotEmpty;
+  }
+
+  Future<bool> _orderNeedsServerId(int workspaceId, String orderLocalId) async {
+    final order = await (_db.select(_db.localOrders)
+          ..where((t) =>
+              t.workspaceId.equals(workspaceId) &
+              t.localId.equals(orderLocalId)))
+        .getSingleOrNull();
+    if (order == null) return true;
+    return order.serverId == null || order.serverId! <= 0;
+  }
+
+  Future<void> _pushSessionOpen(SyncQueueItem row) async {
+    final payload = _decode(row.payloadJson);
+    final tableId = (payload['table_server_id'] as num?)?.toInt();
+    if (tableId == null || tableId <= 0) {
+      throw StateError('table_session open requires table_server_id');
+    }
+    final Map<String, dynamic> data;
+    final opener = _postSessionOpen;
+    if (opener != null) {
+      data = await opener(tableId, row.clientReference);
+    } else {
+      final api = _api;
+      if (api == null) {
+        throw StateError('SyncEngineV2 requires API for session open');
+      }
+      data = await api.post(
+        '/tables/$tableId/sessions/open',
+        idempotencyKey: row.clientReference,
+      );
+    }
+    final sessionId = (data['session_id'] as num?)?.toInt();
+    final now = DateTime.now();
+    await _db.transaction(() async {
+      final table = await (_db.select(_db.localTables)
+            ..where((t) =>
+                t.localId.equals(row.entityId) &
+                t.workspaceId.equals(row.workspaceId)))
+          .getSingleOrNull();
+      if (table != null) {
+        final prev = _decode(table.payloadJson);
+        final next = {
+          ...prev,
+          'session_id': sessionId,
+          'session_open': true,
+          'status': 'occupied',
+          if (data['opened_at'] != null) 'opened_at': data['opened_at'],
+        };
+        await (_db.update(_db.localTables)
+              ..where((t) => t.localId.equals(table.localId)))
+            .write(
+          LocalTablesCompanion(
+            sessionServerId: Value(sessionId),
+            status: const Value('occupied'),
+            payloadJson: Value(jsonEncode(next)),
+            updatedAt: Value(now),
+          ),
+        );
+      }
+      await _queue.markSynced(row.id);
+    });
+  }
+
+  Future<void> _pushSessionClose(SyncQueueItem row) async {
+    final payload = _decode(row.payloadJson);
+    final tableId = (payload['table_server_id'] as num?)?.toInt();
+    if (tableId == null || tableId <= 0) {
+      throw StateError('table_session close requires table_server_id');
+    }
+
+    var sessionId = (payload['session_server_id'] as num?)?.toInt();
+    if (sessionId == null || sessionId <= 0) {
+      final table = await (_db.select(_db.localTables)
+            ..where((t) =>
+                t.localId.equals(row.entityId) &
+                t.workspaceId.equals(row.workspaceId)))
+          .getSingleOrNull();
+      sessionId = table?.sessionServerId;
+    }
+    if (sessionId == null || sessionId <= 0) {
+      final getter = _getTable;
+      if (getter != null) {
+        final remote = await getter(tableId);
+        sessionId = (remote['session_id'] as num?)?.toInt();
+      } else {
+        final api = _api;
+        if (api != null) {
+          final remote = await api.get('/tables/$tableId');
+          sessionId = (remote['session_id'] as num?)?.toInt();
+        }
+      }
+    }
+    if (sessionId == null || sessionId <= 0) {
+      // Session may already be closed server-side (e.g. auto-open + empty).
+      await _markInvoiceSyncedFromClose(row, null);
+      await _queue.markSynced(row.id);
+      return;
+    }
+
+    final closeBody = <String, dynamic>{
+      if (payload['payment_method'] != null)
+        'payment_method': payload['payment_method'],
+    };
+    final Map<String, dynamic> data;
+    final closer = _postSessionClose;
+    if (closer != null) {
+      data = await closer(tableId, sessionId, closeBody, row.clientReference);
+    } else {
+      final api = _api;
+      if (api == null) {
+        throw StateError('SyncEngineV2 requires API for session close');
+      }
+      data = await api.post(
+        '/tables/$tableId/sessions/$sessionId/close',
+        data: closeBody,
+        idempotencyKey: row.clientReference,
+      );
+    }
+    final invoice = data['invoice'] is Map
+        ? Map<String, dynamic>.from(data['invoice'] as Map)
+        : null;
+    await _markInvoiceSyncedFromClose(row, invoice);
+    await _queue.markSynced(row.id);
+  }
+
+  Future<void> _markInvoiceSyncedFromClose(
+    SyncQueueItem row,
+    Map<String, dynamic>? invoice,
+  ) async {
+    final payload = _decode(row.payloadJson);
+    final invoiceLocalId = '${payload['invoice_local_id'] ?? ''}';
+    final paymentLocalId = '${payload['payment_local_id'] ?? ''}';
+    final now = DateTime.now();
+    if (invoiceLocalId.isNotEmpty) {
+      final existing = await (_db.select(_db.localInvoices)
+            ..where((t) => t.localId.equals(invoiceLocalId)))
+          .getSingleOrNull();
+      final prev = existing == null
+          ? <String, dynamic>{}
+          : _decode(existing.payloadJson);
+      final merged = {
+        ...prev,
+        if (invoice != null) ...invoice,
+        'sync_status': 'synced',
+      };
+      await (_db.update(_db.localInvoices)
+            ..where((t) => t.localId.equals(invoiceLocalId)))
+          .write(
+        LocalInvoicesCompanion(
+          serverId: Value((invoice?['id'] as num?)?.toInt()),
+          invoiceNumber: Value(
+            invoice?['invoice_number']?.toString() ?? existing?.invoiceNumber,
+          ),
+          totalAmount: Value(
+            (invoice?['total_amount'] as num?)?.toDouble() ??
+                existing?.totalAmount ??
+                0,
+          ),
+          syncStatus: const Value('synced'),
+          payloadJson: Value(jsonEncode(merged)),
+        ),
+      );
+    }
+    if (paymentLocalId.isNotEmpty) {
+      await (_db.update(_db.localPayments)
+            ..where((t) => t.localId.equals(paymentLocalId)))
+          .write(
+        const LocalPaymentsCompanion(syncStatus: Value('synced')),
+      );
+    }
+    // Ensure table is available after successful close sync.
+    await (_db.update(_db.localTables)
+          ..where((t) =>
+              t.localId.equals(row.entityId) &
+              t.workspaceId.equals(row.workspaceId)))
+        .write(
+      LocalTablesCompanion(
+        status: const Value('available'),
+        sessionServerId: const Value(null),
+        updatedAt: Value(now),
+      ),
+    );
+  }
+
+  Future<void> _pushInvoice(SyncQueueItem row) async {
+    final payload = _decode(row.payloadJson);
+    var orderServerId = (payload['order_server_id'] as num?)?.toInt();
+    final orderLocalId = '${payload['order_local_id'] ?? ''}';
+    if ((orderServerId == null || orderServerId <= 0) &&
+        orderLocalId.isNotEmpty) {
+      final order = await (_db.select(_db.localOrders)
+            ..where((t) =>
+                t.workspaceId.equals(row.workspaceId) &
+                t.localId.equals(orderLocalId)))
+          .getSingleOrNull();
+      orderServerId = order?.serverId;
+    }
+    if (orderServerId == null || orderServerId <= 0) {
+      throw StateError('invoice create requires synced order_server_id');
+    }
+    final Map<String, dynamic> data;
+    final poster = _postInvoice;
+    if (poster != null) {
+      data = await poster(orderServerId, row.clientReference);
+    } else {
+      final api = _api;
+      if (api == null) {
+        throw StateError('SyncEngineV2 requires API for invoice push');
+      }
+      data = await api.post(
+        '/orders/$orderServerId/invoice',
+        idempotencyKey: row.clientReference,
+      );
+    }
+    final invoiceLocalId = row.entityId;
+    final existing = await (_db.select(_db.localInvoices)
+          ..where((t) => t.localId.equals(invoiceLocalId)))
+        .getSingleOrNull();
+    final prev =
+        existing == null ? <String, dynamic>{} : _decode(existing.payloadJson);
+    final merged = {
+      ...prev,
+      'id': data['invoice_id'],
+      'invoice_number': data['invoice_number'],
+      'total_amount': data['total_amount'],
+      'currency': data['currency'],
+      'sync_status': 'synced',
+    };
+    await _db.transaction(() async {
+      await (_db.update(_db.localInvoices)
+            ..where((t) => t.localId.equals(invoiceLocalId)))
+          .write(
+        LocalInvoicesCompanion(
+          serverId: Value((data['invoice_id'] as num?)?.toInt()),
+          invoiceNumber: Value(data['invoice_number']?.toString()),
+          totalAmount: Value(
+            (data['total_amount'] as num?)?.toDouble() ??
+                existing?.totalAmount ??
+                0,
+          ),
+          syncStatus: const Value('synced'),
+          payloadJson: Value(jsonEncode(merged)),
+        ),
+      );
+      await (_db.update(_db.localPayments)
+            ..where((t) => t.invoiceLocalId.equals(invoiceLocalId)))
+          .write(
+        const LocalPaymentsCompanion(syncStatus: Value('synced')),
+      );
+      await _queue.markSynced(row.id);
+    });
   }
 
   Future<void> _pushCreate(SyncQueueItem row) async {

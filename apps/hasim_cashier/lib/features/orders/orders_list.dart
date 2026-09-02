@@ -6,6 +6,7 @@ import '../../core/local_db/local_db_providers.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
 import '../../core/pos/pos_labels.dart';
+import '../../core/sync/pos_sync_coordinator.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
 import '../../core/widgets/hasim_widgets.dart';
@@ -129,24 +130,46 @@ class _OrdersListState extends ConsumerState<OrdersList> {
   }
 
   Future<void> _createInvoice(Map<String, dynamic> order) async {
-    final id = (order['id'] as num?)?.toInt();
-    if (id == null) return;
+    final workspaceId = ref.read(workspaceIdProvider);
+    if (workspaceId == null || workspaceId <= 0) return;
+    final localId = '${order['local_id'] ?? ''}';
+    String? resolved = localId.isNotEmpty ? localId : null;
+    if (resolved == null) {
+      final serverId = (order['id'] as num?)?.toInt();
+      if (serverId == null) return;
+      resolved = (await ref.read(ordersRepositoryProvider).findByServerId(
+                workspaceId: workspaceId,
+                serverId: serverId,
+              ))
+          ?.localId;
+    }
+    if (resolved == null) return;
     try {
-      final data =
-          await ref.read(cashierApiProvider).post('/orders/$id/invoice');
+      final deviceId =
+          await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
+      final invoice =
+          await ref.read(ordersRepositoryProvider).enqueueInvoiceForOrder(
+                workspaceId: workspaceId,
+                deviceId: deviceId,
+                orderLocalId: resolved,
+              );
+      await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+            workspaceId: workspaceId,
+            deviceId: deviceId,
+          );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'تم إنشاء الفاتورة ${data['invoice_number'] ?? data['invoice_id']}',
+            'تم إنشاء الفاتورة ${invoice['invoice_number'] ?? invoice['local_id']}',
           ),
         ),
       );
       await _load();
-    } on ApiException catch (e) {
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+          .showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 

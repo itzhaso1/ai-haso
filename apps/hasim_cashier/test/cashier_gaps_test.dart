@@ -327,7 +327,7 @@ void main() {
     expect(usedKey, 'idem-1');
   });
 
-  test('conflict strategy keeps pending orders and requires online table ops', () {
+  test('conflict strategy keeps pending orders; session/payment/invoice offline', () {
     expect(
       ConflictStrategy.forDomain('pending_order'),
       ConflictPolicy.detectAndRecord,
@@ -338,11 +338,19 @@ void main() {
     );
     expect(
       ConflictStrategy.forDomain('close_table'),
-      ConflictPolicy.requireOnline,
+      ConflictPolicy.detectAndRecord,
     );
     expect(
       ConflictStrategy.forDomain('payment'),
-      ConflictPolicy.requireOnline,
+      ConflictPolicy.detectAndRecord,
+    );
+    expect(
+      ConflictStrategy.forDomain('open_session'),
+      ConflictPolicy.detectAndRecord,
+    );
+    expect(
+      ConflictStrategy.forDomain('invoice'),
+      ConflictPolicy.detectAndRecord,
     );
     expect(
       ConflictStrategy.forDomain('inventory'),
@@ -449,15 +457,19 @@ void main() {
     expect(retries, 2);
   });
 
-  test('table payment and invoice stay online-only with no fake success', () {
+  test('table payment and invoice are offline-first with advanced ops online', () {
     expect(
       ConflictStrategy.forDomain('table_action'),
       ConflictPolicy.requireOnline,
     );
-    expect(ConflictStrategy.forDomain('payment'), ConflictPolicy.requireOnline);
+    expect(ConflictStrategy.forDomain('payment'), ConflictPolicy.detectAndRecord);
     expect(
       ConflictStrategy.forDomain('close_table'),
-      ConflictPolicy.requireOnline,
+      ConflictPolicy.detectAndRecord,
+    );
+    expect(
+      ConflictStrategy.forDomain('invoice'),
+      ConflictPolicy.detectAndRecord,
     );
     expect(
       ConflictStrategy.forDomain('invoice_edit'),

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
@@ -615,6 +617,103 @@ class OrdersRepository {
           ..where((t) =>
               t.workspaceId.equals(workspaceId) & t.serverId.equals(serverId)))
         .getSingleOrNull();
+  }
+
+  /// Local-first takeaway/order invoice draft + sync_queue (POST /orders/{id}/invoice).
+  Future<Map<String, dynamic>> enqueueInvoiceForOrder({
+    required int workspaceId,
+    required String deviceId,
+    required String orderLocalId,
+    String? paymentMethod,
+  }) async {
+    final order = await _getScopedOrder(workspaceId, orderLocalId);
+    if (order == null) {
+      throw StateError('الطلب غير موجود محليًا');
+    }
+    final items = await _itemsFor(orderLocalId);
+    final invoiceLocalId = _newItemId();
+    final clientRef = '$invoiceLocalId';
+    final now = DateTime.now();
+    final method = (paymentMethod ?? 'cash').trim();
+    final invoiceNumber = 'LOCAL-$invoiceLocalId';
+    final invoicePayload = {
+      'local_id': invoiceLocalId,
+      'invoice_number': invoiceNumber,
+      'total_amount': order.totalAmount,
+      'subtotal': order.subtotal,
+      'tax_amount': order.taxAmount,
+      'discount_amount': order.discountAmount,
+      'payment_method': method,
+      'closed_at': now.toUtc().toIso8601String(),
+      'order_local_id': orderLocalId,
+      'order_server_id': order.serverId,
+      'items': [
+        for (final item in items)
+          {
+            'item_name': item.name,
+            'quantity': item.quantity,
+            'unit_price': item.unitPrice,
+            'total_amount': item.totalAmount,
+          },
+      ],
+      'sync_status': 'pending',
+    };
+
+    await _db.transaction(() async {
+      await _db.into(_db.localInvoices).insert(
+            LocalInvoicesCompanion.insert(
+              localId: invoiceLocalId,
+              workspaceId: workspaceId,
+              deviceId: deviceId.trim(),
+              invoiceNumber: Value(invoiceNumber),
+              totalAmount: Value(order.totalAmount),
+              syncStatus: const Value('pending'),
+              payloadJson: Value(jsonEncode(invoicePayload)),
+              createdAt: now,
+            ),
+          );
+      await _db.into(_db.localPayments).insert(
+            LocalPaymentsCompanion.insert(
+              localId: _newItemId(),
+              workspaceId: workspaceId,
+              deviceId: deviceId.trim(),
+              orderLocalId: Value(orderLocalId),
+              invoiceLocalId: Value(invoiceLocalId),
+              method: method,
+              amount: order.totalAmount,
+              syncStatus: const Value('pending'),
+              clientReference: clientRef,
+              createdAt: now,
+            ),
+          );
+      await (_db.update(_db.localOrders)
+            ..where((t) =>
+                t.localId.equals(orderLocalId) &
+                t.workspaceId.equals(workspaceId)))
+          .write(
+        LocalOrdersCompanion(
+          paymentStatus: const Value('paid'),
+          posStatus: const Value('completed'),
+          updatedAt: Value(now),
+        ),
+      );
+      await _queue.enqueue(
+        workspaceId: workspaceId,
+        deviceId: deviceId.trim(),
+        entityType: 'invoice',
+        entityId: invoiceLocalId,
+        operation: 'create',
+        payload: {
+          'invoice_local_id': invoiceLocalId,
+          'order_local_id': orderLocalId,
+          'order_server_id': order.serverId,
+          'payment_method': method,
+        },
+        clientReference: clientRef,
+      );
+    });
+
+    return invoicePayload;
   }
 
   Future<LocalOrder?> _getScopedOrder(int workspaceId, String localId) {

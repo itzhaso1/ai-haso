@@ -15,7 +15,7 @@ import '../repositories/sync_conflict_repository.dart';
 /// - product / category / table → server authoritative
 /// - order → reconcile by client_reference; conflict if local pending diverges
 /// - customer → reconcile by client_reference / server_id; conflict if pending
-/// - payments / invoices → never applied as offline financial mutations
+/// - payments / invoices → upsert local cache (server ids); never silent-delete pending
 class SyncPullApplier {
   SyncPullApplier(
     this._db, {
@@ -86,18 +86,14 @@ class SyncPullApplier {
             );
           case 'payment':
           case 'invoice':
-            // Online-only financial entities — never silently overwrite locally.
-            await _conflicts.record(
+            await _applyInvoiceOrPayment(
               workspaceId: workspaceId,
-              entityType: entity,
-              entityId: '${entityId ?? ''}',
-              strategy: 'require_online',
-              reason: 'payment_invoice_not_offline',
-              local: const {},
-              server: data,
-              deviceId: ourDevice,
+              entity: entity,
               operation: operation,
-              serverVersion: version,
+              serverId: entityId,
+              data: data,
+              version: version,
+              ourDeviceId: ourDevice,
             );
           default:
             // Forward-compatible: ignore unknown entities without failing sync.
@@ -506,5 +502,80 @@ class SyncPullApplier {
       'pos_status': order.posStatus,
       'updated_at': order.updatedAt.toIso8601String(),
     };
+  }
+
+  Future<void> _applyInvoiceOrPayment({
+    required int workspaceId,
+    required String entity,
+    required String operation,
+    required int? serverId,
+    required Map<String, dynamic> data,
+    required int version,
+    required String? ourDeviceId,
+  }) async {
+    if (operation == 'delete' || serverId == null) return;
+    if (entity == 'invoice') {
+      final existing = await (_db.select(_db.localInvoices)
+            ..where((t) =>
+                t.workspaceId.equals(workspaceId) & t.serverId.equals(serverId)))
+          .getSingleOrNull();
+      final pendingLocal = await (_db.select(_db.localInvoices)
+            ..where((t) =>
+                t.workspaceId.equals(workspaceId) &
+                t.syncStatus.equals('pending')))
+          .get();
+      // If we have a divergent pending local invoice, record conflict — no LWW.
+      if (pendingLocal.isNotEmpty && existing == null) {
+        await _conflicts.record(
+          workspaceId: workspaceId,
+          entityType: 'invoice',
+          entityId: '$serverId',
+          strategy: 'detect_and_record',
+          reason: 'local_pending_invoice_vs_server',
+          local: {
+            'pending_count': pendingLocal.length,
+            'local_ids': [for (final p in pendingLocal) p.localId],
+          },
+          server: data,
+          deviceId: ourDeviceId,
+          operation: operation,
+          serverVersion: version,
+        );
+      }
+      final invoiceLocalId =
+          existing?.localId ?? 'w${workspaceId}_inv_$serverId';
+      await _db.into(_db.localInvoices).insertOnConflictUpdate(
+            LocalInvoicesCompanion.insert(
+              localId: invoiceLocalId,
+              workspaceId: workspaceId,
+              deviceId: ourDeviceId ?? 'server',
+              serverId: Value(serverId),
+              invoiceNumber: Value(data['invoice_number']?.toString()),
+              totalAmount: Value((data['total_amount'] as num?)?.toDouble() ?? 0),
+              syncStatus: const Value('synced'),
+              payloadJson: Value(jsonEncode({...data, 'id': serverId})),
+              createdAt: existing?.createdAt ?? DateTime.now(),
+            ),
+          );
+      return;
+    }
+    // payment: informational cache only
+    if (serverId <= 0) return;
+    final paymentLocalId = 'w${workspaceId}_pay_$serverId';
+    await _db.into(_db.localPayments).insertOnConflictUpdate(
+          LocalPaymentsCompanion.insert(
+            localId: paymentLocalId,
+            workspaceId: workspaceId,
+            deviceId: ourDeviceId ?? 'server',
+            serverId: Value(serverId),
+            method: '${data['method'] ?? data['payment_method'] ?? 'cash'}',
+            amount: (data['amount'] as num?)?.toDouble() ??
+                (data['total_amount'] as num?)?.toDouble() ??
+                0,
+            syncStatus: const Value('synced'),
+            clientReference: '${data['client_reference'] ?? paymentLocalId}',
+            createdAt: DateTime.now(),
+          ),
+        );
   }
 }

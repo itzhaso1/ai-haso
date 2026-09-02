@@ -1,21 +1,28 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
 
 import '../api/cashier_api.dart';
 import '../local_db/app_database.dart';
 import '../local_db/local_ids.dart';
+import 'sync_queue_repository.dart';
 
 /// Tables UI reads/writes through this repository only.
 /// Local SQLite is the source for display; remote refresh is an implementation detail.
 class TablesRepository {
   TablesRepository(
-    this._db, {
+    this._db,
+    this._queue, {
     CashierApiClient? api,
-  }) : _api = api;
+    String Function()? newId,
+  })  : _api = api,
+        _newId = newId ?? (() => const Uuid().v4());
 
   final AppDatabase _db;
+  final SyncQueueRepository _queue;
   final CashierApiClient? _api;
+  final String Function() _newId;
 
   Future<List<Map<String, dynamic>>> listTables(int workspaceId) async {
     if (workspaceId <= 0) return const [];
@@ -77,20 +84,38 @@ class TablesRepository {
         }
         // Preserve richer detail payload when board snapshot is thinner.
         final mergedPayload = _mergePayload(previous?.payloadJson, table);
+        // Preserve offline-open client session until close sync completes.
+        final prevMap = previous == null
+            ? const <String, dynamic>{}
+            : _safeMap(previous.payloadJson);
+        final offlineOpen = prevMap['session_client_id'] != null &&
+            previous?.status == 'occupied' &&
+            (table['status'] == 'available' || table['session_id'] == null);
+        final status = offlineOpen
+            ? 'occupied'
+            : '${table['status'] ?? previous?.status ?? 'available'}';
+        final sessionServerId = offlineOpen
+            ? previous?.sessionServerId
+            : (table['session_id'] as num?)?.toInt() ??
+                previous?.sessionServerId;
+        if (offlineOpen && prevMap['session_client_id'] != null) {
+          mergedPayload['session_client_id'] = prevMap['session_client_id'];
+          mergedPayload['session_open'] = true;
+          if (prevMap['opened_at'] != null) {
+            mergedPayload['opened_at'] = prevMap['opened_at'];
+          }
+        }
         await _db.into(_db.localTables).insertOnConflictUpdate(
               LocalTablesCompanion.insert(
                 localId: localId,
                 workspaceId: workspaceId,
                 serverId: Value(serverId),
                 name: '${table['name'] ?? previous?.name ?? ''}',
-                status: Value('${table['status'] ?? previous?.status ?? 'available'}'),
+                status: Value(status),
                 capacity: Value(
                   (table['capacity'] as num?)?.toInt() ?? previous?.capacity,
                 ),
-                sessionServerId: Value(
-                  (table['session_id'] as num?)?.toInt() ??
-                      previous?.sessionServerId,
-                ),
+                sessionServerId: Value(sessionServerId),
                 payloadJson: Value(jsonEncode(mergedPayload)),
                 updatedAt: now,
               ),
@@ -107,22 +132,285 @@ class TablesRepository {
     if (workspaceId <= 0 || tableServerId <= 0) return;
     final now = DateTime.now();
     final localId = tableLocalId(workspaceId, tableServerId);
+    final previous = await (_db.select(_db.localTables)
+          ..where((t) => t.localId.equals(localId)))
+        .getSingleOrNull();
+    final prevMap =
+        previous == null ? const <String, dynamic>{} : _safeMap(previous.payloadJson);
+    final offlineOpen = prevMap['session_client_id'] != null &&
+        previous?.status == 'occupied' &&
+        (detail['status'] == 'available' || detail['session_id'] == null);
+    final merged = {
+      ...detail,
+      'id': tableServerId,
+      if (offlineOpen) ...{
+        'session_client_id': prevMap['session_client_id'],
+        'session_open': true,
+        if (prevMap['opened_at'] != null) 'opened_at': prevMap['opened_at'],
+      },
+    };
     await _db.into(_db.localTables).insertOnConflictUpdate(
           LocalTablesCompanion.insert(
             localId: localId,
             workspaceId: workspaceId,
             serverId: Value(tableServerId),
-            name: '${detail['name'] ?? ''}',
-            status: Value('${detail['status'] ?? 'available'}'),
-            capacity: Value((detail['capacity'] as num?)?.toInt()),
-            sessionServerId: Value((detail['session_id'] as num?)?.toInt()),
-            payloadJson: Value(jsonEncode({
-              ...detail,
-              'id': tableServerId,
-            })),
+            name: '${detail['name'] ?? previous?.name ?? ''}',
+            status: Value(
+              offlineOpen
+                  ? 'occupied'
+                  : '${detail['status'] ?? previous?.status ?? 'available'}',
+            ),
+            capacity: Value(
+              (detail['capacity'] as num?)?.toInt() ?? previous?.capacity,
+            ),
+            sessionServerId: Value(
+              offlineOpen
+                  ? previous?.sessionServerId
+                  : (detail['session_id'] as num?)?.toInt(),
+            ),
+            payloadJson: Value(jsonEncode(merged)),
             updatedAt: now,
           ),
         );
+  }
+
+  /// Local-first open session — works fully offline; syncs when online.
+  Future<Map<String, dynamic>> openSessionLocal({
+    required int workspaceId,
+    required String deviceId,
+    required int tableServerId,
+  }) async {
+    if (workspaceId <= 0 || tableServerId <= 0) {
+      throw ArgumentError('workspaceId and tableServerId required');
+    }
+    final localId = tableLocalId(workspaceId, tableServerId);
+    final existing = await (_db.select(_db.localTables)
+          ..where((t) =>
+              t.localId.equals(localId) & t.workspaceId.equals(workspaceId)))
+        .getSingleOrNull();
+    if (existing == null) {
+      throw StateError('الطاولة غير متاحة محليًا. أكمل Initial Sync أولًا.');
+    }
+    final payload = _safeMap(existing.payloadJson);
+    final existingClient = '${payload['session_client_id'] ?? ''}';
+    if (existing.status == 'occupied' && existingClient.isNotEmpty) {
+      return _rowToDetailMap(existing);
+    }
+
+    final sessionClientId = _newId();
+    final openedAt = DateTime.now().toUtc().toIso8601String();
+    final now = DateTime.now();
+    final nextPayload = {
+      ...payload,
+      'id': tableServerId,
+      'status': 'occupied',
+      'session_open': true,
+      'session_client_id': sessionClientId,
+      'opened_at': openedAt,
+      'session_id': existing.sessionServerId,
+    };
+
+    await _db.transaction(() async {
+      await (_db.update(_db.localTables)
+            ..where((t) =>
+                t.localId.equals(localId) &
+                t.workspaceId.equals(workspaceId)))
+          .write(
+        LocalTablesCompanion(
+          status: const Value('occupied'),
+          payloadJson: Value(jsonEncode(nextPayload)),
+          updatedAt: Value(now),
+        ),
+      );
+      await _queue.enqueue(
+        workspaceId: workspaceId,
+        deviceId: deviceId.trim(),
+        entityType: 'table_session',
+        entityId: localId,
+        operation: 'open',
+        payload: {
+          'table_server_id': tableServerId,
+          'table_local_id': localId,
+          'session_client_id': sessionClientId,
+        },
+        clientReference: sessionClientId,
+      );
+    });
+
+    final refreshed = await getTable(workspaceId, tableServerId);
+    return refreshed ?? nextPayload;
+  }
+
+  /// Local-first close + payment + invoice draft. Queues sync; no online required.
+  Future<Map<String, dynamic>> closeSessionLocal({
+    required int workspaceId,
+    required String deviceId,
+    required int tableServerId,
+    String? paymentMethod,
+  }) async {
+    if (workspaceId <= 0 || tableServerId <= 0) {
+      throw ArgumentError('workspaceId and tableServerId required');
+    }
+    final localId = tableLocalId(workspaceId, tableServerId);
+    final table = await (_db.select(_db.localTables)
+          ..where((t) =>
+              t.localId.equals(localId) & t.workspaceId.equals(workspaceId)))
+        .getSingleOrNull();
+    if (table == null) {
+      throw StateError('الطاولة غير متاحة محليًا.');
+    }
+    final payload = _safeMap(table.payloadJson);
+    final sessionClientId = '${payload['session_client_id'] ?? _newId()}';
+    final closeClientId = _newId();
+    final invoiceLocalId = _newId();
+    final paymentLocalId = _newId();
+    final now = DateTime.now();
+
+    final activeOrders = await (_db.select(_db.localOrders)
+          ..where((t) =>
+              t.workspaceId.equals(workspaceId) &
+              t.tableServerId.equals(tableServerId) &
+              t.posStatus.isNotValue('cancelled') &
+              t.paymentStatus.isNotValue('paid')))
+        .get();
+
+    var subtotal = 0.0;
+    var tax = 0.0;
+    var discount = 0.0;
+    var total = 0.0;
+    final invoiceItems = <Map<String, dynamic>>[];
+    for (final order in activeOrders) {
+      subtotal += order.subtotal;
+      tax += order.taxAmount;
+      discount += order.discountAmount;
+      total += order.totalAmount;
+      final items = await (_db.select(_db.localOrderItems)
+            ..where((t) =>
+                t.orderLocalId.equals(order.localId) &
+                t.isRemoved.equals(false)))
+          .get();
+      for (final item in items) {
+        invoiceItems.add({
+          'item_name': item.name,
+          'quantity': item.quantity,
+          'unit_price': item.unitPrice,
+          'total_amount': item.totalAmount,
+        });
+      }
+    }
+    if (total <= 0) {
+      total = (payload['total'] as num?)?.toDouble() ??
+          ((payload['subtotal'] as num?)?.toDouble() ?? 0);
+      subtotal = (payload['subtotal'] as num?)?.toDouble() ?? total;
+      tax = (payload['tax_amount'] as num?)?.toDouble() ?? 0;
+      discount = (payload['discount_amount'] as num?)?.toDouble() ?? 0;
+    }
+
+    final method = (paymentMethod ?? 'cash').trim();
+    final invoiceNumber = 'LOCAL-$invoiceLocalId';
+    final invoicePayload = {
+      'local_id': invoiceLocalId,
+      'invoice_number': invoiceNumber,
+      'total_amount': total,
+      'subtotal': subtotal,
+      'tax_amount': tax,
+      'discount_amount': discount,
+      'payment_method': method,
+      'closed_at': now.toUtc().toIso8601String(),
+      'table': {'id': tableServerId, 'name': table.name},
+      'items': invoiceItems,
+      'sync_status': 'pending',
+    };
+
+    final nextTablePayload = {
+      ...payload,
+      'id': tableServerId,
+      'status': 'available',
+      'session_open': false,
+      'session_id': null,
+      'session_client_id': null,
+      'orders': const [],
+      'subtotal': 0,
+      'tax_amount': 0,
+      'discount_amount': 0,
+      'total': 0,
+      'last_local_invoice': invoicePayload,
+    };
+
+    await _db.transaction(() async {
+      await _db.into(_db.localInvoices).insert(
+            LocalInvoicesCompanion.insert(
+              localId: invoiceLocalId,
+              workspaceId: workspaceId,
+              deviceId: deviceId.trim(),
+              invoiceNumber: Value(invoiceNumber),
+              totalAmount: Value(total),
+              syncStatus: const Value('pending'),
+              payloadJson: Value(jsonEncode(invoicePayload)),
+              createdAt: now,
+            ),
+          );
+      await _db.into(_db.localPayments).insert(
+            LocalPaymentsCompanion.insert(
+              localId: paymentLocalId,
+              workspaceId: workspaceId,
+              deviceId: deviceId.trim(),
+              invoiceLocalId: Value(invoiceLocalId),
+              method: method,
+              amount: total,
+              syncStatus: const Value('pending'),
+              clientReference: closeClientId,
+              createdAt: now,
+            ),
+          );
+      for (final order in activeOrders) {
+        await (_db.update(_db.localOrders)
+              ..where((t) =>
+                  t.localId.equals(order.localId) &
+                  t.workspaceId.equals(workspaceId)))
+            .write(
+          LocalOrdersCompanion(
+            paymentStatus: const Value('paid'),
+            posStatus: const Value('completed'),
+            updatedAt: Value(now),
+          ),
+        );
+      }
+      await (_db.update(_db.localTables)
+            ..where((t) =>
+                t.localId.equals(localId) &
+                t.workspaceId.equals(workspaceId)))
+          .write(
+        LocalTablesCompanion(
+          status: const Value('available'),
+          sessionServerId: const Value(null),
+          payloadJson: Value(jsonEncode(nextTablePayload)),
+          updatedAt: Value(now),
+        ),
+      );
+      await _queue.enqueue(
+        workspaceId: workspaceId,
+        deviceId: deviceId.trim(),
+        entityType: 'table_session',
+        entityId: localId,
+        operation: 'close',
+        payload: {
+          'table_server_id': tableServerId,
+          'table_local_id': localId,
+          'session_server_id': table.sessionServerId,
+          'session_client_id': sessionClientId,
+          'payment_method': method,
+          'invoice_local_id': invoiceLocalId,
+          'payment_local_id': paymentLocalId,
+        },
+        clientReference: closeClientId,
+      );
+    });
+
+    return {
+      'invoice': invoicePayload,
+      'table': await getTable(workspaceId, tableServerId),
+    };
   }
 
   /// Best-effort remote refresh. UI must not branch on connectivity —
@@ -189,6 +477,7 @@ class TablesRepository {
       'status': row.status,
       'capacity': row.capacity,
       'session_id': row.sessionServerId ?? payload['session_id'],
+      'session_client_id': payload['session_client_id'],
       'workspace_id': row.workspaceId,
     };
   }
@@ -203,6 +492,7 @@ class TablesRepository {
       'status': row.status,
       'capacity': row.capacity ?? payload['capacity'],
       'session_id': row.sessionServerId ?? payload['session_id'],
+      'session_client_id': payload['session_client_id'],
       'workspace_id': row.workspaceId,
       'orders': payload['orders'] ?? const [],
     };
@@ -212,7 +502,8 @@ class TablesRepository {
     String? previousJson,
     Map<String, dynamic> boardRow,
   ) {
-    final previous = previousJson == null ? const <String, dynamic>{} : _safeMap(previousJson);
+    final previous =
+        previousJson == null ? const <String, dynamic>{} : _safeMap(previousJson);
     final merged = <String, dynamic>{...previous, ...boardRow};
     // Keep detailed orders/totals if board snapshot omits them.
     if (boardRow['orders'] == null && previous['orders'] != null) {
@@ -233,6 +524,10 @@ class TablesRepository {
     }
     if (boardRow['notes'] == null && previous['notes'] != null) {
       merged['notes'] = previous['notes'];
+    }
+    if (boardRow['session_client_id'] == null &&
+        previous['session_client_id'] != null) {
+      merged['session_client_id'] = previous['session_client_id'];
     }
     return merged;
   }

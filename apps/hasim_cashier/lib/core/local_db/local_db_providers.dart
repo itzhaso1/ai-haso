@@ -39,6 +39,7 @@ final catalogRepositoryProvider = Provider<CatalogRepository>((ref) {
 final tablesRepositoryProvider = Provider<TablesRepository>((ref) {
   return TablesRepository(
     ref.watch(appDatabaseProvider),
+    ref.watch(syncQueueRepositoryProvider),
     api: ref.watch(cashierApiProvider),
   );
 });

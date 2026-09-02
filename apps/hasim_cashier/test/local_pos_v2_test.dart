@@ -231,7 +231,7 @@ void main() {
           ),
         );
 
-    final repo = TablesRepository(db);
+    final repo = TablesRepository(db, SyncQueueRepository(db));
     final a = await repo.listTables(1);
     final b = await repo.listTables(2);
     expect(a.single['name'], 'طاولة أ');
@@ -255,7 +255,7 @@ void main() {
           ),
         );
     // No API client — repository must still serve SQLite.
-    final repo = TablesRepository(db);
+    final repo = TablesRepository(db, SyncQueueRepository(db));
     final board = await repo.loadBoard(9);
     expect(board, hasLength(1));
     expect(board.single['id'], 3);
@@ -263,7 +263,7 @@ void main() {
   });
 
   test('table detail payload preserved when board refresh is thinner', () async {
-    final repo = TablesRepository(db);
+    final repo = TablesRepository(db, SyncQueueRepository(db));
     await repo.upsertTableDetail(1, 5, {
       'id': 5,
       'name': 'VIP',

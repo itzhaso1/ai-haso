@@ -33,11 +33,11 @@ void main() {
     );
     expect(
       ConflictStrategy.forDomain('payment'),
-      ConflictPolicy.requireOnline,
+      ConflictPolicy.detectAndRecord,
     );
     expect(
       ConflictStrategy.forDomain('invoice'),
-      ConflictPolicy.requireOnline,
+      ConflictPolicy.detectAndRecord,
     );
     expect(
       ConflictStrategy.forDomain('product'),
@@ -249,7 +249,7 @@ void main() {
     expect(inB, isEmpty);
   });
 
-  test('payment pull does not mutate local financial tables', () async {
+  test('payment pull upserts local cache without require_online conflict', () async {
     final applier = SyncPullApplier(db, conflicts: conflicts);
     await applier.applyBatch(
       workspaceId: 1,
@@ -261,12 +261,14 @@ void main() {
           'entity': 'payment',
           'operation': 'create',
           'id': 1,
-          'data': {'id': 1, 'amount': 100},
+          'data': {'id': 1, 'amount': 100, 'method': 'cash'},
         },
       ],
     );
-    expect(await db.select(db.localPayments).get(), isEmpty);
-    final open = await conflicts.openForWorkspace(1);
-    expect(open.first.strategy, 'require_online');
+    final payments = await db.select(db.localPayments).get();
+    expect(payments, hasLength(1));
+    expect(payments.single.serverId, 1);
+    expect(payments.single.syncStatus, 'synced');
+    expect(await conflicts.openForWorkspace(1), isEmpty);
   });
 }
