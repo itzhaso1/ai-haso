@@ -20,7 +20,9 @@ Online is **optional** after Initial Sync: used only to push/pull with Laravel.
 - Open Session / Close (+ payment_method) / Invoice are local-first + `sync_queue`
 - SyncEngineV2 pushes `table_session` open/close and takeaway `invoice`
 - Close waits for table orders to sync before pushing close
-- Advanced ops (transfer / merge / split / discount / QR / refund / invoice_edit) remain online
+- Advanced ops (transfer / merge / split / discount / note / cancel) are local-first + queued
+- QR regenerate / refund / invoice_edit / admin catalog remain online
+- Network is optional after Initial Sync — used only to push sync_queue and refresh reports
 
 ## Conflict strategy
 
