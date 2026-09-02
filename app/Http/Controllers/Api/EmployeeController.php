@@ -91,6 +91,12 @@ class EmployeeController extends Controller
             403
         );
 
+        if (isset($validated['membership_role'])) {
+            $validated['membership_role'] = $this->workspaceAccess->persistableMembershipRole(
+                (string) $validated['membership_role']
+            );
+        }
+
         $membership->update($validated);
 
         return response()->json(['data' => $membership->refresh()]);
@@ -142,7 +148,7 @@ class EmployeeController extends Controller
                     'user_id' => $user->id,
                 ],
                 [
-                    'membership_role' => $invitation->role,
+                    'membership_role' => $this->workspaceAccess->persistableMembershipRole((string) $invitation->role),
                     'status' => 'active',
                     'is_primary' => false,
                     'invited_by' => $invitation->invited_by,

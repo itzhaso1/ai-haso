@@ -94,8 +94,11 @@ use App\Services\Subscription\LocalSubscriptionBillingProvider;
 use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
@@ -121,6 +124,14 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Notification::extend('central_mail', fn ($app) => $app->make(CentralMailChannel::class));
+
+        Queue::failing(function (JobFailed $event): void {
+            Log::error('queue.job.failed', [
+                'connection' => $event->connectionName,
+                'job' => $event->job->resolveName(),
+                'exception' => $event->exception->getMessage(),
+            ]);
+        });
 
         $this->configureMobileRateLimiting();
         $this->configureAuthRateLimiting();

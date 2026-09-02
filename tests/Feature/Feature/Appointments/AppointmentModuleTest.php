@@ -16,12 +16,19 @@ use App\Services\Appointments\AppointmentBillingService;
 use App\Services\Appointments\AppointmentReminderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Notification;
 use RuntimeException;
 use Tests\TestCase;
 
 class AppointmentModuleTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Notification::fake();
+    }
 
     public function test_appointments_dashboard_is_isolated_and_accessible(): void
     {

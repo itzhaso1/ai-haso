@@ -14,12 +14,19 @@ use App\Services\Website\TemplateService;
 use App\Services\Website\WebsiteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Notification;
 use RuntimeException;
 use Tests\TestCase;
 
 class WebsiteBuilderTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Notification::fake();
+    }
 
     public function test_workspace_owner_can_create_select_template_and_publish_website(): void
     {

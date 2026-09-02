@@ -52,6 +52,15 @@ Scheduled commands use `withoutOverlapping()`. Confirm cron:
 * * * * * php /path/to/artisan schedule:run
 ```
 
+## Database migrations
+
+Two files share timestamp `2026_09_01_120000`:
+
+- `2026_09_01_120000_create_pos_customer_sessions_table.php`
+- `2026_09_01_120000_hasim_mobile_api_foundation.php`
+
+Do **not** rename them on environments that already ran migrations. Laravel records the full filename, so both can apply. Treat a rename as a history rewrite.
+
 ## Observability
 
 - [ ] Log channel that ships to your aggregator

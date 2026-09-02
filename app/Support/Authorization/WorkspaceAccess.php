@@ -20,9 +20,24 @@ class WorkspaceAccess
 
     public const ROLE_AGENT = 'agent';
 
+    public const ROLE_MEMBER = 'member';
+
     public const ROLE_STAFF_DOCTOR = 'staff_doctor';
 
     public const ROLE_STAFF = 'staff';
+
+    /**
+     * Values allowed on workspace_users.membership_role (DB enum).
+     *
+     * @var array<int, string>
+     */
+    public const MEMBERSHIP_ROLES = [
+        self::ROLE_OWNER,
+        self::ROLE_ADMIN,
+        self::ROLE_MANAGER,
+        self::ROLE_AGENT,
+        self::ROLE_MEMBER,
+    ];
 
     /**
      * @var array<string, int>
@@ -36,6 +51,7 @@ class WorkspaceAccess
         self::ROLE_AGENT => 20,
         self::ROLE_STAFF_DOCTOR => 20,
         self::ROLE_STAFF => 10,
+        self::ROLE_MEMBER => 10,
     ];
 
     /**
@@ -49,6 +65,7 @@ class WorkspaceAccess
         self::ROLE_AGENT,
         self::ROLE_STAFF_DOCTOR,
         self::ROLE_STAFF,
+        self::ROLE_MEMBER,
     ];
 
     public function membershipRole(User $user, Workspace $workspace): ?string
@@ -70,6 +87,24 @@ class WorkspaceAccess
         }
 
         return self::RANK[$role] ?? 0;
+    }
+
+    /**
+     * Map invite/Spatie role names onto the workspace_users enum.
+     */
+    public function persistableMembershipRole(string $role): string
+    {
+        $normalized = strtolower(trim($role));
+
+        return match ($normalized) {
+            self::ROLE_OWNER,
+            self::ROLE_ADMIN,
+            self::ROLE_MANAGER,
+            self::ROLE_AGENT,
+            self::ROLE_MEMBER => $normalized,
+            self::ROLE_RECEPTIONIST => self::ROLE_AGENT,
+            default => self::ROLE_MEMBER,
+        };
     }
 
     public function isActiveMember(User $user, Workspace $workspace): bool

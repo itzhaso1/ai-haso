@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Feature\Tenancy;
 
+use App\Models\Product;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -52,5 +53,43 @@ class WorkspaceIsolationTest extends TestCase
         $this->withToken($tokenA)
             ->getJson('/api/workspace/'.$workspaceB->id.'/current')
             ->assertForbidden();
+    }
+
+    public function test_product_from_another_workspace_is_not_visible(): void
+    {
+        $userA = User::factory()->create();
+        $workspaceA = Workspace::factory()->create(['owner_user_id' => $userA->id, 'type' => 'company']);
+        $workspaceA->users()->attach($userA->id, [
+            'membership_role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $userB = User::factory()->create();
+        $workspaceB = Workspace::factory()->create(['owner_user_id' => $userB->id, 'type' => 'company']);
+        $workspaceB->users()->attach($userB->id, [
+            'membership_role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $foreign = Product::withoutGlobalScopes()->create([
+            'workspace_id' => $workspaceB->id,
+            'name' => 'Secret Product',
+            'slug' => 'secret-product-b',
+            'sku' => 'SEC-B',
+            'price' => 1,
+            'currency' => 'SAR',
+            'stock' => 1,
+            'status' => 'active',
+        ]);
+
+        $tokenA = $userA->createToken('api');
+        $tokenA->accessToken->forceFill(['workspace_id' => $workspaceA->id])->save();
+
+        $this->withToken($tokenA->plainTextToken)
+            ->withHeader('X-Workspace-Id', (string) $workspaceA->id)
+            ->getJson('/api/products/'.$foreign->id)
+            ->assertNotFound();
     }
 }

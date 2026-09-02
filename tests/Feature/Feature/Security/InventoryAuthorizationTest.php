@@ -15,7 +15,7 @@ class InventoryAuthorizationTest extends TestCase
     public function test_staff_cannot_view_or_adjust_inventory(): void
     {
         [, $workspace] = $this->makeWorkspace();
-        $staff = $this->attachMember($workspace, 'staff');
+        $staff = $this->attachMember($workspace, 'member');
         $product = $this->makeProduct($workspace);
 
         $this->actingAs($staff)

@@ -16,7 +16,7 @@ class VerifyOtpRequest extends FormRequest
         return [
             'phone' => ['required', 'string', 'max:32'],
             'otp' => ['required', 'digits:6'],
-            'workspace_id' => ['required', 'integer'],
+            'workspace_id' => ['nullable', 'integer'],
         ];
     }
 }

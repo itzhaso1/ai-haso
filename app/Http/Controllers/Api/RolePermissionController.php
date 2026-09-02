@@ -64,7 +64,7 @@ class RolePermissionController extends Controller
         $target->syncRoles([$roleName]);
 
         $workspace->users()->updateExistingPivot($target->id, [
-            'membership_role' => $roleName,
+            'membership_role' => $this->workspaceAccess->persistableMembershipRole($roleName),
         ]);
 
         Log::info('workspace.role.assigned', [

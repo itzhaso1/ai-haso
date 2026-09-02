@@ -17,13 +17,13 @@ class RolePermissionAuthorizationTest extends TestCase
     {
         parent::setUp();
         $this->seed(FoundationSeeder::class);
-        Role::findOrCreate('staff', 'web');
+        Role::findOrCreate('member', 'web');
     }
 
     public function test_staff_member_cannot_assign_roles_or_sync_permissions(): void
     {
         [$owner, $workspace] = $this->makeWorkspace();
-        $staff = $this->attachMember($workspace, 'staff');
+        $staff = $this->attachMember($workspace, 'member');
 
         $this->actingAsApi($staff, $workspace)
             ->postJson('/api/roles-permissions/assign-role', [
@@ -44,7 +44,7 @@ class RolePermissionAuthorizationTest extends TestCase
     {
         [$owner, $workspace] = $this->makeWorkspace();
         $manager = $this->attachMember($workspace, 'manager');
-        $staff = $this->attachMember($workspace, 'staff');
+        $staff = $this->attachMember($workspace, 'member');
 
         $this->actingAsApi($manager, $workspace)
             ->postJson('/api/roles-permissions/assign-role', [
@@ -73,7 +73,7 @@ class RolePermissionAuthorizationTest extends TestCase
     {
         [, $workspace] = $this->makeWorkspace();
         $admin = $this->attachMember($workspace, 'admin');
-        $staff = $this->attachMember($workspace, 'staff');
+        $staff = $this->attachMember($workspace, 'member');
 
         $this->actingAsApi($admin, $workspace)
             ->postJson('/api/roles-permissions/assign-role', [
@@ -101,8 +101,8 @@ class RolePermissionAuthorizationTest extends TestCase
     {
         [$ownerA, $workspaceA] = $this->makeWorkspace();
         [, $workspaceB] = $this->makeWorkspace();
-        $staffA = $this->attachMember($workspaceA, 'staff');
-        $staffB = $this->attachMember($workspaceB, 'staff');
+        $staffA = $this->attachMember($workspaceA, 'member');
+        $staffB = $this->attachMember($workspaceB, 'member');
 
         $this->actingAsApi($ownerA, $workspaceA)
             ->postJson('/api/roles-permissions/assign-role', [

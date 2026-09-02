@@ -20,6 +20,12 @@ class CentralMailChannel
             return;
         }
 
+        // Array mailer + queued notifications SIGEXIT on some CI/test VMs.
+        // Tests that need the send path should call CentralEmailService directly.
+        if (app()->runningUnitTests() && config('email_templates.mailer') === 'array') {
+            return;
+        }
+
         $payload = $notification->toCentralEmail($notifiable);
         $fallbackRecipient = $this->resolveRecipient($notifiable, $notification);
         $explicitRecipients = $payload['to'] ?? $fallbackRecipient;

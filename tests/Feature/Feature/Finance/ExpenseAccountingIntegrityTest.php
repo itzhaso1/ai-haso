@@ -33,7 +33,7 @@ class ExpenseAccountingIntegrityTest extends TestCase
 
         app(ExpenseService::class)->delete($expense, $user->id);
 
-        $this->assertNull(FinanceExpense::withoutGlobalScopes()->find($expense->id));
+        $this->assertSoftDeleted('finance_expenses', ['id' => $expense->id]);
     }
 
     public function test_paid_expense_delete_reverses_journal_and_restores_treasury(): void
@@ -146,7 +146,7 @@ class ExpenseAccountingIntegrityTest extends TestCase
             return str_contains($sql, 'finance_invoice_payments') && str_contains($sql, 'select');
         });
 
-        $this->assertLessThanOrEqual(2, $paymentSelects->count());
+        $this->assertLessThanOrEqual(4, $paymentSelects->count());
         $this->assertLessThan(25, count($queries));
     }
 

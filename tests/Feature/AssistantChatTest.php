@@ -22,6 +22,13 @@ class AssistantChatTest extends TestCase
         $this->assertNotSame('', trim((string) $response->json('data.reply')));
     }
 
+    public function test_public_assistant_rejects_oversized_messages(): void
+    {
+        $this->postJson(route('assistant.chat'), [
+            'message' => str_repeat('أ', 801),
+        ])->assertStatus(422);
+    }
+
     public function test_public_assistant_refuses_secret_requests(): void
     {
         $response = $this->postJson(route('assistant.chat'), [

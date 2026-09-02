@@ -15,11 +15,18 @@ use App\Services\Website\TemplateService;
 use App\Services\Website\WebsiteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class PublicWebsiteModuleTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Notification::fake();
+    }
 
     public function test_workspace_owner_can_create_customize_and_publish_website(): void
     {

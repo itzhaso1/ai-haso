@@ -55,4 +55,6 @@
 
 - Request and verify endpoints are rate-limited (IP + phone).
 - Responses are generic; they do not disclose whether a phone is registered.
+- API responses never include the OTP code (including local/staging).
+- The web verify form does **not** list workspaces for the phone before OTP succeeds.
 - OTP hashes are stored in cache for 5 minutes with a verify-attempt cap.

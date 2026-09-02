@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Auth\AuthenticationService;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Laravel\Sanctum\NewAccessToken;
@@ -48,7 +49,7 @@ class AuthController extends Controller
     public function requestOtp(RequestOtpRequest $request): JsonResponse
     {
         try {
-            $otp = $this->authenticationService->requestOtp(
+            $this->authenticationService->requestOtp(
                 $request->string('phone')->toString()
             );
         } catch (\RuntimeException) {
@@ -59,7 +60,7 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'If the phone number is registered, a verification code will be sent.',
-            'data' => app()->isProduction() ? null : ['otp' => $otp],
+            'data' => null,
         ]);
     }
 
@@ -69,9 +70,9 @@ class AuthController extends Controller
             $payload = $this->authenticationService->loginWithOtp(
                 $request->string('phone')->toString(),
                 $request->string('otp')->toString(),
-                $request->integer('workspace_id'),
+                $request->filled('workspace_id') ? $request->integer('workspace_id') : null,
             );
-        } catch (AuthenticationException|\Illuminate\Database\Eloquent\ModelNotFoundException) {
+        } catch (AuthenticationException|ModelNotFoundException) {
             return response()->json([
                 'message' => 'Invalid or expired verification code.',
             ], 401);

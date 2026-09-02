@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\FeatureNotAvailableException;
 use App\Http\Controllers\Controller;
 use App\Models\Conversation;
 use App\Services\Appointments\AppointmentAiActionService;
+use App\Services\Feature\FeatureAccessService;
 use App\Services\Workspace\WorkspaceResolverService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -27,6 +29,16 @@ class AppointmentAiActionController extends Controller
 
         $workspace = $this->workspaceResolverService->resolveFromRequest($request, $request->user());
         abort_unless($workspace, 422, 'لا يمكن تحديد مساحة العمل.');
+
+        $user = $request->user();
+        abort_unless($user, 403);
+        if (! app(FeatureAccessService::class)->hasFeature($user, $workspace, 'appointments')) {
+            throw new FeatureNotAvailableException(
+                feature: 'appointments',
+                requiredPlan: app(FeatureAccessService::class)->suggestedPlanForFeature('appointments'),
+            );
+        }
+
         $this->assertActionPermission($request, (string) $validated['action']);
 
         $conversation = null;

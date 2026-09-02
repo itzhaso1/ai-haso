@@ -93,17 +93,13 @@ class AuthenticationService
 
     public function requestOtp(string $phone): ?string
     {
-        $user = User::query()->where('phone', $phone)->first();
-        if (! $user) {
-            usleep(random_int(40000, 120000));
-
-            return null;
-        }
-
+        // Always issue a cached OTP so request timing and throttle look the same
+        // whether or not the phone is registered. Delivery still happens only
+        // when a user exists (no SMS/email send in this method).
         return $this->otpService->request($phone);
     }
 
-    public function loginWithOtp(string $phone, string $otp, int $workspaceId): array
+    public function loginWithOtp(string $phone, string $otp, ?int $workspaceId = null): array
     {
         if (! $this->otpService->verify($phone, $otp)) {
             throw new AuthenticationException('Invalid OTP.');
@@ -117,10 +113,22 @@ class AuthenticationService
             throw new AuthenticationException('Invalid OTP.');
         }
 
-        $workspace = $user->workspaces()
-            ->where('workspaces.id', $workspaceId)
-            ->wherePivot('status', 'active')
-            ->firstOrFail();
+        if ($workspaceId) {
+            $workspace = $user->workspaces()
+                ->wherePivot('status', 'active')
+                ->where('workspaces.id', $workspaceId)
+                ->first();
+        } else {
+            $workspace = $user->workspaces()
+                ->wherePivot('status', 'active')
+                ->orderByDesc('workspace_users.is_primary')
+                ->orderBy('workspaces.id')
+                ->first();
+        }
+
+        if (! $workspace) {
+            throw new AuthenticationException('Invalid OTP.');
+        }
 
         $user->forceFill(['phone_verified_at' => now()])->save();
 

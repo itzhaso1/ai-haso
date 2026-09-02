@@ -16,7 +16,7 @@ class ApiKeyAuthorizationTest extends TestCase
     {
         [$owner, $workspace] = $this->makeWorkspace();
         $this->enableWorkspaceFeature($workspace, 'api');
-        $staff = $this->attachMember($workspace, 'staff');
+        $staff = $this->attachMember($workspace, 'member');
 
         $this->actingAs($staff)
             ->withSession(['current_workspace_id' => $workspace->id])
