@@ -24,7 +24,7 @@ void main() {
           body: GridView.builder(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 3,
-              childAspectRatio: 0.72,
+              childAspectRatio: 0.68,
               mainAxisSpacing: 10,
               crossAxisSpacing: 10,
             ),
@@ -41,6 +41,75 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.byType(ProductCard).first);
+    await tester.pump();
+    expect(errors, isEmpty, reason: errors.join('\n'));
+  });
+
+  testWidgets('product card with zero constraints does not throw hit-test errors',
+      (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 0,
+            height: 0,
+            child: ProductCard(
+              name: 'x',
+              priceLabel: '1',
+              currency: 'SAR',
+              onAdd: _noop,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tapAt(Offset.zero);
+    await tester.pump();
+    expect(errors, isEmpty, reason: errors.join('\n'));
+  });
+
+  testWidgets('compact cashier grid hit-tests without zero-size errors',
+      (tester) async {
+    tester.view.physicalSize = const Size(400, 500);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              const SizedBox(height: 56),
+              Expanded(
+                child: GridView.builder(
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    childAspectRatio: 0.68,
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                  ),
+                  itemCount: 6,
+                  itemBuilder: (_, i) => ProductCard(
+                    name: 'منتج $i',
+                    priceLabel: '10.00',
+                    currency: 'SAR',
+                    sku: 'S$i',
+                    onAdd: () {},
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(ProductCard).first);
+    await tester.pump();
     expect(errors, isEmpty, reason: errors.join('\n'));
   });
 
@@ -76,3 +145,5 @@ void main() {
     expect(errors, isEmpty, reason: errors.join('\n'));
   });
 }
+
+void _noop() {}

@@ -316,134 +316,153 @@ class ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Opacity(
-      opacity: available ? 1 : 0.55,
-      child: Material(
-        color: HasimColors.surface,
-        borderRadius: BorderRadius.circular(HasimRadius.md),
-        child: InkWell(
-          onTap: available ? onAdd : null,
-          borderRadius: BorderRadius.circular(HasimRadius.md),
-          child: Ink(
-            decoration: BoxDecoration(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bounded = constraints.hasBoundedWidth &&
+            constraints.hasBoundedHeight &&
+            constraints.maxWidth >= 1 &&
+            constraints.maxHeight >= 1;
+        if (!bounded) {
+          // Never mount InkWell/MouseRegion on a 0-size box.
+          return const SizedBox.shrink();
+        }
+        final showImage = constraints.maxHeight >= 168;
+        return Opacity(
+          opacity: available ? 1 : 0.55,
+          child: SizedBox(
+            width: constraints.maxWidth,
+            height: constraints.maxHeight,
+            child: Material(
+              color: HasimColors.surface,
+              clipBehavior: Clip.antiAlias,
               borderRadius: BorderRadius.circular(HasimRadius.md),
-              border: Border.all(color: HasimColors.border),
-            ),
-            // Avoid nested Expanded/Spacer — those flex patterns are a known
-            // trigger for Flutter debug semantics.parentDataDirty storms.
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(HasimRadius.md),
-                    ),
-                    child: imageUrl == null || imageUrl!.isEmpty
-                        ? Container(
-                            color: HasimColors.surfaceSoft,
-                            child: const Icon(
-                              Icons.restaurant_menu,
-                              color: Color(0xFFCBD5E1),
-                              size: 36,
-                            ),
-                          )
-                        : CachedNetworkImage(
-                            imageUrl: imageUrl!,
-                            fit: BoxFit.cover,
-                            placeholder: (_, _) =>
-                                Container(color: HasimColors.surfaceSoft),
-                            errorWidget: (_, _, _) => Container(
-                              color: HasimColors.surfaceSoft,
-                              child: const Icon(
-                                Icons.broken_image_outlined,
-                                color: Color(0xFFCBD5E1),
-                              ),
-                            ),
-                          ),
+              child: InkWell(
+                onTap: available ? onAdd : null,
+                borderRadius: BorderRadius.circular(HasimRadius.md),
+                child: Ink(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(HasimRadius.md),
+                    border: Border.all(color: HasimColors.border),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          height: 1.2,
-                        ),
-                      ),
-                      if (sku != null && sku!.isNotEmpty)
-                        Text(
-                          sku!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: HasimColors.muted,
+                      if (showImage)
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(HasimRadius.md),
+                            ),
+                            child: imageUrl == null || imageUrl!.isEmpty
+                                ? ColoredBox(
+                                    color: HasimColors.surfaceSoft,
+                                    child: const Icon(
+                                      Icons.restaurant_menu,
+                                      color: Color(0xFFCBD5E1),
+                                      size: 36,
+                                    ),
+                                  )
+                                : CachedNetworkImage(
+                                    imageUrl: imageUrl!,
+                                    fit: BoxFit.cover,
+                                    placeholder: (_, _) => const ColoredBox(
+                                      color: HasimColors.surfaceSoft,
+                                    ),
+                                    errorWidget: (_, _, _) => const ColoredBox(
+                                      color: HasimColors.surfaceSoft,
+                                      child: Icon(
+                                        Icons.broken_image_outlined,
+                                        color: Color(0xFFCBD5E1),
+                                      ),
+                                    ),
+                                  ),
                           ),
                         ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '$priceLabel $currency',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      if (!available) ...[
-                        const SizedBox(height: 4),
-                        const Align(
-                          alignment: AlignmentDirectional.centerStart,
-                          child: HsBadge(
-                            label: 'غير متاح',
-                            background: HasimColors.dangerSoft,
-                            foreground: HasimColors.danger,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 6),
-                      Container(
-                        height: 36,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: available
-                              ? HasimColors.ctaSoft
-                              : HasimColors.surfaceSoft,
-                          borderRadius: BorderRadius.circular(HasimRadius.sm),
-                          border: Border.all(
-                            color: available
-                                ? HasimColors.cta
-                                : HasimColors.border,
-                          ),
-                        ),
-                        child: Text(
-                          available ? '+ إضافة' : 'غير متوفر',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                            color: available
-                                ? HasimColors.ctaDark
-                                : HasimColors.muted,
-                          ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                height: 1.2,
+                              ),
+                            ),
+                            if (sku != null && sku!.isNotEmpty)
+                              Text(
+                                sku!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: HasimColors.muted,
+                                ),
+                              ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '$priceLabel $currency',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            if (!available) ...[
+                              const SizedBox(height: 4),
+                              const Align(
+                                alignment: AlignmentDirectional.centerStart,
+                                child: HsBadge(
+                                  label: 'غير متاح',
+                                  background: HasimColors.dangerSoft,
+                                  foreground: HasimColors.danger,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 6),
+                            Container(
+                              height: 32,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: available
+                                    ? HasimColors.ctaSoft
+                                    : HasimColors.surfaceSoft,
+                                borderRadius:
+                                    BorderRadius.circular(HasimRadius.sm),
+                                border: Border.all(
+                                  color: available
+                                      ? HasimColors.cta
+                                      : HasimColors.border,
+                                ),
+                              ),
+                              child: Text(
+                                available ? '+ إضافة' : 'غير متوفر',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: available
+                                      ? HasimColors.ctaDark
+                                      : HasimColors.muted,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

@@ -923,9 +923,11 @@ class _CashierHome extends ConsumerWidget {
       );
     }
 
-    return ListView(
+    return Padding(
       padding: const EdgeInsets.all(HasimSpacing.md),
-      children: [
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           categories.when(
             data: (list) => SizedBox(
               height: 52,
@@ -973,9 +975,8 @@ class _CashierHome extends ConsumerWidget {
             },
           ),
           const SizedBox(height: 8),
-          HsCard(
-            child: SizedBox(
-              height: MediaQuery.sizeOf(context).height - 280,
+          Expanded(
+            child: HsCard(
               child: _ProductsPanel(
                 search: search,
                 selectedCategoryId: selectedCategoryId,
@@ -985,7 +986,8 @@ class _CashierHome extends ConsumerWidget {
               ),
             ),
           ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1142,7 +1144,7 @@ class _ProductsPanel extends ConsumerWidget {
         crossAxisCount: crossAxis,
         mainAxisSpacing: 10,
         crossAxisSpacing: 10,
-        childAspectRatio: 0.72,
+        childAspectRatio: 0.68,
       ),
       itemCount: items.length,
       itemBuilder: (context, index) {
@@ -1253,202 +1255,193 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'طلب جديد',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'نوع الطلب',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              for (final channel in OrderChannel.values)
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsetsDirectional.only(end: 4),
-                    child: _OrderTypeChip(
-                      label: channel.labelAr,
-                      selected: cart.channel == channel,
-                      onTap: () => notifier.setChannel(channel),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          if (cart.channel == OrderChannel.table) ...[
-            const SizedBox(height: 8),
-            _TablePickerField(
-              tables: _tables,
-              selectedId: cart.tableId,
-              onSelected: notifier.setTable,
-            ),
-          ],
-          const SizedBox(height: 8),
-          TextField(
-            controller: _notesController,
-            decoration: const InputDecoration(
-              labelText: 'ملاحظات',
-              isDense: true,
-            ),
-            maxLines: 2,
-            onChanged: notifier.setNotes,
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            enabled: CashierPermissions.canDiscount(
-              ref.watch(cashierPermissionsProvider),
-            ),
-            decoration: InputDecoration(
-              labelText: CashierPermissions.canDiscount(
-                ref.watch(cashierPermissionsProvider),
-              )
-                  ? 'الخصم (مبلغ)'
-                  : 'الخصم (غير مسموح)',
-              isDense: true,
-            ),
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            onChanged: CashierPermissions.canDiscount(
-              ref.watch(cashierPermissionsProvider),
-            )
-                ? (v) => notifier.setDiscount(double.tryParse(v) ?? 0)
-                : null,
-          ),
-          const SizedBox(height: 10),
           Expanded(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: HasimColors.surfaceSoft,
-                borderRadius: BorderRadius.circular(HasimRadius.md),
-                border: Border.all(color: HasimColors.border),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                const Text(
+                  'طلب جديد',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'نوع الطلب',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                Row(
                   children: [
-                    const Text(
-                      'ملخص الطلب',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
+                    for (final channel in OrderChannel.values)
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsetsDirectional.only(end: 4),
+                          child: _OrderTypeChip(
+                            label: channel.labelAr,
+                            selected: cart.channel == channel,
+                            onTap: () => notifier.setChannel(channel),
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Expanded(
-                      child: cart.lines.isEmpty
-                          ? const Center(
-                              child: Text(
-                                'السلة فارغة.',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: HasimColors.muted,
-                                ),
-                              ),
-                            )
-                          : ListView.separated(
-                              itemCount: cart.lines.length,
-                              separatorBuilder: (_, __) =>
-                                  const SizedBox(height: 6),
-                              itemBuilder: (context, index) {
-                                final line = cart.lines[index];
-                                return Container(
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius:
-                                        BorderRadius.circular(HasimRadius.sm),
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              line.name,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                            ),
-                                          ),
-                                          Text(
-                                            line.unitPrice.toStringAsFixed(2),
-                                            style: const TextStyle(
-                                              fontSize: 10,
-                                              color: HasimColors.muted,
-                                            ),
-                                          ),
-                                          TextButton(
-                                            onPressed: () => notifier
-                                                .removeItem(line.menuItemId),
-                                            style: TextButton.styleFrom(
-                                              padding: EdgeInsets.zero,
-                                              minimumSize: const Size(32, 24),
-                                              tapTargetSize:
-                                                  MaterialTapTargetSize
-                                                      .shrinkWrap,
-                                            ),
-                                            child: const Text(
-                                              'حذف',
-                                              style: TextStyle(
-                                                color: HasimColors.danger,
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      Row(
-                                        children: [
-                                          _qtyBtn(
-                                            '-',
-                                            () => notifier.setQuantity(
-                                              line.menuItemId,
-                                              line.quantity - 1,
-                                            ),
-                                          ),
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                            ),
-                                            child: Text('${line.quantity}'),
-                                          ),
-                                          _qtyBtn(
-                                            '+',
-                                            () => notifier.setQuantity(
-                                              line.menuItemId,
-                                              line.quantity + 1,
-                                            ),
-                                          ),
-                                          const Spacer(),
-                                          Text(
-                                            line.lineTotal.toStringAsFixed(2),
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                    const Divider(height: 16),
-                    _money('المجموع الفرعي', cart.subtotal),
-                    _money('الخصم', cart.discountAmount),
-                    _money('الضريبة', cart.taxAmount),
-                    _money('الإجمالي', cart.total, bold: true),
                   ],
                 ),
-              ),
+                if (cart.channel == OrderChannel.table) ...[
+                  const SizedBox(height: 8),
+                  _TablePickerField(
+                    tables: _tables,
+                    selectedId: cart.tableId,
+                    onSelected: notifier.setTable,
+                  ),
+                ],
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _notesController,
+                  decoration: const InputDecoration(
+                    labelText: 'ملاحظات',
+                    isDense: true,
+                  ),
+                  maxLines: 2,
+                  onChanged: notifier.setNotes,
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  enabled: CashierPermissions.canDiscount(
+                    ref.watch(cashierPermissionsProvider),
+                  ),
+                  decoration: InputDecoration(
+                    labelText: CashierPermissions.canDiscount(
+                      ref.watch(cashierPermissionsProvider),
+                    )
+                        ? 'الخصم (مبلغ)'
+                        : 'الخصم (غير مسموح)',
+                    isDense: true,
+                  ),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: CashierPermissions.canDiscount(
+                    ref.watch(cashierPermissionsProvider),
+                  )
+                      ? (v) => notifier.setDiscount(double.tryParse(v) ?? 0)
+                      : null,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'ملخص الطلب',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                if (cart.lines.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Text(
+                      'السلة فارغة.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: HasimColors.muted,
+                      ),
+                    ),
+                  )
+                else
+                  for (var index = 0; index < cart.lines.length; index++)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius:
+                              BorderRadius.circular(HasimRadius.sm),
+                          border: Border.all(color: HasimColors.border),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    cart.lines[index].name,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  cart.lines[index].unitPrice
+                                      .toStringAsFixed(2),
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: HasimColors.muted,
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () => notifier.removeItem(
+                                    cart.lines[index].menuItemId,
+                                  ),
+                                  style: TextButton.styleFrom(
+                                    padding: EdgeInsets.zero,
+                                    minimumSize: const Size(32, 24),
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  child: const Text(
+                                    'حذف',
+                                    style: TextStyle(
+                                      color: HasimColors.danger,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              children: [
+                                _qtyBtn(
+                                  '-',
+                                  () => notifier.setQuantity(
+                                    cart.lines[index].menuItemId,
+                                    cart.lines[index].quantity - 1,
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                  ),
+                                  child: Text('${cart.lines[index].quantity}'),
+                                ),
+                                _qtyBtn(
+                                  '+',
+                                  () => notifier.setQuantity(
+                                    cart.lines[index].menuItemId,
+                                    cart.lines[index].quantity + 1,
+                                  ),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  cart.lines[index].lineTotal
+                                      .toStringAsFixed(2),
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                const Divider(height: 16),
+                _money('المجموع الفرعي', cart.subtotal),
+                _money('الخصم', cart.discountAmount),
+                _money('الضريبة', cart.taxAmount),
+                _money('الإجمالي', cart.total, bold: true),
+              ],
             ),
           ),
           const SizedBox(height: 10),
