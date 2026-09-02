@@ -8,24 +8,29 @@
             ['label' => 'المبيعات', 'route' => 'workspace.finance.sales.index', 'active' => 'workspace.finance.sales.*'],
             ['label' => 'الفواتير', 'route' => 'workspace.finance.invoices.index', 'active' => 'workspace.finance.invoices.*'],
             ['label' => 'كشف حساب العميل', 'route' => 'workspace.finance.statements.index', 'active' => 'workspace.finance.statements.*'],
+            ['label' => 'العملاء المحتملون', 'route' => 'workspace.finance.leads.index', 'active' => 'workspace.finance.leads.*'],
             ['label' => 'العقود', 'route' => 'workspace.finance.contracts.index', 'active' => 'workspace.finance.contracts.*'],
             ['label' => 'العملاء', 'route' => 'workspace.finance.customers.index', 'active' => 'workspace.finance.customers.*'],
             ['label' => 'قوائم الأسعار', 'route' => 'workspace.finance.price-lists.index', 'active' => 'workspace.finance.price-lists.*'],
         ],
         'المشتريات والموردون' => [
             ['label' => 'فواتير الشراء', 'route' => 'workspace.finance.invoices.index', 'params' => ['type' => 'purchase'], 'active' => 'workspace.finance.invoices.*'],
+            ['label' => 'أوامر الشراء', 'route' => 'workspace.finance.purchase-orders.index', 'active' => 'workspace.finance.purchase-orders.*'],
             ['label' => 'الموردون', 'route' => 'workspace.finance.suppliers.index', 'active' => 'workspace.finance.suppliers.*'],
         ],
         'المصروفات والمخزون' => [
             ['label' => 'المصروفات', 'route' => 'workspace.finance.expenses.index', 'active' => 'workspace.finance.expenses.*'],
             ['label' => 'المنتجات', 'route' => 'workspace.finance.products.index', 'active' => 'workspace.finance.products.*'],
             ['label' => 'المخزون', 'route' => 'workspace.finance.inventory.index', 'active' => 'workspace.finance.inventory.*'],
+            ['label' => 'المشاريع', 'route' => 'workspace.finance.projects.index', 'active' => 'workspace.finance.projects.*'],
         ],
         'المحاسبة والضرائب' => [
             ['label' => 'لوحة المحاسبة', 'route' => 'workspace.finance.accounting.dashboard', 'active' => 'workspace.finance.accounting.*'],
             ['label' => 'السنوات والفترات', 'route' => 'workspace.finance.fiscal-years.index', 'active' => 'workspace.finance.fiscal-years.*'],
             ['label' => 'VAT', 'route' => 'workspace.finance.vat.index', 'active' => 'workspace.finance.vat.*'],
             ['label' => 'التقارير', 'route' => 'workspace.finance.reports.index', 'active' => 'workspace.finance.reports.*'],
+            ['label' => 'التنبيهات', 'route' => 'workspace.finance.alerts.index', 'active' => 'workspace.finance.alerts.*'],
+            ['label' => 'المساعد المالي', 'route' => 'workspace.finance.copilot.index', 'active' => 'workspace.finance.copilot.*'],
         ],
         'الرواتب والبنوك' => [
             ['label' => 'الرواتب', 'route' => 'workspace.finance.payroll.index', 'active' => 'workspace.finance.payroll.*'],
@@ -35,6 +40,7 @@
             ['label' => 'السلف', 'route' => 'workspace.finance.salary-advances.index', 'active' => 'workspace.finance.salary-advances.*'],
             ['label' => 'موظفو المالية', 'route' => 'workspace.finance.employees.index', 'active' => 'workspace.finance.employees.*'],
             ['label' => 'الحسابات البنكية', 'route' => 'workspace.finance.banks.index', 'active' => 'workspace.finance.banks.*'],
+            ['label' => 'الخزينة والتسويات', 'route' => 'workspace.finance.treasury.index', 'active' => 'workspace.finance.treasury.*'],
         ],
         'الإعدادات' => [
             ['label' => 'إعدادات الفوترة', 'route' => 'workspace.finance.settings.index', 'active' => 'workspace.finance.settings.*'],

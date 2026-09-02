@@ -11,6 +11,42 @@
             </form>
         </div>
 
+        <div class="flex flex-wrap gap-2 text-xs">
+            @foreach([
+                'profit-loss' => 'الأرباح والخسائر',
+                'balance-sheet' => 'الميزانية',
+                'trial-balance' => 'ميزان المراجعة',
+                'general-ledger' => 'دفتر الأستاذ',
+                'ar-aging' => 'أعمار الذمم',
+                'ap-aging' => 'أعمار الموردين',
+                'cash-flow' => 'التدفق النقدي',
+                'inventory-valuation' => 'تقييم المخزون',
+            ] as $key => $label)
+                <a href="{{ route('workspace.finance.reports.show', ['report' => $key, 'from' => $from, 'to' => $to]) }}" class="rounded-lg border border-slate-300 px-3 py-2 font-semibold text-slate-700 hover:bg-slate-100">{{ $label }}</a>
+            @endforeach
+        </div>
+
+        @if(!empty($profitAndLoss))
+            <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p class="text-xs text-slate-500">الإيرادات (من الدفتر)</p>
+                    <p class="mt-2 text-2xl font-bold">{{ number_format((float) $profitAndLoss['revenue'], 2) }}</p>
+                </article>
+                <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p class="text-xs text-slate-500">تكلفة المبيعات</p>
+                    <p class="mt-2 text-2xl font-bold">{{ number_format((float) $profitAndLoss['cogs'], 2) }}</p>
+                </article>
+                <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p class="text-xs text-slate-500">مجمل الربح</p>
+                    <p class="mt-2 text-2xl font-bold">{{ number_format((float) $profitAndLoss['gross_profit'], 2) }}</p>
+                </article>
+                <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p class="text-xs text-slate-500">صافي الربح الدفتري</p>
+                    <p class="mt-2 text-2xl font-bold">{{ number_format((float) $profitAndLoss['net_profit'], 2) }}</p>
+                </article>
+            </div>
+        @endif
+
         <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <p class="text-xs text-slate-500">إجمالي المبيعات</p>

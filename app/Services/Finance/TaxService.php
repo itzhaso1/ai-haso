@@ -76,6 +76,6 @@ class TaxService
 
     public function roundMoney(float $amount): float
     {
-        return round($amount, 2);
+        return \App\Support\Money\Money::round($amount);
     }
 }

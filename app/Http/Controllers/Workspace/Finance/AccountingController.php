@@ -43,8 +43,12 @@ class AccountingController extends FinanceBaseController
             'credit' => round((float) $trialBalance->sum('credit_total'), 2),
         ];
 
+        $monthExpr = DB::getDriverName() === 'sqlite'
+            ? "strftime('%Y-%m', payment_date)"
+            : "DATE_FORMAT(payment_date, '%Y-%m')";
+
         $monthlyCashFlow = DB::table('finance_invoice_payments')
-            ->selectRaw("DATE_FORMAT(payment_date, '%Y-%m') as month, SUM(amount) as inflow")
+            ->selectRaw($monthExpr.' as month, SUM(amount) as inflow')
             ->where('workspace_id', $workspace->id)
             ->whereDate('payment_date', '>=', now()->subMonths(5)->startOfMonth()->toDateString())
             ->groupBy('month')

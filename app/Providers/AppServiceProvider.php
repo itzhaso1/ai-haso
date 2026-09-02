@@ -193,6 +193,12 @@ class AppServiceProvider extends ServiceProvider
         FinanceEmployeePayrollRecord::observe(WorkspaceAuditObserver::class);
         FinanceTreasuryAccount::observe(WorkspaceAuditObserver::class);
         FinanceJournalEntry::observe(WorkspaceAuditObserver::class);
+        \App\Models\Finance\FinanceJournalEntryLine::observe(WorkspaceAuditObserver::class);
+        \App\Models\Finance\FinanceTreasuryTransfer::observe(WorkspaceAuditObserver::class);
+        \App\Models\Finance\FinanceBankStatement::observe(WorkspaceAuditObserver::class);
+        \App\Models\Finance\FinancePurchaseOrder::observe(WorkspaceAuditObserver::class);
+        \App\Models\Crm\CrmLead::observe(WorkspaceAuditObserver::class);
+        \App\Models\Projects\FinanceProject::observe(WorkspaceAuditObserver::class);
         FinanceFiscalYear::observe(WorkspaceAuditObserver::class);
         FinancePriceList::observe(WorkspaceAuditObserver::class);
         FinancePayrollAdjustment::observe(WorkspaceAuditObserver::class);

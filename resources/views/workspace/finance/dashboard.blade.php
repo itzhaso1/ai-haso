@@ -34,6 +34,34 @@
     @endphp
 
     <div class="space-y-6">
+        @if(!empty($alerts))
+            <section class="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <div class="mb-2 flex items-center justify-between">
+                    <h3 class="text-sm font-bold text-amber-900">ما يحتاج انتباهك</h3>
+                    <a href="{{ route('workspace.finance.alerts.index') }}" class="text-xs font-semibold text-amber-800">عرض الكل</a>
+                </div>
+                <div class="space-y-2">
+                    @foreach($alerts as $alert)
+                        <p class="text-sm text-amber-950"><strong>{{ $alert['title'] }}:</strong> {{ $alert['reason'] }}</p>
+                    @endforeach
+                </div>
+            </section>
+        @endif
+
+        @if(!empty($periods))
+            <section class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                @foreach(['today' => 'اليوم', 'this_week' => 'هذا الأسبوع', 'this_month' => 'هذا الشهر', 'last_month' => 'الشهر الماضي', 'this_year' => 'هذه السنة', 'previous_year' => 'السنة السابقة'] as $key => $label)
+                    @php $period = $periods[$key] ?? null; @endphp
+                    @if($period)
+                        <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                            <p class="text-xs font-semibold text-slate-500">{{ $label }}</p>
+                            <p class="mt-1 text-lg font-extrabold">إيراد {{ number_format((float) $period['revenue'], 2) }}</p>
+                            <p class="text-sm text-slate-600">صافي {{ number_format((float) $period['net_profit'], 2) }} · مصروف {{ number_format((float) $period['expenses'], 2) }}</p>
+                        </article>
+                    @endif
+                @endforeach
+            </section>
+        @endif
         <section class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             @foreach($metricCards as $card)
                 <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

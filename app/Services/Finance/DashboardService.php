@@ -142,8 +142,12 @@ class DashboardService
             return [];
         }
 
+        $monthExpr = DB::getDriverName() === 'sqlite'
+            ? "strftime('%Y-%m', created_at)"
+            : "DATE_FORMAT(created_at, '%Y-%m')";
+
         $query = DB::table($table)
-            ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as month, SUM(".$sumColumn.") as value")
+            ->selectRaw($monthExpr.' as month, SUM('.$sumColumn.') as value')
             ->where('workspace_id', $workspaceId)
             ->whereDate('created_at', '>=', now()->subMonths(11)->startOfMonth()->toDateString());
 

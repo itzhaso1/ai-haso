@@ -29,6 +29,9 @@
                     </div>
 
                     <div class="flex items-center gap-2">
+                        <form method="GET" action="{{ route('workspace.finance.search') }}" class="hidden sm:block">
+                            <input type="search" name="q" value="{{ request('q') }}" placeholder="بحث..." class="w-44 rounded-lg border-slate-300 px-3 py-2 text-xs">
+                        </form>
                         <a href="{{ route('workspace.dashboard') }}" class="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">
                             ← العودة إلى حاسم
                         </a>
