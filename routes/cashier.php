@@ -52,6 +52,8 @@ Route::middleware([
 
     Route::post('/devices/register', [DeviceController::class, 'register'])->middleware('throttle:mobile-write');
     Route::get('/sync/changes', [SyncController::class, 'changes']);
+    Route::post('/sync/push', [SyncController::class, 'push'])->middleware('throttle:mobile-write');
+    Route::post('/sync/pull', [SyncController::class, 'pull']);
 
     Route::get('/plan', [PlanController::class, 'current']);
     Route::get('/plans', [PlanController::class, 'index']);

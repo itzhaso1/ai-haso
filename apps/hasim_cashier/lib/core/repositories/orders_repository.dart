@@ -134,6 +134,12 @@ class OrdersRepository {
         payload: apiPayload,
         clientReference: key,
       );
+      await _recordSaleMovements(
+        workspaceId: workspaceId,
+        deviceId: deviceId.trim(),
+        orderLocalId: key,
+        items: normalized,
+      );
     });
 
     final order = await (_db.select(_db.localOrders)
@@ -236,6 +242,12 @@ class OrdersRepository {
         operation: 'create',
         payload: apiPayload,
         clientReference: key,
+      );
+      await _recordSaleMovements(
+        workspaceId: workspaceId,
+        deviceId: deviceId.trim(),
+        orderLocalId: key,
+        items: normalized,
       );
     });
 
@@ -834,5 +846,64 @@ class OrdersRepository {
           },
       ],
     };
+  }
+
+  Future<void> _recordSaleMovements({
+    required int workspaceId,
+    required String deviceId,
+    required String orderLocalId,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    final now = DateTime.now();
+    for (final item in items) {
+      final qty = (item['quantity'] as num?)?.toInt() ?? 0;
+      if (qty <= 0) continue;
+      final productServerId = (item['pos_menu_item_id'] as num?)?.toInt();
+      final productLocalId = productServerId == null
+          ? null
+          : LocalIds.product(workspaceId, productServerId);
+      int? catalogProductId;
+      if (productLocalId != null) {
+        final product = await (_db.select(_db.localProducts)
+              ..where((t) => t.localId.equals(productLocalId)))
+            .getSingleOrNull();
+        if (product != null) {
+          try {
+            final payload = jsonDecode(product.payloadJson);
+            if (payload is Map && payload['product_id'] != null) {
+              catalogProductId = (payload['product_id'] as num?)?.toInt();
+            }
+          } catch (_) {}
+          if (product.stock != null) {
+            await (_db.update(_db.localProducts)
+                  ..where((t) => t.localId.equals(productLocalId)))
+                .write(
+              LocalProductsCompanion(
+                stock: Value((product.stock! - qty).clamp(0, 1000000000).toInt()),
+                updatedAt: Value(now),
+              ),
+            );
+          }
+        }
+      }
+      await _db.into(_db.localStockMovements).insert(
+            LocalStockMovementsCompanion.insert(
+              localId: _newItemId(),
+              workspaceId: workspaceId,
+              deviceId: deviceId,
+              productLocalId: Value(productLocalId),
+              productServerId: Value(productServerId),
+              catalogProductId: Value(catalogProductId),
+              kind: 'sale',
+              quantity: qty,
+              referenceType: const Value('order'),
+              referenceId: Value(orderLocalId),
+              syncStatus: const Value('local'),
+              clientReference: _newItemId(),
+              payloadJson: Value(jsonEncode({'order_local_id': orderLocalId})),
+              createdAt: now,
+            ),
+          );
+    }
   }
 }

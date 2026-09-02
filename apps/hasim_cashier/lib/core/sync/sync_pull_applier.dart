@@ -84,6 +84,14 @@ class SyncPullApplier {
               originDeviceId: originDevice,
               ourDeviceId: ourDevice,
             );
+          case 'stock':
+            await _applyStock(
+              workspaceId: workspaceId,
+              operation: operation,
+              serverId: entityId,
+              data: data,
+              deviceId: ourDevice,
+            );
           case 'payment':
           case 'invoice':
             await _applyInvoiceOrPayment(
@@ -162,6 +170,7 @@ class SyncPullApplier {
             isActive: Value(data['is_active'] != false),
             isDeleted: const Value(false),
             payloadJson: Value(jsonEncode({...data, 'id': serverId})),
+            stock: Value((data['stock'] as num?)?.toInt()),
             updatedAt: now,
             serverVersion: Value((data['version'] as num?)?.toInt()),
           ),
@@ -577,5 +586,60 @@ class SyncPullApplier {
             createdAt: DateTime.now(),
           ),
         );
+  }
+
+  Future<void> _applyStock({
+    required int workspaceId,
+    required String operation,
+    required int? serverId,
+    required Map<String, dynamic> data,
+    String? deviceId,
+  }) async {
+    if (operation == 'delete') return;
+    final movementId = serverId ?? (data['id'] as num?)?.toInt();
+    final localId = movementId != null
+        ? 'w${workspaceId}_stock_$movementId'
+        : 'w${workspaceId}_stock_${const Uuid().v4()}';
+    final catalogProductId = (data['product_id'] as num?)?.toInt();
+    final after = (data['after_quantity'] as num?)?.toInt();
+    await _db.into(_db.localStockMovements).insertOnConflictUpdate(
+          LocalStockMovementsCompanion.insert(
+            localId: localId,
+            workspaceId: workspaceId,
+            deviceId: deviceId ?? 'server',
+            catalogProductId: Value(catalogProductId),
+            kind: '${data['type'] ?? data['kind'] ?? 'adjustment'}',
+            quantity: (data['quantity'] as num?)?.toInt() ?? 0,
+            referenceType: Value(data['reference_type']?.toString()),
+            referenceId: Value(data['reference_id']?.toString()),
+            syncStatus: const Value('synced'),
+            clientReference: localId,
+            payloadJson: Value(jsonEncode(data)),
+            createdAt: DateTime.now(),
+          ),
+        );
+    if (catalogProductId == null || after == null) return;
+    final products = await (_db.select(_db.localProducts)
+          ..where((t) => t.workspaceId.equals(workspaceId)))
+        .get();
+    for (final product in products) {
+      var linked = false;
+      try {
+        final payload = jsonDecode(product.payloadJson);
+        if (payload is Map &&
+            (payload['product_id'] as num?)?.toInt() == catalogProductId) {
+          linked = true;
+        }
+      } catch (_) {}
+      if (!linked) continue;
+      await (_db.update(_db.localProducts)
+            ..where((t) => t.localId.equals(product.localId)))
+          .write(
+        LocalProductsCompanion(
+          stock: Value(after),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+    }
   }
 }

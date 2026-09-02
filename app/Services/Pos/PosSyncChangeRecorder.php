@@ -4,6 +4,7 @@ namespace App\Services\Pos;
 
 use App\Models\Customer;
 use App\Models\DiningTable;
+use App\Models\InventoryMovement;
 use App\Models\Order;
 use App\Models\PosItemCategory;
 use App\Models\PosMenuItem;
@@ -24,6 +25,8 @@ class PosSyncChangeRecorder
     public const ENTITY_ORDER = 'order';
 
     public const ENTITY_CUSTOMER = 'customer';
+
+    public const ENTITY_STOCK = 'stock';
 
     public function record(
         string $entityType,
@@ -76,6 +79,7 @@ class PosSyncChangeRecorder
             self::ENTITY_TABLE => $this->tablePayload($model instanceof DiningTable ? $model : null),
             self::ENTITY_ORDER => $this->orderPayload($model instanceof Order ? $model : null),
             self::ENTITY_CUSTOMER => $this->customerPayload($model instanceof Customer ? $model : null),
+            self::ENTITY_STOCK => $this->stockPayload($model instanceof InventoryMovement ? $model : null),
             default => [
                 'id' => $model->getKey(),
             ],
@@ -91,9 +95,12 @@ class PosSyncChangeRecorder
             return [];
         }
 
+        $item->loadMissing('product');
+
         return [
             'id' => $item->id,
             'pos_item_category_id' => $item->pos_item_category_id,
+            'product_id' => $item->product_id,
             'name' => $item->name,
             'sku' => $item->sku,
             'barcode' => $item->barcode,
@@ -103,6 +110,7 @@ class PosSyncChangeRecorder
             'currency' => $item->currency,
             'is_active' => (bool) $item->is_active,
             'sort_order' => (int) ($item->sort_order ?? 0),
+            'stock' => $item->product?->stock !== null ? (int) $item->product->stock : null,
             'updated_at' => optional($item->updated_at)?->toIso8601String(),
         ];
     }
@@ -204,6 +212,29 @@ class PosSyncChangeRecorder
             'email' => $customer->email,
             'notes' => $customer->notes,
             'updated_at' => optional($customer->updated_at)?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function stockPayload(?InventoryMovement $movement): array
+    {
+        if (! $movement) {
+            return [];
+        }
+
+        return [
+            'id' => $movement->id,
+            'product_id' => $movement->product_id,
+            'product_variant_id' => $movement->product_variant_id,
+            'type' => $movement->type,
+            'quantity' => (int) $movement->quantity,
+            'before_quantity' => (int) $movement->before_quantity,
+            'after_quantity' => (int) $movement->after_quantity,
+            'reference_type' => $movement->reference_type,
+            'reference_id' => $movement->reference_id,
+            'notes' => $movement->notes,
         ];
     }
 }

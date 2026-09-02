@@ -67,4 +67,42 @@ class PosDeviceRegistry
             ]);
         });
     }
+
+    /**
+     * A POS may only push/pull after it is registered to this workspace.
+     */
+    public function requireRegistered(Workspace $workspace, string $deviceId): PosDevice
+    {
+        $deviceId = trim($deviceId);
+        if ($deviceId === '') {
+            throw new HttpException(422, 'معرّف الجهاز مطلوب.');
+        }
+
+        $device = PosDevice::withoutGlobalScopes()
+            ->where('device_id', $deviceId)
+            ->first();
+
+        if (! $device) {
+            throw new HttpException(403, 'الجهاز غير مسجّل. سجّل الجهاز أولاً عبر /devices/register.');
+        }
+
+        if ((int) $device->workspace_id !== (int) $workspace->id) {
+            throw new HttpException(403, 'هذا الجهاز مسجّل لمساحة عمل أخرى.');
+        }
+
+        return $device;
+    }
+
+    public function touch(PosDevice $device, ?int $cursor = null, ?string $error = null): void
+    {
+        $device->fill([
+            'last_seen_at' => now(),
+            'last_sync_at' => now(),
+            'last_error' => $error,
+        ]);
+        if ($cursor !== null) {
+            $device->last_cursor = $cursor;
+        }
+        $device->save();
+    }
 }

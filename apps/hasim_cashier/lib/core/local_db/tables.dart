@@ -46,6 +46,7 @@ class LocalProducts extends Table {
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   TextColumn get payloadJson => text().withDefault(const Constant('{}'))();
+  IntColumn get stock => integer().nullable()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get serverVersion => integer().nullable()();
 
@@ -129,6 +130,26 @@ class LocalOrderItems extends Table {
   Set<Column<Object>> get primaryKey => {localId};
 }
 
+class LocalStockMovements extends Table {
+  TextColumn get localId => text()();
+  IntColumn get workspaceId => integer()();
+  TextColumn get deviceId => text()();
+  TextColumn get productLocalId => text().nullable()();
+  IntColumn get productServerId => integer().nullable()();
+  IntColumn get catalogProductId => integer().nullable()();
+  TextColumn get kind => text()();
+  IntColumn get quantity => integer()();
+  TextColumn get referenceType => text().nullable()();
+  TextColumn get referenceId => text().nullable()();
+  TextColumn get syncStatus => text().withDefault(const Constant('local'))();
+  TextColumn get clientReference => text()();
+  TextColumn get payloadJson => text().withDefault(const Constant('{}'))();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {localId};
+}
+
 class LocalPayments extends Table {
   TextColumn get localId => text()();
   IntColumn get workspaceId => integer()();
@@ -191,12 +212,14 @@ class SyncQueueItems extends Table {
   TextColumn get operation => text()();
   TextColumn get payloadJson => text()();
   TextColumn get clientReference => text()();
+  TextColumn get operationUuid => text().nullable()();
   TextColumn get status => text().withDefault(const Constant('pending'))();
   IntColumn get attempts => integer().withDefault(const Constant(0))();
   TextColumn get lastError => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   DateTimeColumn get nextAttemptAt => dateTime().nullable()();
+  DateTimeColumn get syncedAt => dateTime().nullable()();
 }
 
 class SyncConflicts extends Table {

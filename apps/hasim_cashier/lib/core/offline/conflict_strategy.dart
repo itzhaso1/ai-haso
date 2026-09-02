@@ -3,12 +3,13 @@
 /// Laravel remains source of truth after sync. Daily POS is fully local-first;
 /// network is optional and used only to sync queued work.
 ///
-/// | Domain | Offline allowed | Conflict rule |
-/// |--------|-----------------|---------------|
-/// | Catalog / categories / tables | read cache + server pull | Server authoritative |
-/// | Customers | create/update offline | Detect conflict; keep local pending |
-/// | Orders | create/update/delete offline | Detect conflict; never silent LWW |
-/// | Open/close/cancel/note/discount/transfer/merge/split | yes (queued) | Detect conflict |
+/// | Domain | Offline allowed | Conflict rule / Source of Truth |
+/// |--------|-----------------|--------------------------------|
+/// | Products / prices / categories | cache | Laravel |
+/// | Users / permissions / settings | cache | Laravel |
+/// | Customers | create offline | POS → Laravel (detect, no LWW) |
+/// | Orders / payments / invoices | yes | POS → Laravel (detect, no LWW) |
+/// | Stock | movements only | Laravel via sale/purchase/return/adjustment/transfer events |
 /// | Refund / invoice_edit / admin catalog | online | Require reconnect |
 ///
 /// On sync failure: keep local Pending/Failed record, never silent-delete.
@@ -38,8 +39,11 @@ class ConflictStrategy {
         'tables' ||
         'product' ||
         'category' ||
+        'settings' ||
+        'users' ||
         'product_availability' =>
           ConflictPolicy.serverWins,
+        'stock' || 'stock_movement' => ConflictPolicy.serverWins,
         'pending_order' ||
         'order' ||
         'customer' ||

@@ -472,42 +472,79 @@ class ConnectionBanner extends StatelessWidget {
     super.key,
     required this.link,
     this.pendingCount = 0,
+    this.failedCount = 0,
+    this.lastSyncAt,
+    this.cursor,
+    this.deviceId,
     this.onRetry,
   });
 
   final CashierLink link;
   final int pendingCount;
+  final int failedCount;
+  final DateTime? lastSyncAt;
+  final String? cursor;
+  final String? deviceId;
   final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
-    if (link == CashierLink.online && pendingCount == 0) {
-      return const SizedBox.shrink();
-    }
     final offline = link != CashierLink.online;
+    final waiting = pendingCount + failedCount;
+    final statusLabel = switch (link) {
+      CashierLink.online => 'متصل',
+      CashierLink.offline => 'غير متصل',
+      CashierLink.serverUnavailable => 'الخادم غير متاح',
+    };
+    final detail = offline
+        ? (waiting > 0
+            ? '$waiting عمليات بانتظار المزامنة'
+            : 'الكاشير يعمل محلياً — المزامنة عند عودة الإنترنت')
+        : (waiting > 0
+            ? '$waiting عمليات بانتظار المزامنة · آخر مزامنة: ${_relative(lastSyncAt)}'
+            : 'آخر مزامنة: ${_relative(lastSyncAt)}');
+
     return Container(
       width: double.infinity,
-      color: offline ? HasimColors.warningSoft : HasimColors.brandSoft,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      color: offline ? HasimColors.warningSoft : HasimColors.ctaSoft,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       child: Row(
         children: [
+          Container(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: offline ? HasimColors.warning : HasimColors.cta,
+            ),
+          ),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
-              LinkPolicy.bannerMessage(link, pendingCount: pendingCount),
+              '● $statusLabel  ·  $detail',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: offline ? HasimColors.warning : HasimColors.brandDark,
+                color: offline ? HasimColors.warning : HasimColors.ctaDark,
               ),
             ),
           ),
-          if (offline && onRetry != null)
+          if (onRetry != null)
             TextButton(
               onPressed: onRetry,
-              child: const Text('إعادة المحاولة'),
+              child: Text(offline ? 'إعادة المحاولة' : 'مزامنة'),
             ),
         ],
       ),
     );
+  }
+
+  static String _relative(DateTime? at) {
+    if (at == null) return 'لم تتم بعد';
+    final diff = DateTime.now().difference(at);
+    if (diff.inSeconds < 45) return 'الآن';
+    if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes} دقيقة';
+    if (diff.inHours < 24) return 'منذ ${diff.inHours} ساعة';
+    return 'منذ ${diff.inDays} يوم';
   }
 }

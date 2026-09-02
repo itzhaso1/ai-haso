@@ -14,6 +14,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'platform',
     'registered_at',
     'last_seen_at',
+    'last_cursor',
+    'last_sync_at',
+    'last_error',
 ])]
 class PosDevice extends WorkspaceScopedModel
 {
@@ -24,6 +27,8 @@ class PosDevice extends WorkspaceScopedModel
         return [
             'registered_at' => 'datetime',
             'last_seen_at' => 'datetime',
+            'last_sync_at' => 'datetime',
+            'last_cursor' => 'integer',
         ];
     }
 

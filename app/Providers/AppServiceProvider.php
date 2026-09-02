@@ -153,6 +153,7 @@ class AppServiceProvider extends ServiceProvider
         Payment::observe(WorkspaceAuditObserver::class);
         PaymentGateway::observe(WorkspaceAuditObserver::class);
         InventoryMovement::observe(WorkspaceAuditObserver::class);
+        InventoryMovement::observe(PosSyncChangeObserver::class);
         Conversation::observe(WorkspaceAuditObserver::class);
         EmailAccount::observe(WorkspaceAuditObserver::class);
         EmailContact::observe(WorkspaceAuditObserver::class);

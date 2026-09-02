@@ -136,7 +136,7 @@ class CatalogController extends CashierController
         $activeOnly = $request->boolean('active_only', true);
 
         $query = PosMenuItem::query()
-            ->with(['category:id,name'])
+            ->with(['category:id,name', 'product:id,workspace_id,stock'])
             ->orderBy('sort_order')
             ->orderBy('name');
 
@@ -184,7 +184,7 @@ class CatalogController extends CashierController
         $this->authorizeCashier($request, $workspace);
         $this->ensurePos($workspace);
 
-        $item->load(['category:id,name']);
+        $item->load(['category:id,name', 'product:id,workspace_id,stock']);
 
         return $this->ok([
             'item' => new MenuItemResource($item),

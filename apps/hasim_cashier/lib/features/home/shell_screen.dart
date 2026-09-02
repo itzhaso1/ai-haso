@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +11,8 @@ import '../../core/auth/auth_controller.dart';
 import '../../core/navigation/pos_shell_nav.dart';
 import '../../core/network/cashier_link.dart';
 import '../../core/local_db/local_db_providers.dart';
+import '../../core/local_db/workspace_scope.dart';
+import '../../core/repositories/sync_queue_repository.dart';
 import '../../core/offline/offline_store.dart';
 import '../../core/permissions/cashier_permissions.dart';
 import '../../core/permissions/permissions_provider.dart';
@@ -60,6 +64,11 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
   String? _bootstrapError;
   var _bootstrapInFlight = false;
   var _pendingSync = 0;
+  var _failedSync = 0;
+  DateTime? _lastSyncAt;
+  String? _syncCursor;
+  String? _syncDeviceId;
+  Timer? _syncHeartbeat;
 
   @override
   void initState() {
@@ -67,10 +76,21 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     _loadBootstrap();
     _watchConnectivity();
     _refreshPending();
+    _syncHeartbeat = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
+      if (!ref.read(cashierLinkProvider).isOnline) return;
+      final workspaceId = ref.read(workspaceIdProvider);
+      if (workspaceId == null) return;
+      ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+            workspaceId: workspaceId,
+            deviceId: ref.read(deviceIdHeaderProvider),
+          ).then((_) => _refreshPending());
+    });
   }
 
   @override
   void dispose() {
+    _syncHeartbeat?.cancel();
     _search.dispose();
     super.dispose();
   }
@@ -104,12 +124,37 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     if (!mounted) return;
     final workspaceId = ref.read(workspaceIdProvider);
     if (workspaceId == null) {
-      setState(() => _pendingSync = 0);
+      setState(() {
+        _pendingSync = 0;
+        _failedSync = 0;
+      });
       return;
     }
-    ref.read(syncQueueRepositoryProvider).pendingCount(workspaceId).then((n) {
+    final queue = ref.read(syncQueueRepositoryProvider);
+    final db = ref.read(appDatabaseProvider);
+    Future.wait([
+      queue.counts(workspaceId),
+      db.readMetaTime(workspaceId, SyncMetaKeys.lastPushAt),
+      db.readMetaTime(workspaceId, SyncMetaKeys.lastPullAt),
+      db.readCursor(workspaceId),
+    ]).then((values) {
       if (!mounted) return;
-      setState(() => _pendingSync = n);
+      final counts = values[0] as SyncQueueCounts;
+      final lastPush = values[1] as DateTime?;
+      final lastPull = values[2] as DateTime?;
+      DateTime? last;
+      if (lastPush != null && lastPull != null) {
+        last = lastPush.isAfter(lastPull) ? lastPush : lastPull;
+      } else {
+        last = lastPush ?? lastPull;
+      }
+      setState(() {
+        _pendingSync = counts.waiting;
+        _failedSync = counts.failed;
+        _lastSyncAt = last;
+        _syncCursor = values[3] as String?;
+        _syncDeviceId = ref.read(deviceIdHeaderProvider);
+      });
     });
   }
 
@@ -380,7 +425,20 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           ConnectionBanner(
             link: link.link,
             pendingCount: _pendingSync,
-            onRetry: _loadBootstrap,
+            failedCount: _failedSync,
+            lastSyncAt: _lastSyncAt,
+            cursor: _syncCursor,
+            deviceId: _syncDeviceId,
+            onRetry: () {
+              _loadBootstrap();
+              final workspaceId = ref.read(workspaceIdProvider);
+              if (workspaceId != null) {
+                ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+                      workspaceId: workspaceId,
+                      deviceId: ref.read(deviceIdHeaderProvider),
+                    ).then((_) => _refreshPending());
+              }
+            },
           ),
           Expanded(
             child: switch (_section) {

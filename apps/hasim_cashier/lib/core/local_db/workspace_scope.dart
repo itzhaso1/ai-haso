@@ -50,15 +50,37 @@ extension WorkspaceScopedDb on AppDatabase {
   }
 
   Future<void> writeCursor(int workspaceId, String cursor, {String? deviceId}) async {
+    await writeMeta(workspaceId, SyncMetaKeys.syncCursor, cursor, deviceId: deviceId);
+  }
+
+  Future<void> writeMeta(
+    int workspaceId,
+    String key,
+    String value, {
+    String? deviceId,
+  }) async {
     await into(syncMetadata).insertOnConflictUpdate(
       SyncMetadataCompanion.insert(
-        key: SyncMetaKeys.syncCursor,
+        key: key,
         workspaceId: workspaceId,
         deviceId: Value(deviceId),
-        value: cursor,
+        value: value,
         updatedAt: DateTime.now(),
       ),
     );
+  }
+
+  Future<String?> readMeta(int workspaceId, String key) async {
+    final row = await (select(syncMetadata)
+          ..where((t) => t.workspaceId.equals(workspaceId) & t.key.equals(key)))
+        .getSingleOrNull();
+    return row?.value;
+  }
+
+  Future<DateTime?> readMetaTime(int workspaceId, String key) async {
+    final raw = await readMeta(workspaceId, key);
+    if (raw == null || raw.isEmpty) return null;
+    return DateTime.tryParse(raw);
   }
 
   Future<int> productCount(int workspaceId) async {

@@ -142,6 +142,7 @@ class InitialSyncService {
                 isActive: Value(item['is_active'] != false),
                 isDeleted: const Value(false),
                 payloadJson: Value(jsonEncode(item)),
+                stock: Value((item['stock'] as num?)?.toInt()),
                 updatedAt: now,
               ),
             );

@@ -1,39 +1,50 @@
 # Offline-First POS Architecture v2 — Migration Plan
 
 **Branch:** `cursor/offline-first-pos-v2-757c`  
-**Base:** `cursor/cashier-ui-ux-fix-757c` @ `54806df`  
-**Status:** Full offline POS (sessions / payments / invoices local-first; online optional sync)
+**Base:** `cursor/cashier-ui-ux-fix-757c`  
+**Status:** Production offline-first POS + batch Laravel sync
 
 ## Architecture
 
 ```text
-Flutter UI → Repositories → SQLite (Drift) → Sync Engine ↔ Laravel (SoT)
+    Flutter UI → Repositories → SQLite (Drift) → SyncEngineV2
+                         ↓
+              POST /api/cashier/v1/sync/push  (batch, idempotent UUID)
+              POST /api/cashier/v1/sync/pull  (cursor delta)
+                         ↓
+                    Laravel (Source of Truth)
 ```
 
-Online is **optional** after Initial Sync: used only to push/pull with Laravel.
+Aliases: `POST /api/pos/sync/push` and `POST /api/pos/sync/pull`.
 
-## Phases
+Daily POS is local-first. Network is optional after Initial Sync.
 
-### Phase 1–6 — done (foundation → SQLite primary)
+## Sync flow
 
-### Full offline expansion — done
-- Open Session / Close (+ payment_method) / Invoice are local-first + `sync_queue`
-- SyncEngineV2 pushes `table_session` open/close and takeaway `invoice`
-- Close waits for table orders to sync before pushing close
-- Advanced ops (transfer / merge / split / discount / note / cancel) are local-first + queued
-- QR regenerate / refund / invoice_edit / admin catalog remain online
-- Network is optional after Initial Sync — used only to push sync_queue and refresh reports
+```text
+POS Operation → Save SQLite → Enqueue UUID op → Keep working
+Internet → Push batch → ACK → Mark synced → Pull cursor delta → Update SQLite
+```
 
-## Conflict strategy
+Backoff (never drop the row): 2s, 5s, 15s, 30s, 60s, 120s, 300s.
 
-| Entity | Offline? | Rule |
-|--------|----------|------|
-| Catalog / tables | cache | Server authoritative |
-| Orders | yes | Detect + keep local pending |
-| Customers | yes | Detect + keep local pending |
-| Open/close session + payment + invoice | yes | Detect + queue; never silent LWW |
-| Transfer / merge / split / discount / QR | no | Require reconnect |
+## Conflict / Source of Truth
 
-## Operational requirement
+| Entity | SoT |
+|--------|-----|
+| Products / prices / categories / users / settings | Laravel |
+| Orders / payments / table sessions / invoices | POS then Laravel |
+| Stock | Laravel via movements. Sale stock is applied by `order.created`, not a second `stock.movement`. |
 
-Device must complete Initial Sync online once per workspace before offline POS is allowed.
+No silent Last-Write-Wins.
+
+## Stock
+
+Local `local_stock_movements` records sale/purchase/return/adjustment/transfer.  
+Sale rows are audit-only locally. Laravel deducts inventory when the order is pushed.  
+Standalone `stock.movement` ops (purchase/return/adjustment/transfer) are pushed in the batch API.
+
+## Monitoring
+
+Cashier banner always shows Online/Offline, last sync, and pending count.  
+Sync panel shows device_id, cursor, pending, failed.

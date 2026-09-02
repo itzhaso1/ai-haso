@@ -18,6 +18,7 @@ part 'app_database.g.dart';
     LocalCustomers,
     LocalOrders,
     LocalOrderItems,
+    LocalStockMovements,
     LocalPayments,
     LocalInvoices,
     LocalSettings,
@@ -31,7 +32,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -40,9 +41,14 @@ class AppDatabase extends _$AppDatabase {
           await _createPerfIndexes();
         },
         onUpgrade: (m, from, to) async {
-          // v2: catalog/table local_ids become workspace-scoped via Initial Sync
-          // rewrite and OrdersRepository writers — no destructive DDL required.
           if (from < 3) {
+            await _createPerfIndexes();
+          }
+          if (from < 4) {
+            await m.createTable(localStockMovements);
+            await m.addColumn(localProducts, localProducts.stock);
+            await m.addColumn(syncQueueItems, syncQueueItems.operationUuid);
+            await m.addColumn(syncQueueItems, syncQueueItems.syncedAt);
             await _createPerfIndexes();
           }
         },
@@ -84,6 +90,15 @@ class AppDatabase extends _$AppDatabase {
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_sync_conflicts_ws_status '
       'ON sync_conflicts (workspace_id, status)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_stock_movements_ws '
+      'ON local_stock_movements (workspace_id, created_at)',
+    );
+    await customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_queue_operation_uuid '
+      'ON sync_queue_items (workspace_id, operation_uuid) '
+      'WHERE operation_uuid IS NOT NULL',
     );
   }
 

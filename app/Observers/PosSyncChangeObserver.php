@@ -4,6 +4,7 @@ namespace App\Observers;
 
 use App\Models\Customer;
 use App\Models\DiningTable;
+use App\Models\InventoryMovement;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\PosItemCategory;
@@ -108,6 +109,7 @@ class PosSyncChangeObserver
             $model instanceof DiningTable => PosSyncChangeRecorder::ENTITY_TABLE,
             $model instanceof Order => PosSyncChangeRecorder::ENTITY_ORDER,
             $model instanceof Customer => PosSyncChangeRecorder::ENTITY_CUSTOMER,
+            $model instanceof InventoryMovement => PosSyncChangeRecorder::ENTITY_STOCK,
             default => null,
         };
     }

@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Controllers\Api\WhatsAppController;
 use App\Http\Controllers\Api\WorkspaceController;
+use App\Http\Controllers\Api\Cashier\V1\SyncController;
 use App\Http\Controllers\Webhook\PaymentWebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -96,3 +97,21 @@ Route::prefix('mobile/v1')
 Route::prefix('cashier/v1')
     ->name('cashier.v1.')
     ->group(base_path('routes/cashier.php'));
+
+/*
+|--------------------------------------------------------------------------
+| POS sync aliases — same handlers as /api/cashier/v1/sync/*
+|--------------------------------------------------------------------------
+*/
+Route::prefix('pos/sync')
+    ->name('pos.sync.')
+    ->middleware([
+        'auth:sanctum',
+        'workspace.resolve',
+        'workspace.member',
+        'throttle:cashier-api',
+    ])
+    ->group(function (): void {
+        Route::post('/push', [SyncController::class, 'push'])->middleware('throttle:mobile-write');
+        Route::post('/pull', [SyncController::class, 'pull']);
+    });

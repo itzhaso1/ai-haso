@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/local_db/local_db_providers.dart';
+import '../../core/local_db/workspace_scope.dart';
 import '../../core/sync/pos_sync_coordinator.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
@@ -19,6 +20,11 @@ class SyncQueuePanel extends ConsumerStatefulWidget {
 class _SyncQueuePanelState extends ConsumerState<SyncQueuePanel> {
   List<Map<String, dynamic>> _records = const [];
   var _busy = false;
+  String? _cursor;
+  String? _deviceId;
+  int _failed = 0;
+  int _pending = 0;
+  DateTime? _lastSyncAt;
 
   @override
   void initState() {
@@ -35,8 +41,27 @@ class _SyncQueuePanelState extends ConsumerState<SyncQueuePanel> {
     final rows = await ref
         .read(syncQueueRepositoryProvider)
         .recentForPanel(workspaceId: workspaceId);
+    final counts =
+        await ref.read(syncQueueRepositoryProvider).counts(workspaceId);
+    final db = ref.read(appDatabaseProvider);
+    final cursor = await db.readCursor(workspaceId);
+    final lastPush = await db.readMetaTime(workspaceId, SyncMetaKeys.lastPushAt);
+    final lastPull = await db.readMetaTime(workspaceId, SyncMetaKeys.lastPullAt);
+    DateTime? last;
+    if (lastPush != null && lastPull != null) {
+      last = lastPush.isAfter(lastPull) ? lastPush : lastPull;
+    } else {
+      last = lastPush ?? lastPull;
+    }
     if (!mounted) return;
-    setState(() => _records = rows);
+    setState(() {
+      _records = rows;
+      _cursor = cursor;
+      _deviceId = ref.read(deviceIdHeaderProvider);
+      _failed = counts.failed;
+      _pending = counts.waiting;
+      _lastSyncAt = last;
+    });
   }
 
   String _label(String? status) => switch (status) {
@@ -80,6 +105,10 @@ class _SyncQueuePanelState extends ConsumerState<SyncQueuePanel> {
 
   Future<void> _retry(Map<String, dynamic> row) async {
     final localId = '${row['local_id'] ?? ''}';
+    final id = row['id'];
+    if (id is int) {
+      await ref.read(syncQueueRepositoryProvider).requeueFailed(id);
+    }
     if (localId.isEmpty) return;
     setState(() => _busy = true);
     final workspaceId = ref.read(workspaceIdProvider);
@@ -121,8 +150,16 @@ class _SyncQueuePanelState extends ConsumerState<SyncQueuePanel> {
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 16),
           child: Text(
-            'الطلبات المحلية لا تُحذف عند الفشل. Idempotency عبر client_reference تمنع التكرار.',
+            'الطلبات المحلية لا تُحذف عند الفشل. Idempotency عبر UUID العملية تمنع التكرار.',
             style: TextStyle(fontSize: 12, color: HasimColors.muted),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Text(
+            'الجهاز: ${_deviceId ?? '—'}  ·  المؤشر: ${_cursor ?? '0'}\n'
+            'بانتظار: $_pending  ·  فشل: $_failed  ·  آخر مزامنة: ${_lastSyncAt?.toLocal().toString().substring(0, 16) ?? '—'}',
+            style: const TextStyle(fontSize: 12, color: HasimColors.muted, height: 1.4),
           ),
         ),
         Expanded(

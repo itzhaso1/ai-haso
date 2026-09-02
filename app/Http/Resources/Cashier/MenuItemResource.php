@@ -38,6 +38,11 @@ class MenuItemResource extends JsonResource
                 'name' => $this->category->name,
             ] : null),
             'pos_item_category_id' => $this->pos_item_category_id,
+            'product_id' => $this->product_id,
+            'stock' => $this->when(
+                $this->relationLoaded('product') && $this->product,
+                fn () => (int) $this->product->stock,
+            ),
         ];
     }
 }
