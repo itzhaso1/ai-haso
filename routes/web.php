@@ -31,6 +31,10 @@ use App\Http\Controllers\Workspace\DashboardController as WorkspaceDashboardCont
 use App\Http\Controllers\Workspace\EmployeeInvitationController;
 use App\Http\Controllers\Workspace\EmailController;
 use App\Http\Controllers\Workspace\Finance\AccountingController as FinanceAccountingController;
+use App\Http\Controllers\Workspace\Finance\BillingDashboardController as FinanceBillingDashboardController;
+use App\Http\Controllers\Workspace\Finance\BillingScheduleController as FinanceBillingScheduleController;
+use App\Http\Controllers\Workspace\Finance\CreditNoteController as FinanceCreditNoteController;
+use App\Http\Controllers\Workspace\Finance\CustomerStatementController as FinanceCustomerStatementController;
 use App\Http\Controllers\Workspace\Finance\DashboardController as FinanceDashboardController;
 use App\Http\Controllers\Workspace\Finance\FinanceEmployeeController as FinanceEmployeeController;
 use App\Http\Controllers\Workspace\Finance\ExpenseController as FinanceExpenseController;
@@ -329,6 +333,9 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
 
         Route::middleware('workspace.feature:finance')->prefix('finance')->as('finance.')->group(function (): void {
             Route::get('/', [FinanceDashboardController::class, 'index'])->name('dashboard');
+            Route::get('billing', [FinanceBillingDashboardController::class, 'index'])->name('billing.dashboard');
+            Route::get('statements', [FinanceCustomerStatementController::class, 'index'])->name('statements.index');
+            Route::get('statements/show', [FinanceCustomerStatementController::class, 'show'])->name('statements.show');
             Route::get('contracts', [WorkspaceContractController::class, 'index'])->name('contracts.index');
             Route::get('contracts/create', [WorkspaceContractController::class, 'create'])->name('contracts.create');
             Route::post('contracts', [WorkspaceContractController::class, 'store'])->name('contracts.store');
@@ -346,9 +353,25 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::get('invoices/create', [FinanceInvoiceController::class, 'create'])->name('invoices.create');
             Route::post('invoices', [FinanceInvoiceController::class, 'store'])->name('invoices.store');
             Route::get('invoices/{invoice}', [FinanceInvoiceController::class, 'show'])->name('invoices.show');
+            Route::get('invoices/{invoice}/edit', [FinanceInvoiceController::class, 'edit'])->name('invoices.edit');
+            Route::put('invoices/{invoice}', [FinanceInvoiceController::class, 'update'])->name('invoices.update');
             Route::get('invoices/{invoice}/pdf', [FinanceInvoiceController::class, 'downloadPdf'])->name('invoices.pdf');
+            Route::post('invoices/{invoice}/issue', [FinanceInvoiceController::class, 'issue'])->name('invoices.issue');
             Route::post('invoices/{invoice}/cancel', [FinanceInvoiceController::class, 'cancel'])->name('invoices.cancel');
             Route::post('invoices/{invoice}/payments', [FinanceInvoiceController::class, 'storePayment'])->name('invoices.payments.store');
+            Route::post('invoices/{invoice}/payments/{payment}/reverse', [FinanceInvoiceController::class, 'reversePayment'])->name('invoices.payments.reverse');
+            Route::post('invoices/{invoice}/attachments', [FinanceInvoiceController::class, 'storeAttachment'])->name('invoices.attachments.store');
+            Route::get('invoices/{invoice}/attachments/{attachment}', [FinanceInvoiceController::class, 'downloadAttachment'])->name('invoices.attachments.download');
+            Route::delete('invoices/{invoice}/attachments/{attachment}', [FinanceInvoiceController::class, 'destroyAttachment'])->name('invoices.attachments.destroy');
+            Route::get('invoices/{invoice}/credit-notes/create', [FinanceCreditNoteController::class, 'create'])->name('invoices.credit-notes.create');
+            Route::post('invoices/{invoice}/credit-notes', [FinanceCreditNoteController::class, 'store'])->name('invoices.credit-notes.store');
+            Route::post('invoices/{invoice}/credit-notes/{creditNote}/issue', [FinanceCreditNoteController::class, 'issue'])->name('invoices.credit-notes.issue');
+            Route::post('invoices/{invoice}/credit-notes/{creditNote}/cancel', [FinanceCreditNoteController::class, 'cancel'])->name('invoices.credit-notes.cancel');
+            Route::post('contracts/{contract}/billing-schedules', [FinanceBillingScheduleController::class, 'store'])->name('contracts.billing-schedules.store');
+            Route::post('contracts/{contract}/billing-schedules/{schedule}/activate', [FinanceBillingScheduleController::class, 'activate'])->name('contracts.billing-schedules.activate');
+            Route::post('contracts/{contract}/billing-schedules/{schedule}/pause', [FinanceBillingScheduleController::class, 'pause'])->name('contracts.billing-schedules.pause');
+            Route::post('contracts/{contract}/billing-schedules/{schedule}/cancel', [FinanceBillingScheduleController::class, 'cancel'])->name('contracts.billing-schedules.cancel');
+            Route::post('contracts/{contract}/billing-schedules/{schedule}/generate', [FinanceBillingScheduleController::class, 'generate'])->name('contracts.billing-schedules.generate');
 
             Route::get('suppliers', [FinanceSupplierController::class, 'index'])->name('suppliers.index');
             Route::post('suppliers', [FinanceSupplierController::class, 'store'])->name('suppliers.store');

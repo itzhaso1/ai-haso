@@ -4,6 +4,8 @@ use App\Jobs\Stories\ExpireStoriesJob;
 use App\Jobs\SyncDomainStatusJob;
 use App\Models\Website\WebsiteDomain;
 use App\Services\Appointments\AppointmentReminderService;
+use App\Services\Finance\BillingScheduleService;
+use App\Services\Finance\InvoiceReminderService;
 use App\Services\Finance\InvoiceService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -28,6 +30,21 @@ Artisan::command('finance:invoices:refresh-payment-status', function (InvoiceSer
     $updated = $service->refreshIssuedPaymentStatuses();
     $this->info("تم تحديث {$updated} فاتورة لحالة الدفع الفعلية.");
 })->purpose('Recalculate issued invoices payment status and overdue state');
+
+Artisan::command('finance:invoices:send-reminders', function (InvoiceReminderService $service) {
+    $counts = $service->dispatchDueReminders();
+    $this->info(sprintf(
+        'تذكيرات الفواتير: قادمة %d، مستحقة اليوم %d، متأخرة %d.',
+        $counts['upcoming'],
+        $counts['due'],
+        $counts['overdue']
+    ));
+})->purpose('Send upcoming, due-today, and overdue finance invoice reminders');
+
+Artisan::command('finance:billing-schedules:generate', function (BillingScheduleService $service) {
+    $generated = $service->generateDueInvoices();
+    $this->info("تم توليد {$generated} فاتورة من جداول الفوترة المستحقة.");
+})->purpose('Generate due finance invoices from activated billing schedules');
 
 Artisan::command('finance:invoices:status-audit', function () {
     $rows = DB::table('finance_invoices')
@@ -66,6 +83,8 @@ Artisan::command('finance:invoices:integrity-report', function () {
 Schedule::command('appointments:reminders:prepare')->everyFiveMinutes();
 Schedule::command('appointments:reminders:dispatch')->everyMinute();
 Schedule::command('finance:invoices:refresh-payment-status')->hourly();
+Schedule::command('finance:invoices:send-reminders')->dailyAt('08:00');
+Schedule::command('finance:billing-schedules:generate')->dailyAt('01:15');
 Schedule::job(new ExpireStoriesJob)->hourly();
 
 Artisan::command('domains:sync-status', function () {

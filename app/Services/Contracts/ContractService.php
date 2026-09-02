@@ -285,11 +285,35 @@ class ContractService
 
     private function nextContractNumber(int $workspaceId): string
     {
-        $next = Contract::withoutGlobalScopes()
+        $settings = FinanceSetting::withoutGlobalScopes()
             ->where('workspace_id', $workspaceId)
-            ->count() + 1;
+            ->lockForUpdate()
+            ->first();
 
-        return 'CTR-'.str_pad((string) $next, 6, '0', STR_PAD_LEFT);
+        if (! $settings) {
+            $settings = FinanceSetting::withoutGlobalScopes()->create([
+                'workspace_id' => $workspaceId,
+                'currency' => 'SAR',
+                'country_code' => 'SA',
+                'invoice_prefix' => 'INV',
+                'next_invoice_sequence' => 1,
+                'next_contract_sequence' => 1,
+                'default_vat_rate' => 15.00,
+            ]);
+        }
+
+        $sequence = (int) ($settings->next_contract_sequence ?? 0);
+        if ($sequence < 1) {
+            $sequence = (int) Contract::withoutGlobalScopes()
+                ->where('workspace_id', $workspaceId)
+                ->lockForUpdate()
+                ->count() + 1;
+        }
+
+        $number = 'CTR-'.str_pad((string) $sequence, 6, '0', STR_PAD_LEFT);
+        $settings->update(['next_contract_sequence' => $sequence + 1]);
+
+        return $number;
     }
 
     private function money(float $value): float

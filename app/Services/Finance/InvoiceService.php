@@ -4,6 +4,7 @@ namespace App\Services\Finance;
 
 use App\Models\Customer;
 use App\Models\Finance\FinanceInvoice;
+use App\Models\Finance\FinanceInvoiceAttachment;
 use App\Models\Finance\FinanceInvoiceItem;
 use App\Models\Finance\FinanceJournalEntry;
 use App\Models\Finance\FinanceInvoicePayment;
@@ -12,6 +13,7 @@ use App\Models\Finance\FinanceSupplier;
 use App\Models\Product;
 use App\Models\Workspace;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
 class InvoiceService
@@ -87,13 +89,17 @@ class InvoiceService
 
             $totals = $this->totals($items);
             $amountPaid = max(0, (float) ($payload['amount_paid'] ?? 0));
-            $amountDue = $this->invoiceStateService->resolveAmountDue($totals['total'], $amountPaid);
+            $amountCredited = (float) ($payload['amount_credited'] ?? 0);
+            $amountDebited = (float) ($payload['amount_debited'] ?? 0);
+            $amountDue = $this->invoiceStateService->resolveAmountDue($totals['total'], $amountPaid, $amountCredited, $amountDebited);
             $invoiceStatus = $this->invoiceStateService->resolveInvoiceStatus($requestedStatus);
             $paymentStatus = $this->invoiceStateService->resolvePaymentStatus(
                 total: $totals['total'],
                 amountPaid: $amountPaid,
                 dueDate: ! empty($payload['due_date']) ? (string) $payload['due_date'] : null,
                 invoiceStatus: $invoiceStatus,
+                amountCredited: $amountCredited,
+                amountDebited: $amountDebited,
             );
             $legacyStatus = $this->invoiceStateService->toLegacyStatus($invoiceStatus, $paymentStatus);
             $supportsSplitStatuses = FinanceInvoice::hasSeparatedStatusColumns();
@@ -138,10 +144,25 @@ class InvoiceService
                 'created_by' => $actorUserId,
             ];
 
+            if (FinanceInvoice::hasContractColumn()) {
+                $attributes['contract_id'] = isset($payload['contract_id']) ? (int) $payload['contract_id'] : null;
+                if (isset($payload['billing_schedule_id'])) {
+                    $attributes['billing_schedule_id'] = (int) $payload['billing_schedule_id'];
+                }
+            }
+
+            if (FinanceInvoice::hasAdjustmentColumns()) {
+                $attributes['amount_credited'] = $this->money($amountCredited);
+                $attributes['amount_debited'] = $this->money($amountDebited);
+            }
+
             if ($supportsSplitStatuses) {
                 $attributes['invoice_status'] = $invoiceStatus;
                 $attributes['payment_status'] = $paymentStatus;
                 $attributes['issued_at'] = $issuedAt;
+                if ($invoiceStatus === 'issued') {
+                    $attributes['issued_by'] = $actorUserId;
+                }
             }
 
             if ($supportsSnapshots) {
@@ -174,42 +195,223 @@ class InvoiceService
                 $this->postInvoiceEntry($invoice, $actorUserId);
             }
 
-            return $invoice->load(['items', 'customer', 'supplier']);
+            $this->storeUploadedAttachments($invoice, $payload['attachments'] ?? [], $actorUserId);
+
+            return $invoice->load(['items', 'customer', 'supplier', 'attachments']);
         });
     }
 
-    public function cancel(FinanceInvoice $invoice): FinanceInvoice
+    public function cancel(FinanceInvoice $invoice, int $actorUserId = 0): FinanceInvoice
+    {
+        return DB::transaction(function () use ($invoice, $actorUserId): FinanceInvoice {
+            $locked = FinanceInvoice::withoutGlobalScopes()
+                ->whereKey($invoice->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $currentInvoiceStatus = $locked->invoice_status
+                ?? $this->invoiceStateService->resolveInvoiceStatus($locked->status);
+
+            if ($currentInvoiceStatus === 'cancelled') {
+                return $locked;
+            }
+
+            $postedPaid = $this->invoiceStateService->postedPaymentsSum($locked);
+            if ($postedPaid > InvoiceStateService::PAYMENT_TOLERANCE) {
+                throw new RuntimeException('لا يمكن إلغاء فاتورة عليها دفعات قائمة. اعكس الدفعات أولاً أو أصدر إشعار دائن.');
+            }
+
+            if ($currentInvoiceStatus === 'issued') {
+                $this->reversePostedInvoiceEntry($locked, $actorUserId > 0 ? $actorUserId : (int) $locked->created_by);
+            }
+
+            $paymentStatus = $this->invoiceStateService->resolvePaymentStatus(
+                total: (float) $locked->total,
+                amountPaid: 0,
+                dueDate: null,
+                invoiceStatus: 'cancelled',
+                amountCredited: (float) ($locked->amount_credited ?? 0),
+                amountDebited: (float) ($locked->amount_debited ?? 0),
+            );
+
+            $attributes = [
+                'status' => 'cancelled',
+                'cancelled_at' => now(),
+            ];
+            if (FinanceInvoice::hasSeparatedStatusColumns()) {
+                $attributes['invoice_status'] = 'cancelled';
+                $attributes['payment_status'] = $paymentStatus;
+            }
+
+            $locked->update($attributes);
+
+            return $locked->fresh(['items', 'customer', 'supplier']);
+        });
+    }
+
+    /**
+     * @param  array<string,mixed>  $payload
+     */
+    public function updateDraft(FinanceInvoice $invoice, array $payload, int $actorUserId): FinanceInvoice
     {
         $currentInvoiceStatus = $invoice->invoice_status
             ?? $this->invoiceStateService->resolveInvoiceStatus($invoice->status);
 
-        if ($currentInvoiceStatus === 'cancelled') {
-            return $invoice;
+        if ($currentInvoiceStatus !== 'draft') {
+            throw new RuntimeException('يمكن تعديل المسودات فقط. الفواتير المعتمدة وثائق مالية ثابتة.');
         }
 
-        if ((float) $invoice->amount_paid > 0) {
-            throw new RuntimeException('لا يمكن إلغاء فاتورة مدفوعة أو مدفوعة جزئيًا بشكل مباشر.');
-        }
+        return DB::transaction(function () use ($invoice, $payload, $actorUserId): FinanceInvoice {
+            $locked = FinanceInvoice::withoutGlobalScopes()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+            $workspaceId = (int) $locked->workspace_id;
+            $workspace = Workspace::query()->findOrFail($workspaceId);
+            $profile = $this->resolveTaxProfile($workspace, $payload);
+            $type = (string) ($payload['type'] ?? $locked->type);
 
-        $paymentStatus = $this->invoiceStateService->resolvePaymentStatus(
-            total: (float) $invoice->total,
-            amountPaid: (float) $invoice->amount_paid,
-            dueDate: null,
-            invoiceStatus: 'cancelled',
-        );
+            $customerId = array_key_exists('customer_id', $payload)
+                ? (isset($payload['customer_id']) ? (int) $payload['customer_id'] : null)
+                : $locked->customer_id;
+            $customerName = trim((string) ($payload['customer_name'] ?? $locked->customer_name ?? ''));
+            $supplierId = array_key_exists('supplier_id', $payload)
+                ? (isset($payload['supplier_id']) ? (int) $payload['supplier_id'] : null)
+                : $locked->supplier_id;
 
-        $attributes = [
-            'status' => 'cancelled',
-            'cancelled_at' => now(),
-        ];
-        if (FinanceInvoice::hasSeparatedStatusColumns()) {
-            $attributes['invoice_status'] = 'cancelled';
-            $attributes['payment_status'] = $paymentStatus;
-        }
+            if ($type === 'sales' && ! $customerId && $customerName === '') {
+                throw new RuntimeException('فاتورة المبيعات تتطلب عميلًا مسجلًا أو اسم عميل نقدي.');
+            }
+            if ($type === 'purchase' && ! $supplierId) {
+                throw new RuntimeException('فاتورة الشراء تتطلب اختيار مورد.');
+            }
 
-        $invoice->update($attributes);
+            $items = $this->normalizeItems($payload['items'] ?? [], $workspaceId, $profile['type'], $profile['rate']);
+            if ($items === []) {
+                throw new RuntimeException('يجب أن تحتوي الفاتورة على بند واحد على الأقل.');
+            }
 
-        return $invoice->fresh(['items', 'customer', 'supplier']);
+            $totals = $this->totals($items);
+            $customer = $customerId
+                ? Customer::withoutGlobalScopes()->where('workspace_id', $workspaceId)->whereKey($customerId)->first()
+                : null;
+            $supplier = $supplierId
+                ? FinanceSupplier::withoutGlobalScopes()->where('workspace_id', $workspaceId)->whereKey($supplierId)->first()
+                : null;
+
+            $settings = FinanceSetting::query()->first();
+            $companySnapshot = $this->buildCompanySnapshot($settings);
+            $updates = [
+                'customer_id' => $customerId,
+                'customer_name' => $type === 'sales' && $customerName !== '' ? $customerName : null,
+                'supplier_id' => $supplierId,
+                'type' => $type,
+                'issue_date' => (string) ($payload['issue_date'] ?? $locked->issue_date?->toDateString()),
+                'due_date' => ($payload['due_date'] ?? null) ?: null,
+                'currency' => (string) ($payload['currency'] ?? $locked->currency ?? 'SAR'),
+                'subtotal' => $totals['subtotal'],
+                'discount' => $totals['discount'],
+                'taxable_amount' => $totals['taxable_amount'],
+                'tax_amount' => $totals['tax_amount'],
+                'total' => $totals['total'],
+                'amount_due' => $totals['total'],
+                'tax_profile_type' => $profile['type'],
+                'tax_rate' => $this->money($profile['rate']),
+                'payment_terms' => ($payload['payment_terms'] ?? null) ?: null,
+                'notes' => ($payload['notes'] ?? null) ?: null,
+                'company_snapshot' => $companySnapshot,
+                'recipient_snapshot' => $this->buildRecipientSnapshot($type, $customer, $supplier, $customerName),
+                'pdf_snapshot' => $this->buildPdfSnapshot($settings, $companySnapshot),
+            ];
+
+            if (! empty($payload['invoice_number'])) {
+                $updates['invoice_number'] = (string) $payload['invoice_number'];
+            }
+
+            $locked->update($updates);
+            FinanceInvoiceItem::withoutGlobalScopes()->where('invoice_id', $locked->id)->delete();
+            foreach ($items as $item) {
+                FinanceInvoiceItem::withoutGlobalScopes()->create([
+                    'workspace_id' => $workspaceId,
+                    'invoice_id' => $locked->id,
+                    'product_id' => $item['product_id'],
+                    'product_name' => $item['product_name'],
+                    'description' => $item['description'],
+                    'quantity' => $item['quantity'],
+                    'unit_price' => $item['unit_price'],
+                    'discount' => $item['discount'],
+                    'tax_rate' => $item['tax_rate'],
+                    'tax_amount' => $item['tax_amount'],
+                    'taxable_amount' => $item['taxable_amount'],
+                    'total' => $item['total'],
+                    'metadata' => $item['metadata'],
+                ]);
+            }
+
+            $this->storeUploadedAttachments($locked, $payload['attachments'] ?? [], $actorUserId);
+
+            return $locked->fresh(['items', 'customer', 'supplier', 'attachments']);
+        });
+    }
+
+    public function issue(FinanceInvoice $invoice, int $actorUserId): FinanceInvoice
+    {
+        return DB::transaction(function () use ($invoice, $actorUserId): FinanceInvoice {
+            $locked = FinanceInvoice::withoutGlobalScopes()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+            $currentInvoiceStatus = $locked->invoice_status
+                ?? $this->invoiceStateService->resolveInvoiceStatus($locked->status);
+
+            if ($currentInvoiceStatus === 'issued') {
+                return $locked;
+            }
+            if ($currentInvoiceStatus === 'cancelled') {
+                throw new RuntimeException('لا يمكن إصدار فاتورة ملغاة.');
+            }
+
+            $this->financialPeriodGuardService->assertDateIsOpen(
+                workspaceId: (int) $locked->workspace_id,
+                date: $locked->issue_date?->toDateString() ?? now()->toDateString(),
+                context: 'إصدار الفاتورة'
+            );
+
+            $paid = $this->invoiceStateService->postedPaymentsSum($locked);
+            $credited = (float) ($locked->amount_credited ?? 0);
+            $debited = (float) ($locked->amount_debited ?? 0);
+            $due = $this->invoiceStateService->resolveAmountDue((float) $locked->total, $paid, $credited, $debited);
+            $paymentStatus = $this->invoiceStateService->resolvePaymentStatus(
+                total: (float) $locked->total,
+                amountPaid: $paid,
+                dueDate: $locked->due_date?->toDateString(),
+                invoiceStatus: 'issued',
+                amountCredited: $credited,
+                amountDebited: $debited,
+            );
+
+            $locked->update([
+                'status' => $this->invoiceStateService->toLegacyStatus('issued', $paymentStatus),
+                'invoice_status' => 'issued',
+                'payment_status' => $paymentStatus,
+                'issued_at' => now(),
+                'issued_by' => $actorUserId,
+                'amount_paid' => $paid,
+                'amount_due' => $due,
+            ]);
+
+            $this->postInvoiceEntry($locked->fresh(), $actorUserId);
+
+            return $locked->fresh(['items', 'customer', 'supplier']);
+        });
+    }
+
+    public function deleteAttachment(FinanceInvoiceAttachment $attachment): void
+    {
+        $attachment->deleteFile();
+        $attachment->delete();
+    }
+
+    /**
+     * @param  array<int, mixed>  $uploadedFiles
+     */
+    public function storeAttachments(FinanceInvoice $invoice, array $uploadedFiles, int $actorUserId): void
+    {
+        $this->storeUploadedAttachments($invoice, $uploadedFiles, $actorUserId);
     }
 
     /**
@@ -306,16 +508,17 @@ class InvoiceService
             return $invoice;
         }
 
-        $paid = round((float) FinanceInvoicePayment::withoutGlobalScopes()
-            ->where('workspace_id', $invoice->workspace_id)
-            ->where('invoice_id', $invoice->id)
-            ->sum('amount'), 2);
-        $due = $this->invoiceStateService->resolveAmountDue((float) $invoice->total, $paid);
+        $paid = $this->invoiceStateService->postedPaymentsSum($invoice);
+        $credited = (float) ($invoice->amount_credited ?? 0);
+        $debited = (float) ($invoice->amount_debited ?? 0);
+        $due = $this->invoiceStateService->resolveAmountDue((float) $invoice->total, $paid, $credited, $debited);
         $paymentStatus = $this->invoiceStateService->resolvePaymentStatus(
             total: (float) $invoice->total,
             amountPaid: $paid,
             dueDate: $invoice->due_date?->toDateString(),
             invoiceStatus: $invoiceStatus,
+            amountCredited: $credited,
+            amountDebited: $debited,
         );
         $legacyStatus = $this->invoiceStateService->toLegacyStatus($invoiceStatus, $paymentStatus);
 
@@ -462,6 +665,63 @@ class InvoiceService
             referenceId: $invoice->id,
             postedBy: $actorUserId
         );
+    }
+
+    private function reversePostedInvoiceEntry(FinanceInvoice $invoice, int $actorUserId): void
+    {
+        $entryType = $invoice->type === 'sales' ? 'sales_invoice' : 'purchase_invoice';
+        $entry = FinanceJournalEntry::withoutGlobalScopes()
+            ->where('workspace_id', $invoice->workspace_id)
+            ->where('type', $entryType)
+            ->where('reference_type', FinanceInvoice::class)
+            ->where('reference_id', $invoice->id)
+            ->whereNull('reverses_entry_id')
+            ->latest('id')
+            ->first();
+
+        if (! $entry) {
+            return;
+        }
+
+        $already = FinanceJournalEntry::withoutGlobalScopes()
+            ->where('workspace_id', $invoice->workspace_id)
+            ->where('reverses_entry_id', $entry->id)
+            ->exists();
+        if ($already) {
+            return;
+        }
+
+        $this->accountingService->reverseEntry(
+            entry: $entry,
+            type: 'invoice_reversal',
+            actorUserId: $actorUserId,
+            description: 'عكس قيد الفاتورة '.$invoice->invoice_number,
+            referenceType: FinanceInvoice::class,
+            referenceId: $invoice->id,
+        );
+    }
+
+    /**
+     * @param  array<int, mixed>  $uploadedFiles
+     */
+    private function storeUploadedAttachments(FinanceInvoice $invoice, array $uploadedFiles, int $actorUserId): void
+    {
+        foreach ($uploadedFiles as $file) {
+            if (! is_object($file) || ! method_exists($file, 'store')) {
+                continue;
+            }
+
+            $storedPath = $file->store('workspaces/'.$invoice->workspace_id.'/finance/invoices/'.$invoice->id, 'public');
+            FinanceInvoiceAttachment::withoutGlobalScopes()->create([
+                'workspace_id' => $invoice->workspace_id,
+                'invoice_id' => $invoice->id,
+                'file_path' => $storedPath,
+                'file_name' => $file->getClientOriginalName(),
+                'file_type' => $file->getClientMimeType(),
+                'file_size' => $file->getSize(),
+                'uploaded_by' => $actorUserId,
+            ]);
+        }
     }
 
     private function nextInvoiceNumber(int $workspaceId): string

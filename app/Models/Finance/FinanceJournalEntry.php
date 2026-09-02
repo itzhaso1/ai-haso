@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'type',
     'reference_type',
     'reference_id',
+    'reverses_entry_id',
     'description',
     'status',
     'posted_by',

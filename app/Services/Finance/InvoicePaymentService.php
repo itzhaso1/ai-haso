@@ -6,6 +6,7 @@ use App\Models\Finance\FinanceInvoice;
 use App\Models\Finance\FinanceInvoicePayment;
 use App\Models\Finance\FinanceJournalEntry;
 use App\Models\Finance\FinanceTreasuryAccount;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -58,12 +59,16 @@ class InvoicePaymentService
                 }
             }
 
-            $existingPaid = round((float) FinanceInvoicePayment::withoutGlobalScopes()
-                ->where('workspace_id', $lockedInvoice->workspace_id)
-                ->where('invoice_id', $lockedInvoice->id)
-                ->sum('amount'), 2);
+            $existingPaid = $this->invoiceStateService->postedPaymentsSum($lockedInvoice);
+            $credited = (float) ($lockedInvoice->amount_credited ?? 0);
+            $debited = (float) ($lockedInvoice->amount_debited ?? 0);
 
-            $remaining = $this->invoiceStateService->resolveAmountDue((float) $lockedInvoice->total, $existingPaid);
+            $remaining = $this->invoiceStateService->resolveAmountDue(
+                (float) $lockedInvoice->total,
+                $existingPaid,
+                $credited,
+                $debited
+            );
             if ($remaining <= InvoiceStateService::PAYMENT_TOLERANCE) {
                 throw new RuntimeException('Invoice is already paid.');
             }
@@ -100,28 +105,51 @@ class InvoicePaymentService
                         ->first();
             }
 
-            $payment = FinanceInvoicePayment::withoutGlobalScopes()->create([
-                'workspace_id' => $lockedInvoice->workspace_id,
-                'invoice_id' => $lockedInvoice->id,
-                'treasury_account_id' => $treasuryAccount?->id,
-                'payment_date' => $paymentDate,
-                'method' => $payload['method'] ?? 'cash',
-                'reference' => $reference !== '' ? $reference : null,
-                'amount' => $amount,
-                'notes' => $payload['notes'] ?? null,
-                'created_by' => $actorUserId,
-            ]);
+            try {
+                $payment = FinanceInvoicePayment::withoutGlobalScopes()->create([
+                    'workspace_id' => $lockedInvoice->workspace_id,
+                    'invoice_id' => $lockedInvoice->id,
+                    'treasury_account_id' => $treasuryAccount?->id,
+                    'payment_date' => $paymentDate,
+                    'method' => $payload['method'] ?? 'cash',
+                    'reference' => $reference !== '' ? $reference : null,
+                    'amount' => $amount,
+                    'status' => FinanceInvoicePayment::STATUS_POSTED,
+                    'notes' => $payload['notes'] ?? null,
+                    'created_by' => $actorUserId,
+                ]);
+            } catch (UniqueConstraintViolationException $exception) {
+                if ($reference === '') {
+                    throw $exception;
+                }
 
-            $paid = round((float) FinanceInvoicePayment::withoutGlobalScopes()
-                ->where('workspace_id', $lockedInvoice->workspace_id)
-                ->where('invoice_id', $lockedInvoice->id)
-                ->sum('amount'), 2);
-            $due = $this->invoiceStateService->resolveAmountDue((float) $lockedInvoice->total, $paid);
+                $existingPayment = FinanceInvoicePayment::withoutGlobalScopes()
+                    ->where('workspace_id', $lockedInvoice->workspace_id)
+                    ->where('invoice_id', $lockedInvoice->id)
+                    ->where('reference', $reference)
+                    ->first();
+
+                if ($existingPayment) {
+                    return $existingPayment;
+                }
+
+                throw $exception;
+            }
+
+            $paid = $this->invoiceStateService->postedPaymentsSum($lockedInvoice);
+            $due = $this->invoiceStateService->resolveAmountDue(
+                (float) $lockedInvoice->total,
+                $paid,
+                $credited,
+                $debited
+            );
             $paymentStatus = $this->invoiceStateService->resolvePaymentStatus(
                 total: (float) $lockedInvoice->total,
                 amountPaid: $paid,
                 dueDate: $lockedInvoice->due_date?->toDateString(),
                 invoiceStatus: $invoiceStatus,
+                amountCredited: $credited,
+                amountDebited: $debited,
             );
             $legacyStatus = $this->invoiceStateService->toLegacyStatus($invoiceStatus, $paymentStatus);
 
@@ -143,6 +171,96 @@ class InvoicePaymentService
             }
 
             return $payment;
+        });
+    }
+
+    public function reversePayment(FinanceInvoicePayment $payment, int $actorUserId, ?string $reason = null): FinanceInvoicePayment
+    {
+        return DB::transaction(function () use ($payment, $actorUserId, $reason): FinanceInvoicePayment {
+            $lockedPayment = FinanceInvoicePayment::withoutGlobalScopes()
+                ->whereKey($payment->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (! $lockedPayment->isPosted()) {
+                return $lockedPayment;
+            }
+
+            $lockedInvoice = FinanceInvoice::withoutGlobalScopes()
+                ->whereKey($lockedPayment->invoice_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $this->financialPeriodGuardService->assertDateIsOpen(
+                workspaceId: (int) $lockedInvoice->workspace_id,
+                date: now()->toDateString(),
+                context: 'عكس دفعة فاتورة'
+            );
+
+            $entry = FinanceJournalEntry::withoutGlobalScopes()
+                ->where('workspace_id', $lockedInvoice->workspace_id)
+                ->where('type', 'invoice_payment')
+                ->where('reference_type', FinanceInvoicePayment::class)
+                ->where('reference_id', $lockedPayment->id)
+                ->latest('id')
+                ->first();
+
+            if ($entry) {
+                $this->accountingService->reverseEntry(
+                    entry: $entry,
+                    type: 'payment_reversal',
+                    actorUserId: $actorUserId,
+                    description: 'عكس دفعة الفاتورة '.$lockedInvoice->invoice_number,
+                    referenceType: FinanceInvoicePayment::class,
+                    referenceId: $lockedPayment->id,
+                );
+            }
+
+            if ($lockedPayment->treasury_account_id) {
+                $treasury = FinanceTreasuryAccount::withoutGlobalScopes()
+                    ->where('workspace_id', $lockedInvoice->workspace_id)
+                    ->whereKey($lockedPayment->treasury_account_id)
+                    ->lockForUpdate()
+                    ->first();
+                if ($treasury) {
+                    $treasury->update([
+                        'current_balance' => round((float) $treasury->current_balance - (float) $lockedPayment->amount, 2),
+                    ]);
+                }
+            }
+
+            $lockedPayment->update([
+                'status' => FinanceInvoicePayment::STATUS_REVERSED,
+                'reversed_at' => now(),
+                'reversed_by' => $actorUserId,
+                'reversal_reason' => $reason,
+            ]);
+
+            $invoiceStatus = $lockedInvoice->invoice_status
+                ?? $this->invoiceStateService->resolveInvoiceStatus($lockedInvoice->status);
+            $paid = $this->invoiceStateService->postedPaymentsSum($lockedInvoice);
+            $credited = (float) ($lockedInvoice->amount_credited ?? 0);
+            $debited = (float) ($lockedInvoice->amount_debited ?? 0);
+            $due = $this->invoiceStateService->resolveAmountDue((float) $lockedInvoice->total, $paid, $credited, $debited);
+            $paymentStatus = $this->invoiceStateService->resolvePaymentStatus(
+                total: (float) $lockedInvoice->total,
+                amountPaid: $paid,
+                dueDate: $lockedInvoice->due_date?->toDateString(),
+                invoiceStatus: $invoiceStatus,
+                amountCredited: $credited,
+                amountDebited: $debited,
+            );
+
+            $lockedInvoice->update([
+                'amount_paid' => $paid,
+                'amount_due' => $due,
+                'status' => $this->invoiceStateService->toLegacyStatus($invoiceStatus, $paymentStatus),
+            ] + (FinanceInvoice::hasSeparatedStatusColumns() ? [
+                'invoice_status' => $invoiceStatus,
+                'payment_status' => $paymentStatus,
+            ] : []));
+
+            return $lockedPayment->fresh();
         });
     }
 
