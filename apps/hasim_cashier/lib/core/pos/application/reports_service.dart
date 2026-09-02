@@ -78,16 +78,27 @@ class LocalReportsService {
       byMethodCount[p.method] = (byMethodCount[p.method] ?? 0) + 1;
     }
 
-    final paidIds = [
-      for (final o in orders.where((o) => o.paymentStatus == 'paid')) o.localId,
-    ];
-    final items = paidIds.isEmpty
-        ? const <LocalOrderItem>[]
-        : await (_db.select(_db.localOrderItems)..where(
-                (t) =>
-                    t.orderLocalId.isIn(paidIds) & t.isRemoved.equals(false),
-              ))
-              .get();
+    // Join instead of `IN (thousands of ids)` — SQLite variable limits
+    // would fail around 10k paid orders on some devices.
+    final items = await (_db.select(_db.localOrderItems).join([
+          innerJoin(
+            _db.localOrders,
+            _db.localOrders.localId.equalsExp(
+              _db.localOrderItems.orderLocalId,
+            ),
+          ),
+        ])
+          ..where(
+            _db.localOrderItems.workspaceId.equals(workspaceId) &
+                _db.localOrderItems.isRemoved.equals(false) &
+                _db.localOrders.workspaceId.equals(workspaceId) &
+                _db.localOrders.posStatus.isNotValue('cancelled') &
+                _db.localOrders.paymentStatus.equals('paid') &
+                _db.localOrders.createdAt.isBiggerOrEqualValue(from) &
+                _db.localOrders.createdAt.isSmallerThanValue(to),
+          ))
+        .map((row) => row.readTable(_db.localOrderItems))
+        .get();
     final itemQty = <String, int>{};
     final itemRev = <String, int>{};
     var cogsCents = 0;

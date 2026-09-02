@@ -15,7 +15,8 @@ void writeLegacyPosDatabase({
   for (final sql in _createSql) {
     db.execute(sql);
   }
-  final now = DateTime.now().millisecondsSinceEpoch;
+  // Drift stores DateTime as UNIX seconds (not ms/µs).
+  final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
   db.execute(
     '''
     INSERT INTO local_stores (local_id, workspace_id, name, currency, timezone,

@@ -42,7 +42,8 @@ void main() {
       );
       final ws = PosMode.standaloneWorkspaceId;
       final now = DateTime.now();
-      final nowMs = now.millisecondsSinceEpoch;
+      // Drift DateTime columns are UNIX seconds.
+      final nowSec = now.millisecondsSinceEpoch ~/ 1000;
       final saleProduct = await catalog.createProduct(
         workspaceId: ws,
         name: 'بيع',
@@ -66,7 +67,7 @@ void main() {
             'price, is_active, is_deleted, payload_json, stock, cost, tax_rate, '
             'track_stock, updated_at) VALUES (?, ?, ?, ?, 199, 1, 0, "{}", 5, 50, '
             '0, 1, ?)',
-            ['p-$i', ws, 'صنف $i', 'BC-${i.toString().padLeft(6, '0')}', nowMs],
+            ['p-$i', ws, 'صنف $i', 'BC-${i.toString().padLeft(6, '0')}', nowSec],
           );
         }
         const invoices = 10000;
@@ -81,7 +82,7 @@ void main() {
             'fulfillment_status, sync_status, retry_count, created_at, '
             'updated_at) VALUES (?, ?, "dev-1", ?, "takeaway", 1000, 0, 0, '
             '1000, "completed", "paid", "unfulfilled", "local", 0, ?, ?)',
-            [orderId, ws, orderId, nowMs, nowMs],
+            [orderId, ws, orderId, nowSec, nowSec],
           );
           await db.customStatement(
             'INSERT INTO local_invoices (local_id, workspace_id, device_id, '
@@ -95,7 +96,7 @@ void main() {
               'STRESS-${i.toString().padLeft(6, '0')}',
               'STRESS-${i.toString().padLeft(6, '0')}',
               orderId,
-              nowMs,
+              nowSec,
             ],
           );
           final values = StringBuffer();
@@ -111,7 +112,7 @@ void main() {
               1,
               100,
               100,
-              nowMs,
+              nowSec,
             ]);
           }
           await db.customStatement(
@@ -152,6 +153,16 @@ void main() {
         );
         return sw.elapsedMilliseconds;
       }
+
+      await timed('open POS catalog', () async {
+        final rows = await db.customSelect(
+          'SELECT local_id, name, price, barcode, stock FROM local_products '
+          'WHERE workspace_id = ? AND is_deleted = 0 AND is_active = 1 '
+          'ORDER BY name LIMIT 80',
+          variables: [Variable.withInt(ws)],
+        ).get();
+        expect(rows.length, 80);
+      });
 
       await timed('product search', () async {
         final rows = await db.customSelect(
