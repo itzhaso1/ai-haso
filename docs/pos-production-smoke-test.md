@@ -6,6 +6,8 @@
 جهّز: جهاز Android أو Windows/macOS desktop، بناء `apps/hasim_cashier`، وضع الطيران، طابعة شبكة اختيارية، ماسح HID إن وُجد.  
 سجّل لكل بند: **Pass / Fail** + ملاحظة + لقطة إن فشل.
 
+نتيجة آخر محاولة تشغيل: [`docs/pos-production-smoke-test-result.md`](pos-production-smoke-test-result.md) — **NOT READY FOR LICENSING** إلى أن يُنفَّذ على جهاز Android حقيقي.
+
 كلمة مرور Backup للتجربة: اختر 6 أحرف على الأقل واحفظها. PIN المدير: 4 أرقام على الأقل.
 
 ---

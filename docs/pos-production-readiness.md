@@ -37,7 +37,7 @@ Standalone POS = SQLite/Drift + Local Business Logic
 | Restore safety | **PASS** | التحقق قبل DELETE؛ كلمة مرور خاطئة لا تمسح |
 | 10k invoices | **PASS** | `pos_scale_stress_test.dart` |
 | 100k items | **PASS** | نفس الاختبار؛ reports 55ms بعد تجميع SQL |
-| Smoke checklist | **PASS كوثيقة / FAIL كتنفيذ جهاز** | `docs/pos-production-smoke-test.md` — لم يُشغَّل على جهاز حقيقي هنا |
+| Smoke checklist | **PASS كوثيقة / FAIL كتنفيذ جهاز** | انظر `docs/pos-production-smoke-test-result.md` — 48 BLOCKED، **NOT READY FOR LICENSING** |
 | Standalone network isolation | **PASS** | `NetworkGuard` + اختبار عدم استيراد Dio في وحدات POS |
 
 `flutter analyze`: 0 errors (28 info سابقة). `flutter test`: **159 passed, 0 failed** (كان 141).
