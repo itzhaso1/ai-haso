@@ -23,6 +23,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use RuntimeException;
 
@@ -357,7 +358,7 @@ class InvoiceController extends FinanceBaseController
         $this->assertSameWorkspace($invoice->workspace_id);
         $request->validate([
             'attachments' => ['required', 'array', 'max:10'],
-            'attachments.*' => ['file', 'max:10240'],
+            'attachments.*' => ['file', 'max:10240', 'mimes:pdf,jpg,jpeg,png,webp'],
         ]);
 
         $this->invoiceService->storeAttachments($invoice, $request->file('attachments', []), (int) $request->user()?->id);
@@ -447,7 +448,7 @@ class InvoiceController extends FinanceBaseController
             'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'items_json' => ['required', 'string'],
             'attachments' => ['nullable', 'array', 'max:10'],
-            'attachments.*' => ['file', 'max:10240'],
+            'attachments.*' => ['file', 'max:10240', 'mimes:pdf,jpg,jpeg,png,webp'],
         ]);
 
         if (
@@ -455,20 +456,20 @@ class InvoiceController extends FinanceBaseController
             && empty($validated['customer_id'])
             && trim((string) ($validated['customer_name'] ?? '')) === ''
         ) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
+            throw ValidationException::withMessages([
                 'customer_name' => 'يرجى اختيار عميل مسجل أو إدخال اسم عميل نقدي.',
             ]);
         }
 
         if ($validated['type'] === 'purchase' && empty($validated['supplier_id'])) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
+            throw ValidationException::withMessages([
                 'supplier_id' => 'يرجى اختيار المورد لفاتورة الشراء.',
             ]);
         }
 
         $items = json_decode($validated['items_json'], true);
         if (! is_array($items) || $items === []) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
+            throw ValidationException::withMessages([
                 'items_json' => 'يجب إدخال عنصر واحد على الأقل في الفاتورة.',
             ]);
         }

@@ -83,6 +83,7 @@
                         <th class="px-3 py-3 text-right">الإجمالي</th>
                         <th class="px-3 py-3 text-right">الحالة</th>
                         <th class="px-3 py-3 text-right">الدفع</th>
+                        <th class="px-3 py-3 text-right"></th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
@@ -96,10 +97,19 @@
                             <td class="px-3 py-3">{{ number_format((float) $expense->total, 2) }} {{ $expense->currency }}</td>
                             <td class="px-3 py-3"><span class="rounded-full bg-slate-100 px-2 py-1 text-xs">{{ $expense->status }}</span></td>
                             <td class="px-3 py-3">{{ $expense->payment_method }}</td>
+                            <td class="px-3 py-3">
+                                @if($expense->status !== 'cancelled')
+                                    <form method="POST" action="{{ route('workspace.finance.expenses.destroy', $expense) }}" onsubmit="return confirm('عكس/إلغاء هذا المصروف؟')">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="text-xs text-rose-600 hover:underline">إلغاء</button>
+                                    </form>
+                                @endif
+                            </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="px-3 py-8 text-center text-slate-500">لا توجد مصروفات بعد.</td>
+                            <td colspan="9" class="px-3 py-8 text-center text-slate-500">لا توجد مصروفات بعد.</td>
                         </tr>
                     @endforelse
                 </tbody>

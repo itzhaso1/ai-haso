@@ -21,7 +21,8 @@ class DomainServiceFlowTest extends TestCase
     {
         config()->set('website.domain_markup_percent', 10);
 
-        $this->app->bind(DomainRegistrarInterface::class, fn () => new class implements DomainRegistrarInterface {
+        $this->app->bind(DomainRegistrarInterface::class, fn () => new class implements DomainRegistrarInterface
+        {
             public function checkAvailability(array $domains): array
             {
                 return [[
@@ -39,13 +40,40 @@ class DomainServiceFlowTest extends TestCase
                 ]];
             }
 
-            public function register(string $domain, int $years, array $contacts, array $options = []): array { return []; }
-            public function getInfo(string $domain): array { return []; }
-            public function getDomains(array $filters = []): array { return []; }
-            public function getDnsRecords(string $domain): array { return []; }
-            public function setDnsRecords(string $domain, array $records, ?string $emailType = null): array { return []; }
-            public function renew(string $domain, int $years, array $options = []): array { return []; }
-            public function getTldPricing(array $tlds, int $years = 1): array { return []; }
+            public function register(string $domain, int $years, array $contacts, array $options = []): array
+            {
+                return [];
+            }
+
+            public function getInfo(string $domain): array
+            {
+                return [];
+            }
+
+            public function getDomains(array $filters = []): array
+            {
+                return [];
+            }
+
+            public function getDnsRecords(string $domain): array
+            {
+                return [];
+            }
+
+            public function setDnsRecords(string $domain, array $records, ?string $emailType = null): array
+            {
+                return [];
+            }
+
+            public function renew(string $domain, int $years, array $options = []): array
+            {
+                return [];
+            }
+
+            public function getTldPricing(array $tlds, int $years = 1): array
+            {
+                return [];
+            }
         });
 
         /** @var DomainService $service */
@@ -158,7 +186,7 @@ class DomainServiceFlowTest extends TestCase
 
     private function enableWebsiteFeatures(Workspace $workspace): void
     {
-        foreach (['website_builder', 'custom_domains', 'public_booking'] as $feature) {
+        foreach (['website_builder', 'custom_domains', 'public_booking', 'appointments'] as $feature) {
             WorkspaceFeatureFlag::withoutGlobalScopes()->updateOrCreate(
                 ['workspace_id' => $workspace->id, 'feature_key' => $feature],
                 ['workspace_id' => $workspace->id, 'feature_key' => $feature, 'enabled' => true, 'source' => 'manual']

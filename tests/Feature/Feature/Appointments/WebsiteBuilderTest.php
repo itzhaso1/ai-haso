@@ -14,12 +14,19 @@ use App\Services\Website\TemplateService;
 use App\Services\Website\WebsiteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Notification;
 use RuntimeException;
 use Tests\TestCase;
 
 class WebsiteBuilderTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Notification::fake();
+    }
 
     public function test_workspace_owner_can_create_select_template_and_publish_website(): void
     {
@@ -101,7 +108,7 @@ class WebsiteBuilderTest extends TestCase
         ]);
         $pastResponse->assertStatus(422);
 
-        $futureStart = Carbon::now('Asia/Riyadh')->addDays(2)->setTime(11, 0, 0);
+        $futureStart = $this->nextOpenAppointmentSlot('Asia/Riyadh', 11, 0);
         $createResponse = $this->postJson(route('public.api.booking.store', $website->slug), [
             'service_id' => $service->id,
             'starts_at' => $futureStart->toDateTimeString(),

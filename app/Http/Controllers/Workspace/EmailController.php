@@ -441,6 +441,8 @@ class EmailController extends Controller
 
     public function syncAccount(EmailAccount $emailAccount): RedirectResponse
     {
+        abort_unless((int) $emailAccount->workspace_id === (int) $this->currentWorkspace()->id, 404);
+
         SyncEmailInboxJob::dispatch($emailAccount->id)->onQueue('emails');
 
         return redirect()
@@ -467,7 +469,7 @@ class EmailController extends Controller
                 Rule::exists('email_messages', 'id')->where(fn ($query) => $query->where('workspace_id', $workspace->id)),
             ],
             'attachments' => ['nullable', 'array', 'max:10'],
-            'attachments.*' => ['file', 'max:10240'],
+            'attachments.*' => ['file', 'max:10240', 'mimes:pdf,jpg,jpeg,png,webp'],
             'recipient_contact_ids' => ['nullable', 'array', 'max:200'],
             'recipient_contact_ids.*' => [
                 'nullable',
@@ -568,7 +570,7 @@ class EmailController extends Controller
                 'delivery_status' => 'sent',
                 'delivery_error' => null,
                 'delivered_at' => now(),
-                'message_id' => $emailLog->provider_message_id ?: $message->message_id,
+                'message_id' => $emailLog?->provider_message_id ?: $message->message_id,
             ])->save();
 
             return redirect()

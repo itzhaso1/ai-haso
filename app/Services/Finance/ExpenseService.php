@@ -8,9 +8,9 @@ use App\Models\Finance\FinanceJournalEntry;
 use App\Models\Finance\FinanceSupplier;
 use App\Models\Finance\FinanceTreasuryAccount;
 use App\Models\Workspace;
+use App\Support\Uploads\SecureUpload;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
 class ExpenseService
@@ -20,6 +20,7 @@ class ExpenseService
         private readonly AccountingService $accountingService,
         private readonly ChartOfAccountsService $chartOfAccountsService,
         private readonly FinancialPeriodGuardService $financialPeriodGuardService,
+        private readonly TreasuryBalanceService $treasuryBalanceService,
     ) {}
 
     /**
@@ -76,9 +77,13 @@ class ExpenseService
 
             $attachmentPath = null;
             if (($payload['attachment_file'] ?? null) instanceof UploadedFile) {
-                /** @var UploadedFile $attachment */
                 $attachment = $payload['attachment_file'];
-                $attachmentPath = $attachment->store('workspaces/'.$workspace->id.'/finance/expenses', 'public');
+                $attachmentPath = app(SecureUpload::class)->store(
+                    $attachment,
+                    'workspaces/'.$workspace->id.'/finance/expenses',
+                    'public',
+                    4096
+                );
             }
 
             $expense = FinanceExpense::withoutGlobalScopes()->create([
@@ -117,13 +122,88 @@ class ExpenseService
         });
     }
 
-    public function delete(FinanceExpense $expense): void
+    public function delete(FinanceExpense $expense, ?int $actorUserId = null): void
     {
-        if ($expense->attachment_path) {
-            Storage::disk('public')->delete($expense->attachment_path);
+        DB::transaction(function () use ($expense, $actorUserId): void {
+            $locked = FinanceExpense::withoutGlobalScopes()
+                ->whereKey($expense->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if ($locked->status === 'cancelled') {
+                return;
+            }
+
+            $originalStatus = (string) $locked->status;
+            $actorUserId = $actorUserId ?: (int) ($locked->created_by ?: 0);
+
+            if ($originalStatus !== 'draft') {
+                $this->reversePostedExpense($locked, $actorUserId, $originalStatus);
+            }
+
+            if ($locked->attachment_path) {
+                app(SecureUpload::class)->delete($locked->attachment_path);
+                $locked->attachment_path = null;
+            }
+
+            if ($originalStatus === 'draft') {
+                $locked->delete();
+
+                return;
+            }
+
+            $locked->update([
+                'status' => 'cancelled',
+                'attachment_path' => $locked->attachment_path,
+            ]);
+        });
+    }
+
+    private function reversePostedExpense(FinanceExpense $expense, int $actorUserId, string $originalStatus): void
+    {
+        $this->financialPeriodGuardService->assertDateIsOpen(
+            workspaceId: (int) $expense->workspace_id,
+            date: now()->toDateString(),
+            context: 'عكس مصروف'
+        );
+
+        $entry = FinanceJournalEntry::withoutGlobalScopes()
+            ->where('workspace_id', $expense->workspace_id)
+            ->where('type', 'expense')
+            ->where('reference_type', FinanceExpense::class)
+            ->where('reference_id', $expense->id)
+            ->whereNull('reverses_entry_id')
+            ->latest('id')
+            ->first();
+
+        if ($entry) {
+            $alreadyReversed = FinanceJournalEntry::withoutGlobalScopes()
+                ->where('workspace_id', $expense->workspace_id)
+                ->where('reverses_entry_id', $entry->id)
+                ->exists();
+
+            if (! $alreadyReversed && $entry->status !== 'reversed') {
+                $this->accountingService->reverseEntry(
+                    entry: $entry,
+                    type: 'expense_reversal',
+                    actorUserId: $actorUserId > 0 ? $actorUserId : (int) ($expense->created_by ?: 0),
+                    description: 'عكس قيد المصروف '.$expense->expense_number,
+                    referenceType: FinanceExpense::class,
+                    referenceId: $expense->id,
+                );
+            }
         }
 
-        $expense->delete();
+        if ($originalStatus === 'paid' && $expense->payment_method !== 'credit' && $expense->treasury_account_id) {
+            $treasury = FinanceTreasuryAccount::withoutGlobalScopes()
+                ->where('workspace_id', $expense->workspace_id)
+                ->whereKey($expense->treasury_account_id)
+                ->lockForUpdate()
+                ->first();
+            if ($treasury) {
+                $this->treasuryBalanceService->adjust($treasury, (float) $expense->total);
+            }
+        }
     }
 
     private function postExpenseEntry(
@@ -204,9 +284,7 @@ class ExpenseService
         );
 
         if ($creditAccount->code !== '2000' && $treasury) {
-            $treasury->update([
-                'current_balance' => round((float) $treasury->current_balance - (float) $expense->total, 2),
-            ]);
+            $this->treasuryBalanceService->adjust($treasury, -1 * (float) $expense->total);
         }
     }
 

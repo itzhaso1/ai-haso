@@ -60,7 +60,7 @@ class WebsiteTenantIsolationTest extends TestCase
 
     private function enableWebsiteFeatures(Workspace $workspace): void
     {
-        foreach (['website_builder', 'custom_domains', 'public_booking'] as $feature) {
+        foreach (['website_builder', 'custom_domains', 'public_booking', 'appointments'] as $feature) {
             WorkspaceFeatureFlag::withoutGlobalScopes()->updateOrCreate(
                 ['workspace_id' => $workspace->id, 'feature_key' => $feature],
                 ['workspace_id' => $workspace->id, 'feature_key' => $feature, 'enabled' => true, 'source' => 'manual']

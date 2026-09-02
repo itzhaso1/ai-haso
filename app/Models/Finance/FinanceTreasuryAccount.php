@@ -5,6 +5,7 @@ namespace App\Models\Finance;
 use App\Models\Concerns\BelongsToWorkspace;
 use App\Models\WorkspaceScopedModel;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -24,7 +25,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 ])]
 class FinanceTreasuryAccount extends WorkspaceScopedModel
 {
-    use BelongsToWorkspace;
+    use BelongsToWorkspace, HasFactory;
 
     protected function casts(): array
     {

@@ -10,6 +10,8 @@ use App\Http\Requests\ApiAuth\VerifyOtpRequest;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Auth\AuthenticationService;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Laravel\Sanctum\NewAccessToken;
@@ -46,23 +48,35 @@ class AuthController extends Controller
 
     public function requestOtp(RequestOtpRequest $request): JsonResponse
     {
-        $otp = $this->authenticationService->requestOtp(
-            $request->string('phone')->toString()
-        );
+        try {
+            $this->authenticationService->requestOtp(
+                $request->string('phone')->toString()
+            );
+        } catch (\RuntimeException) {
+            return response()->json([
+                'message' => 'Too many verification requests. Try again later.',
+            ], 429);
+        }
 
         return response()->json([
-            'message' => 'OTP has been issued.',
-            'data' => app()->isProduction() ? null : ['otp' => $otp],
+            'message' => 'If the phone number is registered, a verification code will be sent.',
+            'data' => null,
         ]);
     }
 
     public function verifyOtp(VerifyOtpRequest $request): JsonResponse
     {
-        $payload = $this->authenticationService->loginWithOtp(
-            $request->string('phone')->toString(),
-            $request->string('otp')->toString(),
-            $request->integer('workspace_id'),
-        );
+        try {
+            $payload = $this->authenticationService->loginWithOtp(
+                $request->string('phone')->toString(),
+                $request->string('otp')->toString(),
+                $request->filled('workspace_id') ? $request->integer('workspace_id') : null,
+            );
+        } catch (AuthenticationException|ModelNotFoundException) {
+            return response()->json([
+                'message' => 'Invalid or expired verification code.',
+            ], 401);
+        }
 
         return response()->json([
             'message' => 'OTP verified.',

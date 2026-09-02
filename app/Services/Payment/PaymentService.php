@@ -170,6 +170,7 @@ class PaymentService
             'platform_subscription' => 'platform_revenue',
             'platform_commerce' => 'platform_commerce',
             'merchant_booking', 'merchant_order' => 'merchant_gmv',
+            'local_sandbox' => 'local_sandbox',
             default => str_starts_with($paymentContext, 'platform_')
                 ? 'platform_commerce'
                 : 'merchant_gmv',

@@ -122,19 +122,21 @@ Route::middleware([
     Route::get('/plans', [PlanController::class, 'index']);
     Route::get('/branding', [BrandingController::class, 'show']);
 
-    Route::get('/appointments/today', [AppointmentController::class, 'today']);
-    Route::get('/appointments/upcoming', [AppointmentController::class, 'upcoming']);
-    Route::get('/appointments/{booking}', [AppointmentController::class, 'show']);
-    Route::post('/appointments/{booking}/confirm', [AppointmentController::class, 'confirm'])
-        ->middleware('throttle:mobile-write');
-    Route::post('/appointments/{booking}/cancel', [AppointmentController::class, 'cancel'])
-        ->middleware('throttle:mobile-write');
-    Route::post('/appointments/{booking}/reschedule', [AppointmentController::class, 'reschedule'])
-        ->middleware('throttle:mobile-write');
+    Route::middleware('workspace.feature:appointments')->group(function (): void {
+        Route::get('/appointments/today', [AppointmentController::class, 'today']);
+        Route::get('/appointments/upcoming', [AppointmentController::class, 'upcoming']);
+        Route::get('/appointments/{booking}', [AppointmentController::class, 'show']);
+        Route::post('/appointments/{booking}/confirm', [AppointmentController::class, 'confirm'])
+            ->middleware('throttle:mobile-write');
+        Route::post('/appointments/{booking}/cancel', [AppointmentController::class, 'cancel'])
+            ->middleware('throttle:mobile-write');
+        Route::post('/appointments/{booking}/reschedule', [AppointmentController::class, 'reschedule'])
+            ->middleware('throttle:mobile-write');
+        Route::get('/customers/{customer}/appointments', [CustomerController::class, 'appointments']);
+    });
 
     Route::get('/customers/{customer}', [CustomerController::class, 'show']);
     Route::get('/customers/{customer}/conversations', [CustomerController::class, 'conversations']);
-    Route::get('/customers/{customer}/appointments', [CustomerController::class, 'appointments']);
 
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/{id}/read', [NotificationController::class, 'markRead']);

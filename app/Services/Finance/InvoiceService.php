@@ -7,13 +7,14 @@ use App\Models\Finance\FinanceInvoice;
 use App\Models\Finance\FinanceInvoiceAttachment;
 use App\Models\Finance\FinanceInvoiceItem;
 use App\Models\Finance\FinanceJournalEntry;
-use App\Models\Finance\FinanceInvoicePayment;
 use App\Models\Finance\FinanceSetting;
 use App\Models\Finance\FinanceSupplier;
 use App\Models\Product;
 use App\Models\Workspace;
+use App\Support\Uploads\SecureUpload;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
 class InvoiceService
@@ -148,6 +149,9 @@ class InvoiceService
                 $attributes['contract_id'] = isset($payload['contract_id']) ? (int) $payload['contract_id'] : null;
                 if (isset($payload['billing_schedule_id'])) {
                     $attributes['billing_schedule_id'] = (int) $payload['billing_schedule_id'];
+                }
+                if (Schema::hasColumn('finance_invoices', 'billing_occurrence_key') && isset($payload['billing_occurrence_key'])) {
+                    $attributes['billing_occurrence_key'] = (string) $payload['billing_occurrence_key'];
                 }
             }
 
@@ -707,11 +711,16 @@ class InvoiceService
     private function storeUploadedAttachments(FinanceInvoice $invoice, array $uploadedFiles, int $actorUserId): void
     {
         foreach ($uploadedFiles as $file) {
-            if (! is_object($file) || ! method_exists($file, 'store')) {
+            if (! $file instanceof UploadedFile) {
                 continue;
             }
 
-            $storedPath = $file->store('workspaces/'.$invoice->workspace_id.'/finance/invoices/'.$invoice->id, 'public');
+            $storedPath = app(SecureUpload::class)->store(
+                $file,
+                'workspaces/'.$invoice->workspace_id.'/finance/invoices/'.$invoice->id,
+                'public',
+                10240
+            );
             FinanceInvoiceAttachment::withoutGlobalScopes()->create([
                 'workspace_id' => $invoice->workspace_id,
                 'invoice_id' => $invoice->id,

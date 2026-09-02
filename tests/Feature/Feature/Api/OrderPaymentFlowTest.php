@@ -11,11 +11,18 @@ use App\Models\Workspace;
 use Database\Seeders\FoundationSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class OrderPaymentFlowTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Notification::fake();
+    }
 
     public function test_order_creation_and_payment_webhook_update_statuses(): void
     {

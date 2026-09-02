@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Inventory\AdjustInventoryRequest;
 use App\Models\InventoryMovement;
 use App\Services\Inventory\InventoryService;
+use App\Support\Authorization\WorkspaceAccess;
+use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -13,10 +15,14 @@ class InventoryController extends Controller
 {
     public function __construct(
         private readonly InventoryService $inventoryService,
+        private readonly WorkspaceAccess $workspaceAccess,
+        private readonly WorkspaceContext $workspaceContext,
     ) {}
 
     public function index(Request $request): JsonResponse
     {
+        $this->authorizeView($request);
+
         $movements = InventoryMovement::query()
             ->with(['product', 'variant', 'user'])
             ->when($request->filled('product_id'), fn ($query) => $query->where('product_id', $request->integer('product_id')))
@@ -41,5 +47,13 @@ class InventoryController extends Controller
         );
 
         return response()->json(['data' => $movement], 201);
+    }
+
+    private function authorizeView(Request $request): void
+    {
+        $user = $request->user();
+        $workspace = $this->workspaceContext->workspace();
+        abort_unless($user && $workspace, 403);
+        abort_unless($this->workspaceAccess->canViewInventory($user, $workspace), 403);
     }
 }

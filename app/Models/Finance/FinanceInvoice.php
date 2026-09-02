@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\WorkspaceScopedModel;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -21,6 +22,7 @@ use Illuminate\Support\Facades\Schema;
     'supplier_id',
     'contract_id',
     'billing_schedule_id',
+    'billing_occurrence_key',
     'invoice_number',
     'type',
     'status',
@@ -57,7 +59,7 @@ use Illuminate\Support\Facades\Schema;
 ])]
 class FinanceInvoice extends WorkspaceScopedModel
 {
-    use BelongsToWorkspace, SoftDeletes;
+    use BelongsToWorkspace, HasFactory, SoftDeletes;
 
     /** @var array<string,bool> */
     private static array $schemaFlags = [];

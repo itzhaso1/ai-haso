@@ -13,11 +13,18 @@ use App\Services\Website\TemplateService;
 use App\Services\Website\WebsiteService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class PublicBookingApiTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Notification::fake();
+    }
 
     public function test_public_booking_api_creates_real_booking_for_published_website(): void
     {

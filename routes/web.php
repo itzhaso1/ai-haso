@@ -1,43 +1,43 @@
 <?php
 
 use App\Http\Controllers\AssistantController;
-use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Auth\PhoneOtpController;
 use App\Http\Controllers\Auth\SocialLoginController;
+use App\Http\Controllers\Download\DigitalDownloadController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicSite\PublicBookingApiController;
 use App\Http\Controllers\PublicSite\PublicWebsiteController;
 use App\Http\Controllers\Webhook\ResendWebhookController;
 use App\Http\Controllers\Webhook\WhatsAppWebhookController;
-use App\Http\Controllers\WorkspaceSelectionController;
 use App\Http\Controllers\Workspace\AiSettingController;
 use App\Http\Controllers\Workspace\AnalyticsController as WorkspaceAnalyticsController;
 use App\Http\Controllers\Workspace\ApiKeyController as WorkspaceApiKeyController;
 use App\Http\Controllers\Workspace\Appointments\BookingController as AppointmentsBookingController;
-use App\Http\Controllers\Workspace\Appointments\HolidayController as AppointmentsHolidayController;
-use App\Http\Controllers\Workspace\Appointments\CustomerProfileController as AppointmentsCustomerProfileController;
 use App\Http\Controllers\Workspace\Appointments\CustomerPortalController as AppointmentsCustomerPortalController;
+use App\Http\Controllers\Workspace\Appointments\CustomerProfileController as AppointmentsCustomerProfileController;
 use App\Http\Controllers\Workspace\Appointments\DashboardController as AppointmentsDashboardController;
 use App\Http\Controllers\Workspace\Appointments\DomainController as AppointmentsDomainController;
+use App\Http\Controllers\Workspace\Appointments\HolidayController as AppointmentsHolidayController;
 use App\Http\Controllers\Workspace\Appointments\ModulePageController as AppointmentsModulePageController;
 use App\Http\Controllers\Workspace\Appointments\RequestController as AppointmentsRequestController;
 use App\Http\Controllers\Workspace\Appointments\WebsiteController as AppointmentsWebsiteController;
 use App\Http\Controllers\Workspace\CategoryController;
 use App\Http\Controllers\Workspace\ChannelController;
-use App\Http\Controllers\Workspace\ConversationController;
 use App\Http\Controllers\Workspace\ContractController as WorkspaceContractController;
+use App\Http\Controllers\Workspace\ConversationController;
 use App\Http\Controllers\Workspace\CustomerController;
 use App\Http\Controllers\Workspace\DashboardController as WorkspaceDashboardController;
-use App\Http\Controllers\Workspace\EmployeeInvitationController;
 use App\Http\Controllers\Workspace\EmailController;
+use App\Http\Controllers\Workspace\EmployeeInvitationController;
 use App\Http\Controllers\Workspace\Finance\AccountingController as FinanceAccountingController;
 use App\Http\Controllers\Workspace\Finance\BillingDashboardController as FinanceBillingDashboardController;
 use App\Http\Controllers\Workspace\Finance\BillingScheduleController as FinanceBillingScheduleController;
 use App\Http\Controllers\Workspace\Finance\CreditNoteController as FinanceCreditNoteController;
 use App\Http\Controllers\Workspace\Finance\CustomerStatementController as FinanceCustomerStatementController;
 use App\Http\Controllers\Workspace\Finance\DashboardController as FinanceDashboardController;
-use App\Http\Controllers\Workspace\Finance\FinanceEmployeeController as FinanceEmployeeController;
 use App\Http\Controllers\Workspace\Finance\ExpenseController as FinanceExpenseController;
+use App\Http\Controllers\Workspace\Finance\FinanceEmployeeController;
 use App\Http\Controllers\Workspace\Finance\FiscalYearController as FinanceFiscalYearController;
 use App\Http\Controllers\Workspace\Finance\InvoiceController as FinanceInvoiceController;
 use App\Http\Controllers\Workspace\Finance\ModulePageController as FinanceModulePageController;
@@ -49,27 +49,31 @@ use App\Http\Controllers\Workspace\Finance\SalesController as FinanceSalesContro
 use App\Http\Controllers\Workspace\Finance\SettingsController as FinanceSettingsController;
 use App\Http\Controllers\Workspace\Finance\SupplierController as FinanceSupplierController;
 use App\Http\Controllers\Workspace\InventoryController;
+use App\Http\Controllers\Workspace\MerchantPaymentController;
 use App\Http\Controllers\Workspace\OrderController;
 use App\Http\Controllers\Workspace\PaymentController;
 use App\Http\Controllers\Workspace\PaymentGatewayController;
-use App\Http\Controllers\Workspace\MerchantPaymentController;
 use App\Http\Controllers\Workspace\Pos\CashierController as PosCashierController;
-use App\Http\Controllers\Workspace\Pos\PosCartController as PosCartController;
-use App\Http\Controllers\Workspace\Pos\PosCashierInvoiceController as PosCashierInvoiceController;
 use App\Http\Controllers\Workspace\Pos\CustomerMenuController as PosCustomerMenuController;
-use App\Http\Controllers\Workspace\Pos\PosItemCategoryController as PosItemCategoryController;
-use App\Http\Controllers\Workspace\Pos\PosKitchenController as PosKitchenController;
-use App\Http\Controllers\Workspace\Pos\PosMenuItemController as PosMenuItemController;
-use App\Http\Controllers\Workspace\Pos\PosMenuPageController as PosMenuPageController;
-use App\Http\Controllers\Workspace\Pos\PosOrderController as PosOrderController;
-use App\Http\Controllers\Workspace\Pos\PosReportController as PosReportController;
-use App\Http\Controllers\Workspace\Pos\PosReturnController as PosReturnController;
-use App\Http\Controllers\Workspace\Pos\PosSettingsController as PosSettingsController;
+use App\Http\Controllers\Workspace\Pos\PosCartController;
+use App\Http\Controllers\Workspace\Pos\PosCashierInvoiceController;
+use App\Http\Controllers\Workspace\Pos\PosItemCategoryController;
+use App\Http\Controllers\Workspace\Pos\PosKitchenController;
+use App\Http\Controllers\Workspace\Pos\PosMenuItemController;
+use App\Http\Controllers\Workspace\Pos\PosMenuPageController;
+use App\Http\Controllers\Workspace\Pos\PosOrderController;
+use App\Http\Controllers\Workspace\Pos\PosReportController;
+use App\Http\Controllers\Workspace\Pos\PosReturnController;
+use App\Http\Controllers\Workspace\Pos\PosSettingsController;
 use App\Http\Controllers\Workspace\Pos\TableController as PosTableController;
-use App\Http\Controllers\Download\DigitalDownloadController;
 use App\Http\Controllers\Workspace\ProductController;
 use App\Http\Controllers\Workspace\SubscriptionController;
 use App\Http\Controllers\Workspace\WhatsAppAccountController;
+use App\Http\Controllers\WorkspaceSelectionController;
+use App\Models\Plan;
+use App\Services\Domain\DomainName;
+use App\Services\Website\PublicWebsiteService;
+use App\Services\Website\WebsiteResolverService;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 
@@ -77,25 +81,25 @@ $publicWebsiteRateLimiter = 'throttle:'.(string) config('website.public_rate_lim
 
 Route::get('/', function () {
     if (Schema::hasTable('websites') && Schema::hasTable('website_domains')) {
-        $website = app(\App\Services\Website\WebsiteResolverService::class)
+        $website = app(WebsiteResolverService::class)
             ->resolveByHost((string) request()->getHost());
         if ($website && $website->status === 'published') {
             $primary = $website->primaryDomain()->withoutGlobalScopes()->first();
             if ($primary && ! str_contains((string) request()->getHost(), 'localhost')) {
-                $currentHost = \App\Services\Domain\DomainName::normalize((string) request()->getHost());
+                $currentHost = DomainName::normalize((string) request()->getHost());
                 if ($currentHost !== '' && $currentHost !== (string) $primary->normalized_domain) {
                     return redirect()->to('https://'.$primary->normalized_domain.request()->getRequestUri(), 301);
                 }
             }
 
-            return view('public.website.show', app(\App\Services\Website\PublicWebsiteService::class)
+            return view('public.website.show', app(PublicWebsiteService::class)
                 ->buildWebsiteViewData($website, 'home'));
         }
     }
 
     $plans = collect();
     if (Schema::hasTable('plans')) {
-        $plansQuery = \App\Models\Plan::query()->where('is_active', true);
+        $plansQuery = Plan::query()->where('is_active', true);
 
         if (Schema::hasColumn('plans', 'is_public')) {
             $plansQuery->where('is_public', true);
@@ -191,13 +195,17 @@ Route::middleware(['public.website.resolve', $publicWebsiteRateLimiter])
                 ->name('public.api.booking.store');
             Route::get('/booking/{reference}', [PublicBookingApiController::class, 'showBooking'])->name('public.api.booking.show');
         });
-});
+    });
 
 Route::middleware(['guest'])->group(function (): void {
     Route::get('/otp/login', [PhoneOtpController::class, 'create'])->name('otp.login');
-    Route::post('/otp/request', [PhoneOtpController::class, 'requestOtp'])->name('otp.request');
+    Route::post('/otp/request', [PhoneOtpController::class, 'requestOtp'])
+        ->middleware('throttle:otp-request')
+        ->name('otp.request');
     Route::get('/otp/verify', [PhoneOtpController::class, 'verifyForm'])->name('otp.verify.form');
-    Route::post('/otp/verify', [PhoneOtpController::class, 'verify'])->name('otp.verify');
+    Route::post('/otp/verify', [PhoneOtpController::class, 'verify'])
+        ->middleware('throttle:otp-verify')
+        ->name('otp.verify');
 
     Route::get('/auth/{provider}/redirect', [SocialLoginController::class, 'redirect'])
         ->whereIn('provider', ['google', 'facebook'])
@@ -379,6 +387,7 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
 
             Route::get('expenses', [FinanceExpenseController::class, 'index'])->name('expenses.index');
             Route::post('expenses', [FinanceExpenseController::class, 'store'])->name('expenses.store');
+            Route::delete('expenses/{expense}', [FinanceExpenseController::class, 'destroy'])->name('expenses.destroy');
 
             Route::get('accounting', [FinanceAccountingController::class, 'dashboard'])->name('accounting.dashboard');
             Route::get('reports', [FinanceReportController::class, 'index'])->name('reports.index');
@@ -437,7 +446,7 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
             Route::get('cashbox', [FinanceModulePageController::class, 'cashbox'])->name('cashbox.index');
         });
 
-        Route::prefix('appointments')->as('appointments.')->group(function (): void {
+        Route::middleware('workspace.feature:appointments')->prefix('appointments')->as('appointments.')->group(function (): void {
             Route::get('/', [AppointmentsModulePageController::class, 'overview'])->name('dashboard');
             Route::get('overview', [AppointmentsModulePageController::class, 'overview'])->name('overview');
             Route::get('bookings', [AppointmentsModulePageController::class, 'bookings'])->name('bookings.index');

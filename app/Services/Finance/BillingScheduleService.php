@@ -7,8 +7,10 @@ use App\Models\Finance\FinanceBillingSchedule;
 use App\Models\Finance\FinanceInvoice;
 use App\Models\Workspace;
 use App\Support\Tenancy\WorkspaceContext;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
 class BillingScheduleService
@@ -154,6 +156,23 @@ class BillingScheduleService
                 return null;
             }
 
+            $occurrenceDate = $locked->next_run_on?->toDateString() ?? $onDate->toDateString();
+            $occurrenceKey = $this->occurrenceKey($locked, $occurrenceDate);
+
+            if (Schema::hasColumn('finance_invoices', 'billing_occurrence_key')) {
+                $existing = FinanceInvoice::withoutGlobalScopes()
+                    ->where('workspace_id', $locked->workspace_id)
+                    ->where('billing_schedule_id', $locked->id)
+                    ->where('billing_occurrence_key', $occurrenceKey)
+                    ->first();
+
+                if ($existing) {
+                    $this->advanceScheduleIfStillDue($locked, $onDate, $occurrenceDate);
+
+                    return $existing;
+                }
+            }
+
             $workspace = Workspace::query()->find($locked->workspace_id);
             if (! $workspace) {
                 return null;
@@ -164,40 +183,51 @@ class BillingScheduleService
 
             try {
 
-            $items = is_array($locked->item_snapshot) && $locked->item_snapshot !== []
-                ? $locked->item_snapshot
-                : [[
-                    'product_name' => $locked->title,
-                    'description' => $locked->notes,
-                    'quantity' => 1,
-                    'unit_price' => (float) $locked->amount,
-                    'discount' => 0,
-                    'tax_rate' => 15,
-                    'tax_type' => 'standard',
-                ]];
+                $items = is_array($locked->item_snapshot) && $locked->item_snapshot !== []
+                    ? $locked->item_snapshot
+                    : [[
+                        'product_name' => $locked->title,
+                        'description' => $locked->notes,
+                        'quantity' => 1,
+                        'unit_price' => (float) $locked->amount,
+                        'discount' => 0,
+                        'tax_rate' => 15,
+                        'tax_type' => 'standard',
+                    ]];
 
-            $invoice = $this->invoiceService->create($workspace, [
-                'type' => $locked->invoice_type ?: 'sales',
-                'customer_id' => $locked->customer_id,
-                'contract_id' => $locked->contract_id,
-                'billing_schedule_id' => $locked->id,
-                'issue_date' => $onDate->toDateString(),
-                'due_date' => $onDate->copy()->addDays(14)->toDateString(),
-                'currency' => $locked->currency,
-                'invoice_status' => $locked->auto_issue ? 'issued' : 'draft',
-                'notes' => 'فاتورة مجدولة: '.$locked->title,
-                'items' => $items,
-            ], (int) ($locked->created_by ?: $workspace->owner_user_id));
+                try {
+                    $invoice = $this->invoiceService->create($workspace, [
+                        'type' => $locked->invoice_type ?: 'sales',
+                        'customer_id' => $locked->customer_id,
+                        'contract_id' => $locked->contract_id,
+                        'billing_schedule_id' => $locked->id,
+                        'billing_occurrence_key' => $occurrenceKey,
+                        'issue_date' => $onDate->toDateString(),
+                        'due_date' => $onDate->copy()->addDays(14)->toDateString(),
+                        'currency' => $locked->currency,
+                        'invoice_status' => $locked->auto_issue ? 'issued' : 'draft',
+                        'notes' => 'فاتورة مجدولة: '.$locked->title,
+                        'items' => $items,
+                    ], (int) ($locked->created_by ?: $workspace->owner_user_id));
+                } catch (UniqueConstraintViolationException) {
+                    $existing = FinanceInvoice::withoutGlobalScopes()
+                        ->where('workspace_id', $locked->workspace_id)
+                        ->where('billing_schedule_id', $locked->id)
+                        ->where('billing_occurrence_key', $occurrenceKey)
+                        ->first();
 
-            $generatedCount = (int) $locked->generated_count + 1;
-            $completed = $locked->total_occurrences !== null && $generatedCount >= (int) $locked->total_occurrences;
-            $locked->update([
-                'generated_count' => $generatedCount,
-                'next_run_on' => $completed ? null : $this->nextRunDate($locked, $onDate)->toDateString(),
-                'status' => $completed ? FinanceBillingSchedule::STATUS_COMPLETED : FinanceBillingSchedule::STATUS_ACTIVE,
-            ]);
+                    if ($existing) {
+                        $this->advanceScheduleIfStillDue($locked, $onDate, $occurrenceDate);
 
-            return $invoice;
+                        return $existing;
+                    }
+
+                    throw new RuntimeException('تعذر توليد فاتورة الجدول بسبب تكرار عملية متزامنة.');
+                }
+
+                $this->advanceScheduleIfStillDue($locked, $onDate, $occurrenceDate);
+
+                return $invoice;
             } finally {
                 $context->clear();
             }
@@ -288,5 +318,26 @@ class BillingScheduleService
         }
 
         return $items;
+    }
+
+    private function occurrenceKey(FinanceBillingSchedule $schedule, string $occurrenceDate): string
+    {
+        return $schedule->id.'|'.$occurrenceDate;
+    }
+
+    private function advanceScheduleIfStillDue(FinanceBillingSchedule $locked, Carbon $onDate, string $occurrenceDate): void
+    {
+        $currentNext = $locked->next_run_on?->toDateString();
+        if ($currentNext !== null && $currentNext !== $occurrenceDate) {
+            return;
+        }
+
+        $generatedCount = (int) $locked->generated_count + 1;
+        $completed = $locked->total_occurrences !== null && $generatedCount >= (int) $locked->total_occurrences;
+        $locked->update([
+            'generated_count' => $generatedCount,
+            'next_run_on' => $completed ? null : $this->nextRunDate($locked, $onDate)->toDateString(),
+            'status' => $completed ? FinanceBillingSchedule::STATUS_COMPLETED : FinanceBillingSchedule::STATUS_ACTIVE,
+        ]);
     }
 }

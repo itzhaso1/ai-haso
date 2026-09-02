@@ -2,29 +2,48 @@
 
 namespace App\Http\Requests\Inventory;
 
+use App\Support\Authorization\WorkspaceAccess;
+use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class AdjustInventoryRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     */
     public function authorize(): bool
     {
-        return true;
+        $user = $this->user();
+        $workspace = app(WorkspaceContext::class)->workspace();
+
+        if (! $user || ! $workspace) {
+            return false;
+        }
+
+        return app(WorkspaceAccess::class)->canManageInventory($user, $workspace);
     }
 
     /**
-     * Get the validation rules that apply to the request.
-     *
      * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
+        $workspaceId = app(WorkspaceContext::class)->workspaceId();
+
         return [
-            'product_id' => ['required', 'integer', 'exists:products,id'],
-            'product_variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
+            'product_id' => [
+                'required',
+                'integer',
+                Rule::exists('products', 'id')->where(
+                    fn ($query) => $query->where('workspace_id', $workspaceId)
+                ),
+            ],
+            'product_variant_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('product_variants', 'id')->where(
+                    fn ($query) => $query->where('workspace_id', $workspaceId)
+                ),
+            ],
             'type' => ['required', 'in:add,remove,reserve,release,adjustment,return'],
             'quantity' => ['required', 'integer', 'min:1'],
             'reference_type' => ['nullable', 'string', 'max:64'],

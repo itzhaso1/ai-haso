@@ -65,6 +65,44 @@ class EmployeeInvitationAcceptanceTest extends TestCase
         ]);
     }
 
+    public function test_invitation_role_outside_membership_enum_is_persisted_safely(): void
+    {
+        $this->seed(FoundationSeeder::class);
+
+        $owner = User::factory()->create();
+        $workspace = Workspace::factory()->create([
+            'owner_user_id' => $owner->id,
+            'type' => 'company',
+        ]);
+        $workspace->users()->attach($owner->id, [
+            'membership_role' => 'owner',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $invitee = User::factory()->create(['email' => 'front@example.com']);
+        $invitation = EmployeeInvitation::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'invited_by' => $owner->id,
+            'email' => 'front@example.com',
+            'role' => 'receptionist',
+            'status' => 'pending',
+            'token' => 'token-accept-receptionist',
+            'expires_at' => now()->addDays(3),
+        ]);
+
+        $this->withToken($invitee->createToken('api')->plainTextToken)
+            ->postJson('/api/employee-invitations/'.$invitation->token.'/accept')
+            ->assertOk()
+            ->assertJsonPath('data.membership.membership_role', 'agent');
+
+        $this->assertDatabaseHas('workspace_users', [
+            'workspace_id' => $workspace->id,
+            'user_id' => $invitee->id,
+            'membership_role' => 'agent',
+        ]);
+    }
+
     public function test_user_cannot_accept_invitation_for_another_email(): void
     {
         $this->seed(FoundationSeeder::class);

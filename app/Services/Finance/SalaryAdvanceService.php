@@ -2,13 +2,14 @@
 
 namespace App\Services\Finance;
 
+use App\Models\Finance\FinanceAccount;
 use App\Models\Finance\FinanceEmployee;
+use App\Models\Finance\FinanceJournalEntry;
 use App\Models\Finance\FinanceSalaryAdvance;
 use App\Models\Finance\FinanceSalaryAdvanceRepayment;
-use App\Models\Finance\FinanceJournalEntry;
 use App\Models\Finance\FinanceTreasuryAccount;
-use App\Models\WorkspaceUser;
 use App\Models\Workspace;
+use App\Models\WorkspaceUser;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -18,6 +19,7 @@ class SalaryAdvanceService
         private readonly AccountingService $accountingService,
         private readonly ChartOfAccountsService $chartOfAccountsService,
         private readonly FinancialPeriodGuardService $financialPeriodGuardService,
+        private readonly TreasuryBalanceService $treasuryBalanceService,
     ) {}
 
     /**
@@ -116,9 +118,7 @@ class SalaryAdvanceService
                 'notes' => trim((string) ($advance->notes ?: '')).($entry->id ? "\nJE#{$entry->entry_number}" : ''),
             ]);
 
-            $treasuryAccount->update([
-                'current_balance' => round((float) $treasuryAccount->current_balance - $amount, 2),
-            ]);
+            $this->treasuryBalanceService->adjust($treasuryAccount, -1 * $amount);
 
             return $advance->refresh();
         });
@@ -182,7 +182,7 @@ class SalaryAdvanceService
                 'payment_date' => $paymentDate,
                 'amount' => $amount,
                 'method' => $method,
-                'status' => 'draft',
+                'status' => 'posted',
                 'notes' => $payload['notes'] ?? null,
                 'posted_journal_entry_id' => null,
                 'created_by' => $actorUserId,
@@ -258,9 +258,7 @@ class SalaryAdvanceService
             ]);
 
             if ($treasuryAccount) {
-                $treasuryAccount->update([
-                    'current_balance' => round((float) $treasuryAccount->current_balance + $amount, 2),
-                ]);
+                $this->treasuryBalanceService->adjust($treasuryAccount, $amount);
             }
 
             return $repayment;
@@ -268,7 +266,7 @@ class SalaryAdvanceService
     }
 
     /**
-     * @return array{0:FinanceTreasuryAccount,1:\App\Models\Finance\FinanceAccount}
+     * @return array{0:FinanceTreasuryAccount,1:FinanceAccount}
      */
     private function resolveTreasuryAccount(int $treasuryAccountId, int $workspaceId): array
     {
