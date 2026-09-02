@@ -1,4 +1,4 @@
-@extends('layouts.financial', ['pageTitle' => 'إنشاء فاتورة'])
+@extends('layouts.financial', ['pageTitle' => $pageTitle ?? 'منشئ الفواتير'])
 
 @section('content')
     @php
@@ -6,19 +6,26 @@
             'draft' => 'مسودة',
             'issued' => 'معتمدة',
         ];
-        $rawType = old('type', request('type', 'sales'));
+        $invoice = $invoice ?? new \App\Models\Finance\FinanceInvoice(['currency' => 'SAR', 'type' => 'sales']);
+        $formAction = $formAction ?? route('workspace.finance.invoices.store');
+        $formMethod = $formMethod ?? 'POST';
+        $rawType = old('type', request('type', $invoice->type ?? 'sales'));
         $defaultType = in_array($rawType, ['sales', 'purchase'], true) ? $rawType : 'sales';
-        $rawInvoiceStatus = old('invoice_status', old('status', 'issued'));
-        $defaultInvoiceStatus = in_array($rawInvoiceStatus, ['draft', 'issued'], true) ? $rawInvoiceStatus : 'issued';
+        $rawInvoiceStatus = old('invoice_status', old('status', $invoice->invoice_status ?? 'draft'));
+        $defaultInvoiceStatus = in_array($rawInvoiceStatus, ['draft', 'issued'], true) ? $rawInvoiceStatus : 'draft';
+        $existingItems = old('items', $invoice->relationLoaded('items') || $invoice->exists ? $invoice->items : []);
     @endphp
     <div x-data="financeInvoiceBuilder('{{ $defaultType }}')" class="space-y-4">
         <div class="flex items-center justify-between">
-            <h2 class="text-xl font-bold text-slate-900">منشئ الفواتير</h2>
+            <h2 class="text-xl font-bold text-slate-900">{{ $pageTitle ?? 'منشئ الفواتير' }}</h2>
             <a href="{{ route('workspace.finance.invoices.index') }}" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">رجوع</a>
         </div>
 
-        <form method="POST" action="{{ route('workspace.finance.invoices.store') }}" class="space-y-4">
+        <form method="POST" action="{{ $formAction }}" enctype="multipart/form-data" class="space-y-4">
             @csrf
+            @if(strtoupper($formMethod) !== 'POST')
+                @method($formMethod)
+            @endif
 
             <div class="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-3">
                 <div>
@@ -30,7 +37,7 @@
                 </div>
                 <div>
                     <label class="mb-1 block text-xs font-semibold text-slate-600">رقم الفاتورة (اختياري)</label>
-                    <input type="text" name="invoice_number" value="{{ old('invoice_number') }}" class="w-full rounded-lg border-slate-300 text-sm" placeholder="INV-000001">
+                    <input type="text" name="invoice_number" value="{{ old('invoice_number', $invoice->invoice_number) }}" class="w-full rounded-lg border-slate-300 text-sm" placeholder="INV-000001">
                 </div>
                 <div>
                     <label class="mb-1 block text-xs font-semibold text-slate-600">حالة الفاتورة</label>
@@ -46,7 +53,7 @@
                     <select name="customer_id" class="w-full rounded-lg border-slate-300 text-sm">
                         <option value="">اختر عميل</option>
                         @foreach($customers as $customer)
-                            <option value="{{ $customer->id }}" @selected(old('customer_id') == $customer->id)>{{ $customer->name }} ({{ $customer->phone }})</option>
+                            <option value="{{ $customer->id }}" @selected(old('customer_id', $invoice->customer_id) == $customer->id)>{{ $customer->name }} ({{ $customer->phone }})</option>
                         @endforeach
                     </select>
                     @error('customer_id')
@@ -58,7 +65,7 @@
                     <input
                         type="text"
                         name="customer_name"
-                        value="{{ old('customer_name') }}"
+                        value="{{ old('customer_name', $invoice->customer_name) }}"
                         class="w-full rounded-lg border-slate-300 text-sm"
                         placeholder="مثال: عميل نقدي - نقطة البيع"
                     >
@@ -71,7 +78,7 @@
                     <select name="supplier_id" class="w-full rounded-lg border-slate-300 text-sm">
                         <option value="">اختر مورد</option>
                         @foreach($suppliers as $supplier)
-                            <option value="{{ $supplier->id }}" @selected(old('supplier_id') == $supplier->id)>{{ $supplier->name }}</option>
+                            <option value="{{ $supplier->id }}" @selected(old('supplier_id', $invoice->supplier_id) == $supplier->id)>{{ $supplier->name }}</option>
                         @endforeach
                     </select>
                     @error('supplier_id')
@@ -80,19 +87,19 @@
                 </div>
                 <div>
                     <label class="mb-1 block text-xs font-semibold text-slate-600">تاريخ الإصدار</label>
-                    <input type="date" name="issue_date" value="{{ old('issue_date', now()->toDateString()) }}" class="w-full rounded-lg border-slate-300 text-sm" required>
+                    <input type="date" name="issue_date" value="{{ old('issue_date', optional($invoice->issue_date)->format('Y-m-d') ?? now()->toDateString()) }}" class="w-full rounded-lg border-slate-300 text-sm" required>
                 </div>
                 <div>
                     <label class="mb-1 block text-xs font-semibold text-slate-600">تاريخ الاستحقاق</label>
-                    <input type="date" name="due_date" value="{{ old('due_date') }}" class="w-full rounded-lg border-slate-300 text-sm">
+                    <input type="date" name="due_date" value="{{ old('due_date', optional($invoice->due_date)->format('Y-m-d')) }}" class="w-full rounded-lg border-slate-300 text-sm">
                 </div>
                 <div>
                     <label class="mb-1 block text-xs font-semibold text-slate-600">الشروط</label>
-                    <input type="text" name="payment_terms" value="{{ old('payment_terms') }}" class="w-full rounded-lg border-slate-300 text-sm" placeholder="مثال: صافي 30 يوم">
+                    <input type="text" name="payment_terms" value="{{ old('payment_terms', $invoice->payment_terms) }}" class="w-full rounded-lg border-slate-300 text-sm" placeholder="مثال: صافي 30 يوم">
                 </div>
                 <div>
                     <label class="mb-1 block text-xs font-semibold text-slate-600">العملة</label>
-                    <input type="text" name="currency" value="{{ old('currency', 'SAR') }}" class="w-full rounded-lg border-slate-300 text-sm" maxlength="3">
+                    <input type="text" name="currency" value="{{ old('currency', $invoice->currency ?: 'SAR') }}" class="w-full rounded-lg border-slate-300 text-sm" maxlength="3">
                 </div>
                 <div>
                     <label class="mb-1 block text-xs font-semibold text-slate-600">نوع الضريبة</label>
@@ -108,7 +115,12 @@
                 </div>
                 <div class="lg:col-span-3">
                     <label class="mb-1 block text-xs font-semibold text-slate-600">ملاحظات</label>
-                    <textarea name="notes" rows="2" class="w-full rounded-lg border-slate-300 text-sm">{{ old('notes') }}</textarea>
+                    <textarea name="notes" rows="2" class="w-full rounded-lg border-slate-300 text-sm">{{ old('notes', $invoice->notes) }}</textarea>
+                </div>
+                <div class="lg:col-span-3">
+                    <label class="mb-1 block text-xs font-semibold text-slate-600">مرفقات (اختياري)</label>
+                    <input type="file" name="attachments[]" multiple class="w-full rounded-lg border-slate-300 text-sm">
+                    <p class="mt-1 text-[11px] text-slate-500">حتى 10 ملفات، الحد الأقصى 10MB للملف.</p>
                 </div>
             </div>
 
@@ -201,7 +213,7 @@
                         سيتم إعادة حساب جميع القيم في الـBackend قبل الحفظ لضمان الدقة المحاسبية.
                     </p>
                     <button type="submit" class="mt-4 rounded-lg bg-[#06C2A4] px-4 py-2 text-sm font-semibold text-white hover:bg-[#05ab91]">
-                        حفظ الفاتورة
+                        {{ $invoice->exists ? 'حفظ التعديلات' : 'حفظ الفاتورة' }}
                     </button>
                 </div>
             </div>
@@ -216,9 +228,18 @@
                     tax_profile_type: 'standard',
                     tax_rate: 15,
                 },
-                items: [
-                    {product_id: '', product_name: '', description: '', quantity: 1, unit_price: 0, discount: 0, tax_rate: 15, total: 0}
-                ],
+                items: @json($invoice->exists ? $invoice->items->map(fn ($item) => [
+                    'product_id' => $item->product_id,
+                    'product_name' => $item->product_name,
+                    'description' => $item->description,
+                    'quantity' => (float) $item->quantity,
+                    'unit_price' => (float) $item->unit_price,
+                    'discount' => (float) $item->discount,
+                    'tax_rate' => (float) $item->tax_rate,
+                    'total' => (float) $item->total,
+                ])->values() : [
+                    ['product_id' => '', 'product_name' => '', 'description' => '', 'quantity' => 1, 'unit_price' => 0, 'discount' => 0, 'tax_rate' => 15, 'total' => 0],
+                ]),
                 summary: {
                     subtotal: 0,
                     discount: 0,

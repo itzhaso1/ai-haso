@@ -3,7 +3,9 @@
 namespace App\Services\Finance;
 
 use App\Models\Finance\FinanceInvoice;
+use App\Models\Finance\FinanceInvoicePayment;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 
 class InvoiceStateService
 {
@@ -24,10 +26,12 @@ class InvoiceStateService
         float $total,
         float $amountPaid,
         ?string $dueDate,
-        string $invoiceStatus
+        string $invoiceStatus,
+        float $amountCredited = 0,
+        float $amountDebited = 0,
     ): string {
         $paid = round(max(0, $amountPaid), 2);
-        $due = $this->resolveAmountDue($total, $paid);
+        $due = $this->resolveAmountDue($total, $paid, $amountCredited, $amountDebited);
 
         if ($due <= self::PAYMENT_TOLERANCE) {
             return 'paid';
@@ -49,9 +53,23 @@ class InvoiceStateService
         return 'unpaid';
     }
 
-    public function resolveAmountDue(float $total, float $amountPaid): float
+    public function resolveAmountDue(
+        float $total,
+        float $amountPaid,
+        float $amountCredited = 0,
+        float $amountDebited = 0,
+    ): float {
+        return round(max(0, $total + $amountDebited - $amountCredited - $amountPaid), 2);
+    }
+
+    public function netInvoiceTotal(FinanceInvoice $invoice): float
     {
-        return round(max(0, $total - $amountPaid), 2);
+        return round(
+            (float) $invoice->total
+            + (float) ($invoice->amount_debited ?? 0)
+            - (float) ($invoice->amount_credited ?? 0),
+            2
+        );
     }
 
     public function toLegacyStatus(string $invoiceStatus, string $paymentStatus): string
@@ -77,8 +95,9 @@ class InvoiceStateService
     {
         $updatedRows = 0;
         $supportsSplitStatuses = FinanceInvoice::hasSeparatedStatusColumns();
+        $hasPaymentRowStatus = Schema::hasColumn('finance_invoice_payments', 'status');
 
-        $query = FinanceInvoice::query();
+        $query = FinanceInvoice::withoutGlobalScopes();
         if ($supportsSplitStatuses) {
             $query->where(function ($builder): void {
                 $builder->where('invoice_status', 'issued')
@@ -95,17 +114,27 @@ class InvoiceStateService
             $query->where('workspace_id', $workspaceId);
         }
 
-        $query->withSum('payments', 'amount')
+        $query->withSum(['payments as payments_sum_amount' => function ($builder) use ($hasPaymentRowStatus): void {
+            if ($hasPaymentRowStatus) {
+                $builder->where(function ($statusQuery): void {
+                    $statusQuery->whereNull('status')->orWhere('status', 'posted');
+                });
+            }
+        }], 'amount')
             ->orderBy('id')
             ->chunkById(200, function ($invoices) use (&$updatedRows, $supportsSplitStatuses): void {
                 foreach ($invoices as $invoice) {
                     $actualPaid = round((float) ($invoice->payments_sum_amount ?? 0), 2);
-                    $due = $this->resolveAmountDue((float) $invoice->total, $actualPaid);
+                    $credited = (float) ($invoice->amount_credited ?? 0);
+                    $debited = (float) ($invoice->amount_debited ?? 0);
+                    $due = $this->resolveAmountDue((float) $invoice->total, $actualPaid, $credited, $debited);
                     $paymentStatus = $this->resolvePaymentStatus(
                         total: (float) $invoice->total,
                         amountPaid: $actualPaid,
                         dueDate: $invoice->due_date?->toDateString(),
                         invoiceStatus: 'issued',
+                        amountCredited: $credited,
+                        amountDebited: $debited,
                     );
                     $legacyStatus = $this->toLegacyStatus('issued', $paymentStatus);
 
@@ -143,10 +172,25 @@ class InvoiceStateService
         return $updatedRows;
     }
 
+    public function postedPaymentsSum(FinanceInvoice $invoice): float
+    {
+        $query = FinanceInvoicePayment::withoutGlobalScopes()
+            ->where('workspace_id', $invoice->workspace_id)
+            ->where('invoice_id', $invoice->id);
+
+        if (Schema::hasColumn('finance_invoice_payments', 'status')) {
+            $query->where(function ($builder): void {
+                $builder->whereNull('status')->orWhere('status', 'posted');
+            });
+        }
+
+        return round((float) $query->sum('amount'), 2);
+    }
+
     private function isPastDate(string $dueDate): bool
     {
         try {
-            return Carbon::parse($dueDate)->isPast();
+            return Carbon::parse($dueDate)->startOfDay()->lt(now()->startOfDay());
         } catch (\Throwable) {
             return false;
         }

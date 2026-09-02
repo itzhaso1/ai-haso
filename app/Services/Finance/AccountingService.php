@@ -23,6 +23,7 @@ class AccountingService
         ?int $referenceId = null,
         ?int $postedBy = null,
         string $status = 'posted',
+        ?int $reversesEntryId = null,
     ): FinanceJournalEntry {
         if (count($lines) < 2) {
             throw new RuntimeException('Journal entry requires at least two lines.');
@@ -42,7 +43,8 @@ class AccountingService
             $referenceType,
             $referenceId,
             $postedBy,
-            $status
+            $status,
+            $reversesEntryId
         ): FinanceJournalEntry {
             $entryNumber = $this->nextEntryNumber($workspaceId, $entryDate);
 
@@ -53,6 +55,7 @@ class AccountingService
                 'type' => $type,
                 'reference_type' => $referenceType,
                 'reference_id' => $referenceId,
+                'reverses_entry_id' => $reversesEntryId,
                 'description' => $description,
                 'status' => $status,
                 'posted_by' => $postedBy,
@@ -81,6 +84,58 @@ class AccountingService
             }
 
             return $entry->load('lines');
+        });
+    }
+
+    public function reverseEntry(
+        FinanceJournalEntry $entry,
+        string $type,
+        int $actorUserId,
+        ?string $description = null,
+        ?string $referenceType = null,
+        ?int $referenceId = null,
+    ): FinanceJournalEntry {
+        $alreadyReversed = FinanceJournalEntry::withoutGlobalScopes()
+            ->where('workspace_id', $entry->workspace_id)
+            ->where('reverses_entry_id', $entry->id)
+            ->exists();
+        if ($alreadyReversed || $entry->status === 'reversed') {
+            throw new RuntimeException('Journal entry is already reversed.');
+        }
+
+        $entry->loadMissing('lines');
+        if ($entry->lines->count() < 2) {
+            throw new RuntimeException('Cannot reverse an incomplete journal entry.');
+        }
+
+        $lines = $entry->lines->map(fn (FinanceJournalEntryLine $line): array => [
+            'account_id' => (int) $line->account_id,
+            'debit' => (float) $line->credit,
+            'credit' => (float) $line->debit,
+            'description' => 'Reversal: '.((string) ($line->description ?: $entry->description)),
+            'entity_type' => $line->entity_type,
+            'entity_id' => $line->entity_id,
+        ])->all();
+
+        return DB::transaction(function () use ($entry, $type, $actorUserId, $description, $referenceType, $referenceId, $lines): FinanceJournalEntry {
+            $reversal = $this->createEntry(
+                workspaceId: (int) $entry->workspace_id,
+                entryDate: now()->toDateString(),
+                type: $type,
+                lines: $lines,
+                description: $description ?: ('Reversal of '.$entry->entry_number),
+                referenceType: $referenceType ?: $entry->reference_type,
+                referenceId: $referenceId ?: $entry->reference_id,
+                postedBy: $actorUserId,
+                reversesEntryId: $entry->id,
+            );
+
+            $metadataNote = trim((string) ($entry->description ?? ''));
+            $entry->update([
+                'description' => trim($metadataNote.' [reversed by '.$reversal->entry_number.']'),
+            ]);
+
+            return $reversal;
         });
     }
 

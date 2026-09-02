@@ -2,10 +2,12 @@
     $sections = [
         'لوحة التحكم' => [
             ['label' => 'لوحة التحكم', 'route' => 'workspace.finance.dashboard', 'active' => 'workspace.finance.dashboard'],
+            ['label' => 'لوحة الفوترة', 'route' => 'workspace.finance.billing.dashboard', 'active' => 'workspace.finance.billing.*'],
         ],
         'المبيعات' => [
             ['label' => 'المبيعات', 'route' => 'workspace.finance.sales.index', 'active' => 'workspace.finance.sales.*'],
             ['label' => 'الفواتير', 'route' => 'workspace.finance.invoices.index', 'active' => 'workspace.finance.invoices.*'],
+            ['label' => 'كشف حساب العميل', 'route' => 'workspace.finance.statements.index', 'active' => 'workspace.finance.statements.*'],
             ['label' => 'العقود', 'route' => 'workspace.finance.contracts.index', 'active' => 'workspace.finance.contracts.*'],
             ['label' => 'العملاء', 'route' => 'workspace.finance.customers.index', 'active' => 'workspace.finance.customers.*'],
             ['label' => 'قوائم الأسعار', 'route' => 'workspace.finance.price-lists.index', 'active' => 'workspace.finance.price-lists.*'],

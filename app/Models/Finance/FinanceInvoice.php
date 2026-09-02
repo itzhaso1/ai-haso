@@ -3,6 +3,7 @@
 namespace App\Models\Finance;
 
 use App\Models\Concerns\BelongsToWorkspace;
+use App\Models\Contract\Contract;
 use App\Models\Customer;
 use App\Models\User;
 use App\Models\WorkspaceScopedModel;
@@ -18,6 +19,8 @@ use Illuminate\Support\Facades\Schema;
     'customer_id',
     'customer_name',
     'supplier_id',
+    'contract_id',
+    'billing_schedule_id',
     'invoice_number',
     'type',
     'status',
@@ -34,6 +37,8 @@ use Illuminate\Support\Facades\Schema;
     'total',
     'amount_paid',
     'amount_due',
+    'amount_credited',
+    'amount_debited',
     'tax_profile_type',
     'tax_rate',
     'payment_terms',
@@ -45,7 +50,10 @@ use Illuminate\Support\Facades\Schema;
     'zatca_qr_code',
     'zatca_xml_hash',
     'created_by',
+    'issued_by',
     'cancelled_at',
+    'last_reminder_sent_at',
+    'reminder_stage',
 ])]
 class FinanceInvoice extends WorkspaceScopedModel
 {
@@ -70,11 +78,14 @@ class FinanceInvoice extends WorkspaceScopedModel
             'total' => 'decimal:2',
             'amount_paid' => 'decimal:2',
             'amount_due' => 'decimal:2',
+            'amount_credited' => 'decimal:2',
+            'amount_debited' => 'decimal:2',
             'tax_rate' => 'decimal:2',
             'company_snapshot' => 'array',
             'recipient_snapshot' => 'array',
             'pdf_snapshot' => 'array',
             'cancelled_at' => 'datetime',
+            'last_reminder_sent_at' => 'datetime',
         ];
     }
 
@@ -101,6 +112,43 @@ class FinanceInvoice extends WorkspaceScopedModel
     public function payments(): HasMany
     {
         return $this->hasMany(FinanceInvoicePayment::class, 'invoice_id');
+    }
+
+    public function postedPayments(): HasMany
+    {
+        $query = $this->payments();
+        if (self::hasPaymentStatusColumn()) {
+            $query->where(function ($builder): void {
+                $builder->whereNull('status')->orWhere('status', 'posted');
+            });
+        }
+
+        return $query;
+    }
+
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(FinanceInvoiceAttachment::class, 'invoice_id')->latest('id');
+    }
+
+    public function creditNotes(): HasMany
+    {
+        return $this->hasMany(FinanceCreditNote::class, 'invoice_id')->latest('id');
+    }
+
+    public function contract(): BelongsTo
+    {
+        return $this->belongsTo(Contract::class);
+    }
+
+    public function billingSchedule(): BelongsTo
+    {
+        return $this->belongsTo(FinanceBillingSchedule::class, 'billing_schedule_id');
+    }
+
+    public function issuer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'issued_by');
     }
 
     public function getInvoiceStatusAttribute(?string $value): string
@@ -187,5 +235,33 @@ class FinanceInvoice extends WorkspaceScopedModel
         }
 
         return self::$schemaFlags['snapshots'];
+    }
+
+    public static function hasAdjustmentColumns(): bool
+    {
+        if (! array_key_exists('adjustments', self::$schemaFlags)) {
+            self::$schemaFlags['adjustments'] = Schema::hasColumn('finance_invoices', 'amount_credited')
+                && Schema::hasColumn('finance_invoices', 'amount_debited');
+        }
+
+        return self::$schemaFlags['adjustments'];
+    }
+
+    public static function hasPaymentStatusColumn(): bool
+    {
+        if (! array_key_exists('payment_row_status', self::$schemaFlags)) {
+            self::$schemaFlags['payment_row_status'] = Schema::hasColumn('finance_invoice_payments', 'status');
+        }
+
+        return self::$schemaFlags['payment_row_status'];
+    }
+
+    public static function hasContractColumn(): bool
+    {
+        if (! array_key_exists('contract', self::$schemaFlags)) {
+            self::$schemaFlags['contract'] = Schema::hasColumn('finance_invoices', 'contract_id');
+        }
+
+        return self::$schemaFlags['contract'];
     }
 }

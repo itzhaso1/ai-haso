@@ -4,6 +4,8 @@ namespace App\Models\Contract;
 
 use App\Models\Concerns\BelongsToWorkspace;
 use App\Models\Customer;
+use App\Models\Finance\FinanceBillingSchedule;
+use App\Models\Finance\FinanceInvoice;
 use App\Models\User;
 use App\Models\WorkspaceScopedModel;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -70,5 +72,15 @@ class Contract extends WorkspaceScopedModel
     public function attachments(): HasMany
     {
         return $this->hasMany(ContractAttachment::class)->latest('id');
+    }
+
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(FinanceInvoice::class)->latest('id');
+    }
+
+    public function billingSchedules(): HasMany
+    {
+        return $this->hasMany(FinanceBillingSchedule::class)->latest('id');
     }
 }

@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\Contracts\ContractEmailService;
 use App\Services\Contracts\ContractPdfService;
 use App\Services\Contracts\ContractService;
+use App\Services\Notification\DomainNotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -27,6 +28,7 @@ class ContractController extends Controller
         private readonly ContractService $contractService,
         private readonly ContractPdfService $contractPdfService,
         private readonly ContractEmailService $contractEmailService,
+        private readonly DomainNotificationService $domainNotificationService,
     ) {}
 
     public function index(Request $request): View
@@ -95,18 +97,31 @@ class ContractController extends Controller
     public function show(Request $request, Contract $contract): View
     {
         $this->authorizeContracts($request, 'contracts.view');
-        $contract->load(['customer', 'items', 'attachments']);
+        $this->assertSameWorkspace($contract->workspace_id);
+        $contract->load(['customer', 'items', 'attachments', 'billingSchedules', 'invoices.payments']);
+
+        $relatedInvoices = $contract->invoices;
+        $invoicedTotal = (float) $relatedInvoices->sum('total');
+        $paidTotal = (float) $relatedInvoices->sum('amount_paid');
+        $outstanding = (float) $relatedInvoices->sum('amount_due');
 
         return view('workspace.contracts.show', [
             'contract' => $contract,
             'emailAccounts' => EmailAccount::query()->orderBy('name')->get(['id', 'name', 'email']),
             'routePrefix' => $this->contractRoutePrefix(),
+            'billingSummary' => [
+                'invoiced_total' => $invoicedTotal,
+                'paid_total' => $paidTotal,
+                'outstanding' => $outstanding,
+                'invoices' => $relatedInvoices,
+            ],
         ]);
     }
 
     public function edit(Request $request, Contract $contract): View
     {
         $this->authorizeContracts($request, 'contracts.manage');
+        $this->assertSameWorkspace($contract->workspace_id);
         $contract->load(['customer', 'items', 'attachments']);
 
         return view('workspace.contracts.edit', [
@@ -122,6 +137,7 @@ class ContractController extends Controller
     public function update(Request $request, Contract $contract): RedirectResponse
     {
         $this->authorizeContracts($request, 'contracts.manage');
+        $this->assertSameWorkspace($contract->workspace_id);
 
         if (in_array($contract->status, ['closed', 'cancelled'], true)) {
             return redirect()
@@ -139,6 +155,7 @@ class ContractController extends Controller
     public function activate(Request $request, Contract $contract): RedirectResponse
     {
         $this->authorizeContracts($request, 'contracts.manage');
+        $this->assertSameWorkspace($contract->workspace_id);
         $workspace = $this->currentWorkspace();
 
         $payload = $request->validate([
@@ -156,6 +173,11 @@ class ContractController extends Controller
         ]);
 
         $contract = $this->contractService->activate($contract, (int) $request->user()->id);
+        $this->domainNotificationService->notifyContractEvent(
+            $contract,
+            'تم تفعيل العقد '.$contract->contract_number,
+            'أصبح العقد مفتوحاً ويمكن ربط جداول فوترة مالية به عند الحاجة.'
+        );
 
         if (! $request->boolean('send_email')) {
             return redirect()
@@ -191,7 +213,13 @@ class ContractController extends Controller
     public function close(Request $request, Contract $contract): RedirectResponse
     {
         $this->authorizeContracts($request, 'contracts.manage');
+        $this->assertSameWorkspace($contract->workspace_id);
         $this->contractService->close($contract);
+        $this->domainNotificationService->notifyContractEvent(
+            $contract->fresh(),
+            'تم إغلاق العقد '.$contract->contract_number,
+            'أُغلق العقد يدوياً. تاريخ النهاية وحده لا يغلق العقد تلقائياً.'
+        );
 
         return redirect()->route($this->contractRouteName('show'), $contract)->with('success', 'تم إغلاق العقد.');
     }
@@ -199,7 +227,13 @@ class ContractController extends Controller
     public function cancel(Request $request, Contract $contract): RedirectResponse
     {
         $this->authorizeContracts($request, 'contracts.manage');
+        $this->assertSameWorkspace($contract->workspace_id);
         $this->contractService->cancel($contract);
+        $this->domainNotificationService->notifyContractEvent(
+            $contract->fresh(),
+            'تم إلغاء العقد '.$contract->contract_number,
+            'أُلغي العقد ولن تُولَّد فواتير جديدة من جداوله إلا بإجراء يدوي.'
+        );
 
         return redirect()->route($this->contractRouteName('show'), $contract)->with('success', 'تم إلغاء العقد.');
     }
@@ -207,6 +241,7 @@ class ContractController extends Controller
     public function downloadPdf(Request $request, Contract $contract)
     {
         $this->authorizeContracts($request, 'contracts.view');
+        $this->assertSameWorkspace($contract->workspace_id);
 
         return $this->contractPdfService->download($contract);
     }
@@ -214,6 +249,7 @@ class ContractController extends Controller
     public function downloadAttachment(Request $request, Contract $contract, ContractAttachment $attachment)
     {
         $this->authorizeContracts($request, 'contracts.view');
+        $this->assertSameWorkspace($contract->workspace_id);
         abort_unless((int) $attachment->contract_id === (int) $contract->id, 404);
 
         return Storage::disk('public')->download(
@@ -225,6 +261,7 @@ class ContractController extends Controller
     public function destroyAttachment(Request $request, Contract $contract, ContractAttachment $attachment): RedirectResponse
     {
         $this->authorizeContracts($request, 'contracts.manage');
+        $this->assertSameWorkspace($contract->workspace_id);
         abort_unless((int) $attachment->contract_id === (int) $contract->id, 404);
 
         $this->contractService->deleteAttachment($attachment);

@@ -334,6 +334,18 @@
                 <td class="label grand">الإجمالي</td>
                 <td class="grand">{{ number_format((float) $invoice->total, 2) }} {{ $invoice->currency }}</td>
             </tr>
+            @if((float) ($invoice->amount_credited ?? 0) > 0)
+            <tr>
+                <td class="label">إشعارات دائن</td>
+                <td>{{ number_format((float) $invoice->amount_credited, 2) }} {{ $invoice->currency }}</td>
+            </tr>
+            @endif
+            @if((float) ($invoice->amount_debited ?? 0) > 0)
+            <tr>
+                <td class="label">إشعارات مدين</td>
+                <td>{{ number_format((float) $invoice->amount_debited, 2) }} {{ $invoice->currency }}</td>
+            </tr>
+            @endif
             <tr>
                 <td class="label">المدفوع</td>
                 <td>{{ number_format((float) $invoice->amount_paid, 2) }} {{ $invoice->currency }}</td>
