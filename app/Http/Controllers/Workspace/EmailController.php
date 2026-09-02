@@ -570,7 +570,7 @@ class EmailController extends Controller
                 'delivery_status' => 'sent',
                 'delivery_error' => null,
                 'delivered_at' => now(),
-                'message_id' => $emailLog->provider_message_id ?: $message->message_id,
+                'message_id' => $emailLog?->provider_message_id ?: $message->message_id,
             ])->save();
 
             return redirect()

@@ -30,7 +30,7 @@ class PaymentService
 
         $moneyBucket = $this->resolveMoneyBucket($paymentContext);
 
-        if (str_starts_with($paymentContext, 'merchant_') && $this->requiresLiveMerchantOnboarding()) {
+        if (str_starts_with($paymentContext, 'merchant_')) {
             $workspace = Workspace::query()->findOrFail($order->workspace_id);
             $this->merchantPaymentEligibilityService->assertCanAcceptCustomerPayments($workspace);
         }
@@ -72,13 +72,6 @@ class PaymentService
 
             return $payment;
         });
-    }
-
-    private function requiresLiveMerchantOnboarding(): bool
-    {
-        $provider = strtolower((string) config('payment.default_provider', 'local'));
-
-        return $provider !== 'local';
     }
 
     /**
@@ -177,6 +170,7 @@ class PaymentService
             'platform_subscription' => 'platform_revenue',
             'platform_commerce' => 'platform_commerce',
             'merchant_booking', 'merchant_order' => 'merchant_gmv',
+            'local_sandbox' => 'local_sandbox',
             default => str_starts_with($paymentContext, 'platform_')
                 ? 'platform_commerce'
                 : 'merchant_gmv',

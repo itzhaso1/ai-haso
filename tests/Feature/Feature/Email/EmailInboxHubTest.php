@@ -5,6 +5,7 @@ namespace Tests\Feature\Feature\Email;
 use App\Models\EmailAccount;
 use App\Models\EmailAttachment;
 use App\Models\EmailContact;
+use App\Models\EmailLog;
 use App\Models\EmailMessage;
 use App\Models\Plan;
 use App\Models\Subscription;
@@ -85,7 +86,10 @@ class EmailInboxHubTest extends TestCase
         ]);
 
         $this->mock(WorkspaceEmailSender::class, function ($mock): void {
-            $mock->shouldReceive('send')->once();
+            $mock->shouldReceive('send')->once()->andReturn(new EmailLog([
+                'provider_message_id' => 'test-msg-1',
+                'status' => 'sent',
+            ]));
         });
 
         $this->actingAs($user)
@@ -144,7 +148,10 @@ class EmailInboxHubTest extends TestCase
         ]);
 
         $this->mock(WorkspaceEmailSender::class, function ($mock): void {
-            $mock->shouldReceive('send')->once();
+            $mock->shouldReceive('send')->once()->andReturn(new EmailLog([
+                'provider_message_id' => 'test-msg-1',
+                'status' => 'sent',
+            ]));
         });
 
         $this->actingAs($user)

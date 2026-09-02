@@ -126,13 +126,15 @@ class AppointmentBillingService
             $metadata = is_array($booking->metadata) ? $booking->metadata : [];
             $localCheckout = strtolower((string) config('payment.default_provider', 'local')) === 'local';
 
-            if ($eligibility['eligible'] || $localCheckout) {
+            if ($eligibility['eligible']) {
                 $payment = $this->paymentService->createPaymentLink($order, null, 'merchant_booking');
                 $paymentLink = $payment->payment_link;
+                unset($metadata['payment_blocked_reason'], $metadata['local_checkout']);
+            } elseif ($localCheckout) {
+                $payment = $this->paymentService->createPaymentLink($order, null, 'local_sandbox');
+                $paymentLink = $payment->payment_link;
                 unset($metadata['payment_blocked_reason']);
-                if ($localCheckout && ! $eligibility['eligible']) {
-                    $metadata['local_checkout'] = true;
-                }
+                $metadata['local_checkout'] = true;
             } else {
                 $metadata['payment_blocked_reason'] = implode(' ', $eligibility['blockers']);
             }

@@ -153,10 +153,13 @@ class RolePermissionAuthorizationTest extends TestCase
 
     private function actingAsApi(User $user, Workspace $workspace)
     {
+        $this->flushHeaders();
+
         $token = $user->createToken('api');
         $token->accessToken->forceFill(['workspace_id' => $workspace->id])->save();
 
-        return $this->withToken($token->plainTextToken)
+        return $this->actingAs($user, 'sanctum')
+            ->withToken($token->plainTextToken)
             ->withHeader('X-Workspace-Id', (string) $workspace->id);
     }
 }
