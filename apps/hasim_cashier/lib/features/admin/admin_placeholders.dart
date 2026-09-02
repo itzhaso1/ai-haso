@@ -150,9 +150,19 @@ class _ItemsAdminPanelState extends ConsumerState<ItemsAdminPanel> {
             permissions: session?.permissions ?? _perms,
           );
         } else {
+          final existingLocalId = '${existing['local_id'] ?? ''}'.trim();
+          if (existingLocalId.isEmpty) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('لا يمكن تعديل الصنف بدون معرّف محلي.'),
+              ),
+            );
+            return;
+          }
           await admin.updateProduct(
             workspaceId: workspaceId,
-            localId: '${existing['local_id'] ?? existing['id']}',
+            localId: existingLocalId,
             name: '${result['name']}',
             price: (result['price'] as num?)?.toDouble(),
             sku: result['sku'] as String?,

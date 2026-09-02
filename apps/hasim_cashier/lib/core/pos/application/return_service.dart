@@ -34,10 +34,14 @@ class ReturnService {
     String? createdByUserId,
     String? shiftLocalId,
     String? deviceId,
+    String? clientReference,
     Map<String, dynamic>? permissions,
   }) {
     if (lines.isEmpty) throw const InvalidReturnQuantity();
     PosPermissions.require(permissions, PosPermissions.refund);
+    if (shiftLocalId == null || shiftLocalId.isEmpty) {
+      throw const ShiftNotOpen();
+    }
     return _db.transaction(() async {
       await _db.writeMeta(
         workspaceId,
@@ -45,6 +49,21 @@ class ReturnService {
         DateTime.now().toIso8601String(),
         deviceId: deviceId,
       );
+      final shift =
+          await (_db.select(_db.localShifts)..where(
+                (t) =>
+                    t.localId.equals(shiftLocalId) &
+                    t.workspaceId.equals(workspaceId) &
+                    t.status.equals('open'),
+              ))
+              .getSingleOrNull();
+      if (shift == null) throw const ShiftNotOpen();
+
+      final ref = clientReference?.trim();
+      if (ref != null && ref.isNotEmpty) {
+        final prior = await _db.readMeta(workspaceId, 'return_idemp:$ref');
+        if (prior != null && prior.isNotEmpty) return prior;
+      }
       final order =
           await (_db.select(_db.localOrders)..where(
                 (t) =>
@@ -86,10 +105,12 @@ class ReturnService {
               _db.localReturnItems,
             )..where((t) => t.returnLocalId.isIn(returnIds))).get();
       final already = <String, int>{};
+      final alreadyCents = <String, int>{};
       for (final p in previous) {
         final oid = p.orderItemLocalId;
         if (oid == null) continue;
         already[oid] = (already[oid] ?? 0) + p.quantity;
+        alreadyCents[oid] = (alreadyCents[oid] ?? 0) + p.refundAmount;
       }
 
       var refundCents = 0;
@@ -118,11 +139,18 @@ class ReturnService {
         if (line.quantity <= 0 || line.quantity > item.quantity - used) {
           throw const InvalidReturnQuantity();
         }
-        final unitCents = item.quantity == 0
+        final remainingQty = item.quantity - used;
+        final remainingCents =
+            item.totalAmount - (alreadyCents[item.localId] ?? 0);
+        final amountCents = remainingQty <= 0
             ? 0
-            : item.totalAmount ~/ item.quantity;
-        final amountCents = unitCents * line.quantity;
+            : (line.quantity == remainingQty
+                ? remainingCents
+                : (remainingCents * line.quantity) ~/ remainingQty);
         refundCents += amountCents;
+        already[item.localId] = used + line.quantity;
+        alreadyCents[item.localId] =
+            (alreadyCents[item.localId] ?? 0) + amountCents;
         await _db
             .into(_db.localReturnItems)
             .insert(
@@ -160,15 +188,7 @@ class ReturnService {
             ),
           );
 
-      if (shiftLocalId != null && refundCents > 0) {
-        final shift =
-            await (_db.select(_db.localShifts)..where(
-                  (t) =>
-                      t.localId.equals(shiftLocalId) &
-                      t.status.equals('open'),
-                ))
-                .getSingleOrNull();
-        if (shift == null) throw const ShiftNotOpen();
+      if (refundCents > 0) {
         await _db
             .into(_db.localCashMovements)
             .insert(
@@ -184,6 +204,14 @@ class ReturnService {
                 createdAt: now,
               ),
             );
+      }
+      if (ref != null && ref.isNotEmpty) {
+        await _db.writeMeta(
+          workspaceId,
+          'return_idemp:$ref',
+          returnId,
+          deviceId: deviceId,
+        );
       }
       // Original invoice totals stay immutable.
       return returnId;

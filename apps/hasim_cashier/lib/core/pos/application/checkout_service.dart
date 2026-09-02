@@ -161,6 +161,13 @@ class CheckoutService {
         throw const ShiftNotOpen();
       }
 
+      final store =
+          await (_db.select(_db.localStores)..where(
+                (t) => t.localId.equals(cmd.storeId),
+              ))
+              .getSingleOrNull();
+      if (store == null) throw const StoreNotFound();
+
       final quote = pricing.quote(
         lines: cmd.lines,
         orderDiscountAmount: cmd.orderDiscountAmount,
@@ -322,7 +329,8 @@ class CheckoutService {
           );
       await _fault(CheckoutFaultPoint.afterInvoice);
 
-      for (final p in cmd.payments) {
+      for (var i = 0; i < cmd.payments.length; i++) {
+        final p = cmd.payments[i];
         await _db
             .into(_db.localPayments)
             .insert(
@@ -344,7 +352,7 @@ class CheckoutService {
                 ),
                 shiftLocalId: Value(cmd.shiftLocalId),
                 syncStatus: Value(cmd.connected ? 'pending' : 'local'),
-                clientReference: '${cmd.clientReference}:${p.method}',
+                clientReference: '${cmd.clientReference}:${p.method}:$i',
                 createdAt: now,
               ),
             );

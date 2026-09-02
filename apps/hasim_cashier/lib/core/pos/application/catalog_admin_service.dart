@@ -4,12 +4,15 @@ import 'package:uuid/uuid.dart';
 import '../../local_db/app_database.dart';
 import '../domain/pricing_service.dart';
 import '../pos_permissions.dart';
+import 'stock_engine.dart';
 
 class CatalogAdminService {
-  CatalogAdminService(this._db, {String Function()? newId})
-    : _newId = newId ?? (() => const Uuid().v4());
+  CatalogAdminService(this._db, {StockEngine? stock, String Function()? newId})
+    : _stock = stock ?? StockEngine(_db),
+      _newId = newId ?? (() => const Uuid().v4());
 
   final AppDatabase _db;
+  final StockEngine _stock;
   final String Function() _newId;
 
   Future<String> createCategory({
@@ -52,25 +55,54 @@ class CatalogAdminService {
     PosPermissions.require(permissions, PosPermissions.catalog);
     final id = _newId();
     final now = DateTime.now();
-    await _db
-        .into(_db.localProducts)
-        .insert(
-          LocalProductsCompanion.insert(
-            localId: id,
+    final tracking = trackStock || stock != null;
+    final opening = stock;
+    await _db.transaction(() async {
+      await _db
+          .into(_db.localProducts)
+          .insert(
+            LocalProductsCompanion.insert(
+              localId: id,
+              workspaceId: workspaceId,
+              categoryLocalId: Value(categoryLocalId),
+              name: name.trim(),
+              sku: Value(sku),
+              barcode: Value(barcode),
+              price: Value(Money.toCents(price)),
+              cost: Value(Money.toCents(cost)),
+              taxRate: Value(taxRate),
+              stock: Value(tracking ? 0 : stock),
+              trackStock: Value(tracking),
+              createdAt: Value(now),
+              updatedAt: now,
+            ),
+          );
+      if (tracking && opening != null && opening != 0) {
+        if (opening > 0) {
+          await _stock.apply(
             workspaceId: workspaceId,
-            categoryLocalId: Value(categoryLocalId),
-            name: name.trim(),
-            sku: Value(sku),
-            barcode: Value(barcode),
-            price: Value(Money.toCents(price)),
-            cost: Value(Money.toCents(cost)),
-            taxRate: Value(taxRate),
-            stock: Value(stock),
-            trackStock: Value(trackStock || stock != null),
-            createdAt: Value(now),
-            updatedAt: now,
-          ),
-        );
+            productLocalId: id,
+            type: 'opening',
+            quantity: opening,
+            allowNegative: false,
+            referenceType: 'catalog',
+            referenceId: id,
+            permissions: permissions,
+          );
+        } else {
+          await _stock.apply(
+            workspaceId: workspaceId,
+            productLocalId: id,
+            type: 'adjustment',
+            quantity: opening,
+            allowNegative: true,
+            referenceType: 'catalog',
+            referenceId: id,
+            permissions: permissions,
+          );
+        }
+      }
+    });
     return id;
   }
 
@@ -89,31 +121,46 @@ class CatalogAdminService {
     Map<String, dynamic>? permissions,
   }) async {
     PosPermissions.require(permissions, PosPermissions.catalog);
-    await (_db.update(_db.localProducts)..where(
-          (t) => t.localId.equals(localId) & t.workspaceId.equals(workspaceId),
-        ))
-        .write(
-          LocalProductsCompanion(
-            name: name == null ? const Value.absent() : Value(name),
-            price: price == null
-                ? const Value.absent()
-                : Value(Money.toCents(price)),
-            cost: cost == null
-                ? const Value.absent()
-                : Value(Money.toCents(cost)),
-            sku: sku == null ? const Value.absent() : Value(sku),
-            barcode: barcode == null ? const Value.absent() : Value(barcode),
-            stock: stock == null ? const Value.absent() : Value(stock),
-            trackStock: trackStock == null
-                ? const Value.absent()
-                : Value(trackStock),
-            isActive: isActive == null ? const Value.absent() : Value(isActive),
-            categoryLocalId: categoryLocalId == null
-                ? const Value.absent()
-                : Value(categoryLocalId),
-            updatedAt: Value(DateTime.now()),
-          ),
+    await _db.transaction(() async {
+      await (_db.update(_db.localProducts)..where(
+            (t) => t.localId.equals(localId) & t.workspaceId.equals(workspaceId),
+          ))
+          .write(
+            LocalProductsCompanion(
+              name: name == null ? const Value.absent() : Value(name),
+              price: price == null
+                  ? const Value.absent()
+                  : Value(Money.toCents(price)),
+              cost: cost == null
+                  ? const Value.absent()
+                  : Value(Money.toCents(cost)),
+              sku: sku == null ? const Value.absent() : Value(sku),
+              barcode: barcode == null ? const Value.absent() : Value(barcode),
+              trackStock: stock != null
+                  ? const Value(true)
+                  : (trackStock == null
+                      ? const Value.absent()
+                      : Value(trackStock)),
+              isActive: isActive == null ? const Value.absent() : Value(isActive),
+              categoryLocalId: categoryLocalId == null
+                  ? const Value.absent()
+                  : Value(categoryLocalId),
+              updatedAt: Value(DateTime.now()),
+            ),
+          );
+      if (stock != null) {
+        await _stock.apply(
+          workspaceId: workspaceId,
+          productLocalId: localId,
+          type: 'adjustment',
+          quantity: stock,
+          allowNegative: stock < 0,
+          referenceType: 'catalog',
+          referenceId: localId,
+          permissions: permissions,
         );
+      }
+    });
   }
 
   Future<Map<String, dynamic>?> findByBarcode({

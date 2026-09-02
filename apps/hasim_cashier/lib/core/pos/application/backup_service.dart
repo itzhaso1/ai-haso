@@ -235,7 +235,7 @@ class BackupService {
 
     return {
       'format_version': backupFormatVersion,
-      'schema_version': 7,
+      'schema_version': 8,
       'money_unit': 'cents',
       'workspace_id': workspaceId,
       'exported_at': DateTime.now().toIso8601String(),

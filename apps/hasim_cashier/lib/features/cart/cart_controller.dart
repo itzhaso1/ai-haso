@@ -147,12 +147,32 @@ class CartState {
 
 class CartController extends StateNotifier<CartState> {
   CartController({this.store, this.workspaceId}) : super(const CartState()) {
-    unawaited(_restore());
+    _ready = _restore();
   }
 
   final DraftCartStore? store;
   final int? workspaceId;
   var _hydrated = false;
+  late final Future<void> _ready;
+  Future<void> _writes = Future.value();
+
+  /// Completes restore plus pending draft writes. Tests should await this.
+  Future<void> get idle async {
+    await _ready;
+    await _writes;
+  }
+
+  Future<void> _enqueue(Future<void> Function() work) {
+    // Isolate a failed write so later persists/clears still run, but keep
+    // the error on the returned future (and report it) instead of stalling.
+    final run = _writes.catchError((_) {}).then((_) => work());
+    _writes = run.catchError((Object error, StackTrace stack) {
+      FlutterError.reportError(
+        FlutterErrorDetails(exception: error, stack: stack),
+      );
+    });
+    return run;
+  }
 
   Future<void> _restore() async {
     final s = store;
@@ -163,57 +183,76 @@ class CartController extends StateNotifier<CartState> {
     }
     final draft = await s.load(workspaceId: ws, channel: state.channel.name);
     if (draft != null && draft.lines.isNotEmpty) {
-      state = CartState(
-        lines: [
-          for (final line in draft.lines)
-            CartLine(
-              productLocalId: line.productLocalId,
-              menuItemId: line.productServerId,
-              name: line.name,
-              unitPrice: line.unitPrice,
-              quantity: line.quantity,
-              taxRate: line.taxRate,
-              cost: line.cost,
-              sku: line.sku,
-              barcode: line.barcode,
-              itemDiscount: line.itemDiscount,
-            ),
-        ],
-        channel: switch (draft.channel) {
-          'table' => OrderChannel.table,
-          'delivery' => OrderChannel.delivery,
-          _ => OrderChannel.takeaway,
-        },
-        tableId: draft.tableServerId,
-        tableLocalId: draft.tableLocalId,
-        customerLocalId: draft.customerLocalId,
-        discountAmount: draft.discountAmount,
-        discountPercent: draft.discountPercent,
-        notes: draft.notes,
-        taxRate: draft.taxRate,
-      );
+      state = _fromDraft(draft);
     }
     _hydrated = true;
   }
 
-  void _persist() {
+  CartState _fromDraft(
+    ({
+      String channel,
+      String? tableLocalId,
+      int? tableServerId,
+      String? customerLocalId,
+      String? notes,
+      double discountAmount,
+      double discountPercent,
+      double taxRate,
+      List<PricedLine> lines,
+    })
+    draft,
+  ) {
+    return CartState(
+      lines: [
+        for (final line in draft.lines)
+          CartLine(
+            productLocalId: line.productLocalId,
+            menuItemId: line.productServerId,
+            name: line.name,
+            unitPrice: line.unitPrice,
+            quantity: line.quantity,
+            taxRate: line.taxRate,
+            cost: line.cost,
+            sku: line.sku,
+            barcode: line.barcode,
+            itemDiscount: line.itemDiscount,
+          ),
+      ],
+      channel: switch (draft.channel) {
+        'table' => OrderChannel.table,
+        'delivery' => OrderChannel.delivery,
+        _ => OrderChannel.takeaway,
+      },
+      tableId: draft.tableServerId,
+      tableLocalId: draft.tableLocalId,
+      customerLocalId: draft.customerLocalId,
+      discountAmount: draft.discountAmount,
+      discountPercent: draft.discountPercent,
+      notes: draft.notes,
+      taxRate: draft.taxRate,
+    );
+  }
+
+  Future<void> _persistAsync() async {
     final s = store;
     final ws = workspaceId;
     if (!_hydrated || s == null || ws == null) return;
-    unawaited(
-      s.save(
-        workspaceId: ws,
-        channel: state.channel.name,
-        tableLocalId: state.tableLocalId,
-        tableServerId: state.tableId,
-        customerLocalId: state.customerLocalId,
-        notes: state.notes,
-        discountAmount: state.discountAmount,
-        discountPercent: state.discountPercent,
-        taxRate: state.taxRate,
-        lines: [for (final line in state.lines) line.toPriced()],
-      ),
+    await s.save(
+      workspaceId: ws,
+      channel: state.channel.name,
+      tableLocalId: state.tableLocalId,
+      tableServerId: state.tableId,
+      customerLocalId: state.customerLocalId,
+      notes: state.notes,
+      discountAmount: state.discountAmount,
+      discountPercent: state.discountPercent,
+      taxRate: state.taxRate,
+      lines: [for (final line in state.lines) line.toPriced()],
     );
+  }
+
+  void _persist() {
+    unawaited(_enqueue(_persistAsync));
   }
 
   void restore(CartState next) {
@@ -227,11 +266,42 @@ class CartController extends StateNotifier<CartState> {
   }
 
   void setChannel(OrderChannel channel) {
-    state = state.copyWith(
-      channel: channel,
-      clearTable: channel != OrderChannel.table,
-    );
-    _persist();
+    if (channel == state.channel) {
+      if (channel != OrderChannel.table &&
+          (state.tableId != null || state.tableLocalId != null)) {
+        state = state.copyWith(clearTable: true);
+        _persist();
+      }
+      return;
+    }
+    if (store == null || workspaceId == null) {
+      state = state.copyWith(
+        channel: channel,
+        clearTable: channel != OrderChannel.table,
+      );
+      return;
+    }
+    unawaited(_enqueue(() async {
+      await _persistAsync();
+      final s = store;
+      final ws = workspaceId;
+      if (s == null || ws == null) {
+        state = state.copyWith(
+          channel: channel,
+          clearTable: channel != OrderChannel.table,
+        );
+        return;
+      }
+      final draft = await s.load(workspaceId: ws, channel: channel.name);
+      if (draft != null && draft.lines.isNotEmpty) {
+        state = _fromDraft(draft);
+        return;
+      }
+      state = CartState(
+        channel: channel,
+        taxRate: state.taxRate,
+      );
+    }));
   }
 
   void setTable(int? tableId, {String? tableLocalId}) {
@@ -261,8 +331,12 @@ class CartController extends StateNotifier<CartState> {
     String? sku,
     String? barcode,
   }) {
+    final id = productLocalId.trim();
+    if (id.isEmpty || id == 'null' || id == '0') {
+      return;
+    }
     final existingIndex = state.lines.indexWhere(
-      (line) => line.productLocalId == productLocalId,
+      (line) => line.productLocalId == id,
     );
     if (existingIndex >= 0) {
       final lines = [...state.lines];
@@ -276,7 +350,7 @@ class CartController extends StateNotifier<CartState> {
       lines: [
         ...state.lines,
         CartLine(
-          productLocalId: productLocalId,
+          productLocalId: id,
           menuItemId: menuItemId,
           name: name,
           unitPrice: unitPrice,
@@ -336,17 +410,16 @@ class CartController extends StateNotifier<CartState> {
     final channel = state.channel;
     final tableLocalId = state.tableLocalId;
     state = CartState(taxRate: tax, channel: channel);
-    final s = store;
-    final ws = workspaceId;
-    if (s != null && ws != null) {
-      unawaited(
-        s.clear(
-          workspaceId: ws,
-          channel: channel.name,
-          tableLocalId: tableLocalId,
-        ),
+    unawaited(_enqueue(() async {
+      final s = store;
+      final ws = workspaceId;
+      if (s == null || ws == null) return;
+      await s.clear(
+        workspaceId: ws,
+        channel: channel.name,
+        tableLocalId: tableLocalId,
       );
-    }
+    }));
   }
 
   Map<String, dynamic> toOrderPayload({required String clientReference}) {

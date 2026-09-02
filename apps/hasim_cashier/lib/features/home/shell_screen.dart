@@ -570,10 +570,17 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       var storeId = ref.read(currentStoreIdProvider);
       if (storeId == null) {
         final store = await ref.read(localAuthServiceProvider).anyStore();
-        storeId = store?.localId ?? 'local-store';
+        storeId = store?.localId;
         if (store != null) {
           ref.read(currentStoreIdProvider.notifier).state = store.localId;
         }
+      }
+      if (storeId == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('لم يتم إعداد المتجر المحلي بعد.')),
+        );
+        return;
       }
       String? sessionId = cart.tableLocalId == null
           ? null
@@ -1167,10 +1174,12 @@ class _ProductsPanel extends ConsumerWidget {
                     onSearchChanged();
                     return;
                   }
+                  final localId = '${hit['local_id'] ?? ''}'.trim();
+                  if (localId.isEmpty || localId == 'null') return;
                   ref
                       .read(cartControllerProvider.notifier)
                       .addItem(
-                        productLocalId: '${hit['local_id']}',
+                        productLocalId: localId,
                         menuItemId: hit['id'] is int ? hit['id'] as int : null,
                         name: '${hit['name']}',
                         unitPrice: (hit['price'] as num?)?.toDouble() ?? 0,
@@ -1269,9 +1278,15 @@ class _ProductsPanel extends ConsumerWidget {
           sku: item['sku'] as String?,
           available: available,
           onAdd: () {
-            final localId =
-                (item['local_id'] as String?) ??
-                (item['id']?.toString() ?? name);
+            final localId = (item['local_id'] as String?)?.trim() ?? '';
+            if (localId.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('لا يمكن إضافة الصنف بدون معرّف محلي.'),
+                ),
+              );
+              return;
+            }
             ref
                 .read(cartControllerProvider.notifier)
                 .addItem(

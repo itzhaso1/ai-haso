@@ -157,7 +157,10 @@ void main() {
       )..where((t) => t.localId.equals(seed.productId))).getSingle();
       expect(product.stock, 7);
 
-      final movement = (await db.select(db.localStockMovements).get()).single;
+      final movement = (await (db.select(db.localStockMovements)
+            ..where((t) => t.kind.equals('sale')))
+          .get())
+          .single;
       expect(movement.beforeQuantity, 10);
       expect(movement.afterQuantity, 7);
       expect(movement.kind, 'sale');
@@ -303,6 +306,7 @@ void main() {
         orderLocalId: 'sale-ret',
         lines: [ReturnLineInput(orderItemLocalId: item.localId, quantity: 3)],
         allowNegativeStock: true,
+        shiftLocalId: seed.shiftId,
         permissions: adminPerms,
       ),
       throwsA(isA<InvalidReturnQuantity>()),
@@ -822,6 +826,7 @@ void main() {
         orderLocalId: 'sale-imm',
         lines: [ReturnLineInput(orderItemLocalId: item.localId, quantity: 2)],
         allowNegativeStock: false,
+        shiftLocalId: seed.shiftId,
         permissions: adminPerms,
       ),
       throwsA(isA<InvalidReturnQuantity>()),
@@ -889,7 +894,7 @@ void main() {
     final moves = await (db.select(
       db.localStockMovements,
     )..where((t) => t.productLocalId.equals(seed.productId))).get();
-    expect(moves, hasLength(3));
+    expect(moves, hasLength(4));
     for (final move in moves) {
       expect(move.afterQuantity, move.beforeQuantity! + (
         move.kind == 'sale' ? -move.quantity : move.quantity

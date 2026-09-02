@@ -130,20 +130,45 @@ class LocalReportsService {
     ).get())
         .single
         .data;
-    final cogsCents = _asInt(cogsRow['cogs']);
+    var cogsCents = _asInt(cogsRow['cogs']);
+    final returnCogsRow = (await _db.customSelect(
+      'SELECT COALESCE(SUM(i.cost_snapshot * ri.quantity), 0) AS cogs '
+      'FROM local_return_items ri '
+      'INNER JOIN local_returns r ON r.local_id = ri.return_local_id '
+      'INNER JOIN local_order_items i ON i.local_id = ri.order_item_local_id '
+      'WHERE ri.workspace_id = ? AND r.created_at >= ? AND r.created_at < ?',
+      variables: vars,
+    ).get())
+        .single
+        .data;
+    cogsCents -= _asInt(returnCogsRow['cogs']);
+    if (cogsCents < 0) cogsCents = 0;
 
     final topRows = await _db.customSelect(
-      'SELECT i.name AS name, SUM(i.quantity) AS qty, '
-      'SUM(i.total_amount) AS rev '
+      'SELECT i.name AS name, '
+      'SUM(i.quantity) - COALESCE(SUM(ri.qty), 0) AS qty, '
+      'SUM(i.total_amount) - COALESCE(SUM(ri.amt), 0) AS rev '
       'FROM local_order_items i '
       'INNER JOIN local_orders o ON o.local_id = i.order_local_id '
+      'LEFT JOIN ('
+      '  SELECT ri.order_item_local_id AS oid, '
+      '  SUM(ri.quantity) AS qty, SUM(ri.refund_amount) AS amt '
+      '  FROM local_return_items ri '
+      '  INNER JOIN local_returns r ON r.local_id = ri.return_local_id '
+      '  WHERE ri.workspace_id = ? AND r.created_at >= ? AND r.created_at < ? '
+      '  GROUP BY ri.order_item_local_id'
+      ') ri ON ri.oid = i.local_id '
       'WHERE i.workspace_id = ? AND i.is_removed = 0 '
       'AND o.workspace_id = ? AND o.pos_status != ? AND o.payment_status = ? '
       'AND o.created_at >= ? AND o.created_at < ? '
       'GROUP BY i.name '
+      'HAVING qty > 0 '
       'ORDER BY qty DESC '
       'LIMIT 20',
       variables: [
+        Variable.withInt(workspaceId),
+        Variable.withDateTime(from),
+        Variable.withDateTime(to),
         Variable.withInt(workspaceId),
         Variable.withInt(workspaceId),
         Variable.withString('cancelled'),

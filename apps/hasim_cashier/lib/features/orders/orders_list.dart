@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/api/cashier_api.dart';
 import '../../core/auth/auth_controller.dart';
@@ -29,6 +30,8 @@ class _OrdersListState extends ConsumerState<OrdersList> {
   String? _error;
   final _search = TextEditingController();
   String _filter = 'all';
+  var _returnInFlight = false;
+  String? _returnClientRef;
 
   static const _statusOptions = [
     'new',
@@ -251,6 +254,9 @@ class _OrdersListState extends ConsumerState<OrdersList> {
       ),
     );
     if (ok != true) return;
+    if (_returnInFlight) return;
+    _returnInFlight = true;
+    _returnClientRef ??= const Uuid().v4();
     try {
       final session = ref.read(authControllerProvider).valueOrNull;
       final workspaceId = ref.read(workspaceIdProvider);
@@ -258,6 +264,18 @@ class _OrdersListState extends ConsumerState<OrdersList> {
       if ((session?.isLocalMode == true || localId != null) &&
           workspaceId != null &&
           localId != null) {
+        var shiftId = ref.read(currentShiftIdProvider);
+        shiftId ??=
+            (await ref.read(shiftServiceProvider).currentOpen(workspaceId))
+                ?.localId;
+        if (shiftId == null) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('افتح وردية أولاً من الإعدادات.')),
+          );
+          return;
+        }
+        ref.read(currentShiftIdProvider.notifier).state = shiftId;
         final resolved = await ref
             .read(ordersRepositoryProvider)
             .getOrder(workspaceId: workspaceId, localId: localId);
@@ -272,18 +290,20 @@ class _OrdersListState extends ConsumerState<OrdersList> {
               orderLocalId: localId,
               lines: [
                 for (final item in rawItems)
-                  if (item['local_id'] != null || item['id'] != null)
+                  if (item['local_id'] != null)
                     ReturnLineInput(
-                      orderItemLocalId: '${item['local_id'] ?? item['id']}',
+                      orderItemLocalId: '${item['local_id']}',
                       quantity: (item['quantity'] as num?)?.toInt() ?? 1,
                     ),
               ],
               allowNegativeStock: store?.allowNegativeStock ?? false,
               reason: 'مرتجع من تطبيق الكاشير',
               createdByUserId: ref.read(currentLocalUserIdProvider),
-              shiftLocalId: ref.read(currentShiftIdProvider),
+              shiftLocalId: shiftId,
+              clientReference: _returnClientRef,
               permissions: session?.permissions ?? perms,
             );
+        _returnClientRef = null;
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تم تسجيل المرتجع محلياً.')),
@@ -314,6 +334,13 @@ class _OrdersListState extends ConsumerState<OrdersList> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      _returnInFlight = false;
     }
   }
 

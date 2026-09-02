@@ -25,7 +25,11 @@ class StockEngine {
     String? deviceId,
     Map<String, dynamic>? permissions,
   }) async {
-    if (quantity <= 0) {
+    if (type == 'adjustment') {
+      if (quantity < 0 && !allowNegative) {
+        throw const InvalidDiscount();
+      }
+    } else if (quantity <= 0) {
       throw const InvalidDiscount();
     }
     if (type == 'adjustment' || type == 'manual' || type == 'damage') {

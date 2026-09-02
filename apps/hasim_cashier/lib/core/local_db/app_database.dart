@@ -44,7 +44,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -180,6 +180,9 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 7) {
         await migrateToIntegerMoneyAndForeignKeys(m);
+        await _createPerfIndexes();
+      }
+      if (from < 8) {
         await _createPerfIndexes();
       }
     },
@@ -648,8 +651,8 @@ class AppDatabase extends _$AppDatabase {
       'ON local_returns (workspace_id, created_at)',
     );
     await _safeIndex(
-      'CREATE INDEX IF NOT EXISTS idx_local_return_items_return '
-      'ON local_return_items (return_local_id)',
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_local_payments_ws_client '
+      'ON local_payments (workspace_id, client_reference)',
     );
   }
 
