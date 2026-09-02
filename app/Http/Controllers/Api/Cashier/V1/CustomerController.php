@@ -39,13 +39,14 @@ class CustomerController extends CashierController
             });
         }
 
-        $customers = $query->limit(30)->get(['id', 'name', 'phone']);
+        $customers = $query->limit(30)->get(['id', 'name', 'phone', 'client_reference']);
 
         return $this->ok([
             'customers' => $customers->map(fn (Customer $customer) => [
                 'id' => $customer->id,
                 'name' => $customer->name,
                 'phone' => $customer->phone,
+                'client_reference' => $customer->client_reference,
             ])->values(),
         ]);
     }
@@ -58,10 +59,46 @@ class CustomerController extends CashierController
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'phone' => ['required', 'string', 'max:32'],
+            'client_reference' => ['nullable', 'string', 'max:120'],
+        ]);
+
+        $clientRef = isset($validated['client_reference'])
+            ? trim((string) $validated['client_reference'])
+            : '';
+        if ($clientRef !== '') {
+            $existingByRef = Customer::query()
+                ->where('client_reference', $clientRef)
+                ->first();
+            if ($existingByRef) {
+                return $this->ok([
+                    'id' => $existingByRef->id,
+                    'name' => $existingByRef->name,
+                    'phone' => $existingByRef->phone,
+                    'client_reference' => $existingByRef->client_reference,
+                ], message: 'عميل موجود مسبقاً.');
+            }
+        }
+
+        $phone = trim($validated['phone']);
+        $existingByPhone = Customer::query()->where('phone', $phone)->first();
+        if ($existingByPhone) {
+            // Idempotent phone match — never create a duplicate contact.
+            if ($clientRef !== '' && empty($existingByPhone->client_reference)) {
+                $existingByPhone->client_reference = $clientRef;
+                $existingByPhone->save();
+            }
+
+            return $this->ok([
+                'id' => $existingByPhone->id,
+                'name' => $existingByPhone->name,
+                'phone' => $existingByPhone->phone,
+                'client_reference' => $existingByPhone->client_reference,
+            ], message: 'عميل موجود مسبقاً.');
+        }
+
+        $request->validate([
             'phone' => [
-                'required',
-                'string',
-                'max:32',
                 Rule::unique('customers', 'phone')->where(fn ($q) => $q->where('workspace_id', $workspace->id)),
             ],
         ]);
@@ -69,7 +106,8 @@ class CustomerController extends CashierController
         $customer = Customer::query()->create([
             'workspace_id' => $workspace->id,
             'name' => $validated['name'],
-            'phone' => $validated['phone'],
+            'phone' => $phone,
+            'client_reference' => $clientRef !== '' ? $clientRef : null,
             'orders_count' => 0,
             'total_purchases' => 0,
         ]);
@@ -78,6 +116,7 @@ class CustomerController extends CashierController
             'id' => $customer->id,
             'name' => $customer->name,
             'phone' => $customer->phone,
+            'client_reference' => $customer->client_reference,
         ], message: 'تم إنشاء العميل.', status: 201);
     }
 

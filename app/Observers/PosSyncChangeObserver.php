@@ -2,15 +2,19 @@
 
 namespace App\Observers;
 
+use App\Models\Customer;
 use App\Models\DiningTable;
+use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\PosItemCategory;
 use App\Models\PosMenuItem;
 use App\Services\Pos\PosSyncChangeRecorder;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Records catalog/table mutations into the monotonic pos_sync_changes log.
+ * Records catalog / table / order / customer mutations into pos_sync_changes.
  * Soft deletes emit operation=delete so offline devices learn about removals.
+ * Payments / invoices are intentionally NOT mirrored as offline financial workflows.
  */
 class PosSyncChangeObserver
 {
@@ -45,6 +49,12 @@ class PosSyncChangeObserver
 
     private function write(Model $model, string $operation): void
     {
+        if ($model instanceof OrderItem) {
+            $this->writeOrderItem($model, $operation);
+
+            return;
+        }
+
         $entity = $this->entityType($model);
         if ($entity === null) {
             return;
@@ -54,22 +64,40 @@ class PosSyncChangeObserver
             return;
         }
 
-        $origin = null;
+        $this->recorder->record($entity, $operation, $model, $this->originDeviceId());
+    }
+
+    private function writeOrderItem(OrderItem $item, string $operation): void
+    {
+        $order = $item->relationLoaded('order')
+            ? $item->order
+            : Order::withoutGlobalScopes()->find($item->order_id);
+
+        if (! $order || ! $order->getAttribute('workspace_id')) {
+            return;
+        }
+
+        // Item mutations surface as order updates with a full snapshot.
+        $op = $operation === 'create' || $operation === 'update' || $operation === 'delete'
+            ? 'update'
+            : 'update';
+        $this->recorder->recordOrderSnapshot($order, $op, $this->originDeviceId());
+    }
+
+    private function originDeviceId(): ?string
+    {
         try {
             $origin = request()?->header('X-Device-Id');
             if (is_string($origin)) {
                 $origin = trim($origin);
-                if ($origin === '') {
-                    $origin = null;
-                }
-            } else {
-                $origin = null;
+
+                return $origin === '' ? null : $origin;
             }
         } catch (\Throwable) {
-            $origin = null;
+            return null;
         }
 
-        $this->recorder->record($entity, $operation, $model, $origin);
+        return null;
     }
 
     private function entityType(Model $model): ?string
@@ -78,6 +106,8 @@ class PosSyncChangeObserver
             $model instanceof PosMenuItem => PosSyncChangeRecorder::ENTITY_PRODUCT,
             $model instanceof PosItemCategory => PosSyncChangeRecorder::ENTITY_CATEGORY,
             $model instanceof DiningTable => PosSyncChangeRecorder::ENTITY_TABLE,
+            $model instanceof Order => PosSyncChangeRecorder::ENTITY_ORDER,
+            $model instanceof Customer => PosSyncChangeRecorder::ENTITY_CUSTOMER,
             default => null,
         };
     }

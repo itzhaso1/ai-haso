@@ -2,12 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/cashier_api.dart';
 import '../local_db/local_db_providers.dart';
-import '../offline/offline_store.dart';
 import '../offline/pending_order.dart';
 import '../offline/sync_engine.dart';
 import 'sync_engine_v2.dart';
 
-/// Flushes Hive outbox + SQLite sync_queue, then pulls Laravel deltas.
+/// Primary sync path is SyncEngineV2. Legacy Hive flush runs only to drain
+/// leftover pending rows until migration completes (no POS dual-write).
 class PosSyncCoordinator {
   PosSyncCoordinator({
     required SyncEngine hiveEngine,
@@ -22,6 +22,7 @@ class PosSyncCoordinator {
     int? workspaceId,
     String? deviceId,
   }) async {
+    // Drain any pre-Phase-6 Hive leftovers once; SQLite is SoT for POS sync.
     final hive = await _hive.flushPendingOrders(workspaceId: workspaceId);
     if (workspaceId == null || workspaceId <= 0) {
       return hive;
@@ -56,7 +57,6 @@ final syncEngineV2Provider = Provider<SyncEngineV2>((ref) {
     ref.watch(appDatabaseProvider),
     ref.watch(syncQueueRepositoryProvider),
     api: ref.watch(cashierApiProvider),
-    offlineStore: OfflineStore.instance,
     pullApplier: ref.watch(syncPullApplierProvider),
   );
 });

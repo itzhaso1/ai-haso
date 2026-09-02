@@ -31,18 +31,49 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) async {
           await m.createAll();
+          await _createPerfIndexes();
         },
         onUpgrade: (m, from, to) async {
           // v2: catalog/table local_ids become workspace-scoped via Initial Sync
           // rewrite and OrdersRepository writers — no destructive DDL required.
+          if (from < 3) {
+            await _createPerfIndexes();
+          }
         },
       );
+
+  Future<void> _createPerfIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_orders_ws_sync '
+      'ON local_orders (workspace_id, sync_status)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_orders_ws_client_ref '
+      'ON local_orders (workspace_id, client_reference)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_order_items_order '
+      'ON local_order_items (workspace_id, order_local_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_products_ws '
+      'ON local_products (workspace_id, is_deleted, is_active)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sync_queue_ws_status '
+      'ON sync_queue_items (workspace_id, status, next_attempt_at)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_customers_ws '
+      'ON local_customers (workspace_id, sync_status)',
+    );
+  }
 
   /// Production/native opener — one SQLite file per app install.
   static AppDatabase open() {

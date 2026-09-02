@@ -8,7 +8,6 @@ import '../offline/pending_order.dart';
 import 'sync_queue_repository.dart';
 
 /// Local-first orders: UI → repository → SQLite transaction → sync_queue.
-/// Hive remains dual-written for Phase 3 compatibility (removed in Phase 6).
 class OrdersRepository {
   OrdersRepository(
     this._db,
@@ -20,7 +19,7 @@ class OrdersRepository {
 
   final AppDatabase _db;
   final SyncQueueRepository _queue;
-  final OfflineStore _hive;
+  final OfflineStore _hive; // legacy one-shot migration only
   final String Function() _newItemId;
 
   /// Create a table order atomically with items + sync_queue create.
@@ -64,6 +63,7 @@ class OrdersRepository {
     final totals = _totals(normalized);
     final tableLocalId = LocalIds.table(workspaceId, tableId);
     final apiPayload = _apiCreatePayload(
+      orderType: 'table',
       tableId: tableId,
       clientReference: key,
       notes: notes,
@@ -133,13 +133,108 @@ class OrdersRepository {
       );
     });
 
-    await _dualWriteHiveCreate(
-      workspaceId: workspaceId,
-      tableId: tableId,
+    final order = await (_db.select(_db.localOrders)
+          ..where((t) => t.localId.equals(key)))
+        .getSingle();
+    return _orderToDisplay(order, await _itemsFor(key));
+  }
+
+  /// Create a takeaway/cart order locally (same sync_queue path as table orders).
+  Future<Map<String, dynamic>> createTakeawayOrder({
+    required int workspaceId,
+    required String deviceId,
+    required String clientReference,
+    required List<Map<String, dynamic>> items,
+    String? notes,
+    int? customerServerId,
+  }) async {
+    if (workspaceId <= 0) throw ArgumentError('workspaceId required');
+    if (deviceId.trim().isEmpty) throw ArgumentError('deviceId required');
+    final key = clientReference.trim();
+    if (key.isEmpty) throw ArgumentError('clientReference required');
+    final normalized = _normalizeItems(items);
+    if (normalized.isEmpty) throw ArgumentError('items required');
+
+    final existing = await (_db.select(_db.localOrders)
+          ..where((t) =>
+              t.workspaceId.equals(workspaceId) &
+              t.clientReference.equals(key)))
+        .getSingleOrNull();
+    if (existing != null) {
+      return _orderToDisplay(existing, await _itemsFor(existing.localId));
+    }
+
+    final now = DateTime.now();
+    final totals = _totals(normalized);
+    final apiPayload = _apiCreatePayload(
+      orderType: 'takeaway',
+      tableId: null,
       clientReference: key,
-      items: normalized,
       notes: notes,
+      items: normalized,
+      customerId: customerServerId,
     );
+
+    await _db.transaction(() async {
+      await _db.into(_db.localOrders).insert(
+            LocalOrdersCompanion.insert(
+              localId: key,
+              workspaceId: workspaceId,
+              deviceId: deviceId.trim(),
+              clientReference: key,
+              orderType: 'takeaway',
+              notes: Value(notes),
+              subtotal: Value(totals.subtotal),
+              taxAmount: const Value(0),
+              discountAmount: const Value(0),
+              totalAmount: Value(totals.subtotal),
+              posStatus: const Value('new'),
+              paymentStatus: const Value('unpaid'),
+              syncStatus: const Value('pending'),
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+      for (final item in normalized) {
+        await _db.into(_db.localOrderItems).insert(
+              LocalOrderItemsCompanion.insert(
+                localId: '${item['local_id']}',
+                workspaceId: workspaceId,
+                orderLocalId: key,
+                productServerId: Value(
+                  (item['pos_menu_item_id'] as num?)?.toInt(),
+                ),
+                productLocalId: Value(
+                  (item['pos_menu_item_id'] as num?) == null
+                      ? null
+                      : LocalIds.product(
+                          workspaceId,
+                          (item['pos_menu_item_id'] as num).toInt(),
+                        ),
+                ),
+                name: '${item['name'] ?? item['product_name'] ?? 'صنف'}',
+                quantity: (item['quantity'] as num).toInt(),
+                unitPrice: (item['unit_price'] as num?)?.toDouble() ?? 0,
+                discountAmount: Value(
+                  (item['discount_amount'] as num?)?.toDouble() ?? 0,
+                ),
+                totalAmount: (item['total_amount'] as num?)?.toDouble() ??
+                    ((item['quantity'] as num).toDouble() *
+                        ((item['unit_price'] as num?)?.toDouble() ?? 0)),
+                updatedAt: now,
+              ),
+            );
+      }
+      await _queue.enqueue(
+        workspaceId: workspaceId,
+        deviceId: deviceId.trim(),
+        entityType: 'order',
+        entityId: key,
+        operation: 'create',
+        payload: apiPayload,
+        clientReference: key,
+      );
+    });
 
     final order = await (_db.select(_db.localOrders)
           ..where((t) => t.localId.equals(key)))
@@ -164,7 +259,8 @@ class OrdersRepository {
     final totals = _totals(normalized);
     final now = DateTime.now();
     final apiPayload = _apiCreatePayload(
-      tableId: order.tableServerId ?? 0,
+      orderType: order.orderType,
+      tableId: order.tableServerId,
       clientReference: order.clientReference,
       notes: notes,
       items: normalized,
@@ -232,10 +328,6 @@ class OrdersRepository {
       }
     });
 
-    try {
-      await _hive.updatePendingOrder(localId, items: normalized, notes: notes);
-    } catch (_) {}
-
     return true;
   }
 
@@ -270,10 +362,6 @@ class OrdersRepository {
                 t.workspaceId.equals(workspaceId)))
           .go();
     });
-
-    try {
-      await _hive.deletePending(localId);
-    } catch (_) {}
 
     return true;
   }
@@ -356,7 +444,6 @@ class OrdersRepository {
     }
     for (final pending in hiveOrders) {
       if (pending.workspaceId != workspaceId) continue;
-      if (!pending.isTableOrder) continue;
       final key = pending.idempotencyKey.trim();
       if (key.isEmpty) continue;
       final existing = await (_db.select(_db.localOrders)
@@ -364,16 +451,34 @@ class OrdersRepository {
                 t.workspaceId.equals(workspaceId) &
                 t.clientReference.equals(key)))
           .getSingleOrNull();
-      if (existing != null) continue;
+      if (existing != null) {
+        try {
+          await _hive.markSynced(key);
+        } catch (_) {}
+        continue;
+      }
       try {
-        await createTableOrder(
-          workspaceId: workspaceId,
-          deviceId: deviceId,
-          tableId: pending.tableId!,
-          clientReference: key,
-          items: pending.items,
-          notes: pending.notes,
-        );
+        if (pending.isTableOrder && pending.tableId != null) {
+          await createTableOrder(
+            workspaceId: workspaceId,
+            deviceId: deviceId,
+            tableId: pending.tableId!,
+            clientReference: key,
+            items: pending.items,
+            notes: pending.notes,
+          );
+        } else {
+          await createTakeawayOrder(
+            workspaceId: workspaceId,
+            deviceId: deviceId,
+            clientReference: key,
+            items: pending.items,
+            notes: pending.notes,
+          );
+        }
+        try {
+          await _hive.markSynced(key);
+        } catch (_) {}
         migrated++;
       } catch (_) {
         // Leave Hive row intact; retry on next boot.
@@ -430,14 +535,17 @@ class OrdersRepository {
   }
 
   Map<String, dynamic> _apiCreatePayload({
-    required int tableId,
+    required String orderType,
+    required int? tableId,
     required String clientReference,
     required String? notes,
     required List<Map<String, dynamic>> items,
+    int? customerId,
   }) {
     return {
-      'order_type': 'table',
-      'dining_table_id': tableId,
+      'order_type': orderType,
+      if (tableId != null && tableId > 0) 'dining_table_id': tableId,
+      if (customerId != null && customerId > 0) 'customer_id': customerId,
       'client_reference': clientReference,
       if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
       'items': [
@@ -497,24 +605,5 @@ class OrdersRepository {
           },
       ],
     };
-  }
-
-  Future<void> _dualWriteHiveCreate({
-    required int workspaceId,
-    required int tableId,
-    required String clientReference,
-    required List<Map<String, dynamic>> items,
-    String? notes,
-  }) async {
-    try {
-      if (_hive.readPending(clientReference) != null) return;
-      await _hive.enqueueTableOrder(
-        tableId: tableId,
-        workspaceId: workspaceId,
-        idempotencyKey: clientReference,
-        items: items,
-        notes: notes,
-      );
-    } catch (_) {}
   }
 }

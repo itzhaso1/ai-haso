@@ -1,4 +1,4 @@
-/// Workspace-scoped local primary keys for catalog / tables.
+/// Workspace-scoped local primary keys for catalog / tables / customers.
 /// Prevents cross-tenant collisions when the same server id exists in two workspaces.
 class LocalIds {
   const LocalIds._();
@@ -12,6 +12,9 @@ class LocalIds {
   static String table(int workspaceId, int serverId) =>
       'w${workspaceId}_table_$serverId';
 
+  static String customer(int workspaceId, int serverId) =>
+      'w${workspaceId}_cust_$serverId';
+
   static bool looksScoped(String localId) =>
-      RegExp(r'^w\d+_(cat|prod|table)_').hasMatch(localId);
+      RegExp(r'^w\d+_(cat|prod|table|cust)_').hasMatch(localId);
 }

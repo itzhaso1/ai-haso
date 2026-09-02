@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'workspace_id',
     'name',
     'phone',
+    'client_reference',
     'whatsapp',
     'email',
     'vat_number',

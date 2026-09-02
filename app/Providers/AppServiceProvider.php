@@ -41,6 +41,7 @@ use App\Models\Finance\FinanceTaxRate;
 use App\Models\Finance\FinanceTreasuryAccount;
 use App\Models\InventoryMovement;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Payment;
 use App\Models\PosMenuItem;
 use App\Models\PosCashierInvoice;
@@ -136,7 +137,10 @@ class AppServiceProvider extends ServiceProvider
         Product::observe(WorkspaceAuditObserver::class);
         Category::observe(WorkspaceAuditObserver::class);
         Customer::observe(WorkspaceAuditObserver::class);
+        Customer::observe(PosSyncChangeObserver::class);
         Order::observe(WorkspaceAuditObserver::class);
+        Order::observe(PosSyncChangeObserver::class);
+        OrderItem::observe(PosSyncChangeObserver::class);
         DiningTable::observe(WorkspaceAuditObserver::class);
         DiningTable::observe(PosSyncChangeObserver::class);
         TableSession::observe(WorkspaceAuditObserver::class);

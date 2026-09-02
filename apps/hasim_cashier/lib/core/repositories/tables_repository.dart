@@ -5,7 +5,6 @@ import 'package:drift/drift.dart';
 import '../api/cashier_api.dart';
 import '../local_db/app_database.dart';
 import '../local_db/local_ids.dart';
-import '../offline/offline_store.dart';
 
 /// Tables UI reads/writes through this repository only.
 /// Local SQLite is the source for display; remote refresh is an implementation detail.
@@ -13,13 +12,10 @@ class TablesRepository {
   TablesRepository(
     this._db, {
     CashierApiClient? api,
-    OfflineStore? offlineStore,
-  })  : _api = api,
-        _hive = offlineStore ?? OfflineStore.instance;
+  }) : _api = api;
 
   final AppDatabase _db;
   final CashierApiClient? _api;
-  final OfflineStore _hive;
 
   Future<List<Map<String, dynamic>>> listTables(int workspaceId) async {
     if (workspaceId <= 0) return const [];
@@ -101,10 +97,6 @@ class TablesRepository {
             );
       }
     });
-    // Keep Hive parallel for Phase 1/2 dual-run (not deleted).
-    try {
-      await _hive.cacheTables(tables, workspaceId: workspaceId);
-    } catch (_) {}
   }
 
   Future<void> upsertTableDetail(
@@ -131,13 +123,6 @@ class TablesRepository {
             updatedAt: now,
           ),
         );
-    try {
-      await _hive.cacheTableDetail(
-        tableServerId,
-        detail,
-        workspaceId: workspaceId,
-      );
-    } catch (_) {}
   }
 
   /// Best-effort remote refresh. UI must not branch on connectivity —

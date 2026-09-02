@@ -5,7 +5,6 @@ import 'package:uuid/uuid.dart';
 import '../../core/api/cashier_api.dart';
 import '../../core/local_db/local_db_providers.dart';
 import '../../core/network/cashier_link.dart';
-import '../../core/offline/offline_store.dart';
 import '../../core/sync/pos_sync_coordinator.dart';
 import '../../core/theme/hasim_colors.dart';
 import '../../core/theme/hasim_radius.dart';
@@ -53,19 +52,11 @@ class _TableAddOrderSheetState extends ConsumerState<TableAddOrderSheet> {
   }
 
   List<Map<String, dynamic>> _cachedCatalog() {
-    final hive = OfflineStore.instance.readCatalog(
-      workspaceId: ref.read(workspaceIdProvider),
-    );
-    if (hive.isNotEmpty) return hive;
     return ref.read(catalogItemsProvider).valueOrNull ?? const [];
   }
 
   List<Map<String, dynamic>> _cachedCategories() {
-    final hive = OfflineStore.instance.readCategories(
-      workspaceId: ref.read(workspaceIdProvider),
-    );
-    if (hive.isNotEmpty) return hive;
-    return const [];
+    return ref.read(categoriesProvider).valueOrNull ?? const [];
   }
 
   void _applyCatalog(
@@ -79,7 +70,7 @@ class _TableAddOrderSheetState extends ConsumerState<TableAddOrderSheet> {
       _loading = false;
       if (items.isEmpty) {
         _error = error ??
-            'الكتالوج غير متاح بدون اتصال. افتح التطبيق وهو متصل لتحميل الأصناف.';
+            'الكتالوج غير متاح. أكمل المزامنة الأولية أثناء الاتصال.';
       } else {
         _error = error;
       }
@@ -91,11 +82,18 @@ class _TableAddOrderSheetState extends ConsumerState<TableAddOrderSheet> {
       _loading = true;
       _error = null;
     });
-    final link = ref.read(cashierLinkProvider);
-    if (!link.isOnline) {
-      if (!mounted) return;
-      _applyCatalog(_cachedCatalog(), _cachedCategories());
-      return;
+    final workspaceId = ref.read(workspaceIdProvider);
+    // Always prefer Local SQLite via repository; remote refresh is best-effort.
+    if (workspaceId != null && workspaceId > 0) {
+      try {
+        final catalog = ref.read(catalogRepositoryProvider);
+        final localItems = await catalog.products(workspaceId);
+        final localCats = await catalog.categories(workspaceId);
+        if (localItems.isNotEmpty) {
+          if (!mounted) return;
+          _applyCatalog(localItems, localCats);
+        }
+      } catch (_) {}
     }
     try {
       final api = ref.read(cashierApiProvider);
@@ -120,34 +118,21 @@ class _TableAddOrderSheetState extends ConsumerState<TableAddOrderSheet> {
       if (cats.isEmpty) {
         cats.addAll(_cachedCategories());
       }
-      if (items.isNotEmpty) {
-        await OfflineStore.instance.cacheCatalog(
-          items,
-          workspaceId: ref.read(workspaceIdProvider),
-        );
-      }
-      if (cats.isNotEmpty) {
-        await OfflineStore.instance.cacheCategories(
-          cats,
-          workspaceId: ref.read(workspaceIdProvider),
-        );
-      }
       if (!mounted) return;
       _applyCatalog(items, cats);
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      _applyCatalog(
-        _cachedCatalog(),
-        _cachedCategories(),
-        error: _cachedCatalog().isEmpty ? e.message : null,
-      );
     } catch (e) {
       if (!mounted) return;
-      _applyCatalog(
-        _cachedCatalog(),
-        _cachedCategories(),
-        error: _cachedCatalog().isEmpty ? e.toString() : null,
-      );
+      final items = _cachedCatalog();
+      final cats = _cachedCategories();
+      if (items.isNotEmpty || _catalog.isNotEmpty) {
+        if (items.isNotEmpty) {
+          _applyCatalog(items, cats);
+        } else {
+          setState(() => _loading = false);
+        }
+      } else {
+        _applyCatalog(const [], const [], error: e.toString());
+      }
     }
   }
 

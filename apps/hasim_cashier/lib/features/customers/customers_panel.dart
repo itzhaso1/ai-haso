@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/api/cashier_api.dart';
+import '../../core/local_db/local_db_providers.dart';
+import '../../core/sync/pos_sync_coordinator.dart';
 import '../../core/theme/hasim_colors.dart';
-import '../../core/widgets/hasim_widgets.dart';
 
 class CustomersPanel extends ConsumerStatefulWidget {
   const CustomersPanel({super.key});
@@ -35,29 +37,62 @@ class _CustomersPanelState extends ConsumerState<CustomersPanel> {
       _loading = true;
       _error = null;
     });
+    final workspaceId = ref.read(workspaceIdProvider);
+    if (workspaceId == null || workspaceId <= 0) {
+      setState(() {
+        _loading = false;
+        _error = 'لا توجد مساحة عمل';
+      });
+      return;
+    }
     try {
-      final data = await ref.read(cashierApiProvider).get(
-        '/customers',
-        query: {
-          if (_search.text.trim().isNotEmpty) 'q': _search.text.trim(),
-        },
-      );
-      final list = <Map<String, dynamic>>[];
-      final raw = data['customers'] ?? data['value'];
-      if (raw is List) {
-        for (final item in raw) {
-          if (item is Map) list.add(Map<String, dynamic>.from(item));
+      final local = await ref.read(customersRepositoryProvider).list(
+            workspaceId: workspaceId,
+            query: _search.text,
+          );
+      if (local.isNotEmpty) {
+        setState(() {
+          _customers = local;
+          _loading = false;
+        });
+      }
+      // Best-effort remote refresh into local store for next time.
+      try {
+        final data = await ref.read(cashierApiProvider).get(
+          '/customers',
+          query: {
+            if (_search.text.trim().isNotEmpty) 'q': _search.text.trim(),
+          },
+        );
+        final list = <Map<String, dynamic>>[];
+        final raw = data['customers'] ?? data['value'];
+        if (raw is List) {
+          for (final item in raw) {
+            if (item is Map) list.add(Map<String, dynamic>.from(item));
+          }
+        }
+        if (list.isNotEmpty && mounted) {
+          setState(() {
+            _customers = list;
+            _loading = false;
+          });
+        } else if (mounted && local.isEmpty) {
+          setState(() {
+            _customers = local;
+            _loading = false;
+          });
+        }
+      } catch (_) {
+        if (mounted) {
+          setState(() {
+            _customers = local;
+            _loading = false;
+            if (local.isEmpty) {
+              _error = 'تعذر تحميل العملاء';
+            }
+          });
         }
       }
-      setState(() {
-        _customers = list;
-        _loading = false;
-      });
-    } on ApiException catch (e) {
-      setState(() {
-        _loading = false;
-        _error = e.message;
-      });
     } catch (e) {
       setState(() {
         _loading = false;
@@ -100,19 +135,33 @@ class _CustomersPanelState extends ConsumerState<CustomersPanel> {
       ),
     );
     if (ok != true || name.text.trim().isEmpty) return;
+    final workspaceId = ref.read(workspaceIdProvider);
+    if (workspaceId == null) return;
     try {
-      await ref.read(cashierApiProvider).post(
-        '/customers',
-        data: {
-          'name': name.text.trim(),
-          if (phone.text.trim().isNotEmpty) 'phone': phone.text.trim(),
-        },
-      );
+      final deviceId =
+          await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
+      await ref.read(customersRepositoryProvider).createOffline(
+            workspaceId: workspaceId,
+            deviceId: deviceId,
+            name: name.text.trim(),
+            phone: phone.text.trim().isEmpty ? '0000000000' : phone.text.trim(),
+            clientReference: const Uuid().v4(),
+          );
+      await ref.read(posSyncCoordinatorProvider).flushPendingOrders(
+            workspaceId: workspaceId,
+            deviceId: deviceId,
+          );
       await _load();
     } on ApiException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(e.message)));
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.toString())));
+      await _load();
     }
   }
 
@@ -121,90 +170,53 @@ class _CustomersPanelState extends ConsumerState<CustomersPanel> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          padding: const EdgeInsets.all(12),
           child: Row(
             children: [
               Expanded(
                 child: TextField(
                   controller: _search,
                   decoration: const InputDecoration(
-                    hintText: 'بحث عن عميل…',
-                    isDense: true,
-                    prefixIcon: Icon(Icons.search, size: 18),
+                    hintText: 'بحث بالاسم أو الجوال',
+                    prefixIcon: Icon(Icons.search),
                   ),
                   onSubmitted: (_) => _load(),
                 ),
               ),
               const SizedBox(width: 8),
-              HsPrimaryButton(label: 'إضافة', onPressed: _addCustomer),
+              FilledButton.icon(
+                onPressed: _addCustomer,
+                icon: const Icon(Icons.person_add_alt_1),
+                label: const Text('إضافة'),
+              ),
             ],
           ),
         ),
+        if (_loading) const LinearProgressIndicator(minHeight: 2),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(_error!, style: const TextStyle(color: HasimColors.danger)),
+          ),
         Expanded(
-          child: _loading
-              ? const Center(child: CircularProgressIndicator())
-              : _error != null
-                  ? Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: HsEmpty(
-                        title: 'تعذر تحميل العملاء',
-                        subtitle: _error,
-                        actionLabel: 'إعادة المحاولة',
-                        onAction: _load,
-                      ),
-                    )
-                  : _customers.isEmpty
-                      ? const Padding(
-                          padding: EdgeInsets.all(16),
-                          child: HsEmpty(title: 'لا يوجد عملاء.'),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: _load,
-                          child: ListView.separated(
-                            padding: const EdgeInsets.all(12),
-                            itemCount: _customers.length,
-                            separatorBuilder: (_, _) =>
-                                const SizedBox(height: 8),
-                            itemBuilder: (context, index) {
-                              final c = _customers[index];
-                              return HsCard(
-                                child: Row(
-                                  children: [
-                                    const CircleAvatar(
-                                      backgroundColor: HasimColors.brandSoft,
-                                      child: Icon(
-                                        Icons.person_outline,
-                                        color: HasimColors.brandDark,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            '${c['name']}',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                          Text(
-                                            '${c['phone'] ?? '—'}',
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              color: HasimColors.muted,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                        ),
+          child: _customers.isEmpty && !_loading
+              ? const Center(child: Text('لا يوجد عملاء'))
+              : ListView.separated(
+                  itemCount: _customers.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, i) {
+                    final c = _customers[i];
+                    final pending = c['is_local_pending'] == true ||
+                        c['sync_status'] == 'pending';
+                    return ListTile(
+                      title: Text('${c['name'] ?? ''}'),
+                      subtitle: Text('${c['phone'] ?? ''}'),
+                      trailing: pending
+                          ? const Chip(label: Text('بانتظار المزامنة'))
+                          : null,
+                    );
+                  },
+                ),
         ),
       ],
     );

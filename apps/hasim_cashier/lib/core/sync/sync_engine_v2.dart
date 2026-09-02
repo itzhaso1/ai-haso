@@ -5,18 +5,16 @@ import 'package:drift/drift.dart';
 import '../api/cashier_api.dart';
 import '../local_db/app_database.dart';
 import '../local_db/workspace_scope.dart';
-import '../offline/offline_store.dart';
 import '../repositories/sync_queue_repository.dart';
 import 'sync_pull_applier.dart';
 
 /// Sync Engine v2 — push SQLite sync_queue, then pull incremental changes.
-/// Coexists with Hive SyncEngine (dual-run) until Phase 6 removes Hive.
+/// Primary POS sync path (Hive outbox is legacy migration only).
 class SyncEngineV2 {
   SyncEngineV2(
     this._db,
     this._queue, {
     CashierApiClient? api,
-    OfflineStore? offlineStore,
     SyncPullApplier? pullApplier,
     Future<Map<String, dynamic>> Function(
       Map<String, dynamic> payload,
@@ -29,7 +27,6 @@ class SyncEngineV2 {
     Future<void> Function(int serverOrderId)? deleteOrder,
     Future<Map<String, dynamic>> Function(int since, int limit)? fetchChanges,
   })  : _api = api,
-        _hive = offlineStore ?? OfflineStore.instance,
         _pullApplier = pullApplier ?? SyncPullApplier(_db),
         _postOrder = postOrder,
         _postOrderItems = postOrderItems,
@@ -39,7 +36,6 @@ class SyncEngineV2 {
   final AppDatabase _db;
   final SyncQueueRepository _queue;
   final CashierApiClient? _api;
-  final OfflineStore _hive;
   final SyncPullApplier _pullApplier;
   final Future<Map<String, dynamic>> Function(
     Map<String, dynamic> payload,
@@ -163,14 +159,17 @@ class SyncEngineV2 {
           kept++;
           continue;
         }
-        if (row.entityType != 'order') {
+        if (row.entityType != 'order' && row.entityType != 'customer') {
           kept++;
           continue;
         }
 
         await _queue.markSyncing(row.id);
         try {
-          if (row.operation == 'create') {
+          if (row.entityType == 'customer') {
+            await _pushCustomer(row);
+            synced++;
+          } else if (row.operation == 'create') {
             await _pushCreate(row);
             synced++;
           } else if (row.operation == 'update') {
@@ -199,16 +198,28 @@ class SyncEngineV2 {
           }
           if (e.statusCode == 422 || e.statusCode == 403) {
             await _queue.markFailed(row.id, e.message, retryable: false);
-            await _markOrderFailed(row.entityId, e.message);
+            if (row.entityType == 'order') {
+              await _markOrderFailed(row.entityId, e.message);
+            } else if (row.entityType == 'customer') {
+              await _markCustomerFailed(row.entityId, e.message);
+            }
             failed++;
           } else {
             await _queue.markFailed(row.id, e.message, retryable: true);
-            await _markOrderPending(row.entityId, e.message);
+            if (row.entityType == 'order') {
+              await _markOrderPending(row.entityId, e.message);
+            } else if (row.entityType == 'customer') {
+              await _markCustomerPending(row.entityId, e.message);
+            }
             kept++;
           }
         } catch (e) {
           await _queue.markFailed(row.id, e.toString(), retryable: true);
-          await _markOrderPending(row.entityId, e.toString());
+          if (row.entityType == 'order') {
+            await _markOrderPending(row.entityId, e.toString());
+          } else if (row.entityType == 'customer') {
+            await _markCustomerPending(row.entityId, e.toString());
+          }
           kept++;
         }
       }
@@ -245,9 +256,39 @@ class SyncEngineV2 {
       );
       await _queue.markSynced(row.id);
     });
-    try {
-      await _hive.markSynced(row.clientReference, serverOrderId: serverId);
-    } catch (_) {}
+  }
+
+  Future<void> _pushCustomer(SyncQueueItem row) async {
+    final payload = _decode(row.payloadJson);
+    payload['client_reference'] = row.clientReference;
+    final api = _api;
+    if (api == null) {
+      throw StateError('SyncEngineV2 requires API for customer push');
+    }
+    final data = await api.post(
+      '/customers',
+      data: payload,
+      idempotencyKey: row.clientReference,
+    );
+    final serverId = data['id'] is num
+        ? (data['id'] as num).toInt()
+        : int.tryParse('${data['id']}');
+    await _db.transaction(() async {
+      await (_db.update(_db.localCustomers)
+            ..where((t) =>
+                t.localId.equals(row.entityId) &
+                t.workspaceId.equals(row.workspaceId)))
+          .write(
+        LocalCustomersCompanion(
+          serverId: Value(serverId),
+          syncStatus: const Value('synced'),
+          name: Value('${data['name'] ?? payload['name'] ?? ''}'),
+          phone: Value(data['phone'] as String? ?? payload['phone'] as String?),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      await _queue.markSynced(row.id);
+    });
   }
 
   Future<void> _pushUpdate(SyncQueueItem row) async {
@@ -316,6 +357,28 @@ class SyncEngineV2 {
       LocalOrdersCompanion(
         syncStatus: const Value('pending'),
         lastError: Value(error),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  Future<void> _markCustomerFailed(String localId, String error) async {
+    await (_db.update(_db.localCustomers)
+          ..where((t) => t.localId.equals(localId)))
+        .write(
+      LocalCustomersCompanion(
+        syncStatus: const Value('failed'),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  Future<void> _markCustomerPending(String localId, String error) async {
+    await (_db.update(_db.localCustomers)
+          ..where((t) => t.localId.equals(localId)))
+        .write(
+      LocalCustomersCompanion(
+        syncStatus: const Value('pending'),
         updatedAt: Value(DateTime.now()),
       ),
     );

@@ -330,7 +330,7 @@ void main() {
   test('conflict strategy keeps pending orders and requires online table ops', () {
     expect(
       ConflictStrategy.forDomain('pending_order'),
-      ConflictPolicy.keepLocalPending,
+      ConflictPolicy.detectAndRecord,
     );
     expect(
       ConflictStrategy.forDomain('table_action'),

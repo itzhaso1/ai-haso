@@ -2,91 +2,39 @@
 
 **Branch:** `cursor/offline-first-pos-v2-757c`  
 **Base:** `cursor/cashier-ui-ux-fix-757c` @ `54806df`  
-**Status:** Phase 4 complete (Laravel devices + incremental sync_changes + Flutter pull)
+**Status:** Phase 5+6 complete (bidirectional sync + SQLite primary / Hive POS dual-write removed)
 
-## Audit summary (current = Online POS + durable outbox)
-
-| Area | Today |
-|------|--------|
-| Architecture | UI → Riverpod → Dio API; Hive is cache + pending-order outbox |
-| Local storage | Hive boxes `cashier_catalog` + `cashier_pending_orders` |
-| Offline orders | Table create/edit/delete pending with stable UUID idempotency (`54806df`) |
-| Sync | Push-only `POST /orders`; no pull cursor / device registry |
-| Financial close | Online-only Scenario A (correct; keep) |
-| Workspace isolation | Pending + catalog/tables scoped; bootstrap/session/kitchen global |
-
-## Target architecture
+## Architecture
 
 ```text
 Flutter UI → Repositories → SQLite (Drift) → Sync Engine ↔ Laravel (SoT)
 ```
 
-Laravel stays Source of Truth. UI must not depend on API for daily POS reads/writes after Initial Sync.
-
-## Non-negotiables
-
-- Do not rebuild from scratch; migrate gradually.
-- Keep Hive until SQLite path is proven; then migrate pending outbox.
-- Do not invent prices/products offline without Initial Sync.
-- Close table / payment / invoice / transfer / merge / split remain **online-only**.
-- `local_id == client_reference == Idempotency-Key` never rotates.
-- Strict `workspace_id` (+ `device_id`) on every local row.
-- No `if (offline)` in every screen — repositories hide transport.
-
 ## Phases
 
-### Phase 1 — Foundation (this PR slice)
-- Add Drift/SQLite schema: products, categories, tables, orders, order_items, customers, settings, permissions, devices, sync_queue, sync_metadata, sync_conflicts.
-- Device identity (`device_id` UUID) in secure storage.
-- Workspace-scoped DB access helpers.
-- Initial Sync using **existing** full snapshot APIs (`/catalog/*`, `/tables`, `/bootstrap`).
-- Gate: POS not “offline-ready” until Initial Sync succeeded once for that workspace (or local rows already present).
-- Catalog/Tables repositories: **read Local DB first**; refresh from API when online.
-- Keep existing Hive pending-order path working (dual-run).
-- Focused unit tests: schema isolation, initial sync readiness, device id.
+### Phase 1–4 — done (foundation, tables, orders queue, devices + cursor pull)
 
-## Phase 2 — Tables UI from Local DB (done)
-- `TablesRepository`: list/get/replace/upsert + `loadBoard` / `loadTableDetail`
-- `TablesBoard` and `TableDetailScreen` read SQLite first via repository
-- No UI `if offline`; remote refresh is repository best-effort
-- Hive table cache still dual-written by repository
-- Close / payment / invoice / open-session mutations unchanged (online)
+### Phase 5 — Full bidirectional sync (done)
+- Order + customer `pos_sync_changes` emission
+- Pull apply + reconcile via `client_reference`
+- Conflict detection into `sync_conflicts` (no silent LWW for orders/payments)
+- Customers local-first create + sync_queue
+- Takeaway offline via SQLite
 
+### Phase 6 — Finalize Local POS Storage (done)
+- Removed Hive POS dual-write for orders/tables
+- SQLite performance indexes
+- Customers panel / table add-order local-first
+- Hive retained only for session/bootstrap prefs + one-shot pending migrate
 
-### Phase 3 — Orders local-first + Sync Queue (done)
-- `OrdersRepository`: atomic create/update/delete + `sync_queue`
-- Hive → SQLite migration preserves `client_reference` / idempotency key
-- `SyncEngineV2` + `PosSyncCoordinator` (Hive dual-run flush)
-- Table add/edit/delete local pending via repository (no UI API for offline create)
-- Catalog/product/category `local_id` workspace-scoped (`w{ws}_prod_*`)
-- Open session / close / payment / invoice remain online
-- Hive outbox retained until Phase 6
+## Conflict strategy
 
-### Phase 4 — Backend incremental sync (done)
-- `POST /devices/register` (idempotent, workspace-bound device_id)
-- `GET /sync/changes?since=` monotonic `pos_sync_changes.id` cursor
-- Observer emits create/update/delete for products/categories/tables
-- Flutter SyncEngineV2: push → pull → apply TX → cursor
-- Close / payment / invoice / open-session unchanged; Hive retained
-
-### Phase 5 — Bidirectional + conflicts + customers
-- Pull apply + conflict table + strategies (server-authoritative for catalog).
-- Customers local cache; kitchen/reports later.
-- Logout / workspace switch: hard scope switch; no cross-tenant reads.
-
-### Phase 6 — Hardening
-- Remove Hive POS caches (keep secure storage / prefs for tokens & printer).
-- Performance + kill-during-transaction tests.
-- Device E2E checklist (not claimed verified from CI alone).
-
-## Conflict strategy (locked)
-
-| Entity | Offline mutate? | Conflict |
-|--------|-----------------|----------|
-| Catalog / tables structure / settings | Admin online preferred; cache local | Server authoritative |
-| Pending orders / order items (pre-invoice) | Yes | Idempotent create; last local edit before push |
-| Payments / invoices / close / transfer / merge / split / refund | **No** | Require online |
-| Stock | No local mutation | Server rejects |
+| Entity | Offline? | Rule |
+|--------|----------|------|
+| Catalog / tables | cache | Server authoritative |
+| Orders (pre-invoice) | yes | Detect + keep local pending |
+| Customers | yes | Detect + keep local pending |
+| Payments / invoices / close | **no** | Online only |
 
 ## Operational requirement
 

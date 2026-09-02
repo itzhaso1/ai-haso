@@ -103,16 +103,13 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
   void _refreshPending() {
     if (!mounted) return;
     final workspaceId = ref.read(workspaceIdProvider);
-    setState(() {
-      _pendingSync = workspaceId == null
-          ? 0
-          : OfflineStore.instance.pendingOrders(workspaceId: workspaceId).length;
-    });
-    if (workspaceId == null) return;
+    if (workspaceId == null) {
+      setState(() => _pendingSync = 0);
+      return;
+    }
     ref.read(syncQueueRepositoryProvider).pendingCount(workspaceId).then((n) {
       if (!mounted) return;
-      final hive = OfflineStore.instance.pendingOrders(workspaceId: workspaceId).length;
-      setState(() => _pendingSync = n > hive ? n : hive);
+      setState(() => _pendingSync = n);
     });
   }
 
@@ -132,6 +129,25 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           clientReference: clientRef,
           notes: notes,
           items: items,
+        );
+  }
+
+  Future<void> _enqueueLocalTakeawayOrder({
+    required int workspaceId,
+    required String clientRef,
+    required String? notes,
+    required List<Map<String, dynamic>> items,
+    int? customerServerId,
+  }) async {
+    final deviceId =
+        await ref.read(deviceIdentityProvider).getOrCreateDeviceId();
+    await ref.read(ordersRepositoryProvider).createTakeawayOrder(
+          workspaceId: workspaceId,
+          deviceId: deviceId,
+          clientReference: clientRef,
+          notes: notes,
+          items: items,
+          customerServerId: customerServerId,
         );
   }
 
@@ -432,9 +448,18 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     final payload = ref.read(cartControllerProvider.notifier).toOrderPayload(
           clientReference: clientRef,
         );
+    final lineItems = [
+      for (final line in cart.lines)
+        {
+          'pos_menu_item_id': line.menuItemId,
+          'name': line.name,
+          'quantity': line.quantity,
+          'unit_price': line.unitPrice,
+          'total_amount': line.lineTotal,
+        },
+    ];
 
-    if (wasTable && !ref.read(cashierLinkProvider).allowMutations) {
-      if (tableId == null) return;
+    if (!ref.read(cashierLinkProvider).allowMutations) {
       final workspaceId = ref.read(workspaceIdProvider);
       if (workspaceId == null) {
         if (!mounted) return;
@@ -445,30 +470,38 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
         );
         return;
       }
-      await _enqueueLocalTableOrder(
-        tableId: tableId,
+      if (wasTable) {
+        if (tableId == null) return;
+        await _enqueueLocalTableOrder(
+          tableId: tableId,
+          workspaceId: workspaceId,
+          clientRef: clientRef,
+          notes: cart.notes,
+          items: lineItems,
+        );
+        ref.read(cartControllerProvider.notifier).clear();
+        _refreshPending();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم حفظ الطلب — بانتظار الاتصال')),
+        );
+        openTableWorkspace(ref, tableId);
+        requestPosShellTab(ref, PosShellTab.tables);
+        return;
+      }
+      await _enqueueLocalTakeawayOrder(
         workspaceId: workspaceId,
         clientRef: clientRef,
         notes: cart.notes,
-        items: [
-          for (final line in cart.lines)
-            {
-              'pos_menu_item_id': line.menuItemId,
-              'name': line.name,
-              'quantity': line.quantity,
-              'unit_price': line.unitPrice,
-              'total_amount': line.lineTotal,
-            },
-        ],
+        items: lineItems,
+        customerServerId: cart.customerId,
       );
       ref.read(cartControllerProvider.notifier).clear();
       _refreshPending();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم حفظ الطلب — بانتظار الاتصال')),
+        const SnackBar(content: Text('تم حفظ الطلب الخارجي — بانتظار الاتصال')),
       );
-      openTableWorkspace(ref, tableId);
-      requestPosShellTab(ref, PosShellTab.tables);
       return;
     }
 
@@ -602,15 +635,27 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           );
           return;
         }
-        await OfflineStore.instance.enqueueOrder(
-          payload,
+        await _enqueueLocalTakeawayOrder(
           workspaceId: workspaceId,
+          clientRef: clientRef,
+          notes: cart.notes,
+          items: [
+            for (final line in cart.lines)
+              {
+                'pos_menu_item_id': line.menuItemId,
+                'name': line.name,
+                'quantity': line.quantity,
+                'unit_price': line.unitPrice,
+                'total_amount': line.lineTotal,
+              },
+          ],
+          customerServerId: cart.customerId,
         );
         ref.read(cartControllerProvider.notifier).clear();
         _refreshPending();
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message)),
+          const SnackBar(content: Text('تم حفظ الطلب الخارجي — بانتظار الاتصال')),
         );
         return;
       }

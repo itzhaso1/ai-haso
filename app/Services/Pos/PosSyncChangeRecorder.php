@@ -2,7 +2,9 @@
 
 namespace App\Services\Pos;
 
+use App\Models\Customer;
 use App\Models\DiningTable;
+use App\Models\Order;
 use App\Models\PosItemCategory;
 use App\Models\PosMenuItem;
 use App\Models\PosSyncChange;
@@ -18,6 +20,10 @@ class PosSyncChangeRecorder
     public const ENTITY_CATEGORY = 'category';
 
     public const ENTITY_TABLE = 'table';
+
+    public const ENTITY_ORDER = 'order';
+
+    public const ENTITY_CUSTOMER = 'customer';
 
     public function record(
         string $entityType,
@@ -35,6 +41,7 @@ class PosSyncChangeRecorder
             'delete' => [
                 'id' => $entityId,
                 'deleted' => true,
+                'client_reference' => $model->getAttribute('client_reference'),
             ],
             default => $this->snapshot($entityType, $model),
         };
@@ -51,6 +58,14 @@ class PosSyncChangeRecorder
     }
 
     /**
+     * Record an order update from an order-item mutation (full order snapshot).
+     */
+    public function recordOrderSnapshot(Order $order, string $operation = 'update', ?string $originDeviceId = null): PosSyncChange
+    {
+        return $this->record(self::ENTITY_ORDER, $operation, $order, $originDeviceId);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function snapshot(string $entityType, Model $model): array
@@ -59,6 +74,8 @@ class PosSyncChangeRecorder
             self::ENTITY_PRODUCT => $this->productPayload($model instanceof PosMenuItem ? $model : null),
             self::ENTITY_CATEGORY => $this->categoryPayload($model instanceof PosItemCategory ? $model : null),
             self::ENTITY_TABLE => $this->tablePayload($model instanceof DiningTable ? $model : null),
+            self::ENTITY_ORDER => $this->orderPayload($model instanceof Order ? $model : null),
+            self::ENTITY_CUSTOMER => $this->customerPayload($model instanceof Customer ? $model : null),
             default => [
                 'id' => $model->getKey(),
             ],
@@ -123,6 +140,70 @@ class PosSyncChangeRecorder
             'status' => $table->status,
             'qr_token' => $table->qr_token,
             'updated_at' => optional($table->updated_at)?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function orderPayload(?Order $order): array
+    {
+        if (! $order) {
+            return [];
+        }
+
+        if (! $order->relationLoaded('items')) {
+            $order->load('items');
+        }
+
+        return [
+            'id' => $order->id,
+            'client_reference' => $order->client_reference,
+            'customer_id' => $order->customer_id,
+            'dining_table_id' => $order->dining_table_id,
+            'table_session_id' => $order->table_session_id,
+            'order_number' => $order->order_number,
+            'order_type' => $order->order_type,
+            'status' => $order->status,
+            'pos_status' => $order->pos_status,
+            'payment_status' => $order->payment_status,
+            'notes' => $order->notes,
+            'subtotal' => (float) $order->subtotal,
+            'discount_amount' => (float) $order->discount_amount,
+            'tax_amount' => (float) $order->tax_amount,
+            'total_amount' => (float) $order->total_amount,
+            'currency' => $order->currency,
+            'updated_at' => optional($order->updated_at)?->toIso8601String(),
+            'placed_at' => optional($order->placed_at)?->toIso8601String(),
+            'items' => $order->items->map(fn ($item) => [
+                'id' => $item->id,
+                'pos_menu_item_id' => $item->pos_menu_item_id,
+                'product_name' => $item->product_name,
+                'quantity' => (int) $item->quantity,
+                'unit_price' => (float) $item->unit_price,
+                'discount_amount' => (float) $item->discount_amount,
+                'total_amount' => (float) $item->total_amount,
+            ])->values()->all(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function customerPayload(?Customer $customer): array
+    {
+        if (! $customer) {
+            return [];
+        }
+
+        return [
+            'id' => $customer->id,
+            'client_reference' => $customer->client_reference,
+            'name' => $customer->name,
+            'phone' => $customer->phone,
+            'email' => $customer->email,
+            'notes' => $customer->notes,
+            'updated_at' => optional($customer->updated_at)?->toIso8601String(),
         ];
     }
 }

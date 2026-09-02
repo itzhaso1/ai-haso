@@ -275,6 +275,90 @@ class CashierSyncApiTest extends TestCase
         $this->assertSame(1, Order::query()->where('client_reference', $clientRef)->count());
     }
 
+    public function test_order_and_customer_changes_appear_in_sync_log(): void
+    {
+        $this->seed(FoundationSeeder::class);
+        [$owner, $workspace] = $this->createWorkspaceOwner('store');
+        $token = $this->loginToken($owner);
+
+        $baseline = $this->withToken($token)
+            ->withHeaders(['X-Workspace-Id' => (string) $workspace->id])
+            ->getJson('/api/cashier/v1/sync/changes?since=0&limit=0')
+            ->assertOk()
+            ->json('data');
+        $cursor = (int) $baseline['server_cursor'];
+
+        $item = PosMenuItem::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'شاي',
+            'price' => 10,
+            'currency' => 'SAR',
+            'is_active' => true,
+        ]);
+
+        $this->withToken($token)
+            ->withHeaders([
+                'X-Workspace-Id' => (string) $workspace->id,
+                'X-Device-Id' => 'device-sync-1',
+                'Idempotency-Key' => 'ord-sync-1',
+            ])
+            ->postJson('/api/cashier/v1/orders', [
+                'order_type' => 'takeaway',
+                'client_reference' => 'ord-sync-1',
+                'items' => [
+                    ['pos_menu_item_id' => $item->id, 'quantity' => 1],
+                ],
+            ])
+            ->assertCreated();
+
+        $this->withToken($token)
+            ->withHeaders([
+                'X-Workspace-Id' => (string) $workspace->id,
+                'X-Device-Id' => 'device-sync-1',
+                'Idempotency-Key' => 'cust-sync-1',
+            ])
+            ->postJson('/api/cashier/v1/customers', [
+                'name' => 'عميل مزامنة',
+                'phone' => '0599999999',
+                'client_reference' => 'cust-sync-1',
+            ])
+            ->assertCreated();
+
+        // Idempotent customer replay.
+        $this->withToken($token)
+            ->withHeaders([
+                'X-Workspace-Id' => (string) $workspace->id,
+                'Idempotency-Key' => 'cust-sync-1-retry',
+            ])
+            ->postJson('/api/cashier/v1/customers', [
+                'name' => 'عميل مزامنة',
+                'phone' => '0599999999',
+                'client_reference' => 'cust-sync-1',
+            ])
+            ->assertOk();
+
+        $this->assertSame(1, \App\Models\Customer::query()->where('client_reference', 'cust-sync-1')->count());
+
+        $pull = $this->withToken($token)
+            ->withHeaders(['X-Workspace-Id' => (string) $workspace->id])
+            ->getJson('/api/cashier/v1/sync/changes?since='.$cursor)
+            ->assertOk()
+            ->json('data');
+
+        $entities = array_column($pull['changes'], 'entity');
+        $this->assertContains('order', $entities);
+        $this->assertContains('customer', $entities);
+        $this->assertContains('product', $entities);
+
+        foreach ($pull['changes'] as $change) {
+            if ($change['entity'] === 'order') {
+                $this->assertArrayHasKey('items', $change['data']);
+                $this->assertSame('ord-sync-1', $change['data']['client_reference']);
+                $this->assertSame('device-sync-1', $change['origin_device_id']);
+            }
+        }
+    }
+
     private function loginToken(User $owner): string
     {
         $login = $this->postJson('/api/cashier/v1/auth/login', [
