@@ -14,6 +14,27 @@
         $rawInvoiceStatus = old('invoice_status', old('status', $invoice->invoice_status ?? 'draft'));
         $defaultInvoiceStatus = in_array($rawInvoiceStatus, ['draft', 'issued'], true) ? $rawInvoiceStatus : 'draft';
         $existingItems = old('items', $invoice->relationLoaded('items') || $invoice->exists ? $invoice->items : []);
+        $builderItems = $invoice->exists
+            ? $invoice->items->map(fn ($item) => [
+                'product_id' => $item->product_id,
+                'product_name' => $item->product_name,
+                'description' => $item->description,
+                'quantity' => (float) $item->quantity,
+                'unit_price' => (float) $item->unit_price,
+                'discount' => (float) $item->discount,
+                'tax_rate' => (float) $item->tax_rate,
+                'total' => (float) $item->total,
+            ])->values()
+            : collect([[
+                'product_id' => '',
+                'product_name' => '',
+                'description' => '',
+                'quantity' => 1,
+                'unit_price' => 0,
+                'discount' => 0,
+                'tax_rate' => 15,
+                'total' => 0,
+            ]]);
     @endphp
     <div x-data="financeInvoiceBuilder('{{ $defaultType }}')" class="space-y-4">
         <div class="flex items-center justify-between">
@@ -246,18 +267,7 @@
                     tax_profile_type: 'standard',
                     tax_rate: 15,
                 },
-                items: @json($invoice->exists ? $invoice->items->map(fn ($item) => [
-                    'product_id' => $item->product_id,
-                    'product_name' => $item->product_name,
-                    'description' => $item->description,
-                    'quantity' => (float) $item->quantity,
-                    'unit_price' => (float) $item->unit_price,
-                    'discount' => (float) $item->discount,
-                    'tax_rate' => (float) $item->tax_rate,
-                    'total' => (float) $item->total,
-                ])->values() : [
-                    ['product_id' => '', 'product_name' => '', 'description' => '', 'quantity' => 1, 'unit_price' => 0, 'discount' => 0, 'tax_rate' => 15, 'total' => 0],
-                ]),
+                items: @json($builderItems),
                 summary: {
                     subtotal: 0,
                     discount: 0,
