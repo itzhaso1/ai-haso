@@ -17,10 +17,15 @@
         'overdue' => 'bg-rose-50 text-rose-700',
         default => 'bg-amber-50 text-amber-700',
     };
-    $invoiceStatusLabels = ['draft' => 'مسودة', 'issued' => 'معتمدة', 'cancelled' => 'ملغاة'];
+    $lifecycle = \App\Support\Finance\InvoicePresentation::lifecycle($invoice);
+    $invoiceStatusLabels = ['draft' => 'مسودة', 'issued' => 'مرسلة', 'cancelled' => 'ملغاة'];
     $paymentStatusLabels = ['unpaid' => 'غير مدفوعة', 'partial' => 'مدفوعة جزئيًا', 'paid' => 'مدفوعة', 'overdue' => 'متأخرة'];
     $dueToday = $invoice->due_date && $invoice->due_date->isToday() && in_array($paymentStatus, ['unpaid', 'partial'], true);
     $canPay = (float) $invoice->amount_due > 0.009 && ! $isDraft && ! $isCancelled;
+    $paidRatio = (float) $invoice->total > 0 ? min(100, ((float) $invoice->amount_paid / (float) $invoice->total) * 100) : 0;
+    $companyVat = data_get($invoice->company_snapshot, 'vat_number');
+    $recipientVat = data_get($invoice->recipient_snapshot, 'vat_number');
+    $einvoiceReady = filled($invoice->invoice_number) && filled($invoice->currency) && ($companyVat || $recipientVat || $invoice->pdf_snapshot);
 @endphp
 
 @section('content')
@@ -30,6 +35,7 @@
                 <h2 class="text-xl font-bold text-slate-900">فاتورة {{ $invoice->invoice_number }}</h2>
                 <p class="mt-1 text-xs text-slate-500">{{ $invoice->customer_name ?: optional($invoice->customer)->name ?: optional($invoice->supplier)->name }}</p>
                 <div class="mt-2 flex flex-wrap items-center gap-2">
+                    @include('workspace.finance.partials.status-badge', ['label' => \App\Support\Finance\InvoicePresentation::label($lifecycle), 'class' => \App\Support\Finance\InvoicePresentation::badgeClass($lifecycle)])
                     <span class="rounded-full px-3 py-1 text-xs font-bold {{ $statusClass }}">مستند: {{ $invoiceStatusLabels[$invoiceStatus] ?? $invoiceStatus }}</span>
                     <span class="rounded-full px-3 py-1 text-xs font-bold {{ $payClass }}">دفع: {{ $paymentStatusLabels[$paymentStatus] ?? $paymentStatus }}</span>
                     @if($dueToday)
@@ -55,6 +61,17 @@
                     </form>
                 @endif
             </div>
+        </div>
+
+        <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div class="flex items-center justify-between text-xs font-semibold text-slate-500">
+                <span>تقدم التحصيل</span>
+                <span>{{ number_format($paidRatio, 0) }}%</span>
+            </div>
+            <div class="mt-2 h-3 overflow-hidden rounded-full bg-slate-100">
+                <div class="h-3 rounded-full {{ $lifecycle === 'overdue' ? 'bg-rose-500' : 'bg-emerald-500' }}" style="width: {{ $paidRatio }}%"></div>
+            </div>
+            <p class="mt-2 text-xs text-slate-500">مدفوع {{ number_format((float) $invoice->amount_paid, 2) }} من {{ number_format((float) $invoice->total, 2) }} {{ $invoice->currency }} · خصم {{ number_format((float) $invoice->discount, 2) }} · ضريبة {{ number_format((float) $invoice->tax_amount, 2) }}</p>
         </div>
 
         <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -91,6 +108,9 @@
                     @if($invoice->contract)
                         <div class="flex justify-between"><dt class="text-slate-500">العقد</dt><dd><a class="font-semibold text-[#06C2A4] hover:underline" href="{{ route('workspace.finance.contracts.show', $invoice->contract) }}">{{ $invoice->contract->contract_number }}</a></dd></div>
                     @endif
+                    @if($invoice->project)
+                        <div class="flex justify-between"><dt class="text-slate-500">المشروع</dt><dd>{{ $invoice->project->name }}</dd></div>
+                    @endif
                 </dl>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -107,8 +127,17 @@
                 @endif
             </div>
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h3 class="text-sm font-bold text-slate-900">ملاحظات</h3>
-                <p class="mt-3 whitespace-pre-line text-sm text-slate-600">{{ $invoice->notes ?: 'لا توجد ملاحظات.' }}</p>
+                <h3 class="text-sm font-bold text-slate-900">جاهزية الفوترة الإلكترونية</h3>
+                <p class="mt-2 text-xs leading-5 text-slate-500">لا يتم الإرسال لأي بوابة الآن. هذه قائمة تحقق حتى تُربط لاحقًا (مثل ZATCA / JoFotara) دون إعادة تصميم الشاشة.</p>
+                <ul class="mt-3 space-y-1.5 text-sm">
+                    <li class="{{ $invoice->invoice_number ? 'text-emerald-700' : 'text-slate-500' }}">رقم مستند: {{ $invoice->invoice_number ?: '—' }}</li>
+                    <li class="{{ $companyVat ? 'text-emerald-700' : 'text-amber-700' }}">الرقم الضريبي للشركة: {{ $companyVat ?: 'غير محفوظ في اللقطة' }}</li>
+                    <li class="{{ $recipientVat ? 'text-emerald-700' : 'text-slate-500' }}">الرقم الضريبي للعميل/المورد: {{ $recipientVat ?: '—' }}</li>
+                    <li class="{{ $invoice->pdf_snapshot ? 'text-emerald-700' : 'text-slate-500' }}">لقطة PDF: {{ $invoice->pdf_snapshot ? 'موجودة' : 'ستُنشأ عند الإصدار' }}</li>
+                    <li class="text-slate-500">معرف إلكتروني: {{ $invoice->getAttribute('zatca_uuid') ?: 'سيُملأ عند الربط' }}</li>
+                </ul>
+                <p class="mt-3 text-xs font-semibold {{ $einvoiceReady ? 'text-emerald-700' : 'text-amber-700' }}">{{ $einvoiceReady ? 'البيانات الأساسية جاهزة للتوسع الإلكتروني.' : 'أكمل الرقم الضريبي في إعدادات الفوترة لتجهيز المرحلة التالية.' }}</p>
+                <p class="mt-3 whitespace-pre-line text-sm text-slate-600">{{ $invoice->notes ?: '' }}</p>
             </div>
         </div>
 

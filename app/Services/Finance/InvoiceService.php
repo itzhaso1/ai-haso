@@ -147,6 +147,10 @@ class InvoiceService
                 'created_by' => $actorUserId,
             ];
 
+            if (Schema::hasColumn('finance_invoices', 'project_id') && array_key_exists('project_id', $payload)) {
+                $attributes['project_id'] = $payload['project_id'] ? (int) $payload['project_id'] : null;
+            }
+
             if (FinanceInvoice::hasContractColumn()) {
                 $attributes['contract_id'] = isset($payload['contract_id']) ? (int) $payload['contract_id'] : null;
                 if (isset($payload['billing_schedule_id'])) {
@@ -329,6 +333,14 @@ class InvoiceService
 
             if (! empty($payload['invoice_number'])) {
                 $updates['invoice_number'] = (string) $payload['invoice_number'];
+            }
+
+            if (Schema::hasColumn('finance_invoices', 'project_id') && array_key_exists('project_id', $payload)) {
+                $updates['project_id'] = $payload['project_id'] ? (int) $payload['project_id'] : null;
+            }
+
+            if (FinanceInvoice::hasContractColumn() && array_key_exists('contract_id', $payload)) {
+                $updates['contract_id'] = $payload['contract_id'] ? (int) $payload['contract_id'] : null;
             }
 
             $locked->update($updates);

@@ -3,7 +3,10 @@
 @section('content')
     <div class="space-y-4">
         <div class="flex flex-wrap items-center justify-between gap-2">
-            <h2 class="text-xl font-bold text-slate-900">التقارير</h2>
+            <div>
+                <h2 class="text-xl font-black text-slate-900">التقارير والتحليلات</h2>
+                <p class="text-sm text-slate-500">الأرقام هنا من الدفتر والفوترة. لوحة القرار تلخص السؤال، والتقارير هنا تفصّل الحساب.</p>
+            </div>
             <form method="GET" action="{{ route('workspace.finance.reports.index') }}" class="flex items-center gap-2">
                 <input type="date" name="from" value="{{ $from }}" class="rounded-lg border-slate-300 text-sm">
                 <input type="date" name="to" value="{{ $to }}" class="rounded-lg border-slate-300 text-sm">

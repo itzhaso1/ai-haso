@@ -6,6 +6,7 @@ use App\Models\Concerns\BelongsToWorkspace;
 use App\Models\Customer;
 use App\Models\Finance\FinanceBillingSchedule;
 use App\Models\Finance\FinanceInvoice;
+use App\Models\Projects\FinanceProject;
 use App\Models\User;
 use App\Models\WorkspaceScopedModel;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -16,6 +17,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[Fillable([
     'workspace_id',
     'customer_id',
+    'project_id',
     'contract_number',
     'title',
     'status',
@@ -57,6 +59,11 @@ class Contract extends WorkspaceScopedModel
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(FinanceProject::class, 'project_id');
     }
 
     public function creator(): BelongsTo

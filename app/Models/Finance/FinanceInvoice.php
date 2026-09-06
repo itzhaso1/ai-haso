@@ -5,6 +5,7 @@ namespace App\Models\Finance;
 use App\Models\Concerns\BelongsToWorkspace;
 use App\Models\Contract\Contract;
 use App\Models\Customer;
+use App\Models\Projects\FinanceProject;
 use App\Models\User;
 use App\Models\WorkspaceScopedModel;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -21,6 +22,7 @@ use Illuminate\Support\Facades\Schema;
     'customer_name',
     'supplier_id',
     'contract_id',
+    'project_id',
     'billing_schedule_id',
     'billing_occurrence_key',
     'invoice_number',
@@ -141,6 +143,11 @@ class FinanceInvoice extends WorkspaceScopedModel
     public function contract(): BelongsTo
     {
         return $this->belongsTo(Contract::class);
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(FinanceProject::class, 'project_id');
     }
 
     public function billingSchedule(): BelongsTo

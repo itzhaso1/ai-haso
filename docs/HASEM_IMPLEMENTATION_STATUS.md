@@ -2,7 +2,7 @@
 
 Status values: **Existing** (unchanged this phase), **Strengthened**, **New**, **Partial**, **Not started**.
 
-This file reflects the platform-core increment on branch `cursor/hasem-platform-core-b600`. It does not claim the entire 54-module mission is complete.
+This file reflects the platform-core increment plus the finance frontend ERP phase (`cursor/finance-frontend-erp-b600`). It does not claim the entire 54-module mission is complete.
 
 ---
 
@@ -47,7 +47,17 @@ This file reflects the platform-core increment on branch `cursor/hasem-platform-
 
 ---
 
-## Phase A (this increment) — done enough to ship as architecture + core paths
+## Frontend ERP phase (invoices, contracts, decision analytics)
+
+| Feature | Status | Notes |
+| --- | --- | --- |
+| Invoice inbox | Strengthened | Draft / Sent / Partial / Paid / Overdue / Cancelled as **display** lifecycle; stored statuses unchanged. Mobile cards, tax + due columns, contract/project/payment-method filters. |
+| Invoice document | Strengthened | Collection progress bar, tax/discount stack, e-invoice readiness checklist (no gateway send). |
+| Contracts | Strengthened | Workspace stats, expiry alerts (30 days), project link, invoiced vs collected, customer/project/expiring filters. |
+| Decision dashboard | New | Answers: كم بعنا؟ كم ربحنا؟ كم لنا؟ كم علينا؟ + trends vs previous period, top/overdue customers, products, project profit, expense mix, inventory, expiring contracts. Filters: date, customer, product, project, lifecycle, payment method. |
+| Export | Not started | Filter architecture is ready; CSV/PDF export is later. |
+
+## Phase A (previous increment) — financial core paths
 
 - Integer money math in accounting/tax/treasury
 - Posted journal immutability + reversal status

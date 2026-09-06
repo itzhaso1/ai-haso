@@ -1,7 +1,7 @@
 @php
     $sections = [
         'لوحة التحكم' => [
-            ['label' => 'لوحة التحكم', 'route' => 'workspace.finance.dashboard', 'active' => 'workspace.finance.dashboard'],
+            ['label' => 'لوحة القرار', 'route' => 'workspace.finance.dashboard', 'active' => 'workspace.finance.dashboard'],
             ['label' => 'لوحة الفوترة', 'route' => 'workspace.finance.billing.dashboard', 'active' => 'workspace.finance.billing.*'],
         ],
         'المبيعات' => [

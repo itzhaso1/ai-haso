@@ -3,8 +3,8 @@
 @section('content')
     @php
         $invoiceStatusLabels = [
-            'draft' => 'مسودة',
-            'issued' => 'معتمدة',
+                    'draft' => 'مسودة',
+                    'issued' => 'إصدار / إرسال',
         ];
         $invoice = $invoice ?? new \App\Models\Finance\FinanceInvoice(['currency' => 'SAR', 'type' => 'sales']);
         $formAction = $formAction ?? route('workspace.finance.invoices.store');
@@ -100,6 +100,24 @@
                 <div>
                     <label class="mb-1 block text-xs font-semibold text-slate-600">العملة</label>
                     <input type="text" name="currency" value="{{ old('currency', $invoice->currency ?: 'SAR') }}" class="w-full rounded-lg border-slate-300 text-sm" maxlength="3">
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-semibold text-slate-600">العقد المرتبط</label>
+                    <select name="contract_id" class="w-full rounded-lg border-slate-300 text-sm">
+                        <option value="">بدون عقد</option>
+                        @foreach($contracts ?? [] as $contract)
+                            <option value="{{ $contract->id }}" @selected((string) old('contract_id', $invoice->contract_id) === (string) $contract->id)>{{ $contract->contract_number }} · {{ $contract->title }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-semibold text-slate-600">المشروع</label>
+                    <select name="project_id" class="w-full rounded-lg border-slate-300 text-sm">
+                        <option value="">بدون مشروع</option>
+                        @foreach($projects ?? [] as $project)
+                            <option value="{{ $project->id }}" @selected((string) old('project_id', $invoice->project_id) === (string) $project->id)>{{ $project->name }}</option>
+                        @endforeach
+                    </select>
                 </div>
                 <div>
                     <label class="mb-1 block text-xs font-semibold text-slate-600">نوع الضريبة</label>

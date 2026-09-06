@@ -27,12 +27,24 @@
             <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:col-span-2">
                 <div class="mb-3 flex items-center justify-between">
                     <h3 class="text-sm font-bold text-slate-900">بيانات العقد</h3>
-                    <span class="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{{ $statusLabels[$contract->status] ?? $contract->status }}</span>
+                    @php $expiry = \App\Support\Finance\ContractPresentation::expiry($contract); @endphp
+                    @include('workspace.finance.partials.status-badge', ['label' => $statusLabels[$contract->status] ?? $contract->status, 'class' => \App\Support\Finance\ContractPresentation::statusBadgeClass($contract->status)])
+                    @include('workspace.finance.partials.status-badge', ['label' => $expiry['label'], 'class' => \App\Support\Finance\ContractPresentation::expiryBadgeClass($expiry['severity'])])
                 </div>
                 <dl class="grid gap-3 sm:grid-cols-2">
                     <div>
                         <dt class="text-xs text-slate-500">العميل</dt>
                         <dd class="mt-1 text-sm font-semibold text-slate-900">{{ $contract->customer?->name ?: '—' }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500">المشروع</dt>
+                        <dd class="mt-1 text-sm font-semibold text-slate-900">
+                            @if($contract->project)
+                                <a class="text-[#0f7668] hover:underline" href="{{ route('workspace.finance.projects.index') }}">{{ $contract->project->name }}</a>
+                            @else
+                                —
+                            @endif
+                        </dd>
                     </div>
                     <div>
                         <dt class="text-xs text-slate-500">القيمة</dt>

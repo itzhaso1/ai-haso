@@ -6,9 +6,11 @@ use App\Models\Contract\Contract;
 use App\Models\Contract\ContractAttachment;
 use App\Models\Customer;
 use App\Models\Finance\FinanceSetting;
+use App\Models\Projects\FinanceProject;
 use App\Models\Workspace;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
 class ContractService
@@ -23,7 +25,7 @@ class ContractService
             );
             [$companySnapshot, $customerSnapshot, $pdfSnapshot] = $this->buildSnapshots($customer);
 
-            $contract = Contract::query()->create([
+            $attributes = [
                 'workspace_id' => $workspace->id,
                 'customer_id' => $customer?->id,
                 'contract_number' => (string) (Arr::get($payload, 'contract_number') ?: $this->nextContractNumber($workspace->id)),
@@ -39,7 +41,12 @@ class ContractService
                 'customer_snapshot' => $customerSnapshot,
                 'pdf_snapshot' => $pdfSnapshot,
                 'created_by' => $actorUserId,
-            ]);
+            ];
+            if (Schema::hasColumn('contracts', 'project_id')) {
+                $attributes['project_id'] = $this->resolveProjectId($workspace->id, Arr::get($payload, 'project_id'));
+            }
+
+            $contract = Contract::query()->create($attributes);
 
             $this->syncItems($contract, $items);
             $this->storeUploadedAttachments($contract, $uploadedFiles);
@@ -69,6 +76,10 @@ class ContractService
                 'terms' => Arr::get($payload, 'terms'),
                 'notes' => Arr::get($payload, 'notes'),
             ];
+
+            if (Schema::hasColumn('contracts', 'project_id')) {
+                $updates['project_id'] = $this->resolveProjectId((int) $contract->workspace_id, Arr::get($payload, 'project_id'));
+            }
 
             if ($contract->status === 'draft') {
                 [$companySnapshot, $customerSnapshot, $pdfSnapshot] = $this->buildSnapshots($customer);
@@ -232,6 +243,20 @@ class ContractService
                 'file_size' => $file->getSize(),
             ]);
         }
+    }
+
+    private function resolveProjectId(int $workspaceId, mixed $projectId): ?int
+    {
+        if (! $projectId) {
+            return null;
+        }
+
+        $exists = FinanceProject::withoutGlobalScopes()
+            ->where('workspace_id', $workspaceId)
+            ->whereKey((int) $projectId)
+            ->exists();
+
+        return $exists ? (int) $projectId : null;
     }
 
     private function resolveCustomer(int $workspaceId, mixed $customerId): ?Customer

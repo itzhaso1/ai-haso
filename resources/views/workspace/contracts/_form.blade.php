@@ -55,6 +55,18 @@
             @error('customer_id')<p class="mt-1 text-xs text-red-600">{{ $message }}</p>@enderror
         </div>
         <div>
+            <label class="mb-1 block text-xs font-semibold text-slate-600">المشروع</label>
+            <select name="project_id" class="w-full rounded-lg border-slate-300 text-sm">
+                <option value="">بدون مشروع</option>
+                @foreach($projects ?? [] as $project)
+                    <option value="{{ $project->id }}" @selected((string) old('project_id', $contract->project_id) === (string) $project->id)>
+                        {{ $project->name }}
+                    </option>
+                @endforeach
+            </select>
+            @error('project_id')<p class="mt-1 text-xs text-red-600">{{ $message }}</p>@enderror
+        </div>
+        <div>
             <label class="mb-1 block text-xs font-semibold text-slate-600">قيمة العقد (اختياري)</label>
             <input name="value" type="number" step="0.01" min="0" value="{{ old('value', $contract->value) }}" class="w-full rounded-lg border-slate-300 text-sm" placeholder="سيتم الحساب تلقائيًا من البنود إن وُجدت">
             @error('value')<p class="mt-1 text-xs text-red-600">{{ $message }}</p>@enderror
