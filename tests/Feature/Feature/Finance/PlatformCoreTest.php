@@ -23,6 +23,7 @@ use App\Services\Finance\LedgerReportService;
 use App\Support\Money\Money;
 use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -452,6 +453,38 @@ class PlatformCoreTest extends TestCase
         $this->actingAs($user)->withSession(['current_workspace_id' => $workspace->id])
             ->post(route('workspace.finance.purchase-orders.bill', $order))
             ->assertNotFound();
+    }
+
+    public function test_platform_core_index_names_fit_mysql_and_migration_is_rerunnable(): void
+    {
+        $tables = [
+            'finance_treasury_transfers',
+            'finance_bank_statements',
+            'finance_bank_statement_lines',
+            'finance_purchase_orders',
+            'finance_purchase_order_items',
+            'crm_leads',
+            'finance_projects',
+        ];
+
+        foreach ($tables as $table) {
+            $this->assertTrue(Schema::hasTable($table), $table.' should exist');
+            foreach (Schema::getIndexes($table) as $index) {
+                $name = (string) ($index['name'] ?? '');
+                $this->assertLessThanOrEqual(64, strlen($name), $table.'.'.$name);
+            }
+        }
+
+        $this->assertLessThanOrEqual(64, strlen('fin_po_items_ws_po_idx'));
+        $this->assertGreaterThan(64, strlen('finance_purchase_order_items_workspace_id_purchase_order_id_index'));
+
+        $migration = require database_path('migrations/2026_09_02_220000_add_platform_financial_core_tables.php');
+        $migration->up();
+
+        $this->assertTrue(Schema::hasTable('finance_purchase_order_items'));
+        $this->assertTrue(collect(Schema::getIndexes('finance_purchase_order_items'))
+            ->contains(fn (array $index): bool => ($index['name'] ?? '') === 'fin_po_items_ws_po_idx'
+                || array_values($index['columns'] ?? []) === ['workspace_id', 'purchase_order_id']));
     }
 
     /**
