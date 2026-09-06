@@ -54,7 +54,9 @@ This file reflects the platform-core increment plus the finance frontend ERP pha
 | Invoice inbox | Strengthened | Draft / Sent / Partial / Paid / Overdue / Cancelled as **display** lifecycle; stored statuses unchanged. Mobile cards, tax + due columns, contract/project/payment-method filters. |
 | Invoice document | Strengthened | Collection progress bar, tax/discount stack, e-invoice readiness checklist (no gateway send). |
 | Contracts | Strengthened | Workspace stats, expiry alerts (30 days), project link, invoiced vs collected, customer/project/expiring filters. |
-| Decision dashboard | New | Answers: كم بعنا؟ كم ربحنا؟ كم لنا؟ كم علينا؟ + trends vs previous period, top/overdue customers, products, project profit, expense mix, inventory, expiring contracts. Filters: date, customer, product, project, lifecycle, payment method. |
+| Decision dashboard | New | Answers: كم بعنا؟ كم ربحنا؟ كم لنا؟ كم علينا؟ + trends vs previous period, cash-flow from ledger 1000/1100, ledger P&L card, period comparison table, top/overdue customers, products, project profit, expense mix, inventory, expiring contracts. Filters: date, customer, product, project, lifecycle, payment method. |
+| Reports hub | Strengthened | Ledger P&L + cash flow + period comparison + product performance; report tiles instead of a flat link row. |
+| Contract → invoice | Strengthened | Prefill customer/contract/project from the contract show page. |
 | Export | Not started | Filter architecture is ready; CSV/PDF export is later. |
 
 ## Phase A (previous increment) — financial core paths

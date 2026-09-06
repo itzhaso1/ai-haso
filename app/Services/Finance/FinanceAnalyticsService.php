@@ -17,6 +17,10 @@ use Illuminate\Support\Facades\Schema;
 
 class FinanceAnalyticsService
 {
+    public function __construct(
+        private readonly LedgerReportService $ledgerReportService,
+    ) {}
+
     /**
      * @param  array<string, mixed>  $filters
      * @return array<string, mixed>
@@ -70,6 +74,8 @@ class FinanceAnalyticsService
             'expiring_contracts' => $this->expiringContracts($workspaceId),
             'attention' => $attention,
             'expense_change' => $expenseDelta,
+            'cash_flow' => $this->ledgerReportService->cashFlow($workspaceId, $from->toDateString(), $to->toDateString()),
+            'ledger_profit' => $this->ledgerReportService->profitAndLoss($workspaceId, $from->toDateString(), $to->toDateString()),
         ];
     }
 
@@ -450,7 +456,7 @@ class FinanceAnalyticsService
             $items[] = [
                 'title' => 'تحصيل متأخر',
                 'reason' => $current['counts']['overdue'].' فواتير متأخرة بقيمة '.$current['overdue_amount'],
-                'href' => 'invoices',
+                'href' => route('workspace.finance.invoices.index', ['lifecycle' => 'overdue', 'type' => 'sales']),
             ];
         }
 
@@ -458,7 +464,7 @@ class FinanceAnalyticsService
             $items[] = [
                 'title' => 'ارتفاع المصروفات',
                 'reason' => 'زادت المصروفات '.$expenseDelta.' عن الفترة السابقة المماثلة',
-                'href' => 'reports',
+                'href' => route('workspace.finance.reports.show', ['report' => 'profit-loss']),
             ];
         }
 
@@ -472,7 +478,7 @@ class FinanceAnalyticsService
             $items[] = [
                 'title' => 'مخزون منخفض',
                 'reason' => $lowStock.' منتجات وصلت لحد التنبيه',
-                'href' => 'inventory',
+                'href' => route('workspace.finance.reports.show', ['report' => 'inventory-valuation']),
             ];
         }
 
@@ -486,7 +492,7 @@ class FinanceAnalyticsService
             $items[] = [
                 'title' => 'عقود قاربت على الانتهاء',
                 'reason' => $expiring.' عقود تنتهي خلال أسبوعين',
-                'href' => 'contracts',
+                'href' => route('workspace.finance.contracts.index', ['expiring' => 1]),
             ];
         }
 

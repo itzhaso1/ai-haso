@@ -11,6 +11,17 @@
         $chartProfit = $series->map(fn ($row) => ['month' => $row['month'], 'value' => $row['profit']]);
         $chartExpenses = $series->map(fn ($row) => ['month' => $row['month'], 'value' => $row['expenses']]);
         $tones = ['sales' => 'indigo', 'profit' => 'emerald', 'receivables' => 'amber', 'payables' => 'rose'];
+        $periodLabels = [
+            'today' => 'اليوم',
+            'this_week' => 'هذا الأسبوع',
+            'this_month' => 'هذا الشهر',
+            'last_month' => 'الشهر الماضي',
+            'this_year' => 'هذه السنة',
+            'previous_year' => 'السنة الماضية',
+        ];
+        $cashFlow = $analytics['cash_flow'] ?? null;
+        $ledgerProfit = $analytics['ledger_profit'] ?? null;
+        $cashFlowChart = collect($charts['cash_flow'] ?? []);
     @endphp
 
     <div class="space-y-6">
@@ -76,10 +87,19 @@
                 </div>
                 <div class="grid gap-2 md:grid-cols-2">
                     @foreach($attention as $item)
-                        <div class="rounded-xl bg-white/80 px-3 py-2 text-sm text-amber-950">
+                        @php $href = $item['href'] ?? null; @endphp
+                        @if($href)
+                            <a href="{{ $href }}" class="rounded-xl bg-white/80 px-3 py-2 text-sm text-amber-950 hover:bg-white">
+                        @else
+                            <div class="rounded-xl bg-white/80 px-3 py-2 text-sm text-amber-950">
+                        @endif
                             <p class="font-bold">{{ $item['title'] ?? $item['reason'] ?? '' }}</p>
                             <p class="text-xs text-amber-900/80">{{ $item['reason'] ?? '' }}</p>
-                        </div>
+                        @if($href)
+                            </a>
+                        @else
+                            </div>
+                        @endif
                     @endforeach
                 </div>
             </section>
@@ -113,6 +133,29 @@
             @endforeach
         </section>
 
+        @if($cashFlow)
+            <section class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                @include('workspace.finance.partials.kpi-card', ['label' => 'افتتاحي النقد', 'value' => $cashFlow['opening_cash'], 'hint' => 'رصيد الصندوق والبنك من الدفتر', 'tone' => 'slate'])
+                @include('workspace.finance.partials.kpi-card', [
+                    'label' => 'صافي التدفق النقدي',
+                    'value' => $cashFlow['net_change'],
+                    'hint' => 'تغير حسابات 1000/1100 خلال الفترة',
+                    'tone' => ((float) $cashFlow['net_change'] >= 0 ? 'emerald' : 'rose'),
+                    'href' => route('workspace.finance.reports.show', ['report' => 'cash-flow', 'from' => $analytics['from'] ?? null, 'to' => $analytics['to'] ?? null]),
+                ])
+                @include('workspace.finance.partials.kpi-card', ['label' => 'ختامي النقد', 'value' => $cashFlow['closing_cash'], 'hint' => 'بعد حركة الفترة', 'tone' => 'indigo'])
+                @if($ledgerProfit)
+                    @include('workspace.finance.partials.kpi-card', [
+                        'label' => 'صافي الربح الدفتري',
+                        'value' => $ledgerProfit['net_profit'],
+                        'hint' => 'من القيود المرحلة — أدق من بطاقة الربح التقريبي',
+                        'tone' => ((float) $ledgerProfit['net_profit'] >= 0 ? 'emerald' : 'rose'),
+                        'href' => route('workspace.finance.reports.show', ['report' => 'profit-loss', 'from' => $analytics['from'] ?? null, 'to' => $analytics['to'] ?? null]),
+                    ])
+                @endif
+            </section>
+        @endif
+
         <section class="grid gap-4 xl:grid-cols-3">
             <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <h3 class="mb-3 text-sm font-bold text-slate-900">المبيعات حسب الشهر</h3>
@@ -125,6 +168,44 @@
             <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <h3 class="mb-3 text-sm font-bold text-slate-900">المصروفات حسب الشهر</h3>
                 @include('workspace.finance.partials.bar-chart', ['points' => $chartExpenses])
+            </article>
+        </section>
+
+        <section class="grid gap-4 xl:grid-cols-2">
+            <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div class="mb-3 flex items-center justify-between">
+                    <h3 class="text-sm font-bold text-slate-900">التدفق النقدي الشهري</h3>
+                    <a href="{{ route('workspace.finance.reports.show', ['report' => 'cash-flow']) }}" class="text-xs font-semibold text-[#0f7668]">تقرير التدفق</a>
+                </div>
+                @include('workspace.finance.partials.bar-chart', ['points' => $cashFlowChart])
+            </article>
+            <article class="overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h3 class="mb-3 text-sm font-bold text-slate-900">مقارنة الفترات</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead class="text-xs text-slate-500">
+                            <tr>
+                                <th class="py-1 text-right font-semibold">الفترة</th>
+                                <th class="py-1 text-right font-semibold">المبيعات</th>
+                                <th class="py-1 text-right font-semibold">المصروف</th>
+                                <th class="py-1 text-right font-semibold">الربح</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            @foreach($periodLabels as $key => $label)
+                                @php $window = $periods[$key] ?? null; @endphp
+                                @if($window)
+                                    <tr>
+                                        <td class="py-2 font-semibold text-slate-800">{{ $label }}</td>
+                                        <td class="py-2">{{ number_format((float) $window['revenue'], 2) }}</td>
+                                        <td class="py-2">{{ number_format((float) $window['expenses'], 2) }}</td>
+                                        <td class="py-2 font-bold {{ (float) $window['net_profit'] >= 0 ? 'text-emerald-700' : 'text-rose-700' }}">{{ number_format((float) $window['net_profit'], 2) }}</td>
+                                    </tr>
+                                @endif
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
             </article>
         </section>
 

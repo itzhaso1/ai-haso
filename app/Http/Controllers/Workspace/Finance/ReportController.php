@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Workspace\Finance;
 
 use App\Models\Finance\FinanceAccount;
+use App\Services\Finance\FinanceAnalyticsService;
 use App\Services\Finance\LedgerReportService;
+use App\Services\Finance\PeriodComparisonService;
 use App\Services\Finance\ReportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -14,6 +16,8 @@ class ReportController extends FinanceBaseController
     public function __construct(
         private readonly ReportService $reportService,
         private readonly LedgerReportService $ledgerReportService,
+        private readonly PeriodComparisonService $periodComparisonService,
+        private readonly FinanceAnalyticsService $financeAnalyticsService,
     ) {}
 
     public function index(Request $request): View
@@ -30,6 +34,12 @@ class ReportController extends FinanceBaseController
             'to' => $to,
             'profitAndLoss' => $this->ledgerReportService->profitAndLoss($workspaceId, $from, $to),
             'trialBalance' => $this->ledgerReportService->trialBalance($workspaceId, $to),
+            'cashFlow' => $this->ledgerReportService->cashFlow($workspaceId, $from, $to),
+            'periods' => $this->periodComparisonService->compare($workspaceId),
+            'analytics' => $this->financeAnalyticsService->dashboard($workspaceId, [
+                'from' => $from,
+                'to' => $to,
+            ]),
             ...$summary,
         ]);
     }

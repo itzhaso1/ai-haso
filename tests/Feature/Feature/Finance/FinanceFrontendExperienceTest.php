@@ -49,8 +49,17 @@ class FinanceFrontendExperienceTest extends TestCase
             ->assertSee('كم ربحنا؟')
             ->assertSee('كم لنا عند العملاء؟')
             ->assertSee('كم علينا؟')
+            ->assertSee('مقارنة الفترات')
+            ->assertSee('صافي التدفق النقدي')
             ->assertSee('1,150.00')
             ->assertDontSee('Foreign Giant');
+
+        $this->actingAs($user)->withSession(['current_workspace_id' => $workspace->id])
+            ->get(route('workspace.finance.reports.index'))
+            ->assertOk()
+            ->assertSee('صافي الربح الدفتري')
+            ->assertSee('صافي التدفق')
+            ->assertSee('مقارنة الفترات');
 
         $analytics = app(FinanceAnalyticsService::class)->dashboard((int) $workspace->id, [
             'from' => now()->startOfMonth()->toDateString(),
@@ -140,6 +149,21 @@ class FinanceFrontendExperienceTest extends TestCase
             ->assertSee('Annual Retainer')
             ->assertSee('Portal Revamp')
             ->assertSee('ينتهي خلال');
+
+        $this->actingAs($user)->withSession(['current_workspace_id' => $workspace->id])
+            ->get(route('workspace.finance.contracts.show', $contract))
+            ->assertOk()
+            ->assertSee('فاتورة من العقد')
+            ->assertSee('Portal Revamp');
+
+        $this->actingAs($user)->withSession(['current_workspace_id' => $workspace->id])
+            ->get(route('workspace.finance.invoices.create', [
+                'contract_id' => $contract->id,
+                'customer_id' => $customer->id,
+                'project_id' => $project->id,
+            ]))
+            ->assertOk()
+            ->assertSee($contract->contract_number);
 
         $this->actingAs($otherUser)->withSession(['current_workspace_id' => $otherWorkspace->id])
             ->get(route('workspace.finance.contracts.index'))

@@ -18,6 +18,7 @@
                 <p class="mt-1 text-xs text-slate-500">{{ $contract->title }}</p>
             </div>
             <div class="flex flex-wrap gap-2">
+                <a href="{{ route('workspace.finance.invoices.create', ['contract_id' => $contract->id, 'customer_id' => $contract->customer_id, 'project_id' => $contract->project_id, 'type' => 'sales']) }}" class="rounded-lg bg-[#06C2A4] px-3 py-2 text-sm font-semibold text-white hover:bg-[#05ab91]">فاتورة من العقد</a>
                 <a href="{{ route($routePrefix.'.edit', $contract) }}" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">تعديل</a>
                 <a href="{{ route($routePrefix.'.pdf', $contract) }}" class="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">تحميل PDF</a>
             </div>
@@ -307,11 +308,12 @@
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @forelse($billingSummary['invoices'] as $relatedInvoice)
+                            @php $life = \App\Support\Finance\InvoicePresentation::lifecycle($relatedInvoice); @endphp
                             <tr>
                                 <td class="px-2 py-2"><a class="font-semibold text-[#06C2A4] hover:underline" href="{{ route('workspace.finance.invoices.show', $relatedInvoice) }}">{{ $relatedInvoice->invoice_number }}</a></td>
-                                <td class="px-2 py-2">{{ $relatedInvoice->invoice_status ?? $relatedInvoice->status }} / {{ $relatedInvoice->payment_status ?? $relatedInvoice->status }}</td>
+                                <td class="px-2 py-2">@include('workspace.finance.partials.status-badge', ['label' => \App\Support\Finance\InvoicePresentation::label($life), 'class' => \App\Support\Finance\InvoicePresentation::badgeClass($life)])</td>
                                 <td class="px-2 py-2">{{ number_format((float) $relatedInvoice->total, 2) }}</td>
-                                <td class="px-2 py-2">{{ number_format((float) $relatedInvoice->amount_due, 2) }}</td>
+                                <td class="px-2 py-2 font-semibold {{ (float) $relatedInvoice->amount_due > 0 ? 'text-amber-700' : 'text-emerald-700' }}">{{ number_format((float) $relatedInvoice->amount_due, 2) }}</td>
                             </tr>
                         @empty
                             <tr>

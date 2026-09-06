@@ -124,11 +124,15 @@
         @endif
 
         @if(!empty($cashFlow))
+            <p class="text-sm text-slate-500">حركة حسابات الصندوق والبنك (1000 / 1100) من القيود المرحلة. هذا ليس بيان IAS 7 كاملًا بعد.</p>
             <div class="grid gap-3 md:grid-cols-3">
-                <article class="rounded-2xl border border-slate-200 bg-white p-4"><p class="text-xs text-slate-500">افتتاحي</p><p class="mt-2 text-2xl font-bold">{{ number_format((float) $cashFlow['opening_cash'], 2) }}</p></article>
-                <article class="rounded-2xl border border-slate-200 bg-white p-4"><p class="text-xs text-slate-500">صافي التغير</p><p class="mt-2 text-2xl font-bold">{{ number_format((float) $cashFlow['net_change'], 2) }}</p></article>
-                <article class="rounded-2xl border border-slate-200 bg-white p-4"><p class="text-xs text-slate-500">ختامي</p><p class="mt-2 text-2xl font-bold">{{ number_format((float) $cashFlow['closing_cash'], 2) }}</p></article>
+                @include('workspace.finance.partials.kpi-card', ['label' => 'افتتاحي', 'value' => $cashFlow['opening_cash']])
+                @include('workspace.finance.partials.kpi-card', ['label' => 'صافي التغير', 'value' => $cashFlow['net_change'], 'tone' => ((float) $cashFlow['net_change'] >= 0 ? 'emerald' : 'rose')])
+                @include('workspace.finance.partials.kpi-card', ['label' => 'ختامي', 'value' => $cashFlow['closing_cash'], 'tone' => 'indigo'])
             </div>
+            <p class="text-xs {{ !empty($cashFlow['balanced']) ? 'text-emerald-700' : 'text-rose-700' }}">
+                {{ !empty($cashFlow['balanced']) ? 'افتتاحي + التغير = الختامي.' : 'عدم تطابق بين الافتتاحي والتغير والختامي — راجع قيود الخزينة.' }}
+            </p>
         @endif
 
         @if(!empty($inventoryValuation))
