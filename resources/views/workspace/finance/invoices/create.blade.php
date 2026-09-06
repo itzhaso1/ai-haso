@@ -3,8 +3,8 @@
 @section('content')
     @php
         $invoiceStatusLabels = [
-            'draft' => 'مسودة',
-            'issued' => 'معتمدة',
+                    'draft' => 'مسودة',
+                    'issued' => 'إصدار / إرسال',
         ];
         $invoice = $invoice ?? new \App\Models\Finance\FinanceInvoice(['currency' => 'SAR', 'type' => 'sales']);
         $formAction = $formAction ?? route('workspace.finance.invoices.store');
@@ -14,6 +14,27 @@
         $rawInvoiceStatus = old('invoice_status', old('status', $invoice->invoice_status ?? 'draft'));
         $defaultInvoiceStatus = in_array($rawInvoiceStatus, ['draft', 'issued'], true) ? $rawInvoiceStatus : 'draft';
         $existingItems = old('items', $invoice->relationLoaded('items') || $invoice->exists ? $invoice->items : []);
+        $builderItems = $invoice->exists
+            ? $invoice->items->map(fn ($item) => [
+                'product_id' => $item->product_id,
+                'product_name' => $item->product_name,
+                'description' => $item->description,
+                'quantity' => (float) $item->quantity,
+                'unit_price' => (float) $item->unit_price,
+                'discount' => (float) $item->discount,
+                'tax_rate' => (float) $item->tax_rate,
+                'total' => (float) $item->total,
+            ])->values()
+            : collect([[
+                'product_id' => '',
+                'product_name' => '',
+                'description' => '',
+                'quantity' => 1,
+                'unit_price' => 0,
+                'discount' => 0,
+                'tax_rate' => 15,
+                'total' => 0,
+            ]]);
     @endphp
     <div x-data="financeInvoiceBuilder('{{ $defaultType }}')" class="space-y-4">
         <div class="flex items-center justify-between">
@@ -100,6 +121,24 @@
                 <div>
                     <label class="mb-1 block text-xs font-semibold text-slate-600">العملة</label>
                     <input type="text" name="currency" value="{{ old('currency', $invoice->currency ?: 'SAR') }}" class="w-full rounded-lg border-slate-300 text-sm" maxlength="3">
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-semibold text-slate-600">العقد المرتبط</label>
+                    <select name="contract_id" class="w-full rounded-lg border-slate-300 text-sm">
+                        <option value="">بدون عقد</option>
+                        @foreach($contracts ?? [] as $contract)
+                            <option value="{{ $contract->id }}" @selected((string) old('contract_id', $invoice->contract_id) === (string) $contract->id)>{{ $contract->contract_number }} · {{ $contract->title }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-xs font-semibold text-slate-600">المشروع</label>
+                    <select name="project_id" class="w-full rounded-lg border-slate-300 text-sm">
+                        <option value="">بدون مشروع</option>
+                        @foreach($projects ?? [] as $project)
+                            <option value="{{ $project->id }}" @selected((string) old('project_id', $invoice->project_id) === (string) $project->id)>{{ $project->name }}</option>
+                        @endforeach
+                    </select>
                 </div>
                 <div>
                     <label class="mb-1 block text-xs font-semibold text-slate-600">نوع الضريبة</label>
@@ -228,18 +267,7 @@
                     tax_profile_type: 'standard',
                     tax_rate: 15,
                 },
-                items: @json($invoice->exists ? $invoice->items->map(fn ($item) => [
-                    'product_id' => $item->product_id,
-                    'product_name' => $item->product_name,
-                    'description' => $item->description,
-                    'quantity' => (float) $item->quantity,
-                    'unit_price' => (float) $item->unit_price,
-                    'discount' => (float) $item->discount,
-                    'tax_rate' => (float) $item->tax_rate,
-                    'total' => (float) $item->total,
-                ])->values() : [
-                    ['product_id' => '', 'product_name' => '', 'description' => '', 'quantity' => 1, 'unit_price' => 0, 'discount' => 0, 'tax_rate' => 15, 'total' => 0],
-                ]),
+                items: @json($builderItems),
                 summary: {
                     subtotal: 0,
                     discount: 0,

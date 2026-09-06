@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Workspace\Concerns\InteractsWithWorkspace;
 use App\Models\Contract\Contract;
 use App\Models\Contract\ContractAttachment;
+use App\Models\Customer;
 use App\Models\EmailAccount;
+use App\Models\Projects\FinanceProject;
 use App\Models\User;
 use App\Services\Contracts\ContractEmailService;
 use App\Services\Contracts\ContractPdfService;
@@ -16,6 +18,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -37,10 +40,20 @@ class ContractController extends Controller
 
         $status = trim((string) $request->string('status'));
         $search = trim((string) $request->string('search'));
+        $customerId = $request->integer('customer_id');
+        $projectId = $request->integer('project_id');
+        $expiring = $request->boolean('expiring');
 
         $contracts = Contract::query()
-            ->with('customer')
+            ->with(['customer', 'project', 'invoices'])
             ->when($status !== '', fn ($query) => $query->where('status', $status))
+            ->when($customerId > 0, fn ($query) => $query->where('customer_id', $customerId))
+            ->when($projectId > 0 && Schema::hasColumn('contracts', 'project_id'), fn ($query) => $query->where('project_id', $projectId))
+            ->when($expiring, function ($query): void {
+                $query->where('status', 'open')
+                    ->whereNotNull('end_date')
+                    ->whereDate('end_date', '<=', now()->addDays(30)->toDateString());
+            })
             ->when($search !== '', function ($query) use ($search): void {
                 $query->where(function ($inner) use ($search): void {
                     $inner->where('contract_number', 'like', '%'.$search.'%')
@@ -52,12 +65,28 @@ class ContractController extends Controller
             ->paginate(20)
             ->withQueryString();
 
+        $base = Contract::query();
+
         return view('workspace.contracts.index', [
             'contracts' => $contracts,
             'filters' => [
                 'status' => $status,
                 'search' => $search,
+                'customer_id' => $customerId,
+                'project_id' => $projectId,
+                'expiring' => $expiring,
             ],
+            'stats' => [
+                'open' => (clone $base)->where('status', 'open')->count(),
+                'draft' => (clone $base)->where('status', 'draft')->count(),
+                'closed' => (clone $base)->where('status', 'closed')->count(),
+                'expiring' => (clone $base)->where('status', 'open')->whereNotNull('end_date')->whereDate('end_date', '<=', now()->addDays(30)->toDateString())->count(),
+                'value_open' => (clone $base)->where('status', 'open')->sum('value'),
+            ],
+            'customers' => Customer::query()->orderBy('name')->get(['id', 'name']),
+            'projects' => Schema::hasTable('finance_projects')
+                ? FinanceProject::query()->orderBy('name')->get(['id', 'name'])
+                : collect(),
             'routePrefix' => $this->contractRoutePrefix(),
         ]);
     }
@@ -68,7 +97,10 @@ class ContractController extends Controller
 
         return view('workspace.contracts.create', [
             'contract' => new Contract(['currency' => 'SAR', 'status' => 'draft']),
-            'customers' => \App\Models\Customer::query()->orderBy('name')->get(['id', 'name']),
+            'customers' => Customer::query()->orderBy('name')->get(['id', 'name']),
+            'projects' => Schema::hasTable('finance_projects')
+                ? FinanceProject::query()->orderBy('name')->get(['id', 'name'])
+                : collect(),
             'emailAccounts' => EmailAccount::query()->orderBy('name')->get(['id', 'name', 'email']),
             'formAction' => route($this->contractRouteName('store')),
             'method' => 'POST',
@@ -98,7 +130,7 @@ class ContractController extends Controller
     {
         $this->authorizeContracts($request, 'contracts.view');
         $this->assertSameWorkspace($contract->workspace_id);
-        $contract->load(['customer', 'items', 'attachments', 'billingSchedules', 'invoices.payments']);
+        $contract->load(['customer', 'project', 'items', 'attachments', 'billingSchedules', 'invoices.payments']);
 
         $relatedInvoices = $contract->invoices;
         $invoicedTotal = (float) $relatedInvoices->sum('total');
@@ -126,7 +158,10 @@ class ContractController extends Controller
 
         return view('workspace.contracts.edit', [
             'contract' => $contract,
-            'customers' => \App\Models\Customer::query()->orderBy('name')->get(['id', 'name']),
+            'customers' => Customer::query()->orderBy('name')->get(['id', 'name']),
+            'projects' => Schema::hasTable('finance_projects')
+                ? FinanceProject::query()->orderBy('name')->get(['id', 'name'])
+                : collect(),
             'emailAccounts' => EmailAccount::query()->orderBy('name')->get(['id', 'name', 'email']),
             'formAction' => route($this->contractRouteName('update'), $contract),
             'method' => 'PUT',
@@ -288,6 +323,11 @@ class ContractController extends Controller
                 'nullable',
                 'integer',
                 Rule::exists('customers', 'id')->where(fn ($query) => $query->where('workspace_id', $workspaceId)),
+            ],
+            'project_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('finance_projects', 'id')->where(fn ($query) => $query->where('workspace_id', $workspaceId)),
             ],
             'currency' => ['nullable', 'string', 'size:3'],
             'value' => ['nullable', 'numeric', 'min:0'],

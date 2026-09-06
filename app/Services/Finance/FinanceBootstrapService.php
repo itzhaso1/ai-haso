@@ -7,12 +7,14 @@ use App\Models\Finance\FinanceSetting;
 use App\Models\Finance\FinanceTaxRate;
 use App\Models\Finance\FinanceTreasuryAccount;
 use App\Models\Workspace;
+use App\Support\Compliance\ComplianceManager;
 use Illuminate\Support\Facades\DB;
 
 class FinanceBootstrapService
 {
     public function __construct(
         private readonly ChartOfAccountsService $chartOfAccountsService,
+        private readonly ComplianceManager $complianceManager,
     ) {}
 
     public function ensureWorkspaceFinanceSetup(Workspace $workspace): void
@@ -84,8 +86,10 @@ class FinanceBootstrapService
                 ]
             );
 
-            $cash = $this->chartOfAccountsService->byCode('1000');
-            $bank = $this->chartOfAccountsService->byCode('1100');
+            $this->ensureCountryTaxProfiles($workspace->id, (string) $setting->country_code);
+
+            $cash = $this->chartOfAccountsService->byCode('1000', $workspace->id);
+            $bank = $this->chartOfAccountsService->byCode('1100', $workspace->id);
 
             FinanceTreasuryAccount::withoutGlobalScopes()->firstOrCreate(
                 ['workspace_id' => $workspace->id, 'name' => 'Main Cash'],
@@ -124,5 +128,28 @@ class FinanceBootstrapService
                 ]
             );
         });
+    }
+
+    private function ensureCountryTaxProfiles(int $workspaceId, string $countryCode): void
+    {
+        $workspaceCountry = strtoupper($countryCode);
+
+        foreach ($this->complianceManager->all() as $profile) {
+            $isDefault = $profile->countryCode() === $workspaceCountry
+                && $profile->countryCode() !== 'SA';
+
+            FinanceTaxRate::withoutGlobalScopes()->firstOrCreate(
+                ['workspace_id' => $workspaceId, 'code' => $profile->standardTaxCode()],
+                [
+                    'workspace_id' => $workspaceId,
+                    'name' => $profile->standardTaxName(),
+                    'code' => $profile->standardTaxCode(),
+                    'type' => 'standard',
+                    'rate' => $profile->standardTaxRate(),
+                    'is_default' => $isDefault,
+                    'is_active' => true,
+                ]
+            );
+        }
     }
 }

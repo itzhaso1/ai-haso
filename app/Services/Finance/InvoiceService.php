@@ -11,6 +11,7 @@ use App\Models\Finance\FinanceSetting;
 use App\Models\Finance\FinanceSupplier;
 use App\Models\Product;
 use App\Models\Workspace;
+use App\Support\Money\Money;
 use App\Support\Uploads\SecureUpload;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -25,6 +26,7 @@ class InvoiceService
         private readonly AccountingService $accountingService,
         private readonly InvoiceStateService $invoiceStateService,
         private readonly FinancialPeriodGuardService $financialPeriodGuardService,
+        private readonly InventoryAccountingService $inventoryAccountingService,
     ) {}
 
     /**
@@ -145,6 +147,10 @@ class InvoiceService
                 'created_by' => $actorUserId,
             ];
 
+            if (Schema::hasColumn('finance_invoices', 'project_id') && array_key_exists('project_id', $payload)) {
+                $attributes['project_id'] = $payload['project_id'] ? (int) $payload['project_id'] : null;
+            }
+
             if (FinanceInvoice::hasContractColumn()) {
                 $attributes['contract_id'] = isset($payload['contract_id']) ? (int) $payload['contract_id'] : null;
                 if (isset($payload['billing_schedule_id'])) {
@@ -196,7 +202,7 @@ class InvoiceService
             }
 
             if ($invoice->invoice_status === 'issued') {
-                $this->postInvoiceEntry($invoice, $actorUserId);
+                $this->postInvoiceEntry($invoice, $actorUserId, (bool) ($payload['skip_inventory'] ?? false));
             }
 
             $this->storeUploadedAttachments($invoice, $payload['attachments'] ?? [], $actorUserId);
@@ -329,6 +335,14 @@ class InvoiceService
                 $updates['invoice_number'] = (string) $payload['invoice_number'];
             }
 
+            if (Schema::hasColumn('finance_invoices', 'project_id') && array_key_exists('project_id', $payload)) {
+                $updates['project_id'] = $payload['project_id'] ? (int) $payload['project_id'] : null;
+            }
+
+            if (FinanceInvoice::hasContractColumn() && array_key_exists('contract_id', $payload)) {
+                $updates['contract_id'] = $payload['contract_id'] ? (int) $payload['contract_id'] : null;
+            }
+
             $locked->update($updates);
             FinanceInvoiceItem::withoutGlobalScopes()->where('invoice_id', $locked->id)->delete();
             foreach ($items as $item) {
@@ -398,7 +412,7 @@ class InvoiceService
                 'amount_due' => $due,
             ]);
 
-            $this->postInvoiceEntry($locked->fresh(), $actorUserId);
+            $this->postInvoiceEntry($locked->fresh(), $actorUserId, false);
 
             return $locked->fresh(['items', 'customer', 'supplier']);
         });
@@ -572,7 +586,7 @@ class InvoiceService
         return $this->taxService->defaultProfileForWorkspace($workspace);
     }
 
-    private function postInvoiceEntry(FinanceInvoice $invoice, int $actorUserId): void
+    private function postInvoiceEntry(FinanceInvoice $invoice, int $actorUserId, bool $skipInventory = false): void
     {
         $entryType = $invoice->type === 'sales' ? 'sales_invoice' : 'purchase_invoice';
         $alreadyPosted = FinanceJournalEntry::withoutGlobalScopes()
@@ -580,27 +594,31 @@ class InvoiceService
             ->where('type', $entryType)
             ->where('reference_type', FinanceInvoice::class)
             ->where('reference_id', $invoice->id)
+            ->whereNull('reverses_entry_id')
             ->exists();
         if ($alreadyPosted) {
             return;
         }
 
-        $ar = $this->chartOfAccountsService->byCode('1200');
-        $ap = $this->chartOfAccountsService->byCode('2000');
-        $sales = $this->chartOfAccountsService->byCode('4000');
-        $generalExpense = $this->chartOfAccountsService->byCode('5900');
-        $outputVat = $this->chartOfAccountsService->byCode('2100');
-        $inputVat = $this->chartOfAccountsService->byCode('1400');
+        $workspaceId = (int) $invoice->workspace_id;
+        $ar = $this->chartOfAccountsService->byCode('1200', $workspaceId);
+        $ap = $this->chartOfAccountsService->byCode('2000', $workspaceId);
+        $sales = $this->chartOfAccountsService->byCode('4000', $workspaceId);
+        $generalExpense = $this->chartOfAccountsService->byCode('5900', $workspaceId);
+        $outputVat = $this->chartOfAccountsService->byCode('2100', $workspaceId);
+        $inputVat = $this->chartOfAccountsService->byCode('1400', $workspaceId);
 
         if (! $ar || ! $ap || ! $sales || ! $generalExpense || ! $outputVat || ! $inputVat) {
             throw new RuntimeException('دليل الحسابات غير مكتمل ولا يمكن ترحيل الفاتورة محاسبيًا.');
         }
 
+        $invoice->loadMissing('items');
+
         if ($invoice->type === 'sales') {
             $lines = [
                 [
                     'account_id' => $ar->id,
-                    'debit' => (float) $invoice->total,
+                    'debit' => $invoice->total,
                     'credit' => 0,
                     'description' => 'Sales invoice receivable',
                     'entity_type' => FinanceInvoice::class,
@@ -609,7 +627,7 @@ class InvoiceService
                 [
                     'account_id' => $sales->id,
                     'debit' => 0,
-                    'credit' => (float) $invoice->taxable_amount,
+                    'credit' => $invoice->taxable_amount,
                     'description' => 'Sales revenue',
                     'entity_type' => FinanceInvoice::class,
                     'entity_id' => $invoice->id,
@@ -620,28 +638,31 @@ class InvoiceService
                 $lines[] = [
                     'account_id' => $outputVat->id,
                     'debit' => 0,
-                    'credit' => (float) $invoice->tax_amount,
+                    'credit' => $invoice->tax_amount,
                     'description' => 'Output VAT',
                     'entity_type' => FinanceInvoice::class,
                     'entity_id' => $invoice->id,
                 ];
             }
         } else {
-            $lines = [
-                [
+            $expenseAmount = $this->inventoryAccountingService->purchaseExpenseAmount($invoice);
+            $lines = [];
+
+            if (! Money::isZero($expenseAmount)) {
+                $lines[] = [
                     'account_id' => $generalExpense->id,
-                    'debit' => (float) $invoice->taxable_amount,
+                    'debit' => $expenseAmount,
                     'credit' => 0,
-                    'description' => 'Purchase expense/inventory',
+                    'description' => 'Purchase expense',
                     'entity_type' => FinanceInvoice::class,
                     'entity_id' => $invoice->id,
-                ],
-            ];
+                ];
+            }
 
             if ((float) $invoice->tax_amount > 0) {
                 $lines[] = [
                     'account_id' => $inputVat->id,
-                    'debit' => (float) $invoice->tax_amount,
+                    'debit' => $invoice->tax_amount,
                     'credit' => 0,
                     'description' => 'Input VAT',
                     'entity_type' => FinanceInvoice::class,
@@ -652,15 +673,17 @@ class InvoiceService
             $lines[] = [
                 'account_id' => $ap->id,
                 'debit' => 0,
-                'credit' => (float) $invoice->total,
+                'credit' => $invoice->total,
                 'description' => 'Accounts payable',
                 'entity_type' => FinanceInvoice::class,
                 'entity_id' => $invoice->id,
             ];
         }
 
+        $lines = array_merge($lines, $this->inventoryAccountingService->journalLines($invoice));
+
         $this->accountingService->createEntry(
-            workspaceId: (int) $invoice->workspace_id,
+            workspaceId: $workspaceId,
             entryDate: $invoice->issue_date?->toDateString() ?? now()->toDateString(),
             type: $entryType,
             lines: $lines,
@@ -669,6 +692,10 @@ class InvoiceService
             referenceId: $invoice->id,
             postedBy: $actorUserId
         );
+
+        if (! $skipInventory) {
+            $this->inventoryAccountingService->applyStock($invoice, $actorUserId);
+        }
     }
 
     private function reversePostedInvoiceEntry(FinanceInvoice $invoice, int $actorUserId): void
@@ -703,6 +730,8 @@ class InvoiceService
             referenceType: FinanceInvoice::class,
             referenceId: $invoice->id,
         );
+
+        $this->inventoryAccountingService->reverseStock($invoice, $actorUserId);
     }
 
     /**
@@ -762,7 +791,7 @@ class InvoiceService
 
     private function money(float $value): float
     {
-        return round($value, 2);
+        return Money::round($value);
     }
 
     /**

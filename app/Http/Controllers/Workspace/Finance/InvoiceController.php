@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Workspace\Finance;
 
 use App\Models\AuditLog;
+use App\Models\Contract\Contract;
 use App\Models\Customer;
 use App\Models\Finance\FinanceCreditNote;
 use App\Models\Finance\FinanceInvoice;
@@ -13,7 +14,9 @@ use App\Models\Finance\FinanceSupplier;
 use App\Models\Finance\FinanceTaxRate;
 use App\Models\Finance\FinanceTreasuryAccount;
 use App\Models\Product;
+use App\Models\Projects\FinanceProject;
 use App\Services\Finance\FinanceBootstrapService;
+use App\Services\Finance\InvoiceInboxService;
 use App\Services\Finance\InvoicePaymentService;
 use App\Services\Finance\InvoiceService;
 use App\Services\Finance\PdfInvoiceService;
@@ -21,6 +24,7 @@ use App\Services\Notification\DomainNotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -35,6 +39,7 @@ class InvoiceController extends FinanceBaseController
         private readonly FinanceBootstrapService $financeBootstrapService,
         private readonly PdfInvoiceService $pdfInvoiceService,
         private readonly DomainNotificationService $domainNotificationService,
+        private readonly InvoiceInboxService $invoiceInboxService,
     ) {}
 
     public function index(Request $request): View
@@ -42,21 +47,6 @@ class InvoiceController extends FinanceBaseController
         $this->authorizeFinance($request, 'invoices.view');
         $workspace = $this->currentWorkspace();
         $this->financeBootstrapService->ensureWorkspaceFinanceSetup($workspace);
-
-        $invoiceStatus = $request->string('invoice_status')->toString();
-        $paymentStatus = $request->string('payment_status')->toString();
-        $legacyStatus = $request->string('status')->toString();
-        $hasSplitStatusColumns = FinanceInvoice::hasSeparatedStatusColumns();
-
-        if ($legacyStatus !== '' && $invoiceStatus === '' && $paymentStatus === '') {
-            if (in_array($legacyStatus, ['draft', 'cancelled'], true)) {
-                $invoiceStatus = $legacyStatus;
-            } elseif ($legacyStatus === 'sent') {
-                $invoiceStatus = 'issued';
-            } elseif (in_array($legacyStatus, ['unpaid', 'partial', 'paid', 'overdue'], true)) {
-                $paymentStatus = $legacyStatus;
-            }
-        }
 
         $sort = $request->string('sort')->toString();
         $direction = $request->string('direction')->toString() === 'asc' ? 'asc' : 'desc';
@@ -70,28 +60,12 @@ class InvoiceController extends FinanceBaseController
         ];
         $sortColumn = $sortable[$sort] ?? 'id';
 
-        $invoices = FinanceInvoice::query()
-            ->with(['customer', 'supplier', 'contract'])
-            ->when($request->string('search')->toString(), function ($query, $search) use ($hasSplitStatusColumns): void {
-                $query->where(function ($inner) use ($search, $hasSplitStatusColumns): void {
-                    $inner->where('invoice_number', 'like', '%'.$search.'%')
-                        ->orWhere('customer_name', 'like', '%'.$search.'%')
-                        ->orWhere('status', 'like', '%'.$search.'%')
-                        ->orWhereHas('customer', fn ($customerQuery) => $customerQuery->where('name', 'like', '%'.$search.'%'));
+        $filtered = $this->invoiceInboxService->applyRequestFilters(
+            FinanceInvoice::query()->with(['customer', 'supplier', 'contract']),
+            $request
+        );
 
-                    if ($hasSplitStatusColumns) {
-                        $inner->orWhere('invoice_status', 'like', '%'.$search.'%')
-                            ->orWhere('payment_status', 'like', '%'.$search.'%');
-                    }
-                });
-            })
-            ->when($request->filled('type'), fn ($query) => $query->where('type', $request->string('type')->toString()))
-            ->when($request->filled('customer_id'), fn ($query) => $query->where('customer_id', $request->integer('customer_id')))
-            ->when($request->filled('currency'), fn ($query) => $query->where('currency', $request->string('currency')->toString()))
-            ->when($request->filled('from'), fn ($query) => $query->whereDate('issue_date', '>=', $request->string('from')->toString()))
-            ->when($request->filled('to'), fn ($query) => $query->whereDate('issue_date', '<=', $request->string('to')->toString()))
-            ->when($invoiceStatus !== '', fn ($query) => $query->whereInvoiceStatus($invoiceStatus))
-            ->when($paymentStatus !== '', fn ($query) => $query->wherePaymentStatus($paymentStatus))
+        $invoices = (clone $filtered)
             ->orderBy($sortColumn, $direction)
             ->paginate(15)
             ->withQueryString();
@@ -99,6 +73,14 @@ class InvoiceController extends FinanceBaseController
         return view('workspace.finance.invoices.index', [
             'invoices' => $invoices,
             'customers' => Customer::query()->orderBy('name')->get(['id', 'name']),
+            'projects' => Schema::hasTable('finance_projects')
+                ? FinanceProject::query()->orderBy('name')->get(['id', 'name'])
+                : collect(),
+            'contracts' => FinanceInvoice::hasContractColumn()
+                ? Contract::query()->orderByDesc('id')->limit(100)->get(['id', 'contract_number', 'title'])
+                : collect(),
+            'pipeline' => $this->invoiceInboxService->pipelineCounts((int) $workspace->id, $request->string('type')->toString()),
+            'totals' => $this->invoiceInboxService->filteredTotals($filtered),
         ]);
     }
 
@@ -116,6 +98,9 @@ class InvoiceController extends FinanceBaseController
                 'currency' => 'SAR',
                 'invoice_status' => 'draft',
                 'issue_date' => now()->toDateString(),
+                'customer_id' => $request->integer('customer_id') ?: null,
+                'contract_id' => $request->integer('contract_id') ?: null,
+                'project_id' => $request->integer('project_id') ?: null,
             ]),
             'formAction' => route('workspace.finance.invoices.store'),
             'formMethod' => 'POST',
@@ -187,7 +172,10 @@ class InvoiceController extends FinanceBaseController
         $this->authorizeFinance($request, 'invoices.view');
         $this->assertSameWorkspace($invoice->workspace_id);
         $invoice = $this->invoiceService->syncPaymentStatus($invoice);
-        $invoice->load(['payments', 'creditNotes']);
+        $invoice->load(['payments', 'creditNotes', 'contract', 'customer', 'supplier', 'items', 'attachments']);
+        if (Schema::hasColumn('finance_invoices', 'project_id')) {
+            $invoice->load('project');
+        }
 
         $paymentIds = $invoice->payments->pluck('id')->all();
         $creditNoteIds = $invoice->creditNotes->pluck('id')->all();
@@ -411,6 +399,12 @@ class InvoiceController extends FinanceBaseController
             'suppliers' => FinanceSupplier::query()->orderBy('name')->get(['id', 'name']),
             'products' => Product::query()->orderBy('name')->get(['id', 'name', 'price', 'currency', 'sku']),
             'taxRates' => FinanceTaxRate::query()->where('is_active', true)->orderByDesc('is_default')->get(['id', 'name', 'type', 'rate', 'code']),
+            'contracts' => FinanceInvoice::hasContractColumn()
+                ? Contract::query()->orderByDesc('id')->limit(200)->get(['id', 'contract_number', 'title', 'customer_id'])
+                : collect(),
+            'projects' => Schema::hasTable('finance_projects')
+                ? FinanceProject::query()->orderBy('name')->get(['id', 'name'])
+                : collect(),
         ];
     }
 
@@ -444,6 +438,16 @@ class InvoiceController extends FinanceBaseController
             'status' => ['nullable', 'in:draft,sent,unpaid,partial,paid,overdue,cancelled'],
             'payment_terms' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
+            'contract_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('contracts', 'id')->where(fn ($query) => $query->where('workspace_id', $workspaceId)),
+            ],
+            'project_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('finance_projects', 'id')->where(fn ($query) => $query->where('workspace_id', $workspaceId)),
+            ],
             'tax_profile_type' => ['nullable', 'in:standard,zero_rated,exempt,out_of_scope'],
             'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'items_json' => ['required', 'string'],

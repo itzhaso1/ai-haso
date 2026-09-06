@@ -24,9 +24,12 @@ class ChartOfAccountsService
         ['code' => '3100', 'name' => 'Retained Earnings', 'type' => 'equity', 'classification' => 'equity'],
         ['code' => '4000', 'name' => 'Sales Revenue', 'type' => 'revenue', 'classification' => 'operating_revenue'],
         ['code' => '4100', 'name' => 'Service Revenue', 'type' => 'revenue', 'classification' => 'operating_revenue'],
+        ['code' => '4200', 'name' => 'Foreign Exchange Gain', 'type' => 'revenue', 'classification' => 'other_income'],
         ['code' => '5000', 'name' => 'Salaries Expense', 'type' => 'expense', 'classification' => 'operating_expense'],
         ['code' => '5100', 'name' => 'Rent Expense', 'type' => 'expense', 'classification' => 'operating_expense'],
         ['code' => '5200', 'name' => 'Utilities Expense', 'type' => 'expense', 'classification' => 'operating_expense'],
+        ['code' => '5300', 'name' => 'Cost of Goods Sold', 'type' => 'expense', 'classification' => 'cogs'],
+        ['code' => '5400', 'name' => 'Foreign Exchange Loss', 'type' => 'expense', 'classification' => 'other_expense'],
         ['code' => '5900', 'name' => 'General Expense', 'type' => 'expense', 'classification' => 'operating_expense'],
     ];
 
@@ -51,8 +54,15 @@ class ChartOfAccountsService
         }
     }
 
-    public function byCode(string $code): ?FinanceAccount
+    public function byCode(string $code, ?int $workspaceId = null): ?FinanceAccount
     {
+        if ($workspaceId !== null) {
+            return FinanceAccount::withoutGlobalScopes()
+                ->where('workspace_id', $workspaceId)
+                ->where('code', $code)
+                ->first();
+        }
+
         return FinanceAccount::query()->where('code', $code)->first();
     }
 }
