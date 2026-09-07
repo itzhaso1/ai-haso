@@ -59,19 +59,46 @@ class UnreadService
 
     public function unreadCountForConversation(Conversation $conversation, User $user): int
     {
-        $state = ConversationUserState::withoutGlobalScopes()
-            ->where('conversation_id', $conversation->id)
-            ->where('user_id', $user->id)
-            ->first();
+        $counts = $this->unreadCountsForConversations($user, [$conversation->id]);
 
-        $query = Message::withoutGlobalScopes()
-            ->where('conversation_id', $conversation->id)
-            ->where('direction', 'inbound');
+        return $counts[$conversation->id] ?? 0;
+    }
 
-        if ($state?->last_read_message_id) {
-            $query->where('id', '>', $state->last_read_message_id);
+    /**
+     * @param  list<int>  $conversationIds
+     * @return array<int, int>
+     */
+    public function unreadCountsForConversations(User $user, array $conversationIds): array
+    {
+        $conversationIds = array_values(array_unique(array_filter($conversationIds)));
+        $counts = [];
+        foreach ($conversationIds as $conversationId) {
+            $counts[(int) $conversationId] = 0;
         }
 
-        return (int) $query->count();
+        if ($conversationIds === []) {
+            return $counts;
+        }
+
+        $rows = Message::withoutGlobalScopes()
+            ->selectRaw('messages.conversation_id, COUNT(*) as unread_count')
+            ->leftJoin('conversation_user_states as cus', function ($join) use ($user): void {
+                $join->on('cus.conversation_id', '=', 'messages.conversation_id')
+                    ->where('cus.user_id', '=', $user->id);
+            })
+            ->whereIn('messages.conversation_id', $conversationIds)
+            ->where('messages.direction', 'inbound')
+            ->where(function ($query): void {
+                $query->whereNull('cus.last_read_message_id')
+                    ->orWhereColumn('messages.id', '>', 'cus.last_read_message_id');
+            })
+            ->groupBy('messages.conversation_id')
+            ->pluck('unread_count', 'conversation_id');
+
+        foreach ($rows as $conversationId => $count) {
+            $counts[(int) $conversationId] = (int) $count;
+        }
+
+        return $counts;
     }
 }

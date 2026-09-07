@@ -23,9 +23,22 @@ class CommunicationTeamController extends Controller
     {
         $this->authorize('viewAny', Conversation::class);
 
+        $teams = CommunicationTeam::query()
+            ->with('members')
+            ->withCount([
+                'conversations as active_conversations_count' => fn ($query) => $query->where('status', 'open'),
+                'conversations as unassigned_conversations_count' => fn ($query) => $query->whereNull('assigned_user_id'),
+            ])
+            ->orderBy('name')
+            ->get();
+
         return view('workspace.communication.teams.index', [
-            'teams' => CommunicationTeam::query()->with('members')->orderBy('name')->get(),
+            'teams' => $teams,
             'members' => $this->currentWorkspace()->users()->wherePivot('status', 'active')->orderBy('name')->get(['users.id', 'users.name']),
+            'workspaceUnassignedCount' => Conversation::query()
+                ->whereNull('assigned_user_id')
+                ->whereNull('assigned_team_id')
+                ->count(),
         ]);
     }
 
@@ -51,7 +64,7 @@ class CommunicationTeamController extends Controller
 
     public function update(Request $request, CommunicationTeam $team): RedirectResponse
     {
-        $this->authorize('update', Conversation::class);
+        $this->authorize('create', Conversation::class);
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:120'],
@@ -68,5 +81,37 @@ class CommunicationTeamController extends Controller
         );
 
         return back()->with('success', 'تم تحديث الفريق.');
+    }
+
+    public function addMember(Request $request, CommunicationTeam $team): RedirectResponse
+    {
+        $this->authorize('create', Conversation::class);
+
+        $validated = $request->validate([
+            'user_id' => ['required', 'integer'],
+        ]);
+
+        $this->communicationTeamService->addMember(
+            $team,
+            $this->currentWorkspace(),
+            (int) $validated['user_id'],
+            $request->user(),
+        );
+
+        return back()->with('success', 'تمت إضافة العضو.');
+    }
+
+    public function removeMember(Request $request, CommunicationTeam $team, int $user): RedirectResponse
+    {
+        $this->authorize('create', Conversation::class);
+
+        $this->communicationTeamService->removeMember(
+            $team,
+            $this->currentWorkspace(),
+            $user,
+            $request->user(),
+        );
+
+        return back()->with('success', 'تمت إزالة العضو.');
     }
 }

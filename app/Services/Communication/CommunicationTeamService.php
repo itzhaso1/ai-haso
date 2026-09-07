@@ -55,4 +55,19 @@ class CommunicationTeamService
             workspaceId: $workspace->id,
         );
     }
+
+    public function addMember(CommunicationTeam $team, Workspace $workspace, int $userId, ?User $actor = null): void
+    {
+        $ids = $team->members()->pluck('users.id')->push($userId)->unique()->all();
+        $this->syncMembers($team, $workspace, array_map('intval', $ids), $actor);
+    }
+
+    public function removeMember(CommunicationTeam $team, Workspace $workspace, int $userId, ?User $actor = null): void
+    {
+        $ids = $team->members()
+            ->pluck('users.id')
+            ->reject(fn ($id): bool => (int) $id === $userId)
+            ->all();
+        $this->syncMembers($team, $workspace, array_map('intval', $ids), $actor);
+    }
 }

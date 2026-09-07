@@ -42,11 +42,13 @@
                         ],
                     ],
                     [
-                        'title' => 'Communication',
-                        'description' => 'المحادثات والبريد الإلكتروني وواتساب.',
+                        'title' => 'Communication Center',
+                        'description' => 'Inbox موحّد للعمليات اليومية عبر القنوات.',
                         'icon' => 'chat',
                         'links' => [
-                            ['label' => 'المحادثات', 'route' => 'workspace.conversations.index', 'active' => 'workspace.conversations.*'],
+                            ['label' => 'Inbox', 'route' => 'workspace.communication.inbox', 'active' => 'workspace.communication.inbox'],
+                            ['label' => 'Teams', 'route' => 'workspace.communication.teams.index', 'active' => 'workspace.communication.teams.*'],
+                            ['label' => 'Connections', 'route' => 'workspace.communication.connections.index', 'active' => 'workspace.communication.connections.*'],
                             ['label' => 'Channels', 'route' => 'workspace.channels.index', 'active' => 'workspace.channels.*'],
                             ['label' => 'البريد الإلكتروني', 'route' => 'workspace.emails.index', 'active' => 'workspace.emails.*'],
                             ['label' => 'واتساب', 'route' => 'workspace.whatsapp-accounts.index', 'active' => 'workspace.whatsapp-accounts.*'],

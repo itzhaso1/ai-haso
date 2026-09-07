@@ -155,6 +155,28 @@ class MessageService
         return $message->fresh() ?? $message;
     }
 
+    public function retryOutbound(Message $message, User $actor): Message
+    {
+        if ($message->direction !== 'outbound' || $message->delivery_status !== Message::DELIVERY_FAILED) {
+            throw new \InvalidArgumentException('Only failed outbound messages can be retried.');
+        }
+
+        $conversation = Conversation::withoutGlobalScopes()->find($message->conversation_id);
+        if (! $conversation) {
+            throw new \InvalidArgumentException('Conversation is missing for this message.');
+        }
+
+        return $this->recordOutbound($conversation, [
+            'content' => (string) $message->content,
+            'message_type' => $message->message_type ?: 'text',
+            'customer_id' => $message->customer_id,
+            'metadata' => array_merge(
+                is_array($message->metadata) ? $message->metadata : [],
+                ['retry_of_message_id' => $message->id],
+            ),
+        ], $actor);
+    }
+
     /**
      * @param  array<string, mixed>  $data
      */

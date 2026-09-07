@@ -34,14 +34,16 @@
         [
             'key' => 'communication',
             'title' => 'Communication Center',
-            'description' => 'Inbox والقنوات والفرق — نواة التواصل.',
+            'description' => 'Inbox موحّد، الفرق، والاتصالات — نظام تواصل مستقل.',
             'icon' => 'chat',
             'links' => [
-                ['label' => 'Inbox', 'route' => 'workspace.conversations.index', 'active' => 'workspace.conversations.*'],
-                ['label' => 'Channels', 'route' => 'workspace.channels.index', 'active' => 'workspace.channels.*'],
+                ['label' => 'Inbox', 'route' => 'workspace.communication.inbox', 'active' => ['workspace.communication.inbox', 'workspace.conversations.*']],
                 ['label' => 'Teams', 'route' => 'workspace.communication.teams.index', 'active' => 'workspace.communication.teams.*'],
+                ['label' => 'Connections', 'route' => 'workspace.communication.connections.index', 'active' => 'workspace.communication.connections.*'],
+                ['label' => 'Templates', 'route' => 'workspace.communication.templates.index', 'active' => 'workspace.communication.templates.*'],
                 ['label' => 'البريد الإلكتروني', 'route' => 'workspace.emails.index', 'active' => 'workspace.emails.*'],
                 ['label' => 'واتساب', 'route' => 'workspace.whatsapp-accounts.index', 'active' => 'workspace.whatsapp-accounts.*'],
+                ['label' => 'Channels', 'route' => 'workspace.channels.index', 'active' => 'workspace.channels.*'],
             ],
         ],
         [
@@ -100,9 +102,10 @@
             ->filter(fn (array $link): bool => \Illuminate\Support\Facades\Route::has($link['route']))
             ->values()
             ->all();
-        $module['is_active'] = collect($module['links'])->contains(
-            fn (array $link): bool => request()->routeIs($link['active'] ?? $link['route'])
-        );
+        $module['is_active'] = collect($module['links'])->contains(function (array $link): bool {
+            return collect((array) ($link['active'] ?? $link['route']))
+                ->contains(fn ($pattern): bool => request()->routeIs($pattern));
+        });
     }
     unset($module);
 
@@ -146,7 +149,8 @@
             <div x-cloak x-show="openModules['{{ $module['key'] }}']" x-transition class="space-y-1 px-3 pb-3">
                 @foreach($module['links'] as $link)
                     @php
-                        $isActive = request()->routeIs($link['active'] ?? $link['route']);
+                        $isActive = collect((array) ($link['active'] ?? $link['route']))
+                            ->contains(fn ($pattern): bool => request()->routeIs($pattern));
                     @endphp
                     <a
                         href="{{ route($link['route']) }}"
