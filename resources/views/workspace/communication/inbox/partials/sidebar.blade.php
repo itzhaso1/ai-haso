@@ -50,6 +50,12 @@
                     <p class="mt-1 font-semibold">{{ \App\Support\Communication\ChannelPresentation::label($conversationIdentity->channel) }}</p>
                     <p class="text-xs text-slate-600">{{ $conversationIdentity->identifier_raw ?: $conversationIdentity->identifier }}</p>
                 </div>
+            @elseif($activeConversation->external_id)
+                <div class="rounded-xl border border-[#BDEFE5] bg-[#F3FCFA] px-3 py-2 text-sm">
+                    <p class="text-[11px] font-semibold text-[#067e6b]">Identity used for this conversation</p>
+                    <p class="mt-1 font-semibold">{{ $activeConversation->channel_label ?? \App\Support\Communication\ChannelPresentation::label((string) $activeConversation->channel) }}</p>
+                    <p class="text-xs text-slate-600">{{ $activeConversation->external_id }}</p>
+                </div>
             @endif
             @forelse($identities as $identity)
                 <div class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
