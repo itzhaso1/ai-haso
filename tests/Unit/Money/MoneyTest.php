@@ -18,6 +18,9 @@ class MoneyTest extends TestCase
     {
         $this->assertSame('80.00', Money::mul('40.00', '2'));
         $this->assertSame('25.50', Money::mul('10.20', '2.5'));
+        $this->assertSame('15.00', Money::percentOf('100.00', 15));
+        $this->assertSame('25.00', Money::quantityTimesUnitPrice(2.5, 10));
+        $this->assertSame('15.00', Money::extractInclusiveTax('115.00', 15));
     }
 
     public function test_rejects_invalid_amount(): void

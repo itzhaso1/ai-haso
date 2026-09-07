@@ -2,12 +2,14 @@
 
 namespace App\Services\Finance;
 
+use App\Enums\Finance\TaxPriceMode;
 use App\Models\Finance\FinanceCreditNote;
 use App\Models\Finance\FinanceCreditNoteItem;
 use App\Models\Finance\FinanceInvoice;
 use App\Models\Finance\FinanceJournalEntry;
 use App\Models\Finance\FinanceSetting;
 use App\Models\Workspace;
+use App\Services\Finance\Tax\TaxCalculationResult;
 use App\Services\Finance\Tax\TaxCalculationService;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -42,18 +44,26 @@ class CreditNoteService
         return DB::transaction(function () use ($workspace, $invoice, $payload, $actorUserId, $type): FinanceCreditNote {
             $lockedInvoice = FinanceInvoice::withoutGlobalScopes()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
             $profile = [
-                'type' => (string) ($payload['tax_profile_type'] ?? $lockedInvoice->tax_profile_type ?? 'standard'),
+                'type' => $this->taxCalculator->normalizeProfileType(
+                    (string) ($payload['tax_profile_type'] ?? $lockedInvoice->tax_profile_type ?? 'standard'),
+                    (string) ($lockedInvoice->tax_profile_type ?? 'standard')
+                ),
                 'rate' => (float) ($payload['tax_rate'] ?? $lockedInvoice->tax_rate ?? 0),
             ];
-            $items = $this->normalizeItems($payload['items'] ?? [], $profile['type'], $profile['rate']);
+            $priceMode = TaxPriceMode::tryFrom((string) ($payload['tax_price_mode'] ?? $lockedInvoice->tax_price_mode ?? TaxPriceMode::Exclusive->value))
+                ?? TaxPriceMode::Exclusive;
+            $items = $this->normalizeItems($workspace, $payload['items'] ?? [], $profile['type'], $profile['rate'], $priceMode);
             if ($items === []) {
                 throw new RuntimeException('يجب أن يحتوي الإشعار على بند واحد على الأقل.');
             }
 
-            $totals = $this->taxCalculator->totals($items);
+            $result = $items['result'];
+            $normalizedItems = $items['items'];
+            $totals = $result->totalsArray();
+            $headerProfile = $result->headerProfile($profile);
             $this->assertCreditDoesNotExceedRemaining($lockedInvoice, $type, $totals['total']);
 
-            $note = FinanceCreditNote::withoutGlobalScopes()->create([
+            $noteAttributes = [
                 'workspace_id' => $workspace->id,
                 'invoice_id' => $lockedInvoice->id,
                 'customer_id' => $lockedInvoice->customer_id,
@@ -68,13 +78,20 @@ class CreditNoteService
                 'taxable_amount' => $totals['taxable_amount'],
                 'tax_amount' => $totals['tax_amount'],
                 'total' => $totals['total'],
-                'tax_profile_type' => $profile['type'],
-                'tax_rate' => round($profile['rate'], 2),
+                'tax_profile_type' => $headerProfile['type'],
+                'tax_rate' => round($headerProfile['rate'], 2),
                 'notes' => ($payload['notes'] ?? null) ?: null,
                 'created_by' => $actorUserId,
-            ]);
+            ];
 
-            foreach ($items as $item) {
+            if (FinanceCreditNote::hasTaxEngineColumns()) {
+                $noteAttributes['tax_price_mode'] = $result->priceMode->value;
+                $noteAttributes['tax_breakdown'] = $result->categoryTotalsToArray();
+            }
+
+            $note = FinanceCreditNote::withoutGlobalScopes()->create($noteAttributes);
+
+            foreach ($normalizedItems as $item) {
                 $itemAttributes = [
                     'workspace_id' => $workspace->id,
                     'credit_note_id' => $note->id,
@@ -91,6 +108,10 @@ class CreditNoteService
                 ];
                 if (FinanceCreditNoteItem::hasTaxProfileColumn()) {
                     $itemAttributes['tax_profile_type'] = $item['tax_profile_type'];
+                }
+                if (FinanceCreditNoteItem::hasExemptionColumns()) {
+                    $itemAttributes['exemption_reason'] = $item['exemption_reason'] ?? null;
+                    $itemAttributes['exemption_code'] = $item['exemption_code'] ?? null;
                 }
                 FinanceCreditNoteItem::withoutGlobalScopes()->create($itemAttributes);
             }
@@ -116,6 +137,7 @@ class CreditNoteService
 
             $invoice = FinanceInvoice::withoutGlobalScopes()->whereKey($locked->invoice_id)->lockForUpdate()->firstOrFail();
             $this->assertCreditDoesNotExceedRemaining($invoice, (string) $locked->type, (float) $locked->total);
+            $this->assertIssuedTaxReconciles($locked);
             $this->financialPeriodGuardService->assertDateIsOpen(
                 workspaceId: (int) $locked->workspace_id,
                 date: $locked->issue_date?->toDateString() ?? now()->toDateString(),
@@ -308,42 +330,97 @@ class CreditNoteService
 
     /**
      * @param  array<int, mixed>  $rawItems
-     * @return array<int, array<string, mixed>>
+     * @return array{items: array<int, array<string, mixed>>, result: TaxCalculationResult|null}
      */
-    private function normalizeItems(array $rawItems, string $taxType, float $defaultTaxRate): array
-    {
-        $items = [];
+    private function normalizeItems(
+        Workspace $workspace,
+        array $rawItems,
+        string $taxType,
+        float $defaultTaxRate,
+        TaxPriceMode $priceMode,
+    ): array {
+        $prepared = [];
         foreach ($rawItems as $rawItem) {
-            $quantity = max(0.001, (float) ($rawItem['quantity'] ?? 0));
-            $unitPrice = max(0.0, (float) ($rawItem['unit_price'] ?? 0));
-            $discount = max(0.0, (float) ($rawItem['discount'] ?? 0));
-            $lineTaxRate = isset($rawItem['tax_rate']) ? (float) $rawItem['tax_rate'] : $defaultTaxRate;
-            $lineTaxType = $this->taxCalculator->normalizeProfileType(
-                (string) ($rawItem['tax_type'] ?? $rawItem['tax_profile_type'] ?? $taxType),
-                $taxType
-            );
-            $lineCalc = $this->taxCalculator->calculateLine($quantity, $unitPrice, $discount, $lineTaxType, $lineTaxRate);
+            if (! is_array($rawItem)) {
+                continue;
+            }
             $name = trim((string) ($rawItem['product_name'] ?? $rawItem['title'] ?? ''));
-            if ($name === '' && $lineCalc['total'] <= 0) {
+            $quantity = (float) ($rawItem['quantity'] ?? 0);
+            $unitPrice = (float) ($rawItem['unit_price'] ?? 0);
+            if ($name === '' && $quantity <= 0 && $unitPrice <= 0) {
                 continue;
             }
 
-            $items[] = [
+            $line = [
                 'product_name' => $name !== '' ? $name : 'بند',
                 'description' => $rawItem['description'] ?? null,
-                'quantity' => round($quantity, 3),
-                'unit_price' => round($unitPrice, 2),
-                'discount' => round($discount, 2),
-                'tax_profile_type' => $lineTaxType,
-                'tax_rate' => round($lineTaxRate, 2),
-                'tax_amount' => round($lineCalc['tax_amount'], 2),
-                'taxable_amount' => round($lineCalc['taxable_amount'], 2),
-                'total' => round($lineCalc['total'], 2),
+                'quantity' => $quantity,
+                'unit_price' => $unitPrice,
+                'discount' => (float) ($rawItem['discount'] ?? 0),
+                'tax_type' => $rawItem['tax_type'] ?? $rawItem['tax_profile_type'] ?? $taxType,
+                'tax_profile_type' => $rawItem['tax_profile_type'] ?? $rawItem['tax_type'] ?? $taxType,
+                'exemption_reason' => $rawItem['exemption_reason'] ?? null,
+                'exemption_code' => $rawItem['exemption_code'] ?? null,
                 'metadata' => is_array($rawItem['metadata'] ?? null) ? $rawItem['metadata'] : null,
+            ];
+            if (array_key_exists('tax_rate', $rawItem)) {
+                $line['tax_rate'] = $rawItem['tax_rate'];
+            }
+            $prepared[] = $line;
+        }
+
+        if ($prepared === []) {
+            return ['items' => [], 'result' => null];
+        }
+
+        $result = $this->taxCalculator->calculateDocument(
+            $workspace,
+            $prepared,
+            $priceMode,
+            $taxType,
+            $defaultTaxRate,
+        );
+
+        $items = [];
+        foreach ($result->lines as $index => $line) {
+            $source = $prepared[$index];
+            $items[] = [
+                'product_name' => $source['product_name'],
+                'description' => $source['description'],
+                'quantity' => $line->quantity,
+                'unit_price' => $line->unitPrice,
+                'discount' => $line->discountAmount,
+                'tax_profile_type' => $line->classification->value,
+                'tax_rate' => $line->taxRate,
+                'tax_amount' => $line->taxAmount,
+                'taxable_amount' => $line->taxableAmount,
+                'total' => $line->total,
+                'exemption_reason' => $line->exemptionReason,
+                'exemption_code' => $line->exemptionCode,
+                'metadata' => $source['metadata'],
             ];
         }
 
-        return $items;
+        return ['items' => $items, 'result' => $result];
+    }
+
+    private function assertIssuedTaxReconciles(FinanceCreditNote $note): void
+    {
+        $note->loadMissing('items');
+        $workspace = Workspace::query()->findOrFail((int) $note->workspace_id);
+        $priceMode = TaxPriceMode::tryFrom((string) ($note->tax_price_mode ?? TaxPriceMode::Exclusive->value))
+            ?? TaxPriceMode::Exclusive;
+        $result = $this->taxCalculator->calculateFromPersistedLines($workspace, $note->items, $priceMode);
+        if (! $result->matchesPersistedCreditNote($note)) {
+            throw new RuntimeException('نتيجة الضريبة غير متسقة ولا يمكن إصدار الإشعار.');
+        }
+
+        if (FinanceCreditNote::hasTaxEngineColumns() && $note->tax_breakdown === null) {
+            $note->update([
+                'tax_breakdown' => $result->categoryTotalsToArray(),
+                'tax_price_mode' => $result->priceMode->value,
+            ]);
+        }
     }
 
     private function nextNumber(int $workspaceId, string $type): string

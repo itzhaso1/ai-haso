@@ -468,6 +468,7 @@ class InvoiceController extends FinanceBaseController
             ],
             'tax_profile_type' => ['nullable', 'in:standard,zero_rated,exempt,out_of_scope'],
             'tax_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'tax_price_mode' => ['nullable', 'in:exclusive,inclusive'],
             'items_json' => ['required', 'string'],
             'attachments' => ['nullable', 'array', 'max:10'],
             'attachments.*' => ['file', 'max:10240', 'mimes:pdf,jpg,jpeg,png,webp'],

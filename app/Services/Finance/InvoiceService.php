@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance;
 
+use App\Enums\Finance\TaxPriceMode;
 use App\Models\Customer;
 use App\Models\Finance\FinanceInvoice;
 use App\Models\Finance\FinanceInvoiceAttachment;
@@ -11,6 +12,7 @@ use App\Models\Finance\FinanceSetting;
 use App\Models\Finance\FinanceSupplier;
 use App\Models\Product;
 use App\Models\Workspace;
+use App\Services\Finance\Tax\TaxCalculationResult;
 use App\Services\Finance\Tax\TaxCalculationService;
 use App\Support\Money\Money;
 use App\Support\Uploads\SecureUpload;
@@ -87,13 +89,19 @@ class InvoiceService
                     ->first()
                 : null;
 
-            $items = $this->normalizeItems($payload['items'] ?? [], $workspace->id, $profile['type'], $profile['rate']);
+            $taxResult = $this->calculateInvoiceItems(
+                $workspace,
+                $payload['items'] ?? [],
+                $profile,
+                $payload
+            );
+            $items = $taxResult['items'];
             if ($items === []) {
                 throw new RuntimeException('يجب أن تحتوي الفاتورة على بند واحد على الأقل.');
             }
 
-            $totals = $this->taxCalculator->totals($items);
-            $headerProfile = $this->headerTaxProfileFromItems($items, $profile);
+            $totals = $taxResult['result']->totalsArray();
+            $headerProfile = $taxResult['result']->headerProfile($profile);
             $classification = InvoiceClassification::fromPayload($payload, $type);
             $amountPaid = max(0, (float) ($payload['amount_paid'] ?? 0));
             $amountCredited = (float) ($payload['amount_credited'] ?? 0);
@@ -142,6 +150,11 @@ class InvoiceService
             if (FinanceInvoice::hasClassificationColumns()) {
                 $attributes['tax_document_subtype'] = $classification->taxDocumentSubtype->value;
                 $attributes['zatca_requirement'] = $classification->zatcaRequirement->value;
+            }
+
+            if (FinanceInvoice::hasTaxEngineColumns()) {
+                $attributes['tax_price_mode'] = $taxResult['result']->priceMode->value;
+                $attributes['tax_breakdown'] = $taxResult['result']->categoryTotalsToArray();
             }
 
             if (Schema::hasColumn('finance_invoices', 'project_id') && array_key_exists('project_id', $payload)) {
@@ -281,13 +294,19 @@ class InvoiceService
                 throw new RuntimeException('فاتورة الشراء تتطلب اختيار مورد.');
             }
 
-            $items = $this->normalizeItems($payload['items'] ?? [], $workspaceId, $profile['type'], $profile['rate']);
+            $taxResult = $this->calculateInvoiceItems(
+                $workspace,
+                $payload['items'] ?? [],
+                $profile,
+                $payload
+            );
+            $items = $taxResult['items'];
             if ($items === []) {
                 throw new RuntimeException('يجب أن تحتوي الفاتورة على بند واحد على الأقل.');
             }
 
-            $totals = $this->taxCalculator->totals($items);
-            $headerProfile = $this->headerTaxProfileFromItems($items, $profile);
+            $totals = $taxResult['result']->totalsArray();
+            $headerProfile = $taxResult['result']->headerProfile($profile);
             $classification = InvoiceClassification::fromPayload($payload, $type);
             $customer = $customerId
                 ? Customer::withoutGlobalScopes()->where('workspace_id', $workspaceId)->whereKey($customerId)->first()
@@ -327,6 +346,11 @@ class InvoiceService
             if (FinanceInvoice::hasClassificationColumns()) {
                 $updates['tax_document_subtype'] = $classification->taxDocumentSubtype->value;
                 $updates['zatca_requirement'] = $classification->zatcaRequirement->value;
+            }
+
+            if (FinanceInvoice::hasTaxEngineColumns()) {
+                $updates['tax_price_mode'] = $taxResult['result']->priceMode->value;
+                $updates['tax_breakdown'] = $taxResult['result']->categoryTotalsToArray();
             }
 
             if (array_key_exists('invoice_number', $payload) && trim((string) $payload['invoice_number']) !== '') {
@@ -380,6 +404,8 @@ class InvoiceService
                 date: $locked->issue_date?->toDateString() ?? now(config('app.timezone'))->toDateString(),
                 context: 'إصدار الفاتورة'
             );
+
+            $this->assertIssuedTaxReconciles($locked);
 
             $paid = $this->invoiceStateService->postedPaymentsSum($locked);
             $credited = (float) ($locked->amount_credited ?? 0);
@@ -468,25 +494,73 @@ class InvoiceService
 
     /**
      * @param  array<int, mixed>  $rawItems
+     * @param  array{type:string, rate:float}  $defaultProfile
+     * @param  array<string, mixed>  $payload
+     * @return array{items: array<int, array<string, mixed>>, result: TaxCalculationResult|null}
+     */
+    private function calculateInvoiceItems(Workspace $workspace, array $rawItems, array $defaultProfile, array $payload): array
+    {
+        $prepared = $this->prepareLineInputs($rawItems, (int) $workspace->id);
+        if ($prepared === []) {
+            return ['items' => [], 'result' => null];
+        }
+
+        $priceMode = TaxPriceMode::tryFrom((string) ($payload['tax_price_mode'] ?? TaxPriceMode::Exclusive->value))
+            ?? TaxPriceMode::Exclusive;
+
+        $result = $this->taxCalculator->calculateDocument(
+            $workspace,
+            $prepared,
+            $priceMode,
+            $defaultProfile['type'],
+            $defaultProfile['rate'],
+        );
+
+        $items = [];
+        foreach ($result->lines as $index => $line) {
+            $source = $prepared[$index];
+            $items[] = [
+                'product_id' => $source['product_id'],
+                'product_name' => $source['product_name'],
+                'description' => $source['description'],
+                'quantity' => $line->quantity,
+                'unit_price' => $line->unitPrice,
+                'discount' => $line->discountAmount,
+                'tax_profile_type' => $line->classification->value,
+                'tax_rate' => $line->taxRate,
+                'tax_amount' => $line->taxAmount,
+                'taxable_amount' => $line->taxableAmount,
+                'total' => $line->total,
+                'exemption_reason' => $line->exemptionReason,
+                'exemption_code' => $line->exemptionCode,
+                'metadata' => $source['metadata'],
+            ];
+        }
+
+        return ['items' => $items, 'result' => $result];
+    }
+
+    /**
+     * @param  array<int, mixed>  $rawItems
      * @return array<int, array<string, mixed>>
      */
-    private function normalizeItems(array $rawItems, int $workspaceId, string $taxType, float $defaultTaxRate): array
+    private function prepareLineInputs(array $rawItems, int $workspaceId): array
     {
         $items = [];
 
         foreach ($rawItems as $rawItem) {
-            $quantity = max(0.001, (float) ($rawItem['quantity'] ?? 0));
-            $unitPrice = max(0.0, (float) ($rawItem['unit_price'] ?? 0));
-            $discount = max(0.0, (float) ($rawItem['discount'] ?? 0));
-            $lineTaxRate = isset($rawItem['tax_rate'])
-                ? (float) $rawItem['tax_rate']
-                : $defaultTaxRate;
-            $lineTaxType = $this->taxCalculator->normalizeProfileType(
-                (string) ($rawItem['tax_type'] ?? $rawItem['tax_profile_type'] ?? $taxType),
-                $taxType
-            );
+            if (! is_array($rawItem)) {
+                continue;
+            }
 
-            $lineCalc = $this->taxCalculator->calculateLine($quantity, $unitPrice, $discount, $lineTaxType, $lineTaxRate);
+            $productName = trim((string) ($rawItem['product_name'] ?? ''));
+            $quantity = (float) ($rawItem['quantity'] ?? 0);
+            $unitPrice = (float) ($rawItem['unit_price'] ?? 0);
+            $discount = (float) ($rawItem['discount'] ?? 0);
+
+            if ($productName === '' && $quantity <= 0 && $unitPrice <= 0) {
+                continue;
+            }
 
             $productId = isset($rawItem['product_id']) ? (int) $rawItem['product_id'] : null;
             if ($productId) {
@@ -499,25 +573,48 @@ class InvoiceService
                 }
             }
 
-            $items[] = [
+            $line = [
                 'product_id' => $productId,
-                'product_name' => (string) ($rawItem['product_name'] ?? ''),
+                'product_name' => $productName,
                 'description' => $rawItem['description'] ?? null,
                 'quantity' => $quantity,
-                'unit_price' => $this->money($unitPrice),
-                'discount' => $this->money($discount),
-                'tax_profile_type' => $lineTaxType,
-                'tax_rate' => $this->money($lineTaxRate),
-                'tax_amount' => $this->money($lineCalc['tax_amount']),
-                'taxable_amount' => $this->money($lineCalc['taxable_amount']),
-                'total' => $this->money($lineCalc['total']),
+                'unit_price' => $unitPrice,
+                'discount' => $discount,
+                'tax_type' => $rawItem['tax_type'] ?? $rawItem['tax_profile_type'] ?? null,
+                'tax_profile_type' => $rawItem['tax_profile_type'] ?? $rawItem['tax_type'] ?? null,
+                'exemption_reason' => $rawItem['exemption_reason'] ?? null,
+                'exemption_code' => $rawItem['exemption_code'] ?? null,
                 'metadata' => is_array($rawItem['metadata'] ?? null) ? $rawItem['metadata'] : null,
             ];
+
+            if (array_key_exists('tax_rate', $rawItem)) {
+                $line['tax_rate'] = $rawItem['tax_rate'];
+            }
+
+            $items[] = $line;
         }
 
-        return array_values(array_filter($items, function (array $item): bool {
-            return $item['product_name'] !== '' || ((float) $item['total']) > 0;
-        }));
+        return $items;
+    }
+
+    private function assertIssuedTaxReconciles(FinanceInvoice $invoice): void
+    {
+        $invoice->loadMissing('items');
+        $workspace = Workspace::query()->findOrFail((int) $invoice->workspace_id);
+        $priceMode = TaxPriceMode::tryFrom((string) ($invoice->tax_price_mode ?? TaxPriceMode::Exclusive->value))
+            ?? TaxPriceMode::Exclusive;
+
+        $result = $this->taxCalculator->calculateFromPersistedLines($workspace, $invoice->items, $priceMode);
+        if (! $result->matchesPersistedInvoice($invoice)) {
+            throw new RuntimeException('نتيجة الضريبة غير متسقة ولا يمكن إصدار الفاتورة.');
+        }
+
+        if (FinanceInvoice::hasTaxEngineColumns() && $invoice->tax_breakdown === null) {
+            $invoice->update([
+                'tax_breakdown' => $result->categoryTotalsToArray(),
+                'tax_price_mode' => $result->priceMode->value,
+            ]);
+        }
     }
 
     public function refreshIssuedPaymentStatuses(?int $workspaceId = null): int
@@ -584,14 +681,23 @@ class InvoiceService
      */
     private function resolveTaxProfile(Workspace $workspace, array $payload): array
     {
-        if (isset($payload['tax_profile_type']) || isset($payload['tax_rate'])) {
+        $default = $this->taxCalculator->defaultProfileForWorkspace($workspace);
+        $type = $this->taxCalculator->normalizeProfileType(
+            isset($payload['tax_profile_type']) ? (string) $payload['tax_profile_type'] : $default['type'],
+            $default['type']
+        );
+
+        if (array_key_exists('tax_rate', $payload) && $payload['tax_rate'] !== null && $payload['tax_rate'] !== '') {
             return [
-                'type' => (string) ($payload['tax_profile_type'] ?? 'standard'),
-                'rate' => (float) ($payload['tax_rate'] ?? 0),
+                'type' => $type,
+                'rate' => (float) $payload['tax_rate'],
             ];
         }
 
-        return $this->taxCalculator->defaultProfileForWorkspace($workspace);
+        return [
+            'type' => $type,
+            'rate' => (float) $default['rate'],
+        ];
     }
 
     private function postInvoiceEntry(FinanceInvoice $invoice, int $actorUserId, bool $skipInventory = false): void
@@ -840,34 +946,12 @@ class InvoiceService
             $attributes['tax_profile_type'] = $item['tax_profile_type'];
         }
 
-        FinanceInvoiceItem::withoutGlobalScopes()->create($attributes);
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $items
-     * @param  array{type:string, rate:float}  $defaultProfile
-     * @return array{type:string, rate:float}
-     */
-    private function headerTaxProfileFromItems(array $items, array $defaultProfile): array
-    {
-        $types = array_values(array_unique(array_map(
-            fn (array $item): string => (string) $item['tax_profile_type'],
-            $items
-        )));
-
-        if (count($types) === 1) {
-            $rates = array_values(array_unique(array_map(
-                fn (array $item): string => number_format((float) $item['tax_rate'], 2, '.', ''),
-                $items
-            )));
-
-            return [
-                'type' => $types[0],
-                'rate' => count($rates) === 1 ? (float) $rates[0] : $defaultProfile['rate'],
-            ];
+        if (FinanceInvoiceItem::hasExemptionColumns()) {
+            $attributes['exemption_reason'] = $item['exemption_reason'] ?? null;
+            $attributes['exemption_code'] = $item['exemption_code'] ?? null;
         }
 
-        return $defaultProfile;
+        FinanceInvoiceItem::withoutGlobalScopes()->create($attributes);
     }
 
     private function settingsForWorkspace(int $workspaceId): ?FinanceSetting

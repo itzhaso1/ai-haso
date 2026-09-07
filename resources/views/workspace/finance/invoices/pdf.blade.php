@@ -25,6 +25,17 @@
         'standard' => 'قياسية',
         'simplified' => 'مبسطة',
     ];
+    $taxProfileLabels = [
+        'standard' => 'قياسية',
+        'zero_rated' => 'صفرية',
+        'exempt' => 'معفاة',
+        'out_of_scope' => 'خارج النطاق',
+    ];
+    $taxPriceModeLabels = [
+        'exclusive' => 'غير شامل الضريبة',
+        'inclusive' => 'شامل الضريبة',
+    ];
+    $taxBreakdown = is_array($invoice->tax_breakdown ?? null) ? $invoice->tax_breakdown : [];
 
     $companyName = $company['company_name_ar'] ?? $company['company_name'] ?? ($useLiveFallbacks ? ($setting?->company_name_ar ?? $setting?->company_name) : null) ?? 'فاتورة';
     $companyNameEn = $company['company_name'] ?? ($useLiveFallbacks ? $setting?->company_name : null);
@@ -298,6 +309,7 @@
                     <p class="block-title">معلومات الفاتورة</p>
                     <div class="muted">العملة: {{ $invoice->currency }}</div>
                     <div class="muted">تصنيف المستند: {{ $taxDocumentLabels[$invoice->tax_document_subtype ?? 'standard'] ?? ($invoice->tax_document_subtype ?: 'قياسية') }}</div>
+                    <div class="muted">تسعير الضريبة: {{ $taxPriceModeLabels[$invoice->tax_price_mode ?? 'exclusive'] ?? 'غير شامل الضريبة' }}</div>
                     <div class="muted">شروط السداد: {{ $invoice->payment_terms ?: ($company['default_payment_terms'] ?? '-') }}</div>
                     <div class="muted">الفوترة الإلكترونية ZATCA: غير مهيأة</div>
                 </td>
@@ -311,6 +323,7 @@
                     <th>الوصف</th>
                     <th>الكمية</th>
                     <th>سعر الوحدة</th>
+                    <th>التصنيف</th>
                     <th>الخصم</th>
                     <th>الضريبة</th>
                     <th>الإجمالي</th>
@@ -323,6 +336,7 @@
                         <td>{{ $item->description ?: '-' }}</td>
                         <td>{{ number_format((float) $item->quantity, 3) }}</td>
                         <td>{{ number_format((float) $item->unit_price, 2) }}</td>
+                        <td>{{ $taxProfileLabels[$item->tax_profile_type ?? ''] ?? ($item->tax_profile_type ?: '-') }}</td>
                         <td>{{ number_format((float) $item->discount, 2) }}</td>
                         <td>{{ number_format((float) $item->tax_amount, 2) }}</td>
                         <td>{{ number_format((float) $item->total, 2) }}</td>
@@ -352,6 +366,12 @@
                 <td class="label grand">الإجمالي</td>
                 <td class="grand">{{ number_format((float) $invoice->total, 2) }} {{ $invoice->currency }}</td>
             </tr>
+            @foreach($taxBreakdown as $bucket)
+            <tr>
+                <td class="label">{{ $taxProfileLabels[$bucket['tax_profile_type'] ?? ''] ?? ($bucket['tax_profile_type'] ?? 'ضريبة') }} @ {{ number_format((float) ($bucket['tax_rate'] ?? 0), 2) }}%</td>
+                <td>{{ number_format((float) ($bucket['taxable_amount'] ?? 0), 2) }} / {{ number_format((float) ($bucket['tax_amount'] ?? 0), 2) }} {{ $invoice->currency }}</td>
+            </tr>
+            @endforeach
             @if((float) ($invoice->amount_credited ?? 0) > 0)
             <tr>
                 <td class="label">إشعارات دائن</td>

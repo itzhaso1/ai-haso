@@ -42,6 +42,17 @@
         : ($invoice->type === 'purchase' ? optional($invoice->supplier)->vat_number : optional($invoice->customer)->vat_number);
     $taxDocumentSubtype = $invoice->tax_document_subtype ?: 'standard';
     $zatcaRequirement = $invoice->type === 'purchase' ? 'not_required' : ($invoice->zatca_requirement ?: 'not_required');
+    $taxProfileLabels = [
+        'standard' => 'قياسية',
+        'zero_rated' => 'صفرية',
+        'exempt' => 'معفاة',
+        'out_of_scope' => 'خارج النطاق',
+    ];
+    $taxPriceModeLabels = [
+        'exclusive' => 'غير شامل الضريبة',
+        'inclusive' => 'شامل الضريبة',
+    ];
+    $taxBreakdown = is_array($invoice->tax_breakdown) ? $invoice->tax_breakdown : [];
 @endphp
 
 @section('content')
@@ -122,6 +133,7 @@
                     <div class="flex justify-between"><dt class="text-slate-500">الإجمالي قبل الضريبة</dt><dd>{{ number_format((float) $invoice->subtotal, 2) }}</dd></div>
                     <div class="flex justify-between"><dt class="text-slate-500">الخصم</dt><dd>{{ number_format((float) $invoice->discount, 2) }}</dd></div>
                     <div class="flex justify-between"><dt class="text-slate-500">الخاضع للضريبة</dt><dd>{{ number_format((float) $invoice->taxable_amount, 2) }}</dd></div>
+                    <div class="flex justify-between"><dt class="text-slate-500">تسعير الضريبة</dt><dd>{{ $taxPriceModeLabels[$invoice->tax_price_mode ?? 'exclusive'] ?? ($invoice->tax_price_mode ?: 'غير شامل الضريبة') }}</dd></div>
                     <div class="flex justify-between"><dt class="text-slate-500">الضريبة</dt><dd>{{ number_format((float) $invoice->tax_amount, 2) }} ({{ number_format((float) $invoice->tax_rate, 2) }}%)</dd></div>
                     <div class="flex justify-between"><dt class="text-slate-500">دائن / مدين</dt><dd>{{ number_format((float) ($invoice->amount_credited ?? 0), 2) }} / {{ number_format((float) ($invoice->amount_debited ?? 0), 2) }}</dd></div>
                     @if($invoice->contract)
@@ -166,6 +178,7 @@
                             <th class="px-4 py-2 text-right">السعر</th>
                             <th class="px-4 py-2 text-right">الخصم</th>
                             <th class="px-4 py-2 text-right">تصنيف الضريبة</th>
+                            <th class="px-4 py-2 text-right">النسبة</th>
                             <th class="px-4 py-2 text-right">الضريبة</th>
                             <th class="px-4 py-2 text-right">الإجمالي</th>
                         </tr>
@@ -177,17 +190,46 @@
                                 <td class="px-4 py-2">{{ number_format((float) $item->quantity, 2) }}</td>
                                 <td class="px-4 py-2">{{ number_format((float) $item->unit_price, 2) }}</td>
                                 <td class="px-4 py-2">{{ number_format((float) $item->discount, 2) }}</td>
-                                <td class="px-4 py-2">{{ $item->tax_profile_type ?: $invoice->tax_profile_type }}</td>
+                                <td class="px-4 py-2">{{ $taxProfileLabels[$item->tax_profile_type ?: $invoice->tax_profile_type] ?? ($item->tax_profile_type ?: $invoice->tax_profile_type) }}@if($item->exemption_reason)<div class="text-[11px] text-slate-500">{{ $item->exemption_reason }}</div>@endif</td>
+                                <td class="px-4 py-2">{{ number_format((float) $item->tax_rate, 2) }}%</td>
                                 <td class="px-4 py-2">{{ number_format((float) $item->tax_amount, 2) }}</td>
                                 <td class="px-4 py-2 font-semibold">{{ number_format((float) $item->total, 2) }}</td>
                             </tr>
                         @empty
-                            <tr><td colspan="7" class="px-4 py-8 text-center text-slate-500">لا توجد بنود.</td></tr>
+                            <tr><td colspan="8" class="px-4 py-8 text-center text-slate-500">لا توجد بنود.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
         </div>
+
+        @if($taxBreakdown !== [])
+            <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div class="border-b border-slate-100 px-5 py-3 text-sm font-bold">مجاميع الضريبة حسب التصنيف</div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead class="bg-slate-50 text-slate-600">
+                            <tr>
+                                <th class="px-4 py-2 text-right">التصنيف</th>
+                                <th class="px-4 py-2 text-right">النسبة</th>
+                                <th class="px-4 py-2 text-right">الخاضع للضريبة</th>
+                                <th class="px-4 py-2 text-right">الضريبة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($taxBreakdown as $bucket)
+                                <tr class="border-t border-slate-100">
+                                    <td class="px-4 py-2">{{ $taxProfileLabels[$bucket['tax_profile_type'] ?? ''] ?? ($bucket['tax_profile_type'] ?? '—') }}</td>
+                                    <td class="px-4 py-2">{{ number_format((float) ($bucket['tax_rate'] ?? 0), 2) }}%</td>
+                                    <td class="px-4 py-2">{{ number_format((float) ($bucket['taxable_amount'] ?? 0), 2) }}</td>
+                                    <td class="px-4 py-2">{{ number_format((float) ($bucket['tax_amount'] ?? 0), 2) }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        @endif
 
         <div id="payments" class="grid gap-4 lg:grid-cols-2">
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

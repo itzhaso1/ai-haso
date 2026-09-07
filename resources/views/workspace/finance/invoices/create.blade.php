@@ -26,6 +26,8 @@
                 'discount' => (float) $item->discount,
                 'tax_rate' => (float) $item->tax_rate,
                 'tax_type' => $item->tax_profile_type ?: ($invoice->tax_profile_type ?: 'standard'),
+                'exemption_reason' => $item->exemption_reason ?? '',
+                'exemption_code' => $item->exemption_code ?? '',
                 'total' => (float) $item->total,
             ])->values()
             : collect([[
@@ -37,6 +39,8 @@
                 'discount' => 0,
                 'tax_rate' => $defaultTaxRate,
                 'tax_type' => 'standard',
+                'exemption_reason' => '',
+                'exemption_code' => '',
                 'total' => 0,
             ]]);
     @endphp
@@ -181,6 +185,14 @@
                     <label class="mb-1 block text-xs font-semibold text-slate-600">نسبة VAT %</label>
                     <input type="number" step="0.01" min="0" max="100" x-model.number="form.tax_rate" name="tax_rate" class="w-full rounded-lg border-slate-300 text-sm">
                 </div>
+                <div>
+                    <label class="mb-1 block text-xs font-semibold text-slate-600">تسعير الضريبة</label>
+                    <select name="tax_price_mode" x-model="form.tax_price_mode" class="w-full rounded-lg border-slate-300 text-sm">
+                        <option value="exclusive" @selected(old('tax_price_mode', $invoice->tax_price_mode ?: 'exclusive') === 'exclusive')>غير شامل الضريبة</option>
+                        <option value="inclusive" @selected(old('tax_price_mode', $invoice->tax_price_mode) === 'inclusive')>شامل الضريبة</option>
+                    </select>
+                    <p class="mt-1 text-[11px] text-slate-500">الحساب النهائي يتم في الخادم. المعاينة هنا تقريبية.</p>
+                </div>
                 <div class="lg:col-span-3">
                     <label class="mb-1 block text-xs font-semibold text-slate-600">ملاحظات</label>
                     <textarea name="notes" rows="2" class="w-full rounded-lg border-slate-300 text-sm">{{ old('notes', $invoice->notes) }}</textarea>
@@ -204,6 +216,7 @@
                                 <th class="px-3 py-2 text-right">الخصم</th>
                                 <th class="px-3 py-2 text-right">تصنيف الضريبة</th>
                                 <th class="px-3 py-2 text-right">نسبة الضريبة %</th>
+                                <th class="px-3 py-2 text-right">سبب الإعفاء</th>
                                 <th class="px-3 py-2 text-right">الإجمالي</th>
                                 <th class="px-3 py-2"></th>
                             </tr>
@@ -250,6 +263,17 @@
                                     <td class="px-3 py-2">
                                         <input type="number" step="0.01" min="0" max="100" x-model.number="item.tax_rate" @input="recalculate()" class="w-20 rounded-md border-slate-300 text-xs">
                                     </td>
+                                    <td class="px-3 py-2">
+                                        <input
+                                            type="text"
+                                            x-show="item.tax_type !== 'standard'"
+                                            x-model="item.exemption_reason"
+                                            maxlength="255"
+                                            placeholder="اختياري"
+                                            class="w-36 rounded-md border-slate-300 text-xs"
+                                        >
+                                        <input type="hidden" x-model="item.exemption_code">
+                                    </td>
                                     <td class="px-3 py-2 font-semibold text-slate-900" x-text="format(item.total)"></td>
                                     <td class="px-3 py-2">
                                         <button type="button" @click="removeItem(idx)" class="rounded-md border border-red-200 px-2 py-1 text-xs text-red-600">حذف</button>
@@ -275,6 +299,12 @@
                         <div class="flex justify-between"><span>المبلغ الخاضع للضريبة</span><span x-text="format(summary.taxable_amount)"></span></div>
                         <div class="flex justify-between"><span>ضريبة القيمة المضافة</span><span x-text="format(summary.tax_amount)"></span></div>
                         <div class="flex justify-between border-t pt-2 font-bold"><span>الإجمالي النهائي</span><span x-text="format(summary.total)"></span></div>
+                        <template x-for="(bucket, key) in summary.categories" :key="key">
+                            <div class="flex justify-between text-xs text-slate-500">
+                                <span x-text="bucket.label"></span>
+                                <span x-text="format(bucket.tax_amount)"></span>
+                            </div>
+                        </template>
                         <div class="flex justify-between"><span>المدفوع</span><span x-text="format(0)"></span></div>
                         <div class="flex justify-between font-bold text-[#06C2A4]"><span>المتبقي</span><span x-text="format(summary.total)"></span></div>
                     </div>
@@ -304,6 +334,7 @@
                     type: defaultType || 'sales',
                     tax_profile_type: 'standard',
                     tax_rate: {{ $defaultTaxRate }},
+                    tax_price_mode: '{{ old('tax_price_mode', $invoice->tax_price_mode ?: 'exclusive') }}',
                 },
                 items: @json($builderItems),
                 summary: {
@@ -311,7 +342,8 @@
                     discount: 0,
                     taxable_amount: 0,
                     tax_amount: 0,
-                    total: 0
+                    total: 0,
+                    categories: {}
                 },
                 get serializedItems() {
                     return JSON.stringify(this.items.map((item) => ({
@@ -323,10 +355,12 @@
                         discount: Number(item.discount || 0),
                         tax_rate: Number(item.tax_rate || this.form.tax_rate || 0),
                         tax_type: item.tax_type || this.form.tax_profile_type,
+                        exemption_reason: item.exemption_reason || '',
+                        exemption_code: item.exemption_code || '',
                     })));
                 },
                 addItem() {
-                    this.items.push({product_id: '', product_name: '', description: '', quantity: 1, unit_price: 0, discount: 0, tax_rate: Number(this.form.tax_rate || 0), tax_type: this.form.tax_profile_type, total: 0});
+                    this.items.push({product_id: '', product_name: '', description: '', quantity: 1, unit_price: 0, discount: 0, tax_rate: Number(this.form.tax_rate || 0), tax_type: this.form.tax_profile_type, exemption_reason: '', exemption_code: '', total: 0});
                     this.recalculate();
                 },
                 removeItem(index) {
@@ -352,23 +386,51 @@
                     let taxable = 0;
                     let tax = 0;
                     let total = 0;
+                    const categories = {};
+                    const labels = {
+                        standard: 'قياسية',
+                        zero_rated: 'صفرية',
+                        exempt: 'معفاة',
+                        out_of_scope: 'خارج النطاق',
+                    };
+                    const priceMode = this.form.tax_price_mode || 'exclusive';
                     this.items = this.items.map((item) => {
                         const qty = Math.max(0.001, Number(item.quantity || 0));
                         const unitPrice = Math.max(0, Number(item.unit_price || 0));
                         const lineDiscount = Math.max(0, Number(item.discount || 0));
-                        const taxRate = Math.max(0, Number(item.tax_rate ?? this.form.tax_rate ?? 0));
                         const taxType = item.tax_type || this.form.tax_profile_type;
+                        const taxRate = taxType === 'standard'
+                            ? Math.max(0, Number(item.tax_rate ?? this.form.tax_rate ?? 0))
+                            : 0;
                         const lineSubtotal = this.money(qty * unitPrice);
                         const boundedDiscount = Math.min(this.money(lineDiscount), lineSubtotal);
-                        const taxableAmount = this.money(lineSubtotal - boundedDiscount);
-                        const taxAmount = taxType === 'standard' ? this.money(taxableAmount * (taxRate / 100)) : 0;
-                        const lineTotal = this.money(taxableAmount + taxAmount);
+                        const net = this.money(lineSubtotal - boundedDiscount);
+                        let taxAmount = 0;
+                        let taxableAmount = net;
+                        let lineTotal = net;
+                        if (taxType === 'standard' && taxRate > 0) {
+                            if (priceMode === 'inclusive') {
+                                taxAmount = this.money(net * taxRate / (100 + taxRate));
+                                taxableAmount = this.money(net - taxAmount);
+                                lineTotal = net;
+                            } else {
+                                taxAmount = this.money(net * (taxRate / 100));
+                                taxableAmount = net;
+                                lineTotal = this.money(taxableAmount + taxAmount);
+                            }
+                        }
 
                         subtotal += lineSubtotal;
                         discount += boundedDiscount;
                         taxable += taxableAmount;
                         tax += taxAmount;
                         total += lineTotal;
+
+                        const key = taxType + '@' + taxRate.toFixed(2);
+                        if (!categories[key]) {
+                            categories[key] = { label: (labels[taxType] || taxType) + ' @ ' + taxRate.toFixed(2) + '%', tax_amount: 0 };
+                        }
+                        categories[key].tax_amount = this.money(categories[key].tax_amount + taxAmount);
 
                         return {...item, quantity: qty, unit_price: unitPrice, discount: boundedDiscount, tax_rate: taxRate, tax_type: taxType, total: lineTotal};
                     });
@@ -379,6 +441,7 @@
                         taxable_amount: this.money(taxable),
                         tax_amount: this.money(tax),
                         total: this.money(total),
+                        categories,
                     };
                 },
                 money(value) {
@@ -391,6 +454,7 @@
                     this.recalculate();
                     this.$watch('form.tax_profile_type', () => this.recalculate());
                     this.$watch('form.tax_rate', () => this.recalculate());
+                    this.$watch('form.tax_price_mode', () => this.recalculate());
                 }
             };
         }
