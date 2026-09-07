@@ -6,6 +6,7 @@ use App\Models\Contract\Contract;
 use App\Models\Finance\FinanceBillingSchedule;
 use App\Models\Finance\FinanceInvoice;
 use App\Models\Workspace;
+use App\Services\Finance\Tax\TaxCalculationService;
 use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
@@ -17,6 +18,7 @@ class BillingScheduleService
 {
     public function __construct(
         private readonly InvoiceService $invoiceService,
+        private readonly TaxCalculationService $taxCalculator,
     ) {}
 
     /**
@@ -33,7 +35,13 @@ class BillingScheduleService
 
         $startDate = Carbon::parse((string) $payload['start_date'])->startOfDay();
         $amount = round(max(0, (float) ($payload['amount'] ?? 0)), 2);
-        $items = $this->normalizeItemSnapshot($payload['items'] ?? [], $amount);
+        $taxProfile = $this->taxCalculator->defaultProfileForWorkspace($workspace);
+        $items = $this->normalizeItemSnapshot(
+            $payload['items'] ?? [],
+            $amount,
+            $taxProfile['rate'],
+            $taxProfile['type']
+        );
         if ($amount <= 0 && $items !== []) {
             $amount = round(array_sum(array_map(fn (array $item): float => (float) $item['total'], $items)), 2);
         }
@@ -178,6 +186,8 @@ class BillingScheduleService
                 return null;
             }
 
+            $taxProfile = $this->taxCalculator->defaultProfileForWorkspace($workspace);
+
             $context = app(WorkspaceContext::class);
             $context->set($workspace);
 
@@ -191,8 +201,8 @@ class BillingScheduleService
                         'quantity' => 1,
                         'unit_price' => (float) $locked->amount,
                         'discount' => 0,
-                        'tax_rate' => 15,
-                        'tax_type' => 'standard',
+                        'tax_rate' => $taxProfile['rate'],
+                        'tax_type' => $taxProfile['type'],
                     ]];
 
                 try {
@@ -240,6 +250,8 @@ class BillingScheduleService
         $occurrences = max(1, (int) ($payload['total_occurrences'] ?? 1));
         $amount = round(((float) $contract->value) / $occurrences, 2);
 
+        $taxProfile = $this->taxCalculator->defaultProfileForWorkspace($workspace);
+
         return $this->create($workspace, [
             'customer_id' => $contract->customer_id,
             'contract_id' => $contract->id,
@@ -260,8 +272,8 @@ class BillingScheduleService
                 'quantity' => 1,
                 'unit_price' => $amount,
                 'discount' => 0,
-                'tax_rate' => 15,
-                'tax_type' => 'standard',
+                'tax_rate' => $taxProfile['rate'],
+                'tax_type' => $taxProfile['type'],
             ]],
         ], $actorUserId);
     }
@@ -283,8 +295,14 @@ class BillingScheduleService
      * @param  array<int, mixed>  $rawItems
      * @return array<int, array<string, mixed>>
      */
-    private function normalizeItemSnapshot(array $rawItems, float $fallbackAmount): array
-    {
+    private function normalizeItemSnapshot(
+        array $rawItems,
+        float $fallbackAmount,
+        ?float $fallbackTaxRate = null,
+        ?string $fallbackTaxType = null
+    ): array {
+        $fallbackTaxRate ??= TaxCalculationService::FALLBACK_STANDARD_RATE;
+        $fallbackTaxType ??= 'standard';
         $items = [];
         foreach ($rawItems as $rawItem) {
             $name = trim((string) ($rawItem['product_name'] ?? $rawItem['title'] ?? ''));
@@ -299,8 +317,8 @@ class BillingScheduleService
                 'quantity' => $qty,
                 'unit_price' => $price,
                 'discount' => max(0, (float) ($rawItem['discount'] ?? 0)),
-                'tax_rate' => (float) ($rawItem['tax_rate'] ?? 15),
-                'tax_type' => (string) ($rawItem['tax_type'] ?? 'standard'),
+                'tax_rate' => (float) ($rawItem['tax_rate'] ?? $fallbackTaxRate),
+                'tax_type' => (string) ($rawItem['tax_type'] ?? $fallbackTaxType),
                 'total' => round($qty * $price, 2),
             ];
         }
@@ -311,8 +329,8 @@ class BillingScheduleService
                 'quantity' => 1,
                 'unit_price' => $fallbackAmount,
                 'discount' => 0,
-                'tax_rate' => 15,
-                'tax_type' => 'standard',
+                'tax_rate' => $fallbackTaxRate,
+                'tax_type' => $fallbackTaxType,
                 'total' => $fallbackAmount,
             ];
         }

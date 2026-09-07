@@ -33,6 +33,11 @@ class FinanceInvoiceFactory extends Factory
             'amount_paid' => 0,
             'amount_due' => 115,
             'customer_name' => fake()->name(),
+            'tax_profile_type' => 'standard',
+            'tax_rate' => 15,
+            'tax_document_subtype' => 'standard',
+            'zatca_requirement' => 'not_required',
+            'issued_at' => now(),
         ];
     }
 }

@@ -7,6 +7,7 @@ use App\Models\Finance\FinanceSetting;
 use App\Models\Finance\FinanceTaxRate;
 use App\Models\Finance\FinanceTreasuryAccount;
 use App\Models\Workspace;
+use App\Services\Finance\Tax\TaxCalculationService;
 use App\Support\Compliance\ComplianceManager;
 use Illuminate\Support\Facades\DB;
 
@@ -28,7 +29,8 @@ class FinanceBootstrapService
                     'currency' => 'SAR',
                     'invoice_prefix' => 'INV',
                     'next_invoice_sequence' => 1,
-                    'default_vat_rate' => 15.00,
+                    'allow_manual_invoice_numbers' => false,
+                    'default_vat_rate' => TaxCalculationService::FALLBACK_STANDARD_RATE,
                 ]
             );
 

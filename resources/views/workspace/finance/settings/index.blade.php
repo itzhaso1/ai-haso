@@ -29,6 +29,10 @@
                     <input name="invoice_primary_color" value="{{ $setting?->invoice_primary_color ?? '#06C2A4' }}" class="rounded-lg border-slate-300 text-sm" placeholder="لون PDF الرئيسي (#06C2A4)">
                     <input name="default_vat_rate" value="{{ $setting?->default_vat_rate ?? 15 }}" type="number" step="0.01" class="rounded-lg border-slate-300 text-sm" placeholder="VAT الافتراضي">
                     <input name="default_payment_terms" value="{{ $setting?->default_payment_terms }}" class="rounded-lg border-slate-300 text-sm sm:col-span-2" placeholder="شروط الدفع الافتراضية">
+                    <label class="flex items-center gap-2 text-xs text-slate-600 sm:col-span-2">
+                        <input type="checkbox" name="allow_manual_invoice_numbers" value="1" class="rounded border-slate-300 text-[#06C2A4]" @checked($setting?->allowsManualInvoiceNumbers())>
+                        السماح بإدخال رقم فاتورة يدوي (يبقى التفرد داخل المنشأة)
+                    </label>
                     <textarea name="invoice_footer_text" rows="2" class="rounded-lg border-slate-300 text-sm sm:col-span-2" placeholder="نص تذييل PDF (اختياري)">{{ $setting?->invoice_footer_text }}</textarea>
                     <div class="sm:col-span-2">
                         <label class="mb-1 block text-xs font-semibold text-slate-600">شعار المنشأة</label>

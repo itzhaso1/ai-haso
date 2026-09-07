@@ -13,6 +13,8 @@
         $defaultType = in_array($rawType, ['sales', 'purchase'], true) ? $rawType : 'sales';
         $rawInvoiceStatus = old('invoice_status', old('status', $invoice->invoice_status ?? 'draft'));
         $defaultInvoiceStatus = in_array($rawInvoiceStatus, ['draft', 'issued'], true) ? $rawInvoiceStatus : 'draft';
+        $allowManualInvoiceNumbers = $allowManualInvoiceNumbers ?? false;
+        $defaultTaxRate = (float) ($defaultTaxRate ?? \App\Services\Finance\Tax\TaxCalculationService::FALLBACK_STANDARD_RATE);
         $existingItems = old('items', $invoice->relationLoaded('items') || $invoice->exists ? $invoice->items : []);
         $builderItems = $invoice->exists
             ? $invoice->items->map(fn ($item) => [
@@ -23,6 +25,7 @@
                 'unit_price' => (float) $item->unit_price,
                 'discount' => (float) $item->discount,
                 'tax_rate' => (float) $item->tax_rate,
+                'tax_type' => $item->tax_profile_type ?: ($invoice->tax_profile_type ?: 'standard'),
                 'total' => (float) $item->total,
             ])->values()
             : collect([[
@@ -32,7 +35,8 @@
                 'quantity' => 1,
                 'unit_price' => 0,
                 'discount' => 0,
-                'tax_rate' => 15,
+                'tax_rate' => $defaultTaxRate,
+                'tax_type' => 'standard',
                 'total' => 0,
             ]]);
     @endphp
@@ -57,9 +61,34 @@
                     </select>
                 </div>
                 <div>
-                    <label class="mb-1 block text-xs font-semibold text-slate-600">رقم الفاتورة (اختياري)</label>
-                    <input type="text" name="invoice_number" value="{{ old('invoice_number', $invoice->invoice_number) }}" class="w-full rounded-lg border-slate-300 text-sm" placeholder="INV-000001">
+                    <label class="mb-1 block text-xs font-semibold text-slate-600">تصنيف المستند الضريبي</label>
+                    <select name="tax_document_subtype" class="w-full rounded-lg border-slate-300 text-sm">
+                        <option value="standard" @selected(old('tax_document_subtype', $invoice->tax_document_subtype ?: 'standard') === 'standard')>قياسية</option>
+                        <option value="simplified" @selected(old('tax_document_subtype', $invoice->tax_document_subtype) === 'simplified')>مبسطة</option>
+                    </select>
                 </div>
+                <div x-show="form.type === 'sales'">
+                    <label class="mb-1 block text-xs font-semibold text-slate-600">متطلب الفوترة الإلكترونية (داخلي)</label>
+                    <select name="zatca_requirement" class="w-full rounded-lg border-slate-300 text-sm">
+                        <option value="not_required" @selected(old('zatca_requirement', $invoice->zatca_requirement ?: 'not_required') === 'not_required')>غير مطلوب</option>
+                        <option value="required" @selected(old('zatca_requirement', $invoice->zatca_requirement) === 'required')>مطلوب لاحقاً</option>
+                    </select>
+                    <p class="mt-1 text-[11px] text-slate-500">لا يفعّل الربط مع ZATCA ولا يغيّر حالة الفاتورة. فواتير الشراء تبقى غير مطلوبة.</p>
+                </div>
+                @if($allowManualInvoiceNumbers)
+                    <div>
+                        <label class="mb-1 block text-xs font-semibold text-slate-600">رقم الفاتورة (يدوي)</label>
+                        <input type="text" name="invoice_number" value="{{ old('invoice_number', $invoice->invoice_number) }}" class="w-full rounded-lg border-slate-300 text-sm" placeholder="INV-000001">
+                        @error('invoice_number')
+                            <p class="mt-1 text-xs font-semibold text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+                @elseif($invoice->exists && $invoice->invoice_number)
+                    <div>
+                        <label class="mb-1 block text-xs font-semibold text-slate-600">رقم الفاتورة</label>
+                        <input type="text" value="{{ $invoice->invoice_number }}" class="w-full rounded-lg border-slate-200 bg-slate-50 text-sm" disabled>
+                    </div>
+                @endif
                 <div>
                     <label class="mb-1 block text-xs font-semibold text-slate-600">حالة الفاتورة</label>
                     <select name="invoice_status" class="w-full rounded-lg border-slate-300 text-sm">
@@ -173,6 +202,7 @@
                                 <th class="px-3 py-2 text-right">الكمية</th>
                                 <th class="px-3 py-2 text-right">سعر الوحدة</th>
                                 <th class="px-3 py-2 text-right">الخصم</th>
+                                <th class="px-3 py-2 text-right">تصنيف الضريبة</th>
                                 <th class="px-3 py-2 text-right">نسبة الضريبة %</th>
                                 <th class="px-3 py-2 text-right">الإجمالي</th>
                                 <th class="px-3 py-2"></th>
@@ -208,6 +238,14 @@
                                     </td>
                                     <td class="px-3 py-2">
                                         <input type="number" step="0.01" min="0" x-model.number="item.discount" @input="recalculate()" class="w-24 rounded-md border-slate-300 text-xs">
+                                    </td>
+                                    <td class="px-3 py-2">
+                                        <select x-model="item.tax_type" @change="recalculate()" class="w-28 rounded-md border-slate-300 text-xs">
+                                            <option value="standard">قياسية</option>
+                                            <option value="zero_rated">صفرية</option>
+                                            <option value="exempt">معفاة</option>
+                                            <option value="out_of_scope">خارج النطاق</option>
+                                        </select>
                                     </td>
                                     <td class="px-3 py-2">
                                         <input type="number" step="0.01" min="0" max="100" x-model.number="item.tax_rate" @input="recalculate()" class="w-20 rounded-md border-slate-300 text-xs">
@@ -265,7 +303,7 @@
                 form: {
                     type: defaultType || 'sales',
                     tax_profile_type: 'standard',
-                    tax_rate: 15,
+                    tax_rate: {{ $defaultTaxRate }},
                 },
                 items: @json($builderItems),
                 summary: {
@@ -284,11 +322,11 @@
                         unit_price: Number(item.unit_price || 0),
                         discount: Number(item.discount || 0),
                         tax_rate: Number(item.tax_rate || this.form.tax_rate || 0),
-                        tax_type: this.form.tax_profile_type,
+                        tax_type: item.tax_type || this.form.tax_profile_type,
                     })));
                 },
                 addItem() {
-                    this.items.push({product_id: '', product_name: '', description: '', quantity: 1, unit_price: 0, discount: 0, tax_rate: Number(this.form.tax_rate || 0), total: 0});
+                    this.items.push({product_id: '', product_name: '', description: '', quantity: 1, unit_price: 0, discount: 0, tax_rate: Number(this.form.tax_rate || 0), tax_type: this.form.tax_profile_type, total: 0});
                     this.recalculate();
                 },
                 removeItem(index) {
@@ -319,10 +357,11 @@
                         const unitPrice = Math.max(0, Number(item.unit_price || 0));
                         const lineDiscount = Math.max(0, Number(item.discount || 0));
                         const taxRate = Math.max(0, Number(item.tax_rate ?? this.form.tax_rate ?? 0));
+                        const taxType = item.tax_type || this.form.tax_profile_type;
                         const lineSubtotal = this.money(qty * unitPrice);
                         const boundedDiscount = Math.min(this.money(lineDiscount), lineSubtotal);
                         const taxableAmount = this.money(lineSubtotal - boundedDiscount);
-                        const taxAmount = this.form.tax_profile_type === 'standard' ? this.money(taxableAmount * (taxRate / 100)) : 0;
+                        const taxAmount = taxType === 'standard' ? this.money(taxableAmount * (taxRate / 100)) : 0;
                         const lineTotal = this.money(taxableAmount + taxAmount);
 
                         subtotal += lineSubtotal;
@@ -331,7 +370,7 @@
                         tax += taxAmount;
                         total += lineTotal;
 
-                        return {...item, quantity: qty, unit_price: unitPrice, discount: boundedDiscount, tax_rate: taxRate, total: lineTotal};
+                        return {...item, quantity: qty, unit_price: unitPrice, discount: boundedDiscount, tax_rate: taxRate, tax_type: taxType, total: lineTotal};
                     });
 
                     this.summary = {

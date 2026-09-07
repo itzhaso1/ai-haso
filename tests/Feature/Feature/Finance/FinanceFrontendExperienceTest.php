@@ -111,7 +111,8 @@ class FinanceFrontendExperienceTest extends TestCase
             ->get(route('workspace.finance.invoices.show', $invoice))
             ->assertOk()
             ->assertSee('تقدم التحصيل')
-            ->assertSee('جاهزية الفوترة الإلكترونية');
+            ->assertSee('الفوترة الإلكترونية')
+            ->assertSee('غير مهيأة');
     }
 
     public function test_contract_index_flags_expiring_contracts_inside_workspace_only(): void

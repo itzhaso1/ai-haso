@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Schema;
+use RuntimeException;
 
 #[Fillable([
     'workspace_id',
@@ -27,6 +28,8 @@ use Illuminate\Support\Facades\Schema;
     'billing_occurrence_key',
     'invoice_number',
     'type',
+    'tax_document_subtype',
+    'zatca_requirement',
     'status',
     'invoice_status',
     'payment_status',
@@ -68,6 +71,30 @@ class FinanceInvoice extends WorkspaceScopedModel
 
     /** @var array<int,string> */
     private const LEGACY_ISSUED_STATUSES = ['sent', 'unpaid', 'partial', 'paid', 'overdue'];
+
+    /**
+     * Fields that may change after issue/cancel. Everything else is frozen
+     * financial content. ZATCA placeholder columns stay writable for a future
+     * e-invoicing layer and are not populated in this phase.
+     *
+     * @var array<int, string>
+     */
+    private const MUTABLE_WHEN_LOCKED = [
+        'status',
+        'payment_status',
+        'amount_paid',
+        'amount_due',
+        'amount_credited',
+        'amount_debited',
+        'last_reminder_sent_at',
+        'reminder_stage',
+        'cancelled_at',
+        'notes',
+        'zatca_uuid',
+        'zatca_qr_code',
+        'zatca_xml_hash',
+        'updated_at',
+    ];
 
     protected function casts(): array
     {
@@ -158,6 +185,88 @@ class FinanceInvoice extends WorkspaceScopedModel
     public function issuer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'issued_by');
+    }
+
+    protected static function booted(): void
+    {
+        parent::booted();
+
+        static::updating(function (FinanceInvoice $invoice): void {
+            $invoice->assertFinancialContentNotMutated();
+        });
+
+        static::deleting(function (FinanceInvoice $invoice): void {
+            if ($invoice->isFinanciallyLocked()) {
+                throw new RuntimeException('لا يمكن حذف فاتورة معتمدة أو ملغاة. استخدم الإلغاء أو إشعار دائن.');
+            }
+        });
+    }
+
+    public function isDraft(): bool
+    {
+        return $this->resolvedInvoiceStatus() === 'draft';
+    }
+
+    public function isIssued(): bool
+    {
+        return $this->resolvedInvoiceStatus() === 'issued';
+    }
+
+    public function isCancelled(): bool
+    {
+        return $this->resolvedInvoiceStatus() === 'cancelled';
+    }
+
+    public function isFinanciallyLocked(): bool
+    {
+        return in_array($this->resolvedInvoiceStatus(), ['issued', 'cancelled'], true);
+    }
+
+    public function snapshotsAreAuthoritative(): bool
+    {
+        return $this->isFinanciallyLocked();
+    }
+
+    public function resolvedInvoiceStatus(): string
+    {
+        $stored = $this->attributes['invoice_status'] ?? null;
+        if (is_string($stored) && $stored !== '') {
+            return $stored;
+        }
+
+        return $this->invoice_status;
+    }
+
+    private function assertFinancialContentNotMutated(): void
+    {
+        $originalStatus = (string) ($this->getOriginal('invoice_status') ?: $this->resolveLegacyOriginalStatus());
+        if (! in_array($originalStatus, ['issued', 'cancelled'], true)) {
+            return;
+        }
+
+        $dirty = $this->getDirty();
+        if (array_key_exists('invoice_status', $dirty)) {
+            $next = (string) $dirty['invoice_status'];
+            if (! ($originalStatus === 'issued' && $next === 'cancelled')) {
+                throw new RuntimeException('لا يمكن تغيير حالة الفاتورة المعتمدة إلا بالإلغاء.');
+            }
+            unset($dirty['invoice_status']);
+        }
+
+        $blocked = array_diff(array_keys($dirty), self::MUTABLE_WHEN_LOCKED);
+        if ($blocked !== []) {
+            throw new RuntimeException('الفاتورة المعتمدة أو الملغاة وثيقة مالية ثابتة ولا يمكن تعديل بياناتها.');
+        }
+    }
+
+    private function resolveLegacyOriginalStatus(): string
+    {
+        $legacy = (string) ($this->getOriginal('status') ?? 'draft');
+        if ($legacy === 'cancelled' || $legacy === 'draft') {
+            return $legacy;
+        }
+
+        return 'issued';
     }
 
     public function getInvoiceStatusAttribute(?string $value): string
@@ -272,5 +381,15 @@ class FinanceInvoice extends WorkspaceScopedModel
         }
 
         return self::$schemaFlags['contract'];
+    }
+
+    public static function hasClassificationColumns(): bool
+    {
+        if (! array_key_exists('classification', self::$schemaFlags)) {
+            self::$schemaFlags['classification'] = Schema::hasColumn('finance_invoices', 'tax_document_subtype')
+                && Schema::hasColumn('finance_invoices', 'zatca_requirement');
+        }
+
+        return self::$schemaFlags['classification'];
     }
 }

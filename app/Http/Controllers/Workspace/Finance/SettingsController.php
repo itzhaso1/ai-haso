@@ -8,6 +8,7 @@ use App\Models\Finance\FinanceSetting;
 use App\Models\Finance\FinanceTaxRate;
 use App\Models\Finance\FinanceTreasuryAccount;
 use App\Services\Finance\FinanceBootstrapService;
+use App\Services\Finance\Tax\TaxCalculationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -27,7 +28,7 @@ class SettingsController extends FinanceBaseController
         $this->financeBootstrapService->ensureWorkspaceFinanceSetup($workspace);
 
         return view('workspace.finance.settings.index', [
-            'setting' => FinanceSetting::query()->first(),
+            'setting' => FinanceSetting::forWorkspaceId((int) $workspace->id),
             'taxRates' => FinanceTaxRate::query()->orderByDesc('is_default')->orderBy('id')->get(),
             'treasuryAccounts' => FinanceTreasuryAccount::query()->with('linkedAccount')->orderBy('type')->orderBy('name')->get(),
             'financeAccounts' => FinanceAccount::query()->orderBy('code')->get(['id', 'code', 'name', 'type']),
@@ -60,11 +61,12 @@ class SettingsController extends FinanceBaseController
             'invoice_footer_text' => ['nullable', 'string', 'max:2000'],
             'default_payment_terms' => ['nullable', 'string', 'max:255'],
             'default_vat_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'allow_manual_invoice_numbers' => ['nullable', 'boolean'],
             'logo' => ['nullable', 'image', 'max:4096'],
             'remove_logo' => ['nullable', 'boolean'],
         ]);
 
-        $setting = FinanceSetting::query()->firstOrCreate(
+        $setting = FinanceSetting::withoutGlobalScopes()->firstOrCreate(
             ['workspace_id' => $workspace->id],
             [
                 'workspace_id' => $workspace->id,
@@ -72,9 +74,12 @@ class SettingsController extends FinanceBaseController
                 'country_code' => 'SA',
                 'invoice_prefix' => 'INV',
                 'next_invoice_sequence' => 1,
-                'default_vat_rate' => 15.00,
+                'allow_manual_invoice_numbers' => false,
+                'default_vat_rate' => TaxCalculationService::FALLBACK_STANDARD_RATE,
             ]
         );
+
+        $validated['allow_manual_invoice_numbers'] = $request->boolean('allow_manual_invoice_numbers');
 
         if ($request->boolean('remove_logo') && $setting->logo_path) {
             if ($this->shouldDeleteLogoFile($setting->logo_path)) {
@@ -133,6 +138,7 @@ class SettingsController extends FinanceBaseController
             'website',
             'invoice_primary_color',
             'invoice_footer_text',
+            'allow_manual_invoice_numbers',
         ];
 
         foreach ($optionalColumns as $column) {
