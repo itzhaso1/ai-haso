@@ -80,6 +80,22 @@ class AssignmentService
         return $conversation->fresh() ?? $conversation;
     }
 
+    public function unassign(Conversation $conversation, ?User $actor = null): Conversation
+    {
+        return $this->assign($conversation, null, null, $conversation->priority, $actor);
+    }
+
+    public function setPriority(Conversation $conversation, string $priority, ?User $actor = null): Conversation
+    {
+        return $this->assign(
+            $conversation,
+            $conversation->assigned_team_id ? (int) $conversation->assigned_team_id : null,
+            $conversation->assigned_user_id ? (int) $conversation->assigned_user_id : null,
+            $priority,
+            $actor,
+        );
+    }
+
     private function userOnTeam(int $workspaceId, int $teamId, int $userId): bool
     {
         return CommunicationTeam::withoutGlobalScopes()

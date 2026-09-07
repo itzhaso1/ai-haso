@@ -24,6 +24,9 @@ use App\Http\Controllers\Workspace\Appointments\RequestController as Appointment
 use App\Http\Controllers\Workspace\Appointments\WebsiteController as AppointmentsWebsiteController;
 use App\Http\Controllers\Workspace\CategoryController;
 use App\Http\Controllers\Workspace\ChannelController;
+use App\Http\Controllers\Workspace\Communication\ConnectionController as CommunicationConnectionController;
+use App\Http\Controllers\Workspace\Communication\InboxController as CommunicationInboxController;
+use App\Http\Controllers\Workspace\Communication\TemplateController as CommunicationTemplateController;
 use App\Http\Controllers\Workspace\CommunicationTeamController;
 use App\Http\Controllers\Workspace\ContractController as WorkspaceContractController;
 use App\Http\Controllers\Workspace\ConversationController;
@@ -279,12 +282,26 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
         Route::get('contracts/{contract}/pdf', [WorkspaceContractController::class, 'downloadPdf'])->name('contracts.pdf');
         Route::get('contracts/{contract}/attachments/{attachment}', [WorkspaceContractController::class, 'downloadAttachment'])->name('contracts.attachments.download');
         Route::delete('contracts/{contract}/attachments/{attachment}', [WorkspaceContractController::class, 'destroyAttachment'])->name('contracts.attachments.destroy');
-        Route::resource('conversations', ConversationController::class)->except(['show']);
+        Route::get('conversations', [CommunicationInboxController::class, 'index'])->name('conversations.index');
+        Route::resource('conversations', ConversationController::class)->except(['show', 'index']);
         Route::post('conversations/{conversation}/messages', [ConversationController::class, 'storeMessage'])->name('conversations.messages.store');
         Route::prefix('communication')->as('communication.')->group(function (): void {
+            Route::get('inbox', [CommunicationInboxController::class, 'index'])->name('inbox');
+            Route::post('inbox/{conversation}/messages', [CommunicationInboxController::class, 'storeMessage'])->name('inbox.messages.store');
+            Route::post('inbox/{conversation}/messages/{message}/retry', [CommunicationInboxController::class, 'retry'])->name('inbox.messages.retry');
+            Route::post('inbox/{conversation}/assign', [CommunicationInboxController::class, 'assign'])->name('inbox.assign');
+            Route::post('inbox/{conversation}/unassign', [CommunicationInboxController::class, 'unassign'])->name('inbox.unassign');
+            Route::put('inbox/{conversation}/priority', [CommunicationInboxController::class, 'priority'])->name('inbox.priority');
+            Route::put('inbox/{conversation}/status', [CommunicationInboxController::class, 'status'])->name('inbox.status');
+
             Route::get('teams', [CommunicationTeamController::class, 'index'])->name('teams.index');
             Route::post('teams', [CommunicationTeamController::class, 'store'])->name('teams.store');
             Route::put('teams/{team}', [CommunicationTeamController::class, 'update'])->name('teams.update');
+            Route::post('teams/{team}/members', [CommunicationTeamController::class, 'addMember'])->name('teams.members.store');
+            Route::delete('teams/{team}/members/{user}', [CommunicationTeamController::class, 'removeMember'])->name('teams.members.destroy');
+
+            Route::get('connections', [CommunicationConnectionController::class, 'index'])->name('connections.index');
+            Route::get('templates', [CommunicationTemplateController::class, 'index'])->name('templates.index');
         });
 
         Route::get('inventory', [InventoryController::class, 'index'])->name('inventory.index');
