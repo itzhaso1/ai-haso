@@ -298,11 +298,9 @@ class BillingScheduleService
     private function normalizeItemSnapshot(
         array $rawItems,
         float $fallbackAmount,
-        ?float $fallbackTaxRate = null,
-        ?string $fallbackTaxType = null
+        float $fallbackTaxRate,
+        string $fallbackTaxType
     ): array {
-        $fallbackTaxRate ??= TaxCalculationService::FALLBACK_STANDARD_RATE;
-        $fallbackTaxType ??= 'standard';
         $items = [];
         foreach ($rawItems as $rawItem) {
             $name = trim((string) ($rawItem['product_name'] ?? $rawItem['title'] ?? ''));

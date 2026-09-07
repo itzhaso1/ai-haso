@@ -95,28 +95,13 @@ Rules:
 
 ## Tax boundary
 
-`App\Services\Finance\Tax\TaxCalculationService` calculates line tax and totals (exclusive price, `Money::round()`).
+Invoice tax calculation is owned by `App\Services\Finance\Tax\TaxCalculationService`.
 
-`TaxService` is a compatibility facade over that calculator.
+See `docs/finance-tax-engine.md` for classifications, rate resolution, rounding, mixed-tax invoices, and historical persistence.
 
-Phase 1 tax types on each line (`finance_invoice_items.tax_profile_type`):
+`TaxService` remains a compatibility facade (expenses / purchase orders). Controllers and Blade must not be the source of truth for VAT.
 
-- `standard`
-- `zero_rated`
-- `exempt`
-- `out_of_scope`
-
-Header `tax_profile_type` is the default for unspecified lines. Mixed-tax invoices are allowed: if lines disagree, the requested header stays as the default and each line keeps its own type. Do not infer line tax from the header later.
-
-ZATCA category codes and exemption-reason engines belong to Phase 2.
-
-### Hardcoded 15% (technical debt)
-
-`TaxCalculationService::FALLBACK_STANDARD_RATE = 15.00` is used only when a workspace has no settings and no default tax-rate row.
-
-Workspace default remains `finance_settings.default_vat_rate`. Billing schedules now read the workspace default instead of scattering `15` through callers.
-
-This fallback is **not** a legal rate table and must not be treated as ZATCA compliance.
+This Tax Engine is **not** a ZATCA integration.
 
 ## Snapshot source of truth
 

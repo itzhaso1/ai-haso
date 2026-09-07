@@ -6,7 +6,9 @@ use InvalidArgumentException;
 
 /**
  * Integer-minor-unit money helper. All arithmetic happens in cents (2 decimal places).
- * Do not use this for FX rates or percentages — only currency amounts.
+ *
+ * Do not store FX rates or tax percentages as Money values. percentOf() and
+ * extractInclusiveTax() only apply a percentage to an already-rounded amount.
  */
 final class Money
 {
@@ -74,6 +76,46 @@ final class Money
     public static function mul(int|float|string $left, int|float|string $right): string
     {
         return self::fromMinor(intdiv(self::minor($left) * self::minor($right), 100));
+    }
+
+    /**
+     * Quantity (up to 3 decimal places) × unit price (2 decimal places).
+     */
+    public static function quantityTimesUnitPrice(int|float|string $quantity, int|float|string $unitPrice): string
+    {
+        $qtyMilli = (int) round(((float) $quantity) * 1000, 0, PHP_ROUND_HALF_UP);
+        $priceCents = self::minor($unitPrice);
+        $cents = (int) round(($qtyMilli * $priceCents) / 1000, 0, PHP_ROUND_HALF_UP);
+
+        return self::fromMinor($cents);
+    }
+
+    /**
+     * tax = round(amount × percent / 100) in integer cents (half-up).
+     */
+    public static function percentOf(int|float|string $amount, float $percent): string
+    {
+        if ($percent < 0) {
+            throw new InvalidArgumentException('النسبة المئوية لا يمكن أن تكون سالبة.');
+        }
+
+        $cents = (int) round(self::minor($amount) * $percent / 100, 0, PHP_ROUND_HALF_UP);
+
+        return self::fromMinor($cents);
+    }
+
+    /**
+     * Inclusive VAT: tax = round(inclusive × rate / (100 + rate)) in integer cents.
+     */
+    public static function extractInclusiveTax(int|float|string $inclusiveAmount, float $rate): string
+    {
+        if ($rate <= 0) {
+            return self::fromMinor(0);
+        }
+
+        $cents = (int) round(self::minor($inclusiveAmount) * $rate / (100 + $rate), 0, PHP_ROUND_HALF_UP);
+
+        return self::fromMinor($cents);
     }
 
     public static function cmp(int|float|string $left, int|float|string $right): int

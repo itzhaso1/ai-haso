@@ -58,6 +58,7 @@
                                 <th class="px-3 py-2 text-right">الكمية</th>
                                 <th class="px-3 py-2 text-right">السعر</th>
                                 <th class="px-3 py-2 text-right">الخصم</th>
+                                <th class="px-3 py-2 text-right">التصنيف</th>
                                 <th class="px-3 py-2 text-right">الضريبة %</th>
                                 <th class="px-3 py-2"></th>
                             </tr>
@@ -69,6 +70,14 @@
                                     <td class="px-3 py-2"><input type="number" step="0.001" x-model.number="item.quantity" @input="recalculate()" class="w-24 rounded-md border-slate-300 text-xs"></td>
                                     <td class="px-3 py-2"><input type="number" step="0.01" x-model.number="item.unit_price" @input="recalculate()" class="w-24 rounded-md border-slate-300 text-xs"></td>
                                     <td class="px-3 py-2"><input type="number" step="0.01" x-model.number="item.discount" @input="recalculate()" class="w-24 rounded-md border-slate-300 text-xs"></td>
+                                    <td class="px-3 py-2">
+                                        <select x-model="item.tax_type" @change="recalculate()" class="w-28 rounded-md border-slate-300 text-xs">
+                                            <option value="standard">قياسية</option>
+                                            <option value="zero_rated">صفرية</option>
+                                            <option value="exempt">معفاة</option>
+                                            <option value="out_of_scope">خارج النطاق</option>
+                                        </select>
+                                    </td>
                                     <td class="px-3 py-2"><input type="number" step="0.01" x-model.number="item.tax_rate" @input="recalculate()" class="w-20 rounded-md border-slate-300 text-xs"></td>
                                     <td class="px-3 py-2"><button type="button" @click="removeItem(idx)" class="text-xs text-rose-600">حذف</button></td>
                                 </tr>
@@ -96,13 +105,20 @@
         function creditNoteBuilder() {
             return {
                 form: { type: '{{ $type }}' },
-                items: [{ product_name: '', quantity: 1, unit_price: 0, discount: 0, tax_rate: {{ (float) $invoice->tax_rate }} }],
+                items: [{ product_name: '', quantity: 1, unit_price: 0, discount: 0, tax_rate: {{ (float) $invoice->tax_rate }}, tax_type: '{{ $invoice->tax_profile_type ?: 'standard' }}' }],
                 summary: { subtotal: 0, discount: 0, tax_amount: 0, total: 0 },
                 get serializedItems() {
-                    return JSON.stringify(this.items);
+                    return JSON.stringify(this.items.map((item) => ({
+                        product_name: item.product_name || '',
+                        quantity: Number(item.quantity || 0),
+                        unit_price: Number(item.unit_price || 0),
+                        discount: Number(item.discount || 0),
+                        tax_rate: Number(item.tax_rate || 0),
+                        tax_type: item.tax_type || 'standard',
+                    })));
                 },
                 addItem() {
-                    this.items.push({ product_name: '', quantity: 1, unit_price: 0, discount: 0, tax_rate: {{ (float) $invoice->tax_rate }} });
+                    this.items.push({ product_name: '', quantity: 1, unit_price: 0, discount: 0, tax_rate: {{ (float) $invoice->tax_rate }}, tax_type: '{{ $invoice->tax_profile_type ?: 'standard' }}' });
                 },
                 removeItem(index) {
                     this.items.splice(index, 1);
@@ -115,10 +131,10 @@
                         const qty = Math.max(0, Number(item.quantity || 0));
                         const price = Math.max(0, Number(item.unit_price || 0));
                         const lineDiscount = Math.max(0, Number(item.discount || 0));
-                        const rate = Math.max(0, Number(item.tax_rate || 0));
+                        const rate = item.tax_type === 'standard' ? Math.max(0, Number(item.tax_rate || 0)) : 0;
                         const lineSubtotal = Math.round((qty * price) * 100) / 100;
                         const taxable = Math.max(0, lineSubtotal - lineDiscount);
-                        const taxAmount = Math.round((taxable * rate / 100) * 100) / 100;
+                        const taxAmount = item.tax_type === 'standard' ? Math.round((taxable * rate / 100) * 100) / 100 : 0;
                         subtotal += lineSubtotal;
                         discount += lineDiscount;
                         tax += taxAmount;

@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Schema;
 
 #[Fillable([
     'workspace_id',
@@ -28,6 +29,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'total',
     'tax_profile_type',
     'tax_rate',
+    'tax_price_mode',
+    'tax_breakdown',
     'notes',
     'issued_at',
     'cancelled_at',
@@ -58,6 +61,7 @@ class FinanceCreditNote extends WorkspaceScopedModel
             'tax_amount' => 'decimal:2',
             'total' => 'decimal:2',
             'tax_rate' => 'decimal:2',
+            'tax_breakdown' => 'array',
             'issued_at' => 'datetime',
             'cancelled_at' => 'datetime',
         ];
@@ -91,5 +95,11 @@ class FinanceCreditNote extends WorkspaceScopedModel
     public function isCredit(): bool
     {
         return $this->type === self::TYPE_CREDIT;
+    }
+
+    public static function hasTaxEngineColumns(): bool
+    {
+        return Schema::hasColumn('finance_credit_notes', 'tax_price_mode')
+            && Schema::hasColumn('finance_credit_notes', 'tax_breakdown');
     }
 }

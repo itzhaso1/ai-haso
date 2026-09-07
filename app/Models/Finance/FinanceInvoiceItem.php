@@ -20,6 +20,8 @@ use RuntimeException;
     'unit_price',
     'discount',
     'tax_profile_type',
+    'exemption_reason',
+    'exemption_code',
     'tax_rate',
     'tax_amount',
     'taxable_amount',
@@ -78,5 +80,11 @@ class FinanceInvoiceItem extends WorkspaceScopedModel
     public static function hasTaxProfileColumn(): bool
     {
         return Schema::hasColumn('finance_invoice_items', 'tax_profile_type');
+    }
+
+    public static function hasExemptionColumns(): bool
+    {
+        return Schema::hasColumn('finance_invoice_items', 'exemption_reason')
+            && Schema::hasColumn('finance_invoice_items', 'exemption_code');
     }
 }

@@ -88,6 +88,7 @@ class AppointmentBillingService
                         'unit_price' => $payableAmount,
                         'discount' => 0,
                         'tax_rate' => 0,
+                        'tax_type' => 'out_of_scope',
                     ]],
                 ], $actorUserId);
             }

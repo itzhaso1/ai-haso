@@ -8,6 +8,7 @@ use App\Models\Customer;
 use App\Models\Finance\FinanceSetting;
 use App\Models\Projects\FinanceProject;
 use App\Models\Workspace;
+use App\Services\Finance\Tax\TaxCalculationService;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -323,7 +324,7 @@ class ContractService
                 'invoice_prefix' => 'INV',
                 'next_invoice_sequence' => 1,
                 'next_contract_sequence' => 1,
-                'default_vat_rate' => 15.00,
+                'default_vat_rate' => TaxCalculationService::FALLBACK_STANDARD_RATE,
             ]);
         }
 

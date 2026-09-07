@@ -48,6 +48,8 @@ use RuntimeException;
     'amount_debited',
     'tax_profile_type',
     'tax_rate',
+    'tax_price_mode',
+    'tax_breakdown',
     'payment_terms',
     'notes',
     'company_snapshot',
@@ -112,6 +114,7 @@ class FinanceInvoice extends WorkspaceScopedModel
             'amount_credited' => 'decimal:2',
             'amount_debited' => 'decimal:2',
             'tax_rate' => 'decimal:2',
+            'tax_breakdown' => 'array',
             'company_snapshot' => 'array',
             'recipient_snapshot' => 'array',
             'pdf_snapshot' => 'array',
@@ -391,5 +394,15 @@ class FinanceInvoice extends WorkspaceScopedModel
         }
 
         return self::$schemaFlags['classification'];
+    }
+
+    public static function hasTaxEngineColumns(): bool
+    {
+        if (! array_key_exists('tax_engine', self::$schemaFlags)) {
+            self::$schemaFlags['tax_engine'] = Schema::hasColumn('finance_invoices', 'tax_price_mode')
+                && Schema::hasColumn('finance_invoices', 'tax_breakdown');
+        }
+
+        return self::$schemaFlags['tax_engine'];
     }
 }
