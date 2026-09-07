@@ -2,10 +2,11 @@
 
 namespace App\Http\Resources\Mobile;
 
+use App\Models\Conversation;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-/** @mixin \App\Models\Conversation */
+/** @mixin Conversation */
 class ConversationResource extends JsonResource
 {
     /**
@@ -25,6 +26,10 @@ class ConversationResource extends JsonResource
             'channel' => $this->channel,
             'status' => $this->status,
             'external_id' => $this->external_id,
+            'assigned_user_id' => $this->assigned_user_id,
+            'assigned_team_id' => $this->assigned_team_id,
+            'priority' => $this->priority,
+            'channel_connection_id' => $this->channel_connection_id,
             'ai_enabled' => (bool) $this->ai_enabled,
             'last_message_at' => optional($this->last_message_at)?->toIso8601String(),
             'customer' => $this->whenLoaded('customer', fn () => new CustomerResource($this->customer)),

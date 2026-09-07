@@ -1,8 +1,8 @@
 <x-app-layout>
     <x-slot name="header">
         <div>
-            <h2 class="text-xl font-semibold text-gray-900">Omnichannel Inbox</h2>
-            <p class="mt-1 text-xs text-slate-500">المحادثات موحّدة عبر WhatsApp وInstagram وMessenger وEmail.</p>
+            <h2 class="text-xl font-semibold text-gray-900">Communication Center · Inbox</h2>
+            <p class="mt-1 text-xs text-slate-500">صندوق وارد موحّد. القنوات مصادر وفلاتر، وليست صناديق منفصلة.</p>
         </div>
     </x-slot>
 
@@ -22,7 +22,7 @@
     <div class="mx-auto max-w-[1450px] space-y-4">
         <div class="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm sm:px-5">
             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <form method="GET" class="grid w-full flex-1 gap-2 md:grid-cols-3">
+                <form method="GET" class="grid w-full flex-1 gap-2 md:grid-cols-5">
                     <input
                         name="search"
                         value="{{ request('search') }}"
@@ -33,6 +33,17 @@
                         @foreach($availableChannels as $channelKey => $channelLabel)
                             <option value="{{ $channelKey }}" @selected($channelFilter === $channelKey)>{{ $channelLabel }}</option>
                         @endforeach
+                    </select>
+                    <select name="status" class="w-full rounded-xl border-gray-300 text-sm focus:border-[#06C2A4] focus:ring-[#06C2A4]">
+                        <option value="">كل الحالات</option>
+                        @foreach(['open','closed','archived'] as $statusOption)
+                            <option value="{{ $statusOption }}" @selected(($statusFilter ?? '') === $statusOption)>{{ $statusOption }}</option>
+                        @endforeach
+                    </select>
+                    <select name="assignee" class="w-full rounded-xl border-gray-300 text-sm focus:border-[#06C2A4] focus:ring-[#06C2A4]">
+                        <option value="">كل التعيينات</option>
+                        <option value="unassigned" @selected(($assigneeFilter ?? '') === 'unassigned')>غير معيّنة</option>
+                        <option value="me" @selected(($assigneeFilter ?? '') === 'me')>معيّنة لي</option>
                     </select>
                     <button class="rounded-xl bg-[#06C2A4] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#04a98e]">بحث</button>
                     @if(request()->filled('conversation'))
@@ -108,12 +119,29 @@
                                         <span class="rounded-full bg-slate-100 px-2 py-1">Status: {{ $activeConversation->status }}</span>
                                     </div>
                                 </div>
-                                <form method="POST" action="{{ route('workspace.conversations.update', $activeConversation) }}" class="flex items-center gap-2">
+                                <form method="POST" action="{{ route('workspace.conversations.update', $activeConversation) }}" class="flex flex-wrap items-center gap-2">
                                     @csrf
                                     @method('PUT')
                                     <select name="status" class="rounded-lg border-gray-300 text-xs focus:border-[#06C2A4] focus:ring-[#06C2A4]">
                                         @foreach(['open','closed','archived'] as $status)
                                             <option value="{{ $status }}" @selected($activeConversation->status === $status)>{{ $status }}</option>
+                                        @endforeach
+                                    </select>
+                                    <select name="priority" class="rounded-lg border-gray-300 text-xs focus:border-[#06C2A4] focus:ring-[#06C2A4]">
+                                        @foreach(['low','normal','high','urgent'] as $priority)
+                                            <option value="{{ $priority }}" @selected(($activeConversation->priority ?? 'normal') === $priority)>{{ $priority }}</option>
+                                        @endforeach
+                                    </select>
+                                    <select name="assigned_team_id" class="rounded-lg border-gray-300 text-xs focus:border-[#06C2A4] focus:ring-[#06C2A4]">
+                                        <option value="">بدون فريق</option>
+                                        @foreach($teams as $team)
+                                            <option value="{{ $team->id }}" @selected((int) $activeConversation->assigned_team_id === (int) $team->id)>{{ $team->name }}</option>
+                                        @endforeach
+                                    </select>
+                                    <select name="assigned_user_id" class="rounded-lg border-gray-300 text-xs focus:border-[#06C2A4] focus:ring-[#06C2A4]">
+                                        <option value="">بدون موظف</option>
+                                        @foreach($agents as $agent)
+                                            <option value="{{ $agent->id }}" @selected((int) $activeConversation->assigned_user_id === (int) $agent->id)>{{ $agent->name }}</option>
                                         @endforeach
                                     </select>
                                     <label class="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-xs">
@@ -136,6 +164,10 @@
                                         <p class="text-sm leading-6">{{ $message->content ?: '—' }}</p>
                                         <div class="mt-1 flex items-center gap-2 text-[11px] text-gray-500">
                                             <span>{{ $message->direction }}</span>
+                                            @if($message->delivery_status)
+                                                <span>•</span>
+                                                <span>{{ $message->delivery_status }}</span>
+                                            @endif
                                             <span>•</span>
                                             <span>{{ $message->created_at?->format('Y-m-d H:i') }}</span>
                                         </div>

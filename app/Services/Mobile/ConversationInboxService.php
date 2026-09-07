@@ -2,22 +2,21 @@
 
 namespace App\Services\Mobile;
 
-use App\Events\Realtime\ConversationUpdated;
-use App\Events\Realtime\MessageCreated;
 use App\Models\Conversation;
 use App\Models\ConversationUserState;
 use App\Models\Message;
 use App\Models\User;
 use App\Models\Workspace;
-use App\Services\Conversation\ConversationService;
+use App\Services\Communication\MessageService;
+use App\Services\Communication\UnreadService;
 use Illuminate\Contracts\Pagination\CursorPaginator;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\DB;
 
 class ConversationInboxService
 {
     public function __construct(
-        private readonly ConversationService $conversationService,
+        private readonly MessageService $messageService,
+        private readonly UnreadService $unreadService,
     ) {}
 
     /**
@@ -135,64 +134,24 @@ class ConversationInboxService
             }
         }
 
-        $message = $this->conversationService->addMessage($conversation, $payload, $actor);
-
-        event(new MessageCreated($message));
-        event(new ConversationUpdated($conversation->fresh()));
+        $message = $this->messageService->recordOutbound($conversation, $payload, $actor);
 
         return $message->load(['user', 'customer', 'attachments']);
     }
 
     public function markRead(Conversation $conversation, User $user, ?int $messageId = null): ConversationUserState
     {
-        $lastId = $messageId
-            ?? (int) Message::query()->where('conversation_id', $conversation->id)->max('id');
-
-        $state = ConversationUserState::query()->firstOrNew([
-            'conversation_id' => $conversation->id,
-            'user_id' => $user->id,
-        ]);
-
-        $state->workspace_id = $conversation->workspace_id;
-        $state->last_read_message_id = $lastId > 0 ? $lastId : null;
-        $state->last_read_at = now();
-        $state->save();
-
-        event(new ConversationUpdated($conversation->fresh()));
-
-        return $state;
+        return $this->unreadService->markRead($conversation, $user, $messageId);
     }
 
     public function archive(Conversation $conversation, User $user, bool $archived = true): ConversationUserState
     {
-        $state = ConversationUserState::query()->firstOrNew([
-            'conversation_id' => $conversation->id,
-            'user_id' => $user->id,
-        ]);
-        $state->workspace_id = $conversation->workspace_id;
-        $state->archived_at = $archived ? now() : null;
-        $state->save();
-
-        if ($archived) {
-            $conversation->update(['status' => 'archived']);
-        }
-
-        event(new ConversationUpdated($conversation->fresh()));
-
-        return $state;
+        return $this->unreadService->archive($conversation, $user, $archived);
     }
 
     public function mute(Conversation $conversation, User $user, bool $muted = true): ConversationUserState
     {
-        $state = ConversationUserState::query()->firstOrNew([
-            'conversation_id' => $conversation->id,
-            'user_id' => $user->id,
-        ]);
-        $state->workspace_id = $conversation->workspace_id;
-        $state->muted_at = $muted ? now() : null;
-        $state->save();
-
-        return $state;
+        return $this->unreadService->mute($conversation, $user, $muted);
     }
 
     public function messages(Conversation $conversation, int $perPage = 30): CursorPaginator
@@ -208,19 +167,6 @@ class ConversationInboxService
 
     public function unreadCountForConversation(Conversation $conversation, User $user): int
     {
-        $state = ConversationUserState::query()
-            ->where('conversation_id', $conversation->id)
-            ->where('user_id', $user->id)
-            ->first();
-
-        $query = Message::query()
-            ->where('conversation_id', $conversation->id)
-            ->where('direction', 'inbound');
-
-        if ($state?->last_read_message_id) {
-            $query->where('id', '>', $state->last_read_message_id);
-        }
-
-        return (int) $query->count();
+        return $this->unreadService->unreadCountForConversation($conversation, $user);
     }
 }

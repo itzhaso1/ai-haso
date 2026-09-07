@@ -3,15 +3,24 @@
 namespace App\Services\WhatsApp;
 
 use App\Jobs\ProcessIncomingWhatsAppMessage;
-use App\Models\Conversation;
-use App\Models\Customer;
 use App\Models\Message;
-use App\Models\WhatsAppPhoneNumber;
 use App\Models\WebhookEvent;
+use App\Models\WhatsAppPhoneNumber;
+use App\Services\Communication\ChannelConnectionService;
+use App\Services\Communication\ConversationWriter;
+use App\Services\Communication\IdentityService;
+use App\Services\Communication\MessageService;
 use Illuminate\Support\Str;
 
 class WhatsAppService
 {
+    public function __construct(
+        private readonly IdentityService $identityService,
+        private readonly ConversationWriter $conversationWriter,
+        private readonly MessageService $messageService,
+        private readonly ChannelConnectionService $channelConnectionService,
+    ) {}
+
     /**
      * @param  array<string, mixed>  $payload
      * @param  array<string, string>  $headers
@@ -66,72 +75,50 @@ class WhatsAppService
      */
     public function storeIncomingMessage(int $workspaceId, array $messageData, ?string $phoneNumberId = null): Message
     {
-        $customerPhone = $messageData['from'] ?? 'unknown';
+        $customerPhone = (string) ($messageData['from'] ?? 'unknown');
         $content = $messageData['text']['body'] ?? null;
         $externalMessageId = $messageData['id'] ?? null;
 
-        $customer = Customer::withoutGlobalScopes()->firstOrCreate(
-            [
-                'workspace_id' => $workspaceId,
-                'phone' => $customerPhone,
-            ],
-            [
-                'name' => 'Customer '.$customerPhone,
-                'whatsapp' => $customerPhone,
-            ]
-        );
-
-        $initialMetadata = [
-            'channel_source' => 'whatsapp',
-            'unread_count' => 0,
-        ];
+        $connection = null;
         if (is_string($phoneNumberId) && $phoneNumberId !== '') {
-            $initialMetadata['phone_number_id'] = $phoneNumberId;
+            $phone = WhatsAppPhoneNumber::withoutGlobalScopes()
+                ->where('workspace_id', $workspaceId)
+                ->where('phone_number_id', $phoneNumberId)
+                ->first();
+            if ($phone) {
+                $connection = $this->channelConnectionService->syncWhatsAppPhone($phone);
+            }
         }
 
-        $conversation = Conversation::withoutGlobalScopes()->firstOrCreate(
-            [
-                'workspace_id' => $workspaceId,
-                'external_id' => $customerPhone,
-            ],
-            [
-                'customer_id' => $customer->id,
-                'channel' => 'whatsapp',
-                'status' => 'open',
-                'ai_enabled' => true,
-                'last_message_at' => now(),
-                'metadata' => $initialMetadata,
-            ]
+        $resolved = $this->identityService->resolve(
+            $workspaceId,
+            'whatsapp',
+            $customerPhone,
+            $connection?->id,
         );
 
-        $message = Message::withoutGlobalScopes()->create([
-            'workspace_id' => $workspaceId,
-            'conversation_id' => $conversation->id,
-            'customer_id' => $customer->id,
-            'direction' => 'inbound',
+        $conversation = $this->conversationWriter->findOrCreateWhatsApp(
+            $workspaceId,
+            $customerPhone,
+            $connection,
+            $resolved['customer']->id,
+        );
+
+        $message = $this->messageService->recordInbound($conversation, [
+            'customer_id' => $resolved['customer']->id,
             'message_type' => 'text',
             'content' => $content,
             'external_message_id' => $externalMessageId,
             'metadata' => $messageData,
+            'channel_connection_id' => $connection?->id,
         ]);
 
-        $conversationMetadata = is_array($conversation->metadata) ? $conversation->metadata : [];
-        $conversationMetadata['channel_source'] = 'whatsapp';
-        $conversationMetadata['unread_count'] = (int) ($conversationMetadata['unread_count'] ?? 0) + 1;
-        if (is_string($phoneNumberId) && $phoneNumberId !== '') {
-            $conversationMetadata['phone_number_id'] = $phoneNumberId;
+        if ($resolved['identity']->conversation_id !== $conversation->id) {
+            $resolved['identity']->forceFill([
+                'conversation_id' => $conversation->id,
+                'channel_connection_id' => $connection?->id ?? $resolved['identity']->channel_connection_id,
+            ])->save();
         }
-
-        $conversation->update([
-            'customer_id' => $conversation->customer_id ?: $customer->id,
-            'channel' => 'whatsapp',
-            'last_message_at' => $message->created_at,
-            'metadata' => $conversationMetadata,
-        ]);
-
-        $customer->update([
-            'last_conversation_at' => $message->created_at,
-        ]);
 
         return $message;
     }

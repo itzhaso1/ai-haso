@@ -55,14 +55,16 @@
                             </div>
                         </div>
                         <span class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold
-                            {{ $connected ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600' }}">
-                            <span class="h-2 w-2 rounded-full {{ $connected ? 'bg-emerald-500' : 'bg-slate-400' }}"></span>
+                            {{ $channel['coming_soon'] ?? false ? 'bg-amber-100 text-amber-800' : ($connected ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600') }}">
+                            <span class="h-2 w-2 rounded-full {{ $channel['coming_soon'] ?? false ? 'bg-amber-500' : ($connected ? 'bg-emerald-500' : 'bg-slate-400') }}"></span>
                             {{ $channel['status_text'] }}
                         </span>
                     </div>
 
                     <div class="mt-5 flex flex-wrap items-center gap-2">
-                        @if($channel['key'] === 'whatsapp')
+                        @if(($channel['coming_soon'] ?? false) === true)
+                            <span class="inline-flex items-center rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800">Coming Soon</span>
+                        @elseif($channel['key'] === 'whatsapp')
                             <button
                                 type="button"
                                 data-whatsapp-connect

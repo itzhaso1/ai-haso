@@ -33,12 +33,13 @@
         ],
         [
             'key' => 'communication',
-            'title' => 'التواصل',
-            'description' => 'المحادثات والبريد وواتساب.',
+            'title' => 'Communication Center',
+            'description' => 'Inbox والقنوات والفرق — نواة التواصل.',
             'icon' => 'chat',
             'links' => [
-                ['label' => 'المحادثات', 'route' => 'workspace.conversations.index', 'active' => 'workspace.conversations.*'],
+                ['label' => 'Inbox', 'route' => 'workspace.conversations.index', 'active' => 'workspace.conversations.*'],
                 ['label' => 'Channels', 'route' => 'workspace.channels.index', 'active' => 'workspace.channels.*'],
+                ['label' => 'Teams', 'route' => 'workspace.communication.teams.index', 'active' => 'workspace.communication.teams.*'],
                 ['label' => 'البريد الإلكتروني', 'route' => 'workspace.emails.index', 'active' => 'workspace.emails.*'],
                 ['label' => 'واتساب', 'route' => 'workspace.whatsapp-accounts.index', 'active' => 'workspace.whatsapp-accounts.*'],
             ],

@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Api\Mobile\V1;
 
 use App\Http\Controllers\Api\Mobile\Concerns\ResolvesMobileWorkspace;
 use App\Http\Controllers\Api\Mobile\MobileController;
-use App\Models\EmailAccount;
-use App\Models\WhatsAppAccount;
+use App\Models\Communication\ChannelConnection;
+use App\Services\Communication\ChannelConnectionService;
 use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Http\JsonResponse;
 
@@ -15,112 +15,52 @@ class ChannelController extends MobileController
 
     public function __construct(
         private readonly WorkspaceContext $workspaceContext,
+        private readonly ChannelConnectionService $channelConnectionService,
     ) {}
 
     public function index(): JsonResponse
     {
         $workspace = $this->requireWorkspace($this->workspaceContext);
-
-        $latestWhatsAppAccount = WhatsAppAccount::query()
-            ->with('phoneNumbers')
-            ->latest('id')
-            ->first();
-
-        $whatsAppConnected = $latestWhatsAppAccount?->status === 'connected'
-            && $latestWhatsAppAccount->phoneNumbers->isNotEmpty();
-
-        $emailConnected = EmailAccount::query()->exists();
-
-        $workspaceChannelSettings = is_array($workspace->settings['channels'] ?? null)
-            ? $workspace->settings['channels']
-            : [];
-
+        $catalog = $this->channelConnectionService->catalog($workspace);
         $embeddedSignupReady = filled(config('whatsapp.meta_app_id'))
             && filled(config('whatsapp.embedded_signup_config_id'));
 
-        $facebookConnected = (bool) ($workspaceChannelSettings['facebook_messenger']['connected'] ?? false);
-        $instagramConnected = (bool) ($workspaceChannelSettings['instagram']['connected'] ?? false);
+        $channels = collect($catalog)
+            ->reject(fn (array $row): bool => $row['key'] === 'manual')
+            ->map(function (array $row) use ($embeddedSignupReady): array {
+                $manageUrl = match ($row['key']) {
+                    'whatsapp' => route('workspace.whatsapp-accounts.index'),
+                    'email' => route('workspace.emails.accounts.index'),
+                    default => route('workspace.conversations.index', ['channel' => $row['key']]),
+                };
 
-        $channels = [
-            $this->channelPayload(
-                key: 'whatsapp',
-                name: 'WhatsApp',
-                icon: 'whatsapp',
-                connected: $whatsAppConnected,
-                status: $whatsAppConnected
-                    ? 'connected'
-                    : ($latestWhatsAppAccount ? 'needs_setup' : 'disconnected'),
-                hint: $whatsAppConnected
-                    ? (($latestWhatsAppAccount->display_name ?? 'حساب متصل').' · '.$latestWhatsAppAccount->phoneNumbers->count().' رقم')
-                    : 'اربط عبر Meta Embedded Signup',
-                manageUrl: route('workspace.whatsapp-accounts.index'),
-                canConnectInApp: $embeddedSignupReady,
-            ),
-            $this->channelPayload(
-                key: 'facebook_messenger',
-                name: 'Facebook Messenger',
-                icon: 'messenger',
-                connected: $facebookConnected,
-                status: $facebookConnected ? 'connected' : 'needs_setup',
-                hint: 'إعدادات الربط جاهزة للتكامل المستقبلي.',
-                manageUrl: route('workspace.conversations.index', ['channel' => 'facebook_messenger']),
-                canConnectInApp: false,
-            ),
-            $this->channelPayload(
-                key: 'instagram',
-                name: 'Instagram',
-                icon: 'instagram',
-                connected: $instagramConnected,
-                status: $instagramConnected ? 'connected' : 'needs_setup',
-                hint: 'إعدادات الربط جاهزة للتكامل المستقبلي.',
-                manageUrl: route('workspace.conversations.index', ['channel' => 'instagram']),
-                canConnectInApp: false,
-            ),
-            $this->channelPayload(
-                key: 'email',
-                name: 'Email',
-                icon: 'email',
-                connected: $emailConnected,
-                status: $emailConnected ? 'connected' : 'disconnected',
-                hint: $emailConnected ? 'حساب البريد مُعد وجاهز.' : 'لم يتم إعداد حساب بريد بعد.',
-                manageUrl: route('workspace.emails.accounts.index'),
-                canConnectInApp: false,
-            ),
-        ];
+                $status = $row['status'] === ChannelConnection::STATUS_COMING_SOON
+                    ? 'coming_soon'
+                    : ($row['connected'] ? 'connected' : 'disconnected');
+
+                return [
+                    'key' => $row['key'],
+                    'name' => $row['name'],
+                    'icon' => $row['icon'],
+                    'connected' => (bool) $row['connected'],
+                    'status' => $status,
+                    'status_label' => $this->statusLabel($status),
+                    'hint' => $row['hint'],
+                    'manage_url' => $manageUrl,
+                    'can_connect_in_app' => $row['key'] === 'whatsapp' && $embeddedSignupReady && $status !== 'coming_soon',
+                ];
+            })
+            ->values()
+            ->all();
 
         return $this->ok($channels);
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function channelPayload(
-        string $key,
-        string $name,
-        string $icon,
-        bool $connected,
-        string $status,
-        string $hint,
-        string $manageUrl,
-        bool $canConnectInApp,
-    ): array {
-        return [
-            'key' => $key,
-            'name' => $name,
-            'icon' => $icon,
-            'connected' => $connected,
-            'status' => $status,
-            'status_label' => $this->statusLabel($status),
-            'hint' => $hint,
-            'manage_url' => $manageUrl,
-            'can_connect_in_app' => $canConnectInApp,
-        ];
     }
 
     private function statusLabel(string $status): string
     {
         return match ($status) {
             'connected' => 'متصل',
+            'coming_soon' => 'قريبًا',
             'needs_setup' => 'يحتاج إعداد',
             default => 'غير متصل',
         };

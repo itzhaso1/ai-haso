@@ -2,10 +2,11 @@
 
 namespace App\Http\Resources\Mobile;
 
+use App\Models\Message;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-/** @mixin \App\Models\Message */
+/** @mixin Message */
 class MessageResource extends JsonResource
 {
     /**
@@ -19,6 +20,8 @@ class MessageResource extends JsonResource
             'direction' => $this->direction,
             'message_type' => $this->message_type,
             'content' => $this->content,
+            'delivery_status' => $this->delivery_status,
+            'delivery_error' => $this->delivery_error,
             'ai_generated' => (bool) $this->ai_generated,
             'created_at' => optional($this->created_at)?->toIso8601String(),
             'user' => $this->whenLoaded('user', fn () => $this->user ? [
