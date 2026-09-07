@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Message\StoreMessageRequest;
 use App\Jobs\ProcessAIResponse;
+use App\Models\Conversation;
 use App\Models\Message;
 use App\Services\Conversation\ConversationService;
 use Illuminate\Http\JsonResponse;
@@ -33,9 +34,9 @@ class MessageController extends Controller
 
     public function store(StoreMessageRequest $request): JsonResponse
     {
-        $conversation = \App\Models\Conversation::query()
+        $conversation = Conversation::query()
             ->findOrFail($request->integer('conversation_id'));
-        $this->authorize('update', $conversation);
+        $this->authorize('reply', $conversation);
 
         $message = $this->conversationService->addMessage($conversation, $request->validated(), $request->user());
 
@@ -48,6 +49,9 @@ class MessageController extends Controller
 
     public function show(Message $message): JsonResponse
     {
+        $message->loadMissing('conversation');
+        $this->authorize('view', $message->conversation);
+
         return response()->json(['data' => $message]);
     }
 }

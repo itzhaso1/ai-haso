@@ -96,8 +96,8 @@ return [
         'crm' => ['advanced_customers'],
         'website' => ['website_builder'],
         'website_builder' => ['website'],
-        'custom_domain' => ['custom_domains'],
-        'custom_domains' => ['custom_domain'],
+        'communication_center' => ['conversations'],
+        'conversations' => ['communication_center'],
     ],
 
     /*

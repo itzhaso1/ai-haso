@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\Message;
 use App\Models\WhatsAppOutboundMessage;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -89,6 +90,7 @@ class SendWhatsAppMessage implements ShouldQueue
                         'sent_at' => now(),
                         'failed_at' => null,
                     ])->save();
+                    $this->syncMessageDelivery($outbound, Message::DELIVERY_SENT, is_string($providerMessageId) ? $providerMessageId : null);
                 }
 
                 return;
@@ -119,6 +121,7 @@ class SendWhatsAppMessage implements ShouldQueue
             'last_error' => $exception?->getMessage() ?: $outbound->last_error,
             'failed_at' => $outbound->failed_at ?? now(),
         ])->save();
+        $this->syncMessageDelivery($outbound, Message::DELIVERY_FAILED);
     }
 
     private function outboundMessage(): ?WhatsAppOutboundMessage
@@ -144,6 +147,30 @@ class SendWhatsAppMessage implements ShouldQueue
             'last_error' => $error,
             'provider_response' => $providerResponse ?? $outbound->provider_response,
             'failed_at' => now(),
+        ])->save();
+        $this->syncMessageDelivery($outbound, Message::DELIVERY_FAILED, error: $error);
+    }
+
+    private function syncMessageDelivery(
+        WhatsAppOutboundMessage $outbound,
+        string $status,
+        ?string $externalMessageId = null,
+        ?string $error = null,
+    ): void {
+        if (! $outbound->message_id) {
+            return;
+        }
+
+        $message = Message::withoutGlobalScopes()->find($outbound->message_id);
+        if (! $message) {
+            return;
+        }
+
+        $message->forceFill([
+            'delivery_status' => $status,
+            'delivery_error' => $status === Message::DELIVERY_FAILED ? ($error ?: $outbound->last_error) : null,
+            'external_message_id' => $externalMessageId ?: $message->external_message_id,
+            'delivered_at' => $status === Message::DELIVERY_SENT ? now() : $message->delivered_at,
         ])->save();
     }
 }

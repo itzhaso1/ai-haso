@@ -36,7 +36,17 @@ class ConversationPolicy
      */
     public function update(User $user, Conversation $conversation): bool
     {
-        return $this->hasAnyWorkspaceRole($user, $conversation->workspace, ['owner', 'admin', 'manager', 'agent']);
+        return $this->canStaffConversation($user, $conversation);
+    }
+
+    public function reply(User $user, Conversation $conversation): bool
+    {
+        return $this->canStaffConversation($user, $conversation);
+    }
+
+    public function assign(User $user, Conversation $conversation): bool
+    {
+        return $this->canStaffConversation($user, $conversation);
     }
 
     /**
@@ -61,5 +71,15 @@ class ConversationPolicy
     public function forceDelete(User $user, Conversation $conversation): bool
     {
         return false;
+    }
+
+    private function canStaffConversation(User $user, Conversation $conversation): bool
+    {
+        if ($this->hasAnyWorkspaceRole($user, $conversation->workspace, ['owner', 'admin', 'manager', 'agent'])) {
+            return true;
+        }
+
+        return $this->hasMembership($user, $conversation->workspace)
+            && $user->can('conversations.manage');
     }
 }

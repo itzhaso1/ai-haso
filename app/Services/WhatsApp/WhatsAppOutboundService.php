@@ -30,6 +30,7 @@ class WhatsAppOutboundService
         string $body,
         ?int $conversationId = null,
         ?int $messageId = null,
+        bool $queue = true,
     ): WhatsAppOutboundMessage {
         $this->assertWhatsAppEntitlement($workspace);
 
@@ -62,14 +63,26 @@ class WhatsAppOutboundService
             ],
         ]);
 
-        SendWhatsAppMessage::dispatch(
+        if ($queue) {
+            SendWhatsAppMessage::dispatch(
+                phoneNumberId: $phoneNumberId,
+                to: $to,
+                message: $body,
+                outboundMessageId: $outbound->id,
+            );
+
+            return $outbound;
+        }
+
+        $job = new SendWhatsAppMessage(
             phoneNumberId: $phoneNumberId,
             to: $to,
             message: $body,
             outboundMessageId: $outbound->id,
         );
+        $job->handle();
 
-        return $outbound;
+        return $outbound->refresh();
     }
 
     private function assertWhatsAppEntitlement(Workspace $workspace): void

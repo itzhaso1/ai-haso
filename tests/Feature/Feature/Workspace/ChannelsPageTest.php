@@ -56,6 +56,7 @@ class ChannelsPageTest extends TestCase
             ->assertSee('Channels')
             ->assertSee('WhatsApp')
             ->assertSee('Facebook Messenger')
+            ->assertSee('Coming Soon')
             ->assertSee('Instagram')
             ->assertSee('Email')
             ->assertSee('Reconnect WhatsApp')

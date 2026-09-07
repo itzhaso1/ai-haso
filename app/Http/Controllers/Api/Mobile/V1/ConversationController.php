@@ -8,6 +8,7 @@ use App\Http\Resources\Mobile\ConversationResource;
 use App\Http\Resources\Mobile\MessageResource;
 use App\Models\Conversation;
 use App\Models\ConversationUserState;
+use App\Models\Message;
 use App\Services\Mobile\ConversationInboxService;
 use App\Support\Tenancy\WorkspaceContext;
 use Illuminate\Http\JsonResponse;
@@ -95,7 +96,7 @@ class ConversationController extends MobileController
 
     public function storeMessage(Request $request, Conversation $conversation): JsonResponse
     {
-        $this->authorize('update', $conversation);
+        $this->authorize('reply', $conversation);
 
         $validated = $request->validate([
             'content' => ['required', 'string'],
@@ -110,7 +111,13 @@ class ConversationController extends MobileController
             'idempotency_key' => $validated['idempotency_key'] ?? null,
         ]);
 
-        return $this->ok(new MessageResource($message), message: 'تم إرسال الرسالة بنجاح.', status: 201);
+        $flash = match ($message->delivery_status) {
+            Message::DELIVERY_FAILED => 'تعذر إرسال الرسالة: '.($message->delivery_error ?: 'فشل الإرسال.'),
+            Message::DELIVERY_PENDING => 'جاري إرسال الرسالة.',
+            default => 'تم إرسال الرسالة بنجاح.',
+        };
+
+        return $this->ok(new MessageResource($message), message: $flash, status: 201);
     }
 
     public function read(Request $request, Conversation $conversation): JsonResponse

@@ -4,8 +4,7 @@ namespace App\Http\Controllers\Workspace;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Workspace\Concerns\InteractsWithWorkspace;
-use App\Models\EmailAccount;
-use App\Models\WhatsAppAccount;
+use App\Services\Communication\ChannelConnectionService;
 use App\Services\WhatsApp\WhatsAppEmbeddedSignupService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,67 +15,39 @@ class ChannelController extends Controller
 {
     use InteractsWithWorkspace;
 
+    public function __construct(
+        private readonly ChannelConnectionService $channelConnectionService,
+    ) {}
+
     public function index(): View
     {
         $workspace = $this->currentWorkspace();
-        $latestWhatsAppAccount = WhatsAppAccount::query()
-            ->with('phoneNumbers')
-            ->latest('id')
-            ->first();
+        $catalog = $this->channelConnectionService->catalog($workspace);
 
-        $whatsAppConnected = $latestWhatsAppAccount?->status === 'connected'
-            && $latestWhatsAppAccount->phoneNumbers->isNotEmpty();
+        $channels = collect($catalog)
+            ->reject(fn (array $row): bool => $row['key'] === 'manual')
+            ->map(function (array $row): array {
+                $manageUrl = match ($row['key']) {
+                    'whatsapp' => route('workspace.whatsapp-accounts.index'),
+                    'email' => route('workspace.emails.accounts.index'),
+                    default => route('workspace.conversations.index', ['channel' => $row['key']]),
+                };
 
-        $emailConnected = EmailAccount::query()->exists();
-
-        $workspaceChannelSettings = is_array($workspace->settings['channels'] ?? null)
-            ? $workspace->settings['channels']
-            : [];
-
-        $channels = [
-            [
-                'key' => 'whatsapp',
-                'name' => 'WhatsApp',
-                'icon' => 'whatsapp',
-                'connected' => $whatsAppConnected,
-                'status_text' => $whatsAppConnected ? 'Connected' : 'Not Connected',
-                'hint' => $whatsAppConnected
-                    ? (($latestWhatsAppAccount->display_name ?? 'Connected account').' · '.$latestWhatsAppAccount->phoneNumbers->count().' number(s)')
-                    : 'Connect via Meta Embedded Signup',
-                'primary_action' => $whatsAppConnected ? 'Reconnect WhatsApp' : 'Connect WhatsApp',
-                'manage_url' => route('workspace.whatsapp-accounts.index'),
-            ],
-            [
-                'key' => 'facebook_messenger',
-                'name' => 'Facebook Messenger',
-                'icon' => 'messenger',
-                'connected' => (bool) ($workspaceChannelSettings['facebook_messenger']['connected'] ?? false),
-                'status_text' => (bool) ($workspaceChannelSettings['facebook_messenger']['connected'] ?? false) ? 'Connected' : 'Not Connected',
-                'hint' => 'Connection settings are ready for future integration.',
-                'primary_action' => 'Manage channel',
-                'manage_url' => route('workspace.conversations.index', ['channel' => 'facebook_messenger']),
-            ],
-            [
-                'key' => 'instagram',
-                'name' => 'Instagram',
-                'icon' => 'instagram',
-                'connected' => (bool) ($workspaceChannelSettings['instagram']['connected'] ?? false),
-                'status_text' => (bool) ($workspaceChannelSettings['instagram']['connected'] ?? false) ? 'Connected' : 'Not Connected',
-                'hint' => 'Connection settings are ready for future integration.',
-                'primary_action' => 'Manage channel',
-                'manage_url' => route('workspace.conversations.index', ['channel' => 'instagram']),
-            ],
-            [
-                'key' => 'email',
-                'name' => 'Email',
-                'icon' => 'email',
-                'connected' => $emailConnected,
-                'status_text' => $emailConnected ? 'Connected' : 'Not Connected',
-                'hint' => $emailConnected ? 'Email account configured and ready.' : 'No email account configured yet.',
-                'primary_action' => $emailConnected ? 'Manage Email' : 'Connect Email',
-                'manage_url' => route('workspace.emails.accounts.index'),
-            ],
-        ];
+                return [
+                    'key' => $row['key'],
+                    'name' => $row['name'],
+                    'icon' => $row['icon'],
+                    'connected' => (bool) $row['connected'],
+                    'status' => $row['status'],
+                    'status_text' => $row['status_text'],
+                    'hint' => $row['hint'],
+                    'primary_action' => $row['primary_action'],
+                    'manage_url' => $manageUrl,
+                    'coming_soon' => $row['status'] === 'coming_soon',
+                ];
+            })
+            ->values()
+            ->all();
 
         return view('workspace.channels.index', [
             'channels' => $channels,
@@ -99,6 +70,7 @@ class ChannelController extends Controller
 
         try {
             $result = $embeddedSignupService->connectWorkspace($workspace, $validated);
+            $this->channelConnectionService->syncWhatsApp($workspace);
         } catch (RuntimeException $exception) {
             return response()->json([
                 'message' => $exception->getMessage(),

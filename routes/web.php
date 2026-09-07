@@ -24,6 +24,7 @@ use App\Http\Controllers\Workspace\Appointments\RequestController as Appointment
 use App\Http\Controllers\Workspace\Appointments\WebsiteController as AppointmentsWebsiteController;
 use App\Http\Controllers\Workspace\CategoryController;
 use App\Http\Controllers\Workspace\ChannelController;
+use App\Http\Controllers\Workspace\CommunicationTeamController;
 use App\Http\Controllers\Workspace\ContractController as WorkspaceContractController;
 use App\Http\Controllers\Workspace\ConversationController;
 use App\Http\Controllers\Workspace\CustomerController;
@@ -280,6 +281,11 @@ Route::middleware(['auth', 'workspace.selected', 'workspace.member'])
         Route::delete('contracts/{contract}/attachments/{attachment}', [WorkspaceContractController::class, 'destroyAttachment'])->name('contracts.attachments.destroy');
         Route::resource('conversations', ConversationController::class)->except(['show']);
         Route::post('conversations/{conversation}/messages', [ConversationController::class, 'storeMessage'])->name('conversations.messages.store');
+        Route::prefix('communication')->as('communication.')->group(function (): void {
+            Route::get('teams', [CommunicationTeamController::class, 'index'])->name('teams.index');
+            Route::post('teams', [CommunicationTeamController::class, 'store'])->name('teams.store');
+            Route::put('teams/{team}', [CommunicationTeamController::class, 'update'])->name('teams.update');
+        });
 
         Route::get('inventory', [InventoryController::class, 'index'])->name('inventory.index');
         Route::get('inventory/create', [InventoryController::class, 'create'])->name('inventory.create');

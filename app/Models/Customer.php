@@ -3,8 +3,10 @@
 namespace App\Models;
 
 use App\Models\Appointment\AppointmentBooking;
+use App\Models\Communication\CustomerChannelIdentity;
 use App\Models\Concerns\BelongsToWorkspace;
 use App\Models\Finance\FinanceInvoice;
+use Database\Factories\CustomerFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -32,7 +34,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 ])]
 class Customer extends WorkspaceScopedModel
 {
-    /** @use HasFactory<\Database\Factories\CustomerFactory> */
+    /** @use HasFactory<CustomerFactory> */
     use BelongsToWorkspace, HasFactory, SoftDeletes;
 
     protected function casts(): array
@@ -54,6 +56,11 @@ class Customer extends WorkspaceScopedModel
     public function conversations(): HasMany
     {
         return $this->hasMany(Conversation::class);
+    }
+
+    public function channelIdentities(): HasMany
+    {
+        return $this->hasMany(CustomerChannelIdentity::class);
     }
 
     public function financeInvoices(): HasMany

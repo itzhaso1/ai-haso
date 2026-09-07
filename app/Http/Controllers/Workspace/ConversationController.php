@@ -7,9 +7,14 @@ use App\Http\Controllers\Workspace\Concerns\InteractsWithWorkspace;
 use App\Http\Requests\Conversation\StoreConversationRequest;
 use App\Http\Requests\Message\StoreMessageRequest;
 use App\Jobs\ProcessAIResponse;
+use App\Models\Communication\CommunicationTeam;
 use App\Models\Conversation;
 use App\Models\Customer;
+use App\Models\Message;
+use App\Services\Communication\AssignmentService;
+use App\Services\Communication\UnreadService;
 use App\Services\Conversation\ConversationService;
+use App\Support\Communication\ChannelIdentifier;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -18,7 +23,11 @@ class ConversationController extends Controller
 {
     use InteractsWithWorkspace;
 
-    public function __construct(private readonly ConversationService $conversationService) {}
+    public function __construct(
+        private readonly ConversationService $conversationService,
+        private readonly UnreadService $unreadService,
+        private readonly AssignmentService $assignmentService,
+    ) {}
 
     public function index(Request $request): View
     {
@@ -26,33 +35,32 @@ class ConversationController extends Controller
 
         $search = $request->string('search')->toString();
         $channelFilter = $this->normalizeChannelFilter($request->string('channel')->toString());
+        $statusFilter = $request->string('status')->toString();
+        $assigneeFilter = $request->string('assignee')->toString();
+        $user = $request->user();
 
         $conversations = Conversation::query()
             ->with([
                 'customer',
+                'assignedUser:id,name',
+                'assignedTeam:id,name',
                 'messages' => fn ($query) => $query->latest()->limit(1),
             ])
             ->withCount('messages')
             ->when($channelFilter, function ($query, $channelFilter): void {
-                if (in_array($channelFilter, ['whatsapp', 'web'], true)) {
-                    $query->where('channel', $channelFilter);
-
-                    return;
-                }
-
-                if ($channelFilter === 'manual') {
-                    $query->where('channel', 'manual')
-                        ->where(function ($manualQuery): void {
-                            $manualQuery
-                                ->whereNull('metadata->channel_source')
-                                ->orWhere('metadata->channel_source', 'manual');
-                        });
-
-                    return;
-                }
-
-                $query->where('channel', 'manual')
-                    ->where('metadata->channel_source', $channelFilter);
+                $query->where(function ($channelQuery) use ($channelFilter): void {
+                    $channelQuery->where('channel', $channelFilter)
+                        ->orWhere('metadata->channel_source', $channelFilter);
+                });
+            })
+            ->when($statusFilter !== '' && in_array($statusFilter, ['open', 'closed', 'archived'], true), function ($query) use ($statusFilter): void {
+                $query->where('status', $statusFilter);
+            })
+            ->when($assigneeFilter === 'unassigned', function ($query): void {
+                $query->whereNull('assigned_user_id')->whereNull('assigned_team_id');
+            })
+            ->when($assigneeFilter === 'me' && $user, function ($query) use ($user): void {
+                $query->where('assigned_user_id', $user->id);
             })
             ->when($search, function ($query, $search): void {
                 $query->where(function ($innerQuery) use ($search): void {
@@ -67,11 +75,12 @@ class ConversationController extends Controller
 
         $conversations->setCollection(
             $conversations->getCollection()
-                ->map(function (Conversation $conversation) {
-                    $displayChannel = $this->resolveDisplayChannel($conversation);
-                    $metadata = is_array($conversation->metadata) ? $conversation->metadata : [];
-                    $conversation->setAttribute('display_channel', $displayChannel);
-                    $conversation->setAttribute('unread_count', (int) ($metadata['unread_count'] ?? 0));
+                ->map(function (Conversation $conversation) use ($user) {
+                    $conversation->setAttribute('display_channel', $this->resolveDisplayChannel($conversation));
+                    $conversation->setAttribute(
+                        'unread_count',
+                        $user ? $this->unreadService->unreadCountForConversation($conversation, $user) : 0,
+                    );
 
                     return $conversation;
                 })
@@ -88,24 +97,16 @@ class ConversationController extends Controller
             $activeConversation = Conversation::query()
                 ->with([
                     'customer',
+                    'assignedUser:id,name',
+                    'assignedTeam:id,name',
+                    'channelConnection',
                     'messages' => fn ($query) => $query->with('user')->latest()->limit(80),
                 ])
                 ->find($activeConversationId);
 
-            if ($activeConversation) {
-                $metadata = is_array($activeConversation->metadata) ? $activeConversation->metadata : [];
-                if ((int) ($metadata['unread_count'] ?? 0) > 0) {
-                    $metadata['unread_count'] = 0;
-                    // Update only metadata via query to avoid persisting virtual attributes.
-                    Conversation::query()
-                        ->whereKey($activeConversation->id)
-                        ->update(['metadata' => $metadata]);
-                    $activeConversation->setAttribute('metadata', $metadata);
-                    $activeConversation->syncOriginalAttribute('metadata');
-                }
-
+            if ($activeConversation && $user) {
+                $this->unreadService->markRead($activeConversation, $user);
                 $activeConversation->setAttribute('display_channel', $this->resolveDisplayChannel($activeConversation));
-
                 $activeConversation->setRelation(
                     'messages',
                     $activeConversation->messages->sortBy('created_at')->values()
@@ -117,6 +118,10 @@ class ConversationController extends Controller
             'conversations' => $conversations,
             'activeConversation' => $activeConversation,
             'channelFilter' => $channelFilter,
+            'statusFilter' => $statusFilter,
+            'assigneeFilter' => $assigneeFilter,
+            'teams' => CommunicationTeam::query()->orderBy('name')->get(['id', 'name']),
+            'agents' => $this->currentWorkspace()->users()->wherePivot('status', 'active')->orderBy('name')->get(['users.id', 'users.name']),
             'availableChannels' => [
                 'whatsapp' => 'WhatsApp',
                 'instagram' => 'Instagram',
@@ -170,7 +175,21 @@ class ConversationController extends Controller
             'status' => ['nullable', 'in:open,closed,archived'],
             'ai_enabled' => ['nullable', 'boolean'],
             'metadata_json' => ['nullable', 'string'],
+            'assigned_team_id' => ['nullable', 'integer'],
+            'assigned_user_id' => ['nullable', 'integer'],
+            'priority' => ['nullable', 'in:low,normal,high,urgent'],
         ]);
+
+        if ($request->hasAny(['assigned_team_id', 'assigned_user_id', 'priority'])) {
+            $this->authorize('assign', $conversation);
+            $this->assignmentService->assign(
+                $conversation,
+                $request->filled('assigned_team_id') ? (int) $request->input('assigned_team_id') : null,
+                $request->filled('assigned_user_id') ? (int) $request->input('assigned_user_id') : null,
+                $payload['priority'] ?? $conversation->priority,
+                $request->user(),
+            );
+        }
 
         $conversation->update([
             'status' => $payload['status'] ?? $conversation->status,
@@ -193,7 +212,7 @@ class ConversationController extends Controller
 
     public function storeMessage(StoreMessageRequest $request, Conversation $conversation): RedirectResponse
     {
-        $this->authorize('update', $conversation);
+        $this->authorize('reply', $conversation);
 
         $payload = $request->validated();
         $payload['conversation_id'] = $conversation->id;
@@ -207,36 +226,31 @@ class ConversationController extends Controller
             ProcessAIResponse::dispatch($conversation->id, $sentMessage->id);
         }
 
+        $flash = match ($sentMessage->delivery_status) {
+            Message::DELIVERY_FAILED => ['error', 'تعذر إرسال الرسالة: '.($sentMessage->delivery_error ?: 'فشل الإرسال.')],
+            Message::DELIVERY_PENDING => ['success', 'جاري إرسال الرسالة.'],
+            default => ['success', 'تم إرسال الرسالة.'],
+        };
+
         return redirect()->route('workspace.conversations.index', [
             'conversation' => $conversation->id,
-        ])->with('success', 'تم إرسال الرسالة.');
+        ])->with($flash[0], $flash[1]);
     }
 
     private function normalizeChannelFilter(string $channel): ?string
     {
-        $normalized = strtolower(trim($channel));
-
-        if ($normalized === '') {
+        if (trim($channel) === '') {
             return null;
         }
 
-        return match ($normalized) {
-            'facebook', 'messenger', 'facebook-messenger' => 'facebook_messenger',
-            'ig' => 'instagram',
-            default => $normalized,
-        };
+        return ChannelIdentifier::normalizeChannelName($channel);
     }
 
     private function resolveDisplayChannel(Conversation $conversation): string
     {
         $metadata = is_array($conversation->metadata) ? $conversation->metadata : [];
         $channel = $metadata['channel_source'] ?? $conversation->channel ?? 'manual';
-        $normalized = strtolower(trim((string) $channel));
 
-        return match ($normalized) {
-            'facebook', 'messenger', 'facebook-messenger' => 'facebook_messenger',
-            'ig' => 'instagram',
-            default => $normalized !== '' ? $normalized : 'manual',
-        };
+        return ChannelIdentifier::normalizeChannelName((string) $channel);
     }
 }
