@@ -104,6 +104,9 @@ class InvoiceDomainHardeningTest extends TestCase
     {
         [$user, $workspace] = $this->createWorkspaceOwner('company');
         $customer = $this->makeCustomer($workspace, 'Snapshot Customer', ['vat_number' => '300111111111113']);
+        $this->actingAs($user)->withSession(['current_workspace_id' => $workspace->id])
+            ->get(route('workspace.finance.settings.index'))
+            ->assertOk();
         FinanceSetting::withoutGlobalScopes()
             ->where('workspace_id', $workspace->id)
             ->update(['company_name' => 'Issued Co', 'vat_number' => '310000000000003']);
@@ -635,29 +638,28 @@ class InvoiceDomainHardeningTest extends TestCase
         }
     }
 
-    /**
-     * @return array<string, mixed>
-     */
     private function financialFingerprint(FinanceInvoice $invoice): array
     {
-        return $invoice->only([
-            'invoice_number',
-            'issue_date',
-            'issued_at',
-            'currency',
-            'type',
-            'tax_document_subtype',
-            'subtotal',
-            'discount',
-            'taxable_amount',
-            'tax_amount',
-            'total',
-            'tax_profile_type',
-            'tax_rate',
-            'company_snapshot',
-            'recipient_snapshot',
-            'pdf_snapshot',
-        ]);
+        $invoice->refresh();
+
+        return [
+            'invoice_number' => $invoice->invoice_number,
+            'issue_date' => optional($invoice->issue_date)?->toDateString(),
+            'issued_at' => optional($invoice->issued_at)?->utc()->toIso8601String(),
+            'currency' => $invoice->currency,
+            'type' => $invoice->type,
+            'tax_document_subtype' => $invoice->tax_document_subtype,
+            'subtotal' => (string) $invoice->subtotal,
+            'discount' => (string) $invoice->discount,
+            'taxable_amount' => (string) $invoice->taxable_amount,
+            'tax_amount' => (string) $invoice->tax_amount,
+            'total' => (string) $invoice->total,
+            'tax_profile_type' => $invoice->tax_profile_type,
+            'tax_rate' => (string) $invoice->tax_rate,
+            'company_snapshot' => $invoice->company_snapshot,
+            'recipient_snapshot' => $invoice->recipient_snapshot,
+            'pdf_snapshot' => $invoice->pdf_snapshot,
+        ];
     }
 
     private function storeIssuedInvoice(User $user, Workspace $workspace, Customer $customer): FinanceInvoice
