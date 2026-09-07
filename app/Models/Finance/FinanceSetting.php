@@ -27,6 +27,7 @@ use Illuminate\Support\Facades\Schema;
     'currency',
     'invoice_prefix',
     'next_invoice_sequence',
+    'allow_manual_invoice_numbers',
     'credit_note_prefix',
     'next_credit_note_sequence',
     'debit_note_prefix',
@@ -53,6 +54,7 @@ class FinanceSetting extends WorkspaceScopedModel
         return [
             'default_vat_rate' => 'decimal:2',
             'next_invoice_sequence' => 'integer',
+            'allow_manual_invoice_numbers' => 'boolean',
             'zatca_last_synced_at' => 'datetime',
             'invoice_primary_color' => 'string',
             'metadata' => 'array',
@@ -68,5 +70,21 @@ class FinanceSetting extends WorkspaceScopedModel
         }
 
         return self::$schemaFlags['pdf_customization'];
+    }
+
+    public static function forWorkspaceId(int $workspaceId): ?self
+    {
+        return static::withoutGlobalScopes()
+            ->where('workspace_id', $workspaceId)
+            ->first();
+    }
+
+    public function allowsManualInvoiceNumbers(): bool
+    {
+        if (! Schema::hasColumn($this->getTable(), 'allow_manual_invoice_numbers')) {
+            return true;
+        }
+
+        return (bool) $this->allow_manual_invoice_numbers;
     }
 }

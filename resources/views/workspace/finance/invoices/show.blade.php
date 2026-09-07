@@ -20,12 +20,28 @@
     $lifecycle = \App\Support\Finance\InvoicePresentation::lifecycle($invoice);
     $invoiceStatusLabels = ['draft' => 'مسودة', 'issued' => 'مرسلة', 'cancelled' => 'ملغاة'];
     $paymentStatusLabels = ['unpaid' => 'غير مدفوعة', 'partial' => 'مدفوعة جزئيًا', 'paid' => 'مدفوعة', 'overdue' => 'متأخرة'];
+    $taxDocumentLabels = ['standard' => 'قياسية', 'simplified' => 'مبسطة'];
+    $zatcaRequirementLabels = ['not_required' => 'غير مطلوب', 'required' => 'مطلوب (داخلي)'];
     $dueToday = $invoice->due_date && $invoice->due_date->isToday() && in_array($paymentStatus, ['unpaid', 'partial'], true);
     $canPay = (float) $invoice->amount_due > 0.009 && ! $isDraft && ! $isCancelled;
     $paidRatio = (float) $invoice->total > 0 ? min(100, ((float) $invoice->amount_paid / (float) $invoice->total) * 100) : 0;
+    $snapshotsAuthoritative = $invoice->snapshotsAreAuthoritative();
     $companyVat = data_get($invoice->company_snapshot, 'vat_number');
     $recipientVat = data_get($invoice->recipient_snapshot, 'vat_number');
-    $einvoiceReady = filled($invoice->invoice_number) && filled($invoice->currency) && ($companyVat || $recipientVat || $invoice->pdf_snapshot);
+    $recipientName = $snapshotsAuthoritative
+        ? (data_get($invoice->recipient_snapshot, 'name') ?: ($invoice->customer_name ?: optional($invoice->customer)->name ?: optional($invoice->supplier)->name))
+        : ($invoice->customer_name ?: optional($invoice->customer)->name ?: optional($invoice->supplier)->name);
+    $recipientEmail = $snapshotsAuthoritative
+        ? data_get($invoice->recipient_snapshot, 'email')
+        : ($invoice->type === 'purchase' ? optional($invoice->supplier)->email : optional($invoice->customer)->email);
+    $recipientPhone = $snapshotsAuthoritative
+        ? data_get($invoice->recipient_snapshot, 'phone')
+        : ($invoice->type === 'purchase' ? optional($invoice->supplier)->phone : optional($invoice->customer)->phone);
+    $displayRecipientVat = $snapshotsAuthoritative
+        ? $recipientVat
+        : ($invoice->type === 'purchase' ? optional($invoice->supplier)->vat_number : optional($invoice->customer)->vat_number);
+    $taxDocumentSubtype = $invoice->tax_document_subtype ?: 'standard';
+    $zatcaRequirement = $invoice->type === 'purchase' ? 'not_required' : ($invoice->zatca_requirement ?: 'not_required');
 @endphp
 
 @section('content')
@@ -33,11 +49,12 @@
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
                 <h2 class="text-xl font-bold text-slate-900">فاتورة {{ $invoice->invoice_number }}</h2>
-                <p class="mt-1 text-xs text-slate-500">{{ $invoice->customer_name ?: optional($invoice->customer)->name ?: optional($invoice->supplier)->name }}</p>
+                <p class="mt-1 text-xs text-slate-500">{{ $recipientName }}</p>
                 <div class="mt-2 flex flex-wrap items-center gap-2">
                     @include('workspace.finance.partials.status-badge', ['label' => \App\Support\Finance\InvoicePresentation::label($lifecycle), 'class' => \App\Support\Finance\InvoicePresentation::badgeClass($lifecycle)])
                     <span class="rounded-full px-3 py-1 text-xs font-bold {{ $statusClass }}">مستند: {{ $invoiceStatusLabels[$invoiceStatus] ?? $invoiceStatus }}</span>
                     <span class="rounded-full px-3 py-1 text-xs font-bold {{ $payClass }}">دفع: {{ $paymentStatusLabels[$paymentStatus] ?? $paymentStatus }}</span>
+                    <span class="rounded-full bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600">{{ $taxDocumentLabels[$taxDocumentSubtype] ?? $taxDocumentSubtype }}</span>
                     @if($dueToday)
                         <span class="rounded-full bg-orange-50 px-3 py-1 text-xs font-bold text-orange-700">مستحقة اليوم</span>
                     @endif
@@ -99,6 +116,8 @@
                 <dl class="mt-3 space-y-2 text-sm">
                     <div class="flex justify-between"><dt class="text-slate-500">رقم الفاتورة</dt><dd class="font-semibold">{{ $invoice->invoice_number }}</dd></div>
                     <div class="flex justify-between"><dt class="text-slate-500">تاريخ الإصدار</dt><dd>{{ optional($invoice->issue_date)->format('Y-m-d') }}</dd></div>
+                    <div class="flex justify-between"><dt class="text-slate-500">وقت الاعتماد</dt><dd>{{ $invoice->issued_at ? $invoice->issued_at->timezone(config('app.timezone'))->format('Y-m-d H:i') : '—' }}</dd></div>
+                    <div class="flex justify-between"><dt class="text-slate-500">تصنيف المستند</dt><dd>{{ $taxDocumentLabels[$taxDocumentSubtype] ?? $taxDocumentSubtype }}</dd></div>
                     <div class="flex justify-between"><dt class="text-slate-500">الشروط</dt><dd>{{ $invoice->payment_terms ?: '—' }}</dd></div>
                     <div class="flex justify-between"><dt class="text-slate-500">الإجمالي قبل الضريبة</dt><dd>{{ number_format((float) $invoice->subtotal, 2) }}</dd></div>
                     <div class="flex justify-between"><dt class="text-slate-500">الخصم</dt><dd>{{ number_format((float) $invoice->discount, 2) }}</dd></div>
@@ -115,28 +134,23 @@
             </div>
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <h3 class="text-sm font-bold text-slate-900">العميل / المورد</h3>
-                @if($invoice->type === 'purchase')
-                    <p class="mt-3 text-sm font-semibold">{{ optional($invoice->supplier)->name ?: '—' }}</p>
-                    <p class="text-xs text-slate-500">{{ optional($invoice->supplier)->vat_number }}</p>
-                    <p class="text-xs text-slate-500">{{ optional($invoice->supplier)->email }}</p>
-                @else
-                    <p class="mt-3 text-sm font-semibold">{{ $invoice->customer_name ?: optional($invoice->customer)->name }}</p>
-                    <p class="text-xs text-slate-500">{{ optional($invoice->customer)->email }}</p>
-                    <p class="text-xs text-slate-500">{{ optional($invoice->customer)->phone }}</p>
-                    <p class="text-xs text-slate-500">الرقم الضريبي: {{ optional($invoice->customer)->vat_number ?: '—' }}</p>
+                <p class="mt-3 text-sm font-semibold">{{ $recipientName ?: '—' }}</p>
+                <p class="text-xs text-slate-500">{{ $recipientEmail }}</p>
+                <p class="text-xs text-slate-500">{{ $recipientPhone }}</p>
+                <p class="text-xs text-slate-500">الرقم الضريبي: {{ $displayRecipientVat ?: '—' }}</p>
+                @if($snapshotsAuthoritative)
+                    <p class="mt-2 text-[11px] text-slate-500">البيانات أعلاه من لقطة الإصدار ولا تتغير إذا تغيّر ملف العميل لاحقاً.</p>
                 @endif
             </div>
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h3 class="text-sm font-bold text-slate-900">جاهزية الفوترة الإلكترونية</h3>
-                <p class="mt-2 text-xs leading-5 text-slate-500">لا يتم الإرسال لأي بوابة الآن. هذه قائمة تحقق حتى تُربط لاحقًا (مثل ZATCA / JoFotara) دون إعادة تصميم الشاشة.</p>
+                <h3 class="text-sm font-bold text-slate-900">الفوترة الإلكترونية</h3>
+                <p class="mt-2 text-xs leading-5 text-slate-500">الفاتورة هنا مستند أعمال. طبقة ZATCA غير مهيأة في هذه المرحلة ولا يتم توليد QR أو XML.</p>
                 <ul class="mt-3 space-y-1.5 text-sm">
-                    <li class="{{ $invoice->invoice_number ? 'text-emerald-700' : 'text-slate-500' }}">رقم مستند: {{ $invoice->invoice_number ?: '—' }}</li>
-                    <li class="{{ $companyVat ? 'text-emerald-700' : 'text-amber-700' }}">الرقم الضريبي للشركة: {{ $companyVat ?: 'غير محفوظ في اللقطة' }}</li>
-                    <li class="{{ $recipientVat ? 'text-emerald-700' : 'text-slate-500' }}">الرقم الضريبي للعميل/المورد: {{ $recipientVat ?: '—' }}</li>
-                    <li class="{{ $invoice->pdf_snapshot ? 'text-emerald-700' : 'text-slate-500' }}">لقطة PDF: {{ $invoice->pdf_snapshot ? 'موجودة' : 'ستُنشأ عند الإصدار' }}</li>
-                    <li class="text-slate-500">معرف إلكتروني: {{ $invoice->getAttribute('zatca_uuid') ?: 'سيُملأ عند الربط' }}</li>
+                    <li class="text-slate-700">الفوترة الإلكترونية ZATCA: غير مهيأة</li>
+                    <li class="text-slate-600">متطلب داخلي: {{ $zatcaRequirementLabels[$zatcaRequirement] ?? $zatcaRequirement }}</li>
+                    <li class="{{ $companyVat ? 'text-emerald-700' : 'text-slate-500' }}">الرقم الضريبي للشركة (لقطة): {{ $companyVat ?: 'غير محفوظ في اللقطة' }}</li>
+                    <li class="{{ $recipientVat ? 'text-emerald-700' : 'text-slate-500' }}">الرقم الضريبي للعميل/المورد (لقطة): {{ $recipientVat ?: '—' }}</li>
                 </ul>
-                <p class="mt-3 text-xs font-semibold {{ $einvoiceReady ? 'text-emerald-700' : 'text-amber-700' }}">{{ $einvoiceReady ? 'البيانات الأساسية جاهزة للتوسع الإلكتروني.' : 'أكمل الرقم الضريبي في إعدادات الفوترة لتجهيز المرحلة التالية.' }}</p>
                 <p class="mt-3 whitespace-pre-line text-sm text-slate-600">{{ $invoice->notes ?: '' }}</p>
             </div>
         </div>
@@ -151,6 +165,7 @@
                             <th class="px-4 py-2 text-right">الكمية</th>
                             <th class="px-4 py-2 text-right">السعر</th>
                             <th class="px-4 py-2 text-right">الخصم</th>
+                            <th class="px-4 py-2 text-right">تصنيف الضريبة</th>
                             <th class="px-4 py-2 text-right">الضريبة</th>
                             <th class="px-4 py-2 text-right">الإجمالي</th>
                         </tr>
@@ -162,11 +177,12 @@
                                 <td class="px-4 py-2">{{ number_format((float) $item->quantity, 2) }}</td>
                                 <td class="px-4 py-2">{{ number_format((float) $item->unit_price, 2) }}</td>
                                 <td class="px-4 py-2">{{ number_format((float) $item->discount, 2) }}</td>
+                                <td class="px-4 py-2">{{ $item->tax_profile_type ?: $invoice->tax_profile_type }}</td>
                                 <td class="px-4 py-2">{{ number_format((float) $item->tax_amount, 2) }}</td>
                                 <td class="px-4 py-2 font-semibold">{{ number_format((float) $item->total, 2) }}</td>
                             </tr>
                         @empty
-                            <tr><td colspan="6" class="px-4 py-8 text-center text-slate-500">لا توجد بنود.</td></tr>
+                            <tr><td colspan="7" class="px-4 py-8 text-center text-slate-500">لا توجد بنود.</td></tr>
                         @endforelse
                     </tbody>
                 </table>

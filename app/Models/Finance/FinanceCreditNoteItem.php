@@ -6,6 +6,7 @@ use App\Models\Concerns\BelongsToWorkspace;
 use App\Models\WorkspaceScopedModel;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Schema;
 
 #[Fillable([
     'workspace_id',
@@ -15,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'quantity',
     'unit_price',
     'discount',
+    'tax_profile_type',
     'tax_rate',
     'tax_amount',
     'taxable_amount',
@@ -42,5 +44,10 @@ class FinanceCreditNoteItem extends WorkspaceScopedModel
     public function creditNote(): BelongsTo
     {
         return $this->belongsTo(FinanceCreditNote::class, 'credit_note_id');
+    }
+
+    public static function hasTaxProfileColumn(): bool
+    {
+        return Schema::hasColumn('finance_credit_note_items', 'tax_profile_type');
     }
 }

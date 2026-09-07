@@ -10,6 +10,7 @@ use App\Models\Finance\FinanceInvoice;
 use App\Models\Finance\FinanceInvoiceAttachment;
 use App\Models\Finance\FinanceInvoicePayment;
 use App\Models\Finance\FinanceJournalEntry;
+use App\Models\Finance\FinanceSetting;
 use App\Models\Finance\FinanceSupplier;
 use App\Models\Finance\FinanceTaxRate;
 use App\Models\Finance\FinanceTreasuryAccount;
@@ -20,6 +21,7 @@ use App\Services\Finance\InvoiceInboxService;
 use App\Services\Finance\InvoicePaymentService;
 use App\Services\Finance\InvoiceService;
 use App\Services\Finance\PdfInvoiceService;
+use App\Services\Finance\Tax\TaxCalculationService;
 use App\Services\Notification\DomainNotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -349,7 +351,11 @@ class InvoiceController extends FinanceBaseController
             'attachments.*' => ['file', 'max:10240', 'mimes:pdf,jpg,jpeg,png,webp'],
         ]);
 
-        $this->invoiceService->storeAttachments($invoice, $request->file('attachments', []), (int) $request->user()?->id);
+        try {
+            $this->invoiceService->storeAttachments($invoice, $request->file('attachments', []), (int) $request->user()?->id);
+        } catch (RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
 
         return redirect()->route('workspace.finance.invoices.show', $invoice)->with('success', 'تم رفع المرفق.');
     }
@@ -371,7 +377,12 @@ class InvoiceController extends FinanceBaseController
         $this->authorizeFinance($request, 'invoices.edit');
         $this->assertSameWorkspace($invoice->workspace_id);
         abort_unless((int) $attachment->invoice_id === (int) $invoice->id, 404);
-        $this->invoiceService->deleteAttachment($attachment);
+
+        try {
+            $this->invoiceService->deleteAttachment($attachment);
+        } catch (RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
 
         return redirect()->route('workspace.finance.invoices.show', $invoice)->with('success', 'تم حذف المرفق.');
     }
@@ -394,6 +405,9 @@ class InvoiceController extends FinanceBaseController
      */
     private function formCatalog(): array
     {
+        $workspace = $this->currentWorkspace();
+        $setting = FinanceSetting::forWorkspaceId((int) $workspace->id);
+
         return [
             'customers' => Customer::query()->orderBy('name')->get(['id', 'name', 'phone']),
             'suppliers' => FinanceSupplier::query()->orderBy('name')->get(['id', 'name']),
@@ -405,6 +419,8 @@ class InvoiceController extends FinanceBaseController
             'projects' => Schema::hasTable('finance_projects')
                 ? FinanceProject::query()->orderBy('name')->get(['id', 'name'])
                 : collect(),
+            'allowManualInvoiceNumbers' => $setting?->allowsManualInvoiceNumbers() ?? false,
+            'defaultTaxRate' => (float) ($setting?->default_vat_rate ?? TaxCalculationService::FALLBACK_STANDARD_RATE),
         ];
     }
 
@@ -431,6 +447,8 @@ class InvoiceController extends FinanceBaseController
                 ),
             ],
             'invoice_number' => ['nullable', 'string', 'max:255'],
+            'tax_document_subtype' => ['nullable', 'in:standard,simplified'],
+            'zatca_requirement' => ['nullable', 'in:not_required,required'],
             'issue_date' => ['required', 'date'],
             'due_date' => ['nullable', 'date', 'after_or_equal:issue_date'],
             'currency' => ['nullable', 'string', 'size:3'],

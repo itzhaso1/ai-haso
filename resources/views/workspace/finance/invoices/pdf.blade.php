@@ -2,7 +2,8 @@
     $company = is_array($companySnapshot ?? null) ? $companySnapshot : [];
     $recipient = is_array($recipientSnapshot ?? null) ? $recipientSnapshot : [];
     $theme = is_array($pdfSnapshot ?? null) ? $pdfSnapshot : [];
-    $primaryColor = $theme['primary_color'] ?? ($setting?->invoice_primary_color ?: '#06C2A4');
+    $useLiveFallbacks = ! ($snapshotsAuthoritative ?? false);
+    $primaryColor = $theme['primary_color'] ?? ($useLiveFallbacks ? ($setting?->invoice_primary_color ?: '#06C2A4') : '#06C2A4');
 
     $invoiceStatus = $invoice->invoice_status
         ?? (in_array($invoice->status, ['draft', 'cancelled'], true) ? $invoice->status : 'issued');
@@ -20,9 +21,13 @@
         'paid' => 'مدفوعة بالكامل',
         'overdue' => 'متأخرة',
     ];
+    $taxDocumentLabels = [
+        'standard' => 'قياسية',
+        'simplified' => 'مبسطة',
+    ];
 
-    $companyName = $company['company_name_ar'] ?? $company['company_name'] ?? $setting?->company_name_ar ?? $setting?->company_name ?? 'فاتورة';
-    $companyNameEn = $company['company_name'] ?? $setting?->company_name;
+    $companyName = $company['company_name_ar'] ?? $company['company_name'] ?? ($useLiveFallbacks ? ($setting?->company_name_ar ?? $setting?->company_name) : null) ?? 'فاتورة';
+    $companyNameEn = $company['company_name'] ?? ($useLiveFallbacks ? $setting?->company_name : null);
     $companyAddress = trim(implode(' - ', array_filter([
         $company['address_line'] ?? null,
         $company['street'] ?? null,
@@ -31,24 +36,34 @@
         $company['postal_code'] ?? null,
         $company['country_code'] ?? null,
     ])));
-    $companyVat = $company['vat_number'] ?? $setting?->vat_number;
-    $companyCr = $company['commercial_registration'] ?? $setting?->commercial_registration;
-    $companyPhone = $company['phone'] ?? $setting?->phone;
-    $companyEmail = $company['email'] ?? $setting?->email;
-    $companyWebsite = $company['website'] ?? $setting?->website;
-    $invoiceFooter = $theme['footer_text'] ?? $setting?->invoice_footer_text;
+    $companyVat = $company['vat_number'] ?? ($useLiveFallbacks ? $setting?->vat_number : null);
+    $companyCr = $company['commercial_registration'] ?? ($useLiveFallbacks ? $setting?->commercial_registration : null);
+    $companyPhone = $company['phone'] ?? ($useLiveFallbacks ? $setting?->phone : null);
+    $companyEmail = $company['email'] ?? ($useLiveFallbacks ? $setting?->email : null);
+    $companyWebsite = $company['website'] ?? ($useLiveFallbacks ? $setting?->website : null);
+    $invoiceFooter = $theme['footer_text'] ?? ($useLiveFallbacks ? $setting?->invoice_footer_text : null);
 
     $recipientName = $recipient['name']
-        ?? ($invoice->type === 'sales' ? ($invoice->customer?->name ?? $invoice->customer_name) : ($invoice->supplier?->name ?? null))
+        ?? ($useLiveFallbacks
+            ? ($invoice->type === 'sales' ? ($invoice->customer?->name ?? $invoice->customer_name) : ($invoice->supplier?->name ?? null))
+            : ($invoice->customer_name ?: null))
         ?? '-';
     $recipientAddress = $recipient['address']
-        ?? ($invoice->type === 'sales' ? ($invoice->customer?->address ?? null) : ($invoice->supplier?->address ?? null));
+        ?? ($useLiveFallbacks
+            ? ($invoice->type === 'sales' ? ($invoice->customer?->address ?? null) : ($invoice->supplier?->address ?? null))
+            : null);
     $recipientVat = $recipient['vat_number']
-        ?? ($invoice->type === 'sales' ? ($invoice->customer?->vat_number ?? null) : ($invoice->supplier?->vat_number ?? null));
+        ?? ($useLiveFallbacks
+            ? ($invoice->type === 'sales' ? ($invoice->customer?->vat_number ?? null) : ($invoice->supplier?->vat_number ?? null))
+            : null);
     $recipientPhone = $recipient['phone']
-        ?? ($invoice->type === 'sales' ? ($invoice->customer?->phone ?? null) : ($invoice->supplier?->phone ?? null));
+        ?? ($useLiveFallbacks
+            ? ($invoice->type === 'sales' ? ($invoice->customer?->phone ?? null) : ($invoice->supplier?->phone ?? null))
+            : null);
     $recipientEmail = $recipient['email']
-        ?? ($invoice->type === 'sales' ? ($invoice->customer?->email ?? null) : ($invoice->supplier?->email ?? null));
+        ?? ($useLiveFallbacks
+            ? ($invoice->type === 'sales' ? ($invoice->customer?->email ?? null) : ($invoice->supplier?->email ?? null))
+            : null);
 @endphp
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -257,6 +272,9 @@
                         <p style="margin:0;font-size:18px;font-weight:700;">{{ $invoice->type === 'sales' ? 'فاتورة مبيعات' : 'فاتورة شراء' }}</p>
                         <p class="subtitle">#{{ $invoice->invoice_number }}</p>
                         <p class="subtitle">تاريخ الإصدار: {{ $invoice->issue_date?->format('Y-m-d') ?? '-' }}</p>
+                        @if($invoice->issued_at)
+                            <p class="subtitle">وقت الاعتماد: {{ $invoice->issued_at->timezone(config('app.timezone'))->format('Y-m-d H:i') }}</p>
+                        @endif
                         <p class="subtitle">تاريخ الاستحقاق: {{ $invoice->due_date?->format('Y-m-d') ?? '-' }}</p>
                         <div>
                             <span class="invoice-badge">حالة الفاتورة: {{ $invoiceStatusLabels[$invoiceStatus] ?? $invoiceStatus }}</span>
@@ -279,9 +297,9 @@
                 <td>
                     <p class="block-title">معلومات الفاتورة</p>
                     <div class="muted">العملة: {{ $invoice->currency }}</div>
+                    <div class="muted">تصنيف المستند: {{ $taxDocumentLabels[$invoice->tax_document_subtype ?? 'standard'] ?? ($invoice->tax_document_subtype ?: 'قياسية') }}</div>
                     <div class="muted">شروط السداد: {{ $invoice->payment_terms ?: ($company['default_payment_terms'] ?? '-') }}</div>
-                    <div class="muted">مرجع ZATCA UUID: {{ $invoice->zatca_uuid ?: '-' }}</div>
-                    <div class="muted">QR: {{ $invoice->zatca_qr_code ? 'متوفر' : 'غير متوفر' }}</div>
+                    <div class="muted">الفوترة الإلكترونية ZATCA: غير مهيأة</div>
                 </td>
             </tr>
         </table>

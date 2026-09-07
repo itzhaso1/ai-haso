@@ -8,13 +8,14 @@ use App\Models\Finance\FinanceInvoice;
 use App\Models\Finance\FinanceJournalEntry;
 use App\Models\Finance\FinanceSetting;
 use App\Models\Workspace;
+use App\Services\Finance\Tax\TaxCalculationService;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class CreditNoteService
 {
     public function __construct(
-        private readonly TaxService $taxService,
+        private readonly TaxCalculationService $taxCalculator,
         private readonly ChartOfAccountsService $chartOfAccountsService,
         private readonly AccountingService $accountingService,
         private readonly InvoiceStateService $invoiceStateService,
@@ -49,7 +50,7 @@ class CreditNoteService
                 throw new RuntimeException('يجب أن يحتوي الإشعار على بند واحد على الأقل.');
             }
 
-            $totals = $this->totals($items);
+            $totals = $this->taxCalculator->totals($items);
             $this->assertCreditDoesNotExceedRemaining($lockedInvoice, $type, $totals['total']);
 
             $note = FinanceCreditNote::withoutGlobalScopes()->create([
@@ -74,11 +75,24 @@ class CreditNoteService
             ]);
 
             foreach ($items as $item) {
-                FinanceCreditNoteItem::withoutGlobalScopes()->create([
+                $itemAttributes = [
                     'workspace_id' => $workspace->id,
                     'credit_note_id' => $note->id,
-                    ...$item,
-                ]);
+                    'product_name' => $item['product_name'],
+                    'description' => $item['description'],
+                    'quantity' => $item['quantity'],
+                    'unit_price' => $item['unit_price'],
+                    'discount' => $item['discount'],
+                    'tax_rate' => $item['tax_rate'],
+                    'tax_amount' => $item['tax_amount'],
+                    'taxable_amount' => $item['taxable_amount'],
+                    'total' => $item['total'],
+                    'metadata' => $item['metadata'],
+                ];
+                if (FinanceCreditNoteItem::hasTaxProfileColumn()) {
+                    $itemAttributes['tax_profile_type'] = $item['tax_profile_type'];
+                }
+                FinanceCreditNoteItem::withoutGlobalScopes()->create($itemAttributes);
             }
 
             if (($payload['status'] ?? 'draft') === 'issued') {
@@ -304,7 +318,11 @@ class CreditNoteService
             $unitPrice = max(0.0, (float) ($rawItem['unit_price'] ?? 0));
             $discount = max(0.0, (float) ($rawItem['discount'] ?? 0));
             $lineTaxRate = isset($rawItem['tax_rate']) ? (float) $rawItem['tax_rate'] : $defaultTaxRate;
-            $lineCalc = $this->taxService->calculateLine($quantity, $unitPrice, $discount, $taxType, $lineTaxRate);
+            $lineTaxType = $this->taxCalculator->normalizeProfileType(
+                (string) ($rawItem['tax_type'] ?? $rawItem['tax_profile_type'] ?? $taxType),
+                $taxType
+            );
+            $lineCalc = $this->taxCalculator->calculateLine($quantity, $unitPrice, $discount, $lineTaxType, $lineTaxRate);
             $name = trim((string) ($rawItem['product_name'] ?? $rawItem['title'] ?? ''));
             if ($name === '' && $lineCalc['total'] <= 0) {
                 continue;
@@ -316,6 +334,7 @@ class CreditNoteService
                 'quantity' => round($quantity, 3),
                 'unit_price' => round($unitPrice, 2),
                 'discount' => round($discount, 2),
+                'tax_profile_type' => $lineTaxType,
                 'tax_rate' => round($lineTaxRate, 2),
                 'tax_amount' => round($lineCalc['tax_amount'], 2),
                 'taxable_amount' => round($lineCalc['taxable_amount'], 2),
@@ -325,34 +344,6 @@ class CreditNoteService
         }
 
         return $items;
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $items
-     * @return array{subtotal:float,discount:float,taxable_amount:float,tax_amount:float,total:float}
-     */
-    private function totals(array $items): array
-    {
-        $subtotal = 0.0;
-        $discount = 0.0;
-        $taxable = 0.0;
-        $tax = 0.0;
-        $total = 0.0;
-        foreach ($items as $item) {
-            $subtotal += round(((float) $item['quantity']) * ((float) $item['unit_price']), 2);
-            $discount += (float) $item['discount'];
-            $taxable += (float) $item['taxable_amount'];
-            $tax += (float) $item['tax_amount'];
-            $total += (float) $item['total'];
-        }
-
-        return [
-            'subtotal' => round($subtotal, 2),
-            'discount' => round($discount, 2),
-            'taxable_amount' => round($taxable, 2),
-            'tax_amount' => round($tax, 2),
-            'total' => round($total, 2),
-        ];
     }
 
     private function nextNumber(int $workspaceId, string $type): string
@@ -373,7 +364,7 @@ class CreditNoteService
                 'next_credit_note_sequence' => 1,
                 'debit_note_prefix' => 'DN',
                 'next_debit_note_sequence' => 1,
-                'default_vat_rate' => 15.00,
+                'default_vat_rate' => TaxCalculationService::FALLBACK_STANDARD_RATE,
             ]);
         }
 

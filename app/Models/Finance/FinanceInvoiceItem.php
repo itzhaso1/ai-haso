@@ -7,6 +7,8 @@ use App\Models\Product;
 use App\Models\WorkspaceScopedModel;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Schema;
+use RuntimeException;
 
 #[Fillable([
     'workspace_id',
@@ -17,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'quantity',
     'unit_price',
     'discount',
+    'tax_profile_type',
     'tax_rate',
     'tax_amount',
     'taxable_amount',
@@ -49,5 +52,31 @@ class FinanceInvoiceItem extends WorkspaceScopedModel
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    protected static function booted(): void
+    {
+        parent::booted();
+
+        $guard = static function (FinanceInvoiceItem $item): void {
+            $invoiceId = (int) ($item->invoice_id ?: $item->getOriginal('invoice_id'));
+            if ($invoiceId <= 0) {
+                return;
+            }
+
+            $invoice = FinanceInvoice::withoutGlobalScopes()->find($invoiceId);
+            if ($invoice?->isFinanciallyLocked()) {
+                throw new RuntimeException('لا يمكن تعديل بنود فاتورة معتمدة أو ملغاة.');
+            }
+        };
+
+        static::creating($guard);
+        static::updating($guard);
+        static::deleting($guard);
+    }
+
+    public static function hasTaxProfileColumn(): bool
+    {
+        return Schema::hasColumn('finance_invoice_items', 'tax_profile_type');
     }
 }

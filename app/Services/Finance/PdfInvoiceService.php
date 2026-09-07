@@ -4,6 +4,8 @@ namespace App\Services\Finance;
 
 use App\Models\Finance\FinanceInvoice;
 use App\Models\Finance\FinanceSetting;
+use ArPHP\I18N\Arabic;
+use Barryvdh\DomPDF\PDF;
 use Illuminate\Contracts\Support\Responsable;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
@@ -20,11 +22,14 @@ class PdfInvoiceService
             throw new RuntimeException('PDF generation is unavailable. Please install barryvdh/laravel-dompdf.');
         }
 
-        $setting = FinanceSetting::query()->first();
+        $snapshotsAuthoritative = $invoice->snapshotsAreAuthoritative();
+        $setting = $snapshotsAuthoritative
+            ? null
+            : FinanceSetting::forWorkspaceId((int) $invoice->workspace_id);
         $companySnapshot = is_array($invoice->company_snapshot) ? $invoice->company_snapshot : [];
         $recipientSnapshot = is_array($invoice->recipient_snapshot) ? $invoice->recipient_snapshot : [];
         $pdfSnapshot = is_array($invoice->pdf_snapshot) ? $invoice->pdf_snapshot : [];
-        $logoPath = $companySnapshot['logo_path'] ?? $setting?->logo_path;
+        $logoPath = $companySnapshot['logo_path'] ?? ($snapshotsAuthoritative ? null : $setting?->logo_path);
 
         $viewData = [
             'invoice' => $invoice,
@@ -32,13 +37,14 @@ class PdfInvoiceService
             'companySnapshot' => $companySnapshot,
             'recipientSnapshot' => $recipientSnapshot,
             'pdfSnapshot' => $pdfSnapshot,
+            'snapshotsAuthoritative' => $snapshotsAuthoritative,
             'logoDataUri' => $this->resolveLogoDataUri(is_string($logoPath) ? $logoPath : null),
         ];
 
         $html = view('workspace.finance.invoices.pdf', $viewData)->render();
         $html = $this->shapeArabicForDompdf($html);
 
-        /** @var \Barryvdh\DomPDF\PDF $pdf */
+        /** @var PDF $pdf */
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)->setPaper('a4');
 
         return $pdf->download($fileName);
@@ -70,13 +76,13 @@ class PdfInvoiceService
 
     private function shapeArabicForDompdf(string $html): string
     {
-        if (! class_exists(\ArPHP\I18N\Arabic::class)) {
+        if (! class_exists(Arabic::class)) {
             return $html;
         }
 
         try {
             /** @var object $arabic */
-            $arabic = new \ArPHP\I18N\Arabic();
+            $arabic = new Arabic;
             if (! method_exists($arabic, 'arIdentify') || ! method_exists($arabic, 'utf8Glyphs')) {
                 return $html;
             }
