@@ -25,6 +25,7 @@ class CommunicationBackfill
         $this->backfillIdentitiesFromCustomers();
         $this->backfillIdentitiesFromConversations();
         $this->backfillMessageDeliveryStatus();
+        $this->detectIdentityKeyCollisions();
         $this->verifyOrThrow();
     }
 
@@ -59,6 +60,36 @@ class CommunicationBackfill
             throw new \RuntimeException(
                 "Communication backfill failed: {$duplicates} duplicate identity_key group(s)."
             );
+        }
+    }
+
+    private function detectIdentityKeyCollisions(): void
+    {
+        if (! Schema::hasColumn('conversations', 'identity_key')) {
+            return;
+        }
+
+        $duplicates = DB::table('conversations')
+            ->select('workspace_id', 'identity_key', DB::raw('COUNT(*) as aggregate'))
+            ->whereNotNull('identity_key')
+            ->whereNull('deleted_at')
+            ->groupBy('workspace_id', 'identity_key')
+            ->having('aggregate', '>', 1)
+            ->get();
+
+        foreach ($duplicates as $row) {
+            $ids = DB::table('conversations')
+                ->where('workspace_id', $row->workspace_id)
+                ->where('identity_key', $row->identity_key)
+                ->whereNull('deleted_at')
+                ->pluck('id')
+                ->all();
+
+            $this->recordIssue((int) $row->workspace_id, 'identity_collision', 'conversation', null, [
+                'identity_key' => $row->identity_key,
+                'count' => (int) $row->aggregate,
+                'conversation_ids' => $ids,
+            ]);
         }
     }
 

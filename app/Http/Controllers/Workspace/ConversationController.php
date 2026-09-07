@@ -181,6 +181,7 @@ class ConversationController extends Controller
         ]);
 
         if ($request->hasAny(['assigned_team_id', 'assigned_user_id', 'priority'])) {
+            $this->authorize('assign', $conversation);
             $this->assignmentService->assign(
                 $conversation,
                 $request->filled('assigned_team_id') ? (int) $request->input('assigned_team_id') : null,
@@ -211,7 +212,7 @@ class ConversationController extends Controller
 
     public function storeMessage(StoreMessageRequest $request, Conversation $conversation): RedirectResponse
     {
-        $this->authorize('update', $conversation);
+        $this->authorize('reply', $conversation);
 
         $payload = $request->validated();
         $payload['conversation_id'] = $conversation->id;

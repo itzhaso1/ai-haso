@@ -2,8 +2,11 @@
 
 namespace Tests\Feature\Feature\Communication;
 
+use App\Jobs\ProcessAIResponse;
 use App\Models\Communication\ChannelConnection;
+use App\Models\Communication\CommunicationBackfillIssue;
 use App\Models\Communication\CommunicationTeam;
+use App\Models\Communication\CustomerChannelIdentity;
 use App\Models\Conversation;
 use App\Models\Customer;
 use App\Models\Message;
@@ -17,11 +20,14 @@ use App\Services\Communication\AssignmentService;
 use App\Services\Communication\ChannelConnectionService;
 use App\Services\Communication\IdentityService;
 use App\Services\Communication\MessageService;
+use App\Services\Communication\Setup\CommunicationBackfill;
 use App\Services\Communication\UnreadService;
 use App\Services\WhatsApp\WhatsAppService;
 use App\Support\Communication\ConversationIdentityKey;
 use App\Support\Tenancy\WorkspaceContext;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -159,6 +165,28 @@ class CommunicationCenterPhase1Test extends TestCase
         $this->assertSame($ownerA->id, $assigned->assigned_user_id);
         $this->assertSame('high', $assigned->priority);
 
+        $outsider = User::factory()->create();
+        $workspaceA->users()->attach($outsider->id, [
+            'membership_role' => 'agent',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        try {
+            app(AssignmentService::class)->assign($conversation, $team->id, $outsider->id, null, $ownerA);
+            $this->fail('Non-member of the team must not be assigned with the team.');
+        } catch (\InvalidArgumentException $exception) {
+            $this->assertStringContainsString('not a member of the selected team', $exception->getMessage());
+        }
+
+        $reassigned = app(AssignmentService::class)->assign($conversation, null, $outsider->id, 'urgent', $ownerA);
+        $this->assertSame($outsider->id, $reassigned->assigned_user_id);
+        $this->assertNull($reassigned->assigned_team_id);
+        $this->assertSame('urgent', $reassigned->priority);
+
+        $this->assertTrue($ownerA->can('assign', $conversation));
+        $this->assertTrue($ownerA->can('reply', $conversation));
+
         $this->expectException(\InvalidArgumentException::class);
         app(AssignmentService::class)->assign($conversation, null, $ownerB->id, null, $ownerA);
     }
@@ -239,6 +267,81 @@ class CommunicationCenterPhase1Test extends TestCase
         $this->assertSame(Message::DELIVERY_FAILED, $failed->delivery_status);
         $this->assertNotSame(Message::DELIVERY_SENT, $failed->delivery_status);
         $this->assertNotNull($failed->delivery_error);
+        $this->assertSame(2, Message::withoutGlobalScopes()->where('conversation_id', $conversation->id)->count());
+    }
+
+    public function test_whatsapp_limit_and_entitlement_failures_persist_as_failed(): void
+    {
+        config()->set('services.whatsapp.token', 'test-wa-token');
+        config()->set('whatsapp.api_version', 'v20.0');
+        Http::fake([
+            'graph.facebook.com/*' => Http::response(['messages' => [['id' => 'should-not-send']]], 200),
+        ]);
+
+        [$workspace, $owner] = $this->workspaceWithWhatsApp(
+            'wa-limit@example.com',
+            'waba_limit',
+            ['whatsapp_messages' => 0],
+            ['whatsapp', 'conversations'],
+            ['whatsapp_messages' => 'hard_block'],
+        );
+        app(WorkspaceContext::class)->set($workspace);
+        $phone = $this->createPhone($workspace, 'pnid_limit', 'waba_limit');
+        $connection = app(ChannelConnectionService::class)->syncWhatsAppPhone($phone);
+
+        $conversation = Conversation::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'whatsapp',
+            'channel_connection_id' => $connection->id,
+            'external_id' => '966500000088',
+            'status' => 'open',
+            'metadata' => ['phone_number_id' => 'pnid_limit', 'channel_source' => 'whatsapp'],
+        ]);
+
+        $limited = app(MessageService::class)->recordOutbound($conversation, [
+            'content' => 'حد الاستخدام',
+            'message_type' => 'text',
+        ], $owner);
+
+        $this->assertSame(Message::DELIVERY_FAILED, $limited->delivery_status);
+        $this->assertNotSame(Message::DELIVERY_SENT, $limited->delivery_status);
+        $this->assertNotNull($limited->delivery_error);
+        $this->assertDatabaseHas('messages', [
+            'id' => $limited->id,
+            'delivery_status' => Message::DELIVERY_FAILED,
+        ]);
+        $this->assertSame(0, Message::withoutGlobalScopes()->where('conversation_id', $conversation->id)->where('delivery_status', Message::DELIVERY_SENT)->count());
+
+        app(WorkspaceContext::class)->clear();
+
+        [$blockedWorkspace, $blockedOwner] = $this->workspaceWithWhatsApp(
+            'wa-entitlement@example.com',
+            'waba_entitlement',
+            ['whatsapp_messages' => 100],
+            ['conversations'],
+        );
+        app(WorkspaceContext::class)->set($blockedWorkspace);
+        $blockedPhone = $this->createPhone($blockedWorkspace, 'pnid_ent', 'waba_entitlement');
+        $blockedConnection = app(ChannelConnectionService::class)->syncWhatsAppPhone($blockedPhone);
+        $blockedConversation = Conversation::withoutGlobalScopes()->create([
+            'workspace_id' => $blockedWorkspace->id,
+            'channel' => 'whatsapp',
+            'channel_connection_id' => $blockedConnection->id,
+            'external_id' => '966500000089',
+            'status' => 'open',
+            'metadata' => ['phone_number_id' => 'pnid_ent', 'channel_source' => 'whatsapp'],
+        ]);
+
+        $blocked = app(MessageService::class)->recordOutbound($blockedConversation, [
+            'content' => 'بدون ميزة واتساب',
+            'message_type' => 'text',
+        ], $blockedOwner);
+
+        $this->assertSame(Message::DELIVERY_FAILED, $blocked->delivery_status);
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'communication.message.outbound',
+            'entity_id' => $blocked->id,
+        ]);
     }
 
     public function test_coming_soon_channels_are_not_connected(): void
@@ -277,11 +380,264 @@ class CommunicationCenterPhase1Test extends TestCase
             ->assertOk();
     }
 
+    public function test_same_connection_and_external_id_cannot_duplicate(): void
+    {
+        [$workspace] = $this->workspaceWithWhatsApp('uniq@example.com', 'waba_uniq');
+        $phone = $this->createPhone($workspace, 'pnid_uniq', 'waba_uniq');
+        $connection = app(ChannelConnectionService::class)->syncWhatsAppPhone($phone);
+
+        Conversation::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'whatsapp',
+            'channel_connection_id' => $connection->id,
+            'external_id' => '966500000077',
+            'status' => 'open',
+        ]);
+
+        try {
+            Conversation::withoutGlobalScopes()->create([
+                'workspace_id' => $workspace->id,
+                'channel' => 'whatsapp',
+                'channel_connection_id' => $connection->id,
+                'external_id' => '966500000077',
+                'status' => 'open',
+            ]);
+            $this->fail('Duplicate identity_key should be rejected.');
+        } catch (QueryException) {
+            $this->assertSame(
+                1,
+                Conversation::withoutGlobalScopes()
+                    ->where('workspace_id', $workspace->id)
+                    ->where('channel_connection_id', $connection->id)
+                    ->where('external_id', '966500000077')
+                    ->count(),
+            );
+        }
+    }
+
+    public function test_null_external_id_allows_multiple_conversations(): void
+    {
+        [$workspace] = $this->workspaceWithWhatsApp('null-ext@example.com', 'waba_null_ext');
+
+        $one = Conversation::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'manual',
+            'status' => 'open',
+        ]);
+        $two = Conversation::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'manual',
+            'status' => 'open',
+        ]);
+
+        $this->assertNull($one->identity_key);
+        $this->assertNull($two->identity_key);
+        $this->assertNotSame($one->id, $two->id);
+    }
+
+    public function test_customer_can_own_multiple_identities_without_merge(): void
+    {
+        [$workspace] = $this->workspaceWithWhatsApp('identities@example.com', 'waba_ids');
+        app(WorkspaceContext::class)->set($workspace);
+
+        $customer = Customer::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Multi Channel',
+            'phone' => '966511100001',
+            'email' => 'multi@example.com',
+        ]);
+
+        $identities = app(IdentityService::class);
+        $whatsapp = $identities->resolve($workspace->id, 'whatsapp', '966511100001');
+        $email = $identities->resolve($workspace->id, 'email', 'multi@example.com');
+        $instagram = $identities->linkToCustomer($customer, 'instagram', 'ig_multi_1');
+
+        $this->assertSame($customer->id, $whatsapp['customer']->id);
+        $this->assertSame($customer->id, $email['customer']->id);
+        $this->assertSame($customer->id, $instagram->customer_id);
+        $this->assertSame(3, CustomerChannelIdentity::withoutGlobalScopes()->where('customer_id', $customer->id)->count());
+        $this->assertSame(1, Customer::withoutGlobalScopes()->where('workspace_id', $workspace->id)->count());
+    }
+
+    public function test_backfill_records_identity_and_connection_issues_without_merging(): void
+    {
+        [$workspace] = $this->workspaceWithWhatsApp('backfill@example.com', 'waba_bf');
+        $firstPhone = $this->createPhone($workspace, 'pnid_bf_a', 'waba_bf_a');
+        $this->createPhone($workspace, 'pnid_bf_b', 'waba_bf_b');
+
+        Customer::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Dup A',
+            'phone' => '+966 50 333 3333',
+        ]);
+        Customer::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Dup B',
+            'phone' => '966503333333',
+        ]);
+
+        $ambiguous = Conversation::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'whatsapp',
+            'external_id' => '966500000055',
+            'status' => 'open',
+            'metadata' => ['channel_source' => 'whatsapp'],
+        ]);
+        $missing = Conversation::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'whatsapp',
+            'external_id' => '966500000056',
+            'status' => 'open',
+            'metadata' => ['channel_source' => 'whatsapp', 'phone_number_id' => 'pnid_missing_xyz'],
+        ]);
+
+        $customerCountBefore = Customer::withoutGlobalScopes()->where('workspace_id', $workspace->id)->count();
+        $conversationIds = [$ambiguous->id, $missing->id];
+
+        app(CommunicationBackfill::class)->run();
+
+        $this->assertSame($customerCountBefore, Customer::withoutGlobalScopes()->where('workspace_id', $workspace->id)->count());
+        $this->assertSame($conversationIds, Conversation::withoutGlobalScopes()->whereIn('id', $conversationIds)->orderBy('id')->pluck('id')->all());
+        $this->assertNull($ambiguous->fresh()->channel_connection_id);
+        $this->assertNull($missing->fresh()->channel_connection_id);
+        $this->assertSame($ambiguous->external_id, $ambiguous->fresh()->external_id);
+
+        $issues = CommunicationBackfillIssue::withoutGlobalScopes()
+            ->where('workspace_id', $workspace->id)
+            ->pluck('issue_type')
+            ->all();
+
+        $this->assertContains('identity_collision', $issues);
+        $this->assertContains('ambiguous_connection', $issues);
+        $this->assertContains('missing_connection', $issues);
+        $this->assertNotNull($firstPhone->id);
+    }
+
+    public function test_whatsapp_webhook_inbound_is_idempotent_and_uses_core(): void
+    {
+        Bus::fake([ProcessAIResponse::class]);
+        config()->set('whatsapp.app_secret', 'meta_secret_core');
+
+        [$workspace] = $this->workspaceWithWhatsApp('hook@example.com', 'waba_hook');
+        $phone = $this->createPhone($workspace, 'pnid_hook', 'waba_hook');
+        app(ChannelConnectionService::class)->syncWhatsAppPhone($phone);
+
+        $payload = [
+            'object' => 'whatsapp_business_account',
+            'entry' => [[
+                'id' => 'waba_event_core_1',
+                'changes' => [[
+                    'value' => [
+                        'messaging_product' => 'whatsapp',
+                        'metadata' => [
+                            'display_phone_number' => '966500000000',
+                            'phone_number_id' => 'pnid_hook',
+                        ],
+                        'messages' => [[
+                            'from' => '966511122244',
+                            'id' => 'wamid.hook.core.1',
+                            'timestamp' => (string) time(),
+                            'type' => 'text',
+                            'text' => ['body' => 'webhook inbound'],
+                        ]],
+                    ],
+                    'field' => 'messages',
+                ]],
+            ]],
+        ];
+
+        $encoded = json_encode($payload, JSON_UNESCAPED_UNICODE);
+        $signature = 'sha256='.hash_hmac('sha256', $encoded ?: '{}', 'meta_secret_core');
+
+        $this->withHeader('X-Hub-Signature-256', $signature)
+            ->postJson('/whatsapp-webhook', $payload)
+            ->assertStatus(202);
+
+        $this->withHeader('X-Hub-Signature-256', $signature)
+            ->postJson('/whatsapp-webhook', $payload)
+            ->assertStatus(202);
+
+        $this->assertSame(1, Message::withoutGlobalScopes()->where('external_message_id', 'wamid.hook.core.1')->count());
+        $conversation = Conversation::withoutGlobalScopes()
+            ->where('workspace_id', $workspace->id)
+            ->where('external_id', '966511122244')
+            ->first();
+        $this->assertNotNull($conversation?->channel_connection_id);
+        $this->assertSame('whatsapp', $conversation->channel);
+        $this->assertDatabaseHas('customer_channel_identities', [
+            'workspace_id' => $workspace->id,
+            'channel' => 'whatsapp',
+            'identifier' => '966511122244',
+        ]);
+        Bus::assertDispatched(ProcessAIResponse::class);
+    }
+
+    public function test_tenant_isolation_blocks_cross_workspace_reads_and_writes(): void
+    {
+        [$workspaceA, $ownerA] = $this->workspaceWithWhatsApp('iso-a@example.com', 'waba_iso_full_a');
+        [$workspaceB, $ownerB] = $this->workspaceWithWhatsApp('iso-b@example.com', 'waba_iso_full_b');
+
+        $phone = $this->createPhone($workspaceA, 'pnid_iso_full', 'waba_iso_full');
+        $connection = app(ChannelConnectionService::class)->syncWhatsAppPhone($phone);
+        $team = CommunicationTeam::withoutGlobalScopes()->create([
+            'workspace_id' => $workspaceA->id,
+            'name' => 'A Team',
+        ]);
+        $customer = Customer::withoutGlobalScopes()->create([
+            'workspace_id' => $workspaceA->id,
+            'name' => 'Iso Customer',
+            'phone' => '966500000066',
+        ]);
+        $identity = app(IdentityService::class)->linkToCustomer($customer, 'whatsapp', '966500000066', $connection->id);
+        $conversation = Conversation::withoutGlobalScopes()->create([
+            'workspace_id' => $workspaceA->id,
+            'customer_id' => $customer->id,
+            'channel' => 'whatsapp',
+            'channel_connection_id' => $connection->id,
+            'external_id' => '966500000066',
+            'status' => 'open',
+        ]);
+        $message = Message::withoutGlobalScopes()->create([
+            'workspace_id' => $workspaceA->id,
+            'conversation_id' => $conversation->id,
+            'direction' => 'inbound',
+            'message_type' => 'text',
+            'content' => 'secret',
+            'delivery_status' => Message::DELIVERY_RECEIVED,
+        ]);
+
+        app(WorkspaceContext::class)->set($workspaceB);
+
+        $this->assertNull(Conversation::query()->find($conversation->id));
+        $this->assertNull(Message::query()->find($message->id));
+        $this->assertNull(ChannelConnection::query()->find($connection->id));
+        $this->assertNull(CustomerChannelIdentity::query()->find($identity->id));
+        $this->assertNull(CommunicationTeam::query()->find($team->id));
+        $this->assertFalse($ownerB->can('view', $conversation));
+        $this->assertFalse($ownerB->can('reply', $conversation));
+        $this->assertFalse($ownerB->can('assign', $conversation));
+        $this->assertTrue($ownerA->can('view', $conversation));
+
+        $this->expectException(\RuntimeException::class);
+        Conversation::query()->create([
+            'workspace_id' => $workspaceA->id,
+            'channel' => 'manual',
+            'status' => 'open',
+        ]);
+    }
+
     /**
      * @return array{0:Workspace,1:User}
      */
-    private function workspaceWithWhatsApp(string $email = 'wa-core@example.com', string $waba = 'waba_core'): array
-    {
+    private function workspaceWithWhatsApp(
+        string $email = 'wa-core@example.com',
+        string $waba = 'waba_core',
+        array $limits = ['whatsapp_messages' => 100],
+        array $features = ['whatsapp', 'ai', 'conversations'],
+        array $overageRules = [],
+    ): array {
+        app(WorkspaceContext::class)->clear();
+
         $user = User::factory()->create(['email' => $email]);
         $workspace = Workspace::factory()->create([
             'owner_user_id' => $user->id,
@@ -301,8 +657,9 @@ class CommunicationCenterPhase1Test extends TestCase
             'currency' => 'SAR',
             'price' => 0,
             'is_active' => true,
-            'features' => ['whatsapp', 'ai', 'conversations'],
-            'limits' => ['whatsapp_messages' => 100],
+            'features' => $features,
+            'limits' => $limits,
+            'overage_rules' => $overageRules,
         ]);
 
         Subscription::query()->create([

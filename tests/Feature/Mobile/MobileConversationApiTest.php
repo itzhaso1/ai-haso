@@ -78,6 +78,31 @@ class MobileConversationApiTest extends TestCase
 
         $this->withToken($token)
             ->withHeader('X-Workspace-Id', (string) $workspace->id)
+            ->postJson("/api/mobile/v1/conversations/{$conversation->id}/mute", ['muted' => true])
+            ->assertOk();
+
+        $this->withToken($token)
+            ->withHeader('X-Workspace-Id', (string) $workspace->id)
+            ->getJson("/api/mobile/v1/conversations/{$conversation->id}/messages")
+            ->assertOk();
+
+        $suggest = $this->withToken($token)
+            ->withHeader('X-Workspace-Id', (string) $workspace->id)
+            ->postJson('/api/mobile/v1/ai/suggest-reply', [
+                'conversation_id' => $conversation->id,
+                'content' => 'مرحبا',
+            ]);
+        $this->assertNotSame(404, $suggest->status());
+
+        $summarize = $this->withToken($token)
+            ->withHeader('X-Workspace-Id', (string) $workspace->id)
+            ->postJson('/api/mobile/v1/ai/summarize-conversation', [
+                'conversation_id' => $conversation->id,
+            ]);
+        $this->assertNotSame(404, $summarize->status());
+
+        $this->withToken($token)
+            ->withHeader('X-Workspace-Id', (string) $workspace->id)
             ->getJson('/api/mobile/v1/unread')
             ->assertOk()
             ->assertJsonPath('success', true);
@@ -107,6 +132,95 @@ class MobileConversationApiTest extends TestCase
 
         $this->assertContains($response->status(), [403, 404]);
         $this->assertNotEquals(200, $response->status());
+    }
+
+    public function test_archive_is_per_user_and_does_not_change_conversation_status(): void
+    {
+        $this->seed(FoundationSeeder::class);
+        [$userA, $workspace, $tokenA] = $this->authMember('arch-a@example.com');
+        $userB = User::factory()->create([
+            'email' => 'arch-b@example.com',
+            'password' => 'password',
+        ]);
+        $workspace->users()->attach($userB->id, [
+            'membership_role' => 'agent',
+            'status' => 'active',
+            'joined_at' => now(),
+        ]);
+
+        $this->flushHeaders();
+        $tokenB = $this->postJson('/api/mobile/v1/auth/login', [
+            'email' => $userB->email,
+            'password' => 'password',
+            'workspace_id' => $workspace->id,
+        ])->assertOk()->json('data.token');
+        $this->assertNotEmpty($tokenB);
+
+        $conversation = Conversation::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'whatsapp',
+            'status' => 'open',
+            'last_message_at' => now(),
+        ]);
+        Message::withoutGlobalScopes()->create([
+            'workspace_id' => $workspace->id,
+            'conversation_id' => $conversation->id,
+            'direction' => 'inbound',
+            'message_type' => 'text',
+            'content' => 'archive me',
+            'delivery_status' => 'received',
+        ]);
+
+        $this->withToken($tokenA)
+            ->withHeader('X-Workspace-Id', (string) $workspace->id)
+            ->postJson("/api/mobile/v1/conversations/{$conversation->id}/archive", [
+                'archived' => true,
+            ])
+            ->assertOk();
+
+        $this->assertSame('open', $conversation->fresh()->status);
+        $this->assertDatabaseHas('conversation_user_states', [
+            'conversation_id' => $conversation->id,
+            'user_id' => $userA->id,
+        ]);
+        $this->assertDatabaseMissing('conversation_user_states', [
+            'conversation_id' => $conversation->id,
+            'user_id' => $userB->id,
+        ]);
+
+        app(\App\Support\Tenancy\WorkspaceContext::class)->set($workspace);
+        $inbox = app(\App\Services\Mobile\ConversationInboxService::class);
+        $forB = collect($inbox->listForUser($userB, $workspace, ['filter' => 'all'])->items())->pluck('id')->all();
+        $forA = collect($inbox->listForUser($userA, $workspace, ['filter' => 'all'])->items())->pluck('id')->all();
+        $archivedForA = collect($inbox->listForUser($userA, $workspace, ['filter' => 'archived'])->items())->pluck('id')->all();
+
+        $this->assertNotContains($conversation->id, $forA);
+        $this->assertContains($conversation->id, $forB);
+        $this->assertContains($conversation->id, $archivedForA);
+
+        $this->flushHeaders();
+        $httpA = $this->actingAs($userA, 'sanctum')
+            ->withHeader('X-Workspace-Id', (string) $workspace->id)
+            ->getJson('/api/mobile/v1/conversations')
+            ->assertOk();
+        $this->flushHeaders();
+        $httpB = $this->actingAs($userB, 'sanctum')
+            ->withHeader('X-Workspace-Id', (string) $workspace->id)
+            ->getJson('/api/mobile/v1/conversations')
+            ->assertOk();
+        $this->flushHeaders();
+        $httpArchivedA = $this->actingAs($userA, 'sanctum')
+            ->withHeader('X-Workspace-Id', (string) $workspace->id)
+            ->getJson('/api/mobile/v1/conversations?filter=archived')
+            ->assertOk();
+
+        $idsA = collect($this->extractMobileList($httpA->json('data')))->pluck('id')->map(fn ($id) => (int) $id);
+        $idsB = collect($this->extractMobileList($httpB->json('data')))->pluck('id')->map(fn ($id) => (int) $id);
+        $archivedA = collect($this->extractMobileList($httpArchivedA->json('data')))->pluck('id')->map(fn ($id) => (int) $id);
+
+        $this->assertFalse($idsA->contains($conversation->id), 'Archiving user still sees conversation in the default inbox.');
+        $this->assertTrue($idsB->contains($conversation->id), 'Other workspace members must still see the conversation. ids='.$idsB->implode(','));
+        $this->assertTrue($archivedA->contains($conversation->id), 'Archiving user must see the conversation in the archived filter. ids='.$archivedA->implode(','));
     }
 
     public function test_device_push_token_register_and_revoke(): void
@@ -167,5 +281,42 @@ class MobileConversationApiTest extends TestCase
         ]);
 
         return [$user, $workspace];
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, int>
+     */
+    private function mobileConversationIds(string $token, int $workspaceId, string $filter = 'all'): \Illuminate\Support\Collection
+    {
+        $response = $this->withToken($token)
+            ->withHeader('X-Workspace-Id', (string) $workspaceId)
+            ->getJson('/api/mobile/v1/conversations?filter='.$filter)
+            ->assertOk();
+
+        $payload = $response->json('data');
+        $items = $this->extractMobileList($payload);
+
+        return collect($items)->pluck('id')->map(fn ($id) => (int) $id);
+    }
+
+    /**
+     * @param  mixed  $node
+     * @return list<array<string, mixed>>
+     */
+    private function extractMobileList(mixed $node): array
+    {
+        if (! is_array($node)) {
+            return [];
+        }
+
+        if ($node !== [] && array_is_list($node) && isset($node[0]) && is_array($node[0]) && array_key_exists('id', $node[0])) {
+            return $node;
+        }
+
+        if (array_key_exists('data', $node)) {
+            return $this->extractMobileList($node['data']);
+        }
+
+        return [];
     }
 }

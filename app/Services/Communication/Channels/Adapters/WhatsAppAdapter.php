@@ -72,9 +72,9 @@ class WhatsAppAdapter implements ChannelAdapterInterface
                 queue: false,
             );
         } catch (FeatureNotAvailableException|UsageLimitExceededException $exception) {
-            throw $exception;
+            return ChannelSendResult::failed($exception->getMessage() ?: $exception::class);
         } catch (\Throwable $exception) {
-            return ChannelSendResult::failed($exception->getMessage());
+            return ChannelSendResult::failed($exception->getMessage() ?: $exception::class);
         }
 
         $outbound->refresh();

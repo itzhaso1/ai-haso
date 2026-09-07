@@ -86,7 +86,7 @@ class MessageService
 
         $needsProvider = $channel === 'whatsapp';
 
-        return DB::transaction(function () use ($conversation, $data, $actor, $adapter, $connection, $channel, $needsProvider): Message {
+        $message = DB::transaction(function () use ($conversation, $data, $actor, $needsProvider): Message {
             $message = $this->persist($conversation, [
                 ...$data,
                 'direction' => 'outbound',
@@ -97,59 +97,62 @@ class MessageService
 
             $this->touchConversation($conversation, $message);
 
-            if (! $needsProvider) {
-                event(new MessageCreated($message));
-                event(new ConversationUpdated($conversation->fresh()));
+            return $message;
+        });
 
-                return $message->fresh() ?? $message;
-            }
+        if (! $needsProvider) {
+            event(new MessageCreated($message));
+            event(new ConversationUpdated($conversation->fresh()));
 
-            $workspace = Workspace::withoutGlobalScopes()->find($conversation->workspace_id);
-            if (! $workspace) {
-                $message->forceFill([
-                    'delivery_status' => Message::DELIVERY_FAILED,
-                    'delivery_error' => 'Workspace missing.',
-                ])->save();
+            return $message->fresh() ?? $message;
+        }
 
-                return $message->fresh() ?? $message;
-            }
-
-            $intent = new OutboundMessageIntent(
-                workspace: $workspace,
-                conversation: $conversation,
-                message: $message,
-                body: (string) ($data['content'] ?? ''),
-                connection: $connection,
-                actor: $actor,
-            );
-
-            try {
-                $result = $adapter->send($intent);
-            } catch (FeatureNotAvailableException|UsageLimitExceededException $exception) {
-                $message->delete();
-                throw $exception;
-            } catch (\Throwable $exception) {
-                $result = ChannelSendResult::failed($exception->getMessage());
-            }
-
-            $this->applySendResult($message, $result);
-            $this->auditLogService->log(
-                action: ($data['ai_generated'] ?? false) ? 'communication.ai.outbound' : 'communication.message.outbound',
-                entityType: 'message',
-                entityId: $message->id,
-                newValues: [
-                    'delivery_status' => $message->delivery_status,
-                    'channel' => $channel,
-                ],
-                actor: $actor,
-                workspaceId: $conversation->workspace_id,
-            );
+        $workspace = Workspace::withoutGlobalScopes()->find($conversation->workspace_id);
+        if (! $workspace) {
+            $message->forceFill([
+                'delivery_status' => Message::DELIVERY_FAILED,
+                'delivery_error' => 'Workspace missing.',
+            ])->save();
 
             event(new MessageCreated($message->fresh() ?? $message));
             event(new ConversationUpdated($conversation->fresh()));
 
             return $message->fresh() ?? $message;
-        });
+        }
+
+        $intent = new OutboundMessageIntent(
+            workspace: $workspace,
+            conversation: $conversation,
+            message: $message,
+            body: (string) ($data['content'] ?? ''),
+            connection: $connection,
+            actor: $actor,
+        );
+
+        try {
+            $result = $adapter->send($intent);
+        } catch (FeatureNotAvailableException|UsageLimitExceededException|\Throwable $exception) {
+            $result = ChannelSendResult::failed($exception->getMessage() ?: $exception::class);
+        }
+
+        $this->applySendResult($message, $result);
+        $this->auditLogService->log(
+            action: ($data['ai_generated'] ?? false) ? 'communication.ai.outbound' : 'communication.message.outbound',
+            entityType: 'message',
+            entityId: $message->id,
+            newValues: [
+                'delivery_status' => $message->delivery_status,
+                'channel' => $channel,
+                'delivery_error' => $message->delivery_error,
+            ],
+            actor: $actor,
+            workspaceId: $conversation->workspace_id,
+        );
+
+        event(new MessageCreated($message->fresh() ?? $message));
+        event(new ConversationUpdated($conversation->fresh()));
+
+        return $message->fresh() ?? $message;
     }
 
     /**

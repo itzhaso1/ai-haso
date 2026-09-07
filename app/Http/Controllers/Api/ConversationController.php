@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Conversation\StoreConversationRequest;
 use App\Models\Conversation;
+use App\Services\Communication\AssignmentService;
 use App\Services\Conversation\ConversationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,6 +14,7 @@ class ConversationController extends Controller
 {
     public function __construct(
         private readonly ConversationService $conversationService,
+        private readonly AssignmentService $assignmentService,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -52,9 +54,33 @@ class ConversationController extends Controller
         $validated = $request->validate([
             'status' => ['nullable', 'in:open,closed,archived'],
             'ai_enabled' => ['nullable', 'boolean'],
+            'assigned_team_id' => ['nullable', 'integer'],
+            'assigned_user_id' => ['nullable', 'integer'],
+            'priority' => ['nullable', 'in:low,normal,high,urgent'],
         ]);
 
-        $conversation->update($validated);
+        if ($request->exists('assigned_team_id') || $request->exists('assigned_user_id') || $request->exists('priority')) {
+            $this->authorize('assign', $conversation);
+            $conversation = $this->assignmentService->assign(
+                $conversation,
+                $request->exists('assigned_team_id')
+                    ? ($request->filled('assigned_team_id') ? (int) $request->input('assigned_team_id') : null)
+                    : $conversation->assigned_team_id,
+                $request->exists('assigned_user_id')
+                    ? ($request->filled('assigned_user_id') ? (int) $request->input('assigned_user_id') : null)
+                    : $conversation->assigned_user_id,
+                $validated['priority'] ?? $conversation->priority,
+                $request->user(),
+            );
+        }
+
+        $conversation->update(array_filter(
+            [
+                'status' => $validated['status'] ?? null,
+                'ai_enabled' => array_key_exists('ai_enabled', $validated) ? (bool) $validated['ai_enabled'] : null,
+            ],
+            fn ($value) => $value !== null,
+        ));
 
         return response()->json(['data' => $conversation->refresh()]);
     }

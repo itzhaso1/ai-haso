@@ -13,6 +13,8 @@ return new class extends Migration
             return;
         }
 
+        app(\App\Services\Communication\Setup\CommunicationBackfill::class)->verifyOrThrow();
+
         if ($this->indexExists('conversations', 'conv_ws_identity_key_uniq')) {
             return;
         }

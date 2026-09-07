@@ -78,6 +78,29 @@ class IdentityService
         return ['customer' => $customer, 'identity' => $identity, 'created' => true];
     }
 
+    public function linkToCustomer(
+        Customer $customer,
+        string $channel,
+        string $identifierRaw,
+        ?int $connectionId = null,
+        ?int $conversationId = null,
+        string $matchRule = 'manual_link',
+    ): CustomerChannelIdentity {
+        $channel = ChannelIdentifier::normalizeChannelName($channel);
+        $identifier = ChannelIdentifier::normalize($channel, $identifierRaw);
+
+        return $this->remember(
+            (int) $customer->workspace_id,
+            $customer,
+            $channel,
+            $identifier,
+            $identifierRaw,
+            $matchRule,
+            $connectionId,
+            $conversationId,
+        );
+    }
+
     private function matchCustomerColumn(int $workspaceId, string $channel, string $identifier, string $raw): ?Customer
     {
         $query = Customer::withoutGlobalScopes()->where('workspace_id', $workspaceId);

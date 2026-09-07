@@ -6,10 +6,15 @@ use App\Models\Communication\ChannelConnection;
 use App\Models\EmailAccount;
 use App\Models\WhatsAppPhoneNumber;
 use App\Models\Workspace;
+use App\Services\Audit\AuditLogService;
 use App\Support\Communication\ChannelIdentifier;
 
 class ChannelConnectionService
 {
+    public function __construct(
+        private readonly AuditLogService $auditLogService,
+    ) {}
+
     public function syncWorkspace(Workspace $workspace): void
     {
         $this->syncWhatsApp($workspace);
@@ -33,7 +38,13 @@ class ChannelConnectionService
             ? ChannelConnection::STATUS_CONNECTED
             : ($phone->status === 'error' ? ChannelConnection::STATUS_ERROR : ChannelConnection::STATUS_DISCONNECTED);
 
-        return ChannelConnection::withoutGlobalScopes()->updateOrCreate(
+        $previous = ChannelConnection::withoutGlobalScopes()
+            ->where('workspace_id', $phone->workspace_id)
+            ->where('source_type', ChannelConnection::SOURCE_WHATSAPP_PHONE)
+            ->where('source_id', $phone->id)
+            ->first();
+
+        $connection = ChannelConnection::withoutGlobalScopes()->updateOrCreate(
             [
                 'workspace_id' => $phone->workspace_id,
                 'source_type' => ChannelConnection::SOURCE_WHATSAPP_PHONE,
@@ -58,13 +69,23 @@ class ChannelConnectionService
                 ],
             ],
         );
+
+        $this->auditConnectionChange($previous, $connection);
+
+        return $connection;
     }
 
     public function syncEmail(Workspace $workspace): void
     {
         $accounts = EmailAccount::withoutGlobalScopes()->where('workspace_id', $workspace->id)->get();
         foreach ($accounts as $account) {
-            ChannelConnection::withoutGlobalScopes()->updateOrCreate(
+            $previous = ChannelConnection::withoutGlobalScopes()
+                ->where('workspace_id', $workspace->id)
+                ->where('source_type', ChannelConnection::SOURCE_EMAIL_ACCOUNT)
+                ->where('source_id', $account->id)
+                ->first();
+
+            $connection = ChannelConnection::withoutGlobalScopes()->updateOrCreate(
                 [
                     'workspace_id' => $workspace->id,
                     'source_type' => ChannelConnection::SOURCE_EMAIL_ACCOUNT,
@@ -86,6 +107,8 @@ class ChannelConnectionService
                     'metadata' => ['hub' => 'email', 'wired' => false],
                 ],
             );
+
+            $this->auditConnectionChange($previous, $connection);
         }
     }
 
@@ -181,5 +204,26 @@ class ChannelConnectionService
         }
 
         return 'Manage channel';
+    }
+
+    private function auditConnectionChange(?ChannelConnection $previous, ChannelConnection $connection): void
+    {
+        if ($previous && $previous->status === $connection->status) {
+            return;
+        }
+
+        $this->auditLogService->log(
+            action: 'communication.connection.changed',
+            entityType: 'channel_connection',
+            entityId: $connection->id,
+            oldValues: $previous ? ['status' => $previous->status] : null,
+            newValues: [
+                'status' => $connection->status,
+                'channel' => $connection->channel,
+                'source_type' => $connection->source_type,
+                'source_id' => $connection->source_id,
+            ],
+            workspaceId: $connection->workspace_id,
+        );
     }
 }
